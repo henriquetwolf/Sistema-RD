@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
 import { UploadPanel } from './components/UploadPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { LoginPanel } from './components/LoginPanel';
-import { SupabaseConfig, FileData, AppStep, UploadStatus } from './types';
+import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
 import { appBackend } from './services/appBackend';
-import { CheckCircle, AlertTriangle, Loader2, Database, LogOut } from 'lucide-react';
+import { 
+  CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
+  Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock 
+} from 'lucide-react';
 import clsx from 'clsx';
 
 function App() {
@@ -16,29 +19,48 @@ function App() {
   const [session, setSession] = useState<any>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
 
-  // App State
-  // Default to UPLOAD step now
-  const [step, setStep] = useState<AppStep>(AppStep.UPLOAD);
-  const [config, setConfig] = useState<SupabaseConfig>({
-    url: '',
-    key: '',
-    tableName: '',
-    primaryKey: ''
-  });
+  // Dashboard State (Persisted Jobs)
+  const [jobs, setJobs] = useState<SyncJob[]>([]);
+  const jobsRef = useRef<SyncJob[]>([]); // Ref to access latest jobs inside interval without resetting it
+  
+  // Wizard/Creation State
+  const [step, setStep] = useState<AppStep>(AppStep.DASHBOARD);
+  const [config, setConfig] = useState<SupabaseConfig>({ url: '', key: '', tableName: '', primaryKey: '' });
   const [filesData, setFilesData] = useState<FileData[]>([]);
+  const [tempSheetUrl, setTempSheetUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>('idle');
-  const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Auth Effect
+  // Sync Timer Ref
+  const intervalRef = useRef<number | null>(null);
+  const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 Minutes
+
+  // --- INIT & AUTH ---
   useEffect(() => {
-    // Check active session
+    // Load Jobs from LocalStorage
+    const savedJobs = localStorage.getItem('csv_syncer_jobs');
+    if (savedJobs) {
+      try {
+        const parsed = JSON.parse(savedJobs);
+        // Fix Date objects lost in JSON and reset stuck 'syncing' states
+        const fixed = parsed.map((j: any) => ({
+          ...j,
+          lastSync: j.lastSync ? new Date(j.lastSync) : null,
+          status: j.status === 'syncing' ? 'idle' : j.status, // Reset stuck jobs
+          lastMessage: j.status === 'syncing' ? 'Sincronização interrompida' : j.lastMessage
+        }));
+        setJobs(fixed);
+      } catch (e) {
+        console.error("Failed to load saved jobs", e);
+      }
+    }
+
+    // Check Auth
     appBackend.auth.getSession().then((s) => {
       setSession(s);
       setIsLoadingSession(false);
     });
 
-    // Listen for changes
     const { data: { subscription } } = appBackend.auth.onAuthStateChange((s) => {
       setSession(s);
     });
@@ -48,278 +70,408 @@ function App() {
     };
   }, []);
 
-  const handleLogout = async () => {
-    await appBackend.auth.signOut();
+  // --- SAVE JOBS & UPDATE REF ---
+  useEffect(() => {
+    jobsRef.current = jobs; // Keep ref updated
+    
+    // FIX: Always save, even if empty array, to persist deletions correctly
+    localStorage.setItem('csv_syncer_jobs', JSON.stringify(jobs));
+    
+  }, [jobs]);
+
+  // --- GLOBAL SYNC LOOP ---
+  useEffect(() => {
+    // Clear existing
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
+    // Setup new loop - independent of 'jobs' state changes thanks to ref
+    intervalRef.current = window.setInterval(() => {
+       runAllActiveJobs();
+    }, SYNC_INTERVAL_MS);
+
+    return () => {
+       if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []); // Run once on mount
+
+  const runAllActiveJobs = () => {
+    const currentJobs = jobsRef.current;
+    const jobsToRun = currentJobs.filter(j => j.active && j.status !== 'syncing');
+
+    jobsToRun.forEach(job => {
+        performJobSync(job);
+    });
   };
-  
-  // Handlers
+
+  const performJobSync = async (job: SyncJob) => {
+    // 1. Set Status to Syncing
+    setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'syncing', lastMessage: 'Iniciando...' } : j));
+
+    try {
+        // Setup Timeout (30 seconds)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+        // 2. Fetch CSV
+        const response = await fetch(job.sheetUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        
+        // Check for HTML response (Login page usually)
+        if (text.trim().startsWith('<') || text.includes('<!DOCTYPE html')) {
+             throw new Error("O link retornou HTML/Login. Verifique se está publicado como CSV.");
+        }
+
+        const file = new File([text], "sync.csv", { type: 'text/csv' });
+        const parsed = await parseCsvFile(file);
+
+        // 3. Upload to Supabase
+        const client = createSupabaseClient(job.config.url, job.config.key);
+        await batchUploadData(client, job.config, parsed.data, () => {});
+
+        // 4. Update Success State
+        setJobs(prev => prev.map(j => j.id === job.id ? { 
+            ...j, 
+            status: 'success', 
+            lastSync: new Date(),
+            lastMessage: `OK: ${parsed.rowCount} registros.`
+        } : j));
+
+    } catch (e: any) {
+        console.error(`Job ${job.name} failed`, e);
+        
+        let msg = e.message || "Erro desconhecido";
+        
+        // Improve error messages for users
+        if (e.name === 'AbortError') msg = "Tempo limite excedido (30s)";
+        if (msg.includes('duplicate key') || msg.includes('unique constraint')) {
+            msg = "Erro: Registros duplicados. Configure a 'Chave Única' (PK) para corrigir.";
+        }
+        
+        // 5. Update Error State
+        setJobs(prev => prev.map(j => j.id === job.id ? { 
+            ...j, 
+            status: 'error', 
+            lastSync: new Date(),
+            lastMessage: msg
+        } : j));
+    }
+  };
+
+
+  // --- WIZARD HANDLERS ---
+  const handleStartWizard = () => {
+    setStep(AppStep.UPLOAD);
+    setFilesData([]);
+    setConfig({ url: '', key: '', tableName: '', primaryKey: '' });
+    setTempSheetUrl(null);
+    setErrorMessage(null);
+  };
+
   const handleFilesSelected = async (files: File[]) => {
     setStatus('parsing');
     try {
       const parsedFiles = await Promise.all(files.map(parseCsvFile));
-      
-      // Basic validation: Check if all files have same headers
-      if (parsedFiles.length > 1) {
-          const firstHeaders = parsedFiles[0].headers.sort().join(',');
-          for (let i = 1; i < parsedFiles.length; i++) {
-              if (parsedFiles[i].headers.sort().join(',') !== firstHeaders) {
-                  throw new Error(`O arquivo ${parsedFiles[i].fileName} tem colunas diferentes do primeiro arquivo.`);
-              }
-          }
-      }
-      
       setFilesData(parsedFiles);
       
-      // Auto-suggest table name from file name if not already set
+      // Suggest Table Name
       if (!config.tableName && files.length > 0) {
-          // Clean filename: remove extension, replace non-alphanumeric with underscore, lowercase
-          const suggestedName = files[0].name
-              .replace(/\.csv$/i, '')
-              .replace(/[^a-zA-Z0-9_]/g, '_')
-              .toLowerCase();
-              
+          const suggestedName = files[0].name.replace(/\.csv$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
           setConfig(prev => ({ ...prev, tableName: suggestedName }));
       }
-
-      setStep(AppStep.CONFIG); // Move to Config Step
+      setStep(AppStep.CONFIG);
       setStatus('idle');
     } catch (e: any) {
-      setErrorMessage(e.message || "Erro ao ler arquivos CSV");
+      setErrorMessage(e.message);
       setStatus('error');
     }
   };
 
-  const handleConfigConfirm = () => {
-    // ConfigPanel handles saving presets internally.
-    // We just move to preview now that we have both Data and Config.
-    setStep(AppStep.PREVIEW);
-  };
-
-  const handleClearTable = async () => {
-    setErrorMessage(null);
-    try {
-        const client = createSupabaseClient(config.url, config.key);
-        // Default to 'id' if no PK specified, as we need a column to filter 'not null' on.
-        const pk = config.primaryKey && config.primaryKey.trim() !== '' ? config.primaryKey : 'id';
-        await clearTableData(client, config.tableName, pk);
-    } catch (e: any) {
-        console.error(e);
-        let msg = e.message || "Falha ao limpar dados da tabela.";
-        if (msg.includes('row-level security policy')) {
-             msg = `ERRO DE PERMISSÃO (RLS): O banco de dados bloqueou a exclusão dos dados.\n\nSOLUÇÃO: Verifique se a tabela possui uma política permitindo DELETE. Use o SQL gerado para habilitar acesso total.`;
-        }
-        setErrorMessage(msg);
-        throw e; // Propagate to component to handle loading state
-    }
-  };
-
-  const handleSync = async () => {
-    setStep(AppStep.SYNC);
-    setStatus('uploading');
-    setErrorMessage(null);
-    setProgress(0);
-
-    try {
-      const client = createSupabaseClient(config.url, config.key);
-      
-      // Flatten data from all files
-      const allRows = filesData.flatMap(f => f.data);
-      
-      await batchUploadData(client, config, allRows, (prog) => {
-        setProgress(prog);
-      });
-
-      setStatus('success');
-    } catch (e: any) {
-      console.error(e);
-      let msg = e.message || "Falha ao enviar dados para o Supabase.";
-      
-      // Check for specific type mismatch error
-      if (msg.includes('invalid input syntax for type bigint') || msg.includes('invalid input syntax for type integer')) {
-          msg = `ERRO DE TIPO: O banco de dados espera um número inteiro (bigint) na coluna, mas encontrou um valor decimal (ex: "0.01"). \n\nSOLUÇÃO: No painel do Supabase, exclua a tabela "${config.tableName}" e recrie-a utilizando o código SQL gerado na etapa "Preview & SQL". O novo código SQL detectará automaticamente o tipo correto (numeric).`;
+  const handleCreateConnection = () => {
+      // Create new Job from current Wizard State
+      if (!tempSheetUrl) {
+          alert("Para criar uma conexão automática, você deve usar a opção 'Google Sheets' na etapa 1.");
+          return;
       }
-      // Check for RLS Policy error
-      else if (msg.includes('row-level security policy') || msg.includes('new row violates row-level security policy')) {
-         msg = `ERRO DE PERMISSÃO (RLS): O banco de dados bloqueou a gravação dos dados.\n\nSOLUÇÃO: A tabela está com a segurança ativada (RLS), mas não possui uma regra permitindo inserção.\n\nExecute o seguinte comando no SQL Editor do Supabase:\nCREATE POLICY "Acesso Total" ON "${config.tableName}" FOR ALL USING (true) WITH CHECK (true);`;
-      }
+
+      const newJob: SyncJob = {
+          id: crypto.randomUUID(),
+          name: config.tableName || "Nova Conexão",
+          sheetUrl: tempSheetUrl,
+          config: { ...config },
+          active: true,
+          status: 'idle',
+          lastSync: null,
+          lastMessage: 'Aguardando primeira sincronização...'
+      };
+
+      setJobs(prev => [...prev, newJob]);
+      setStep(AppStep.DASHBOARD);
       
-      setErrorMessage(msg);
-      setStatus('error');
-    }
+      // Trigger immediate sync
+      setTimeout(() => performJobSync(newJob), 500);
   };
 
-  const resetProcess = () => {
-    setStatus('idle');
-    setStep(AppStep.UPLOAD);
-    setFilesData([]);
-    setProgress(0);
-    setErrorMessage(null);
+  // --- JOB ACTIONS ---
+  const toggleJob = (id: string) => {
+      setJobs(prev => prev.map(j => j.id === id ? { ...j, active: !j.active } : j));
   };
 
-  const goBackToConfig = () => {
-      setStep(AppStep.CONFIG);
+  const deleteJob = (id: string) => {
+      // Use window.confirm to ensure the user really wants to delete
+      const confirmed = window.confirm("Tem certeza que deseja remover esta conexão?");
+      if(confirmed) {
+          setJobs(prev => prev.filter(j => j.id !== id));
+      }
   };
-  
-  const goBackToUpload = () => {
-      setStep(AppStep.UPLOAD);
+
+  const handleManualSync = (id: string) => {
+      const job = jobs.find(j => j.id === id);
+      if (job) performJobSync(job);
   };
 
-  // Loading Screen
-  if (isLoadingSession) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="animate-spin text-indigo-600" size={40} />
-      </div>
-    );
-  }
+  const handleLogout = async () => {
+    await appBackend.auth.signOut();
+  };
 
-  // Not Logged In Screen
-  if (!session) {
-    return <LoginPanel />;
-  }
+  // --- RENDER ---
+  if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>;
+  if (!session) return <LoginPanel />;
 
-  // Main App
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
+      
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 py-4 mb-8">
+      <header className="bg-white border-b border-slate-200 py-4 mb-8 sticky top-0 z-10 shadow-sm">
         <div className="container mx-auto px-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setStep(AppStep.DASHBOARD)}>
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
                <Database size={18} />
             </div>
-            <h1 className="text-xl font-bold text-slate-800 hidden sm:block">CSV to Supabase</h1>
+            <h1 className="text-xl font-bold text-slate-800 hidden sm:block">Supabase Syncer</h1>
           </div>
-          
           <div className="flex items-center gap-4">
-            {step > AppStep.UPLOAD && (
-              <button 
-                  onClick={resetProcess}
-                  className="text-sm text-slate-500 hover:text-indigo-600 transition"
-              >
-                  Reiniciar Processo
-              </button>
-            )}
-            
-            <div className="h-4 w-px bg-slate-200"></div>
-
-            <button 
-                onClick={handleLogout}
-                className="text-sm text-slate-500 hover:text-red-600 transition flex items-center gap-1"
-                title="Sair"
-            >
-                <LogOut size={16} />
-                <span className="hidden sm:inline">Sair</span>
+             {step !== AppStep.DASHBOARD && (
+                <button onClick={() => setStep(AppStep.DASHBOARD)} className="text-sm font-medium text-slate-600 hover:text-indigo-600">
+                    Cancelar
+                </button>
+             )}
+             <div className="h-4 w-px bg-slate-200"></div>
+             <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600 flex items-center gap-1">
+                <LogOut size={16} /> <span className="hidden sm:inline">Sair</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="container mx-auto px-4">
         
-        <StepIndicator currentStep={step} />
-
-        {/* Error Notification */}
-        {errorMessage && (
-            <div className="max-w-4xl mx-auto mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-4 rounded-lg flex items-start gap-3 shadow-sm">
-                <AlertTriangle className="shrink-0 mt-1" size={20} />
-                <div className="flex-1">
-                    <h4 className="font-bold text-lg mb-1">Ocorreu um erro na sincronização</h4>
-                    <p className="text-sm whitespace-pre-line leading-relaxed">{errorMessage}</p>
+        {/* DASHBOARD VIEW */}
+        {step === AppStep.DASHBOARD && (
+            <div className="max-w-5xl mx-auto">
+                <div className="flex justify-between items-end mb-6">
+                    <div>
+                        <h2 className="text-2xl font-bold text-slate-800">Painel de Conexões</h2>
+                        <p className="text-slate-500 text-sm mt-1">Gerencie suas sincronizações automáticas (Ciclo: 5 minutos)</p>
+                    </div>
+                    <button 
+                        onClick={handleStartWizard}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow-md"
+                    >
+                        <Plus size={18} /> Nova Conexão
+                    </button>
                 </div>
-                <button onClick={() => setErrorMessage(null)} className="ml-auto text-red-400 hover:text-red-600 p-1">
-                    <XIcon />
-                </button>
+
+                {jobs.length === 0 ? (
+                    <div className="bg-white rounded-xl border-2 border-dashed border-slate-200 p-12 text-center">
+                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+                            <Activity size={32} />
+                        </div>
+                        <h3 className="text-lg font-medium text-slate-700">Nenhuma conexão ativa</h3>
+                        <p className="text-slate-500 mb-6 max-w-md mx-auto">Conecte uma planilha do Google Sheets ao Supabase para começar a sincronizar dados automaticamente.</p>
+                        <button onClick={handleStartWizard} className="text-indigo-600 font-medium hover:underline">
+                            Criar primeira conexão
+                        </button>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                        {jobs.map(job => (
+                            <div key={job.id} className={clsx("bg-white rounded-xl border p-5 shadow-sm transition-all", job.active ? "border-slate-200" : "border-slate-100 opacity-75 bg-slate-50")}>
+                                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                    
+                                    {/* Info Info */}
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-3 mb-1">
+                                            <h3 className="font-bold text-lg text-slate-800">{job.name}</h3>
+                                            <span className={clsx("px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide", job.active ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-500")}>
+                                                {job.active ? "Ativo" : "Pausado"}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-4 text-xs text-slate-500 font-mono">
+                                            <span title="Tabela Supabase" className="flex items-center gap-1"><Database size={12}/> {job.config.tableName}</span>
+                                            {job.config.primaryKey ? (
+                                                <span className="text-indigo-600 bg-indigo-50 px-1.5 rounded flex items-center gap-1" title="Upsert Ativado (Edições funcionam)">
+                                                    PK: {job.config.primaryKey}
+                                                </span>
+                                            ) : (
+                                                <span className="text-amber-600 bg-amber-50 px-1.5 rounded flex items-center gap-1" title="Apenas Insert (Sem edição)">
+                                                    <AlertTriangle size={10} /> Insert Only
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Status & Time */}
+                                    <div className="flex items-center gap-6">
+                                        <div className="text-right">
+                                            <div className="flex items-center justify-end gap-1.5 mb-0.5">
+                                                {job.status === 'syncing' && <Loader2 size={14} className="animate-spin text-indigo-600" />}
+                                                {job.status === 'success' && <CheckCircle size={14} className="text-green-500" />}
+                                                {job.status === 'error' && <AlertTriangle size={14} className="text-red-500" />}
+                                                <span className={clsx("text-sm font-medium", 
+                                                    job.status === 'success' ? 'text-green-700' : 
+                                                    job.status === 'error' ? 'text-red-700' : 'text-slate-600'
+                                                )}>
+                                                    {job.status === 'syncing' ? 'Sincronizando...' : job.status === 'idle' ? 'Aguardando' : job.status === 'success' ? 'Sincronizado' : 'Erro'}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-400">
+                                                {job.lastSync ? `Última: ${job.lastSync.toLocaleTimeString()}` : 'Nunca executado'}
+                                            </p>
+                                            {job.lastMessage && (
+                                                <p className="text-[10px] text-slate-400 max-w-[150px] truncate" title={job.lastMessage}>{job.lastMessage}</p>
+                                            )}
+                                        </div>
+
+                                        {/* Controls */}
+                                        <div className="flex items-center gap-2 border-l border-slate-100 pl-4">
+                                            <button 
+                                                onClick={() => handleManualSync(job.id)}
+                                                disabled={job.status === 'syncing' || !job.active}
+                                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-30"
+                                                title="Forçar sincronização agora"
+                                            >
+                                                <Clock size={18} />
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleJob(job.id)}
+                                                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                                title={job.active ? "Pausar" : "Retomar"}
+                                            >
+                                                {job.active ? <Pause size={18} /> : <Play size={18} />}
+                                            </button>
+                                            <a 
+                                                href={job.sheetUrl} 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                title="Abrir planilha original"
+                                            >
+                                                <ExternalLink size={18} />
+                                            </a>
+                                            <button 
+                                                onClick={() => deleteJob(job.id)}
+                                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                title="Excluir conexão"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         )}
 
-        {/* Render Step Content */}
-        
-        {step === AppStep.UPLOAD && (
-          <UploadPanel 
-            onFilesSelected={handleFilesSelected} 
-            isLoading={status === 'parsing'}
-          />
-        )}
-
-        {step === AppStep.CONFIG && (
-          <ConfigPanel 
-            config={config} 
-            setConfig={setConfig} 
-            onNext={handleConfigConfirm}
-            onBack={goBackToUpload}
-          />
-        )}
-
-        {step === AppStep.PREVIEW && (
-          <PreviewPanel 
-            files={filesData} 
-            tableName={config.tableName}
-            onSync={handleSync}
-            onBack={goBackToConfig}
-            onClearTable={handleClearTable}
-          />
-        )}
-
-        {step === AppStep.SYNC && (
-          <div className="max-w-md mx-auto text-center bg-white p-12 rounded-xl shadow-sm border border-slate-200">
-            {status === 'uploading' && (
-                <>
-                    <Loader2 className="animate-spin text-indigo-600 mx-auto mb-4" size={48} />
-                    <h2 className="text-xl font-bold text-slate-800 mb-2">Enviando dados...</h2>
-                    <p className="text-slate-500 mb-6">Por favor, não feche a página.</p>
-                    
-                    <div className="w-full bg-slate-100 rounded-full h-3 mb-2 overflow-hidden">
-                        <div 
-                            className="bg-indigo-600 h-3 rounded-full transition-all duration-300"
-                            style={{ width: `${progress}%` }}
-                        ></div>
+        {/* WIZARD FLOW */}
+        {step !== AppStep.DASHBOARD && (
+            <>
+                <StepIndicator currentStep={step} />
+                
+                {errorMessage && (
+                    <div className="max-w-4xl mx-auto mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-4 rounded-lg flex items-start gap-3">
+                        <AlertTriangle className="shrink-0 mt-1" size={20} />
+                        <div className="flex-1">{errorMessage}</div>
+                        <button onClick={() => setErrorMessage(null)} className="text-red-400 hover:text-red-600">×</button>
                     </div>
-                    <span className="text-sm font-semibold text-indigo-700">{progress}%</span>
-                </>
-            )}
+                )}
 
-            {status === 'success' && (
-                <>
-                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <CheckCircle size={32} />
-                    </div>
-                    <h2 className="text-xl font-bold text-slate-800 mb-2">Sucesso!</h2>
-                    <p className="text-slate-500 mb-6">Todos os dados foram enviados para o Supabase.</p>
-                    <button 
-                        onClick={resetProcess}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition"
-                    >
-                        Enviar mais arquivos
-                    </button>
-                </>
-            )}
+                {step === AppStep.UPLOAD && (
+                    <UploadPanel 
+                        onFilesSelected={handleFilesSelected} 
+                        onUrlConfirmed={setTempSheetUrl} 
+                        isLoading={status === 'parsing'}
+                    />
+                )}
 
-             {status === 'error' && (
-                <>
-                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <AlertTriangle size={32} />
+                {step === AppStep.CONFIG && (
+                    <ConfigPanel 
+                        config={config} 
+                        setConfig={setConfig} 
+                        onNext={() => setStep(AppStep.PREVIEW)}
+                        onBack={() => setStep(AppStep.UPLOAD)}
+                    />
+                )}
+
+                {step === AppStep.PREVIEW && (
+                    <div className="space-y-6">
+                        <PreviewPanel 
+                            files={filesData} 
+                            tableName={config.tableName}
+                            onSync={() => setStep(AppStep.SYNC)} // Just goes to next step, doesn't actually sync yet if we want dashboard
+                            onBack={() => setStep(AppStep.CONFIG)}
+                            onClearTable={async () => {
+                                 const client = createSupabaseClient(config.url, config.key);
+                                 // IMPORTANT FIX: 
+                                 // 1. Try config.primaryKey
+                                 // 2. Try the FIRST column of the CSV (most likely the ID)
+                                 // 3. Fallback to 'id' as a last resort.
+                                 const targetColumn = config.primaryKey || (filesData.length > 0 && filesData[0].headers[0]) || 'id';
+                                 
+                                 await clearTableData(client, config.tableName, targetColumn);
+                            }}
+                        />
+                         {/* Action Bar for "Create Connection" */}
+                        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-lg z-20">
+                            <div className="container mx-auto max-w-4xl flex items-center justify-between">
+                                <div className="text-sm text-slate-500">
+                                    {tempSheetUrl ? (
+                                        <span className="flex items-center gap-2 text-green-600 bg-green-50 px-2 py-1 rounded">
+                                            <CheckCircle size={14} /> Modo Auto-Sync Habilitado
+                                        </span>
+                                    ) : (
+                                        <span className="flex items-center gap-2 text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                                            <AlertTriangle size={14} /> Modo Manual (Sem URL da Planilha)
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setStep(AppStep.DASHBOARD)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">
+                                        Cancelar
+                                    </button>
+                                    <button 
+                                        onClick={handleCreateConnection}
+                                        disabled={!tempSheetUrl}
+                                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-bold shadow-md flex items-center gap-2"
+                                    >
+                                        <Clock size={18} /> Criar Conexão Automática (5 min)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <h2 className="text-xl font-bold text-slate-800 mb-2">Falha no Envio</h2>
-                    <p className="text-slate-500 mb-6">Verifique a mensagem de erro acima.</p>
-                    <button 
-                        onClick={() => setStep(AppStep.CONFIG)}
-                        className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-6 py-2 rounded-lg font-medium transition"
-                    >
-                        Revisar Configurações
-                    </button>
-                </>
-            )}
-          </div>
+                )}
+            </>
         )}
+
       </main>
     </div>
   );
 }
-
-const XIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-);
 
 export default App;

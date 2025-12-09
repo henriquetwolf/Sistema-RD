@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SupabaseConfig, SavedPreset } from '../types';
-import { Key, Database, Link, Save, Trash2, ChevronDown, Loader2 } from 'lucide-react';
+import { Key, Database, Link, Save, Trash2, ChevronDown, Loader2, Fingerprint, Info } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 
 interface ConfigPanelProps {
@@ -26,7 +26,6 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
         setPresets(data);
       } catch (e) {
         console.error("Failed to load presets from backend", e);
-        // Fallback or user notification could go here
       } finally {
         setIsLoadingPresets(false);
       }
@@ -45,7 +44,6 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
     
     const selected = presets.find(p => p.id === presetId);
     if (selected) {
-      // Don't overwrite tableName if it's already set (from file upload) unless the preset has a specific one
       const tableNameToUse = config.tableName && !selected.tableName ? config.tableName : (selected.tableName || config.tableName);
       
       setConfig({
@@ -67,7 +65,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
         name: newPresetName
       });
 
-      setPresets([newPreset, ...presets]); // Add to top of list
+      setPresets([newPreset, ...presets]);
       setShowSaveInput(false);
       setNewPresetName('');
     } catch (e) {
@@ -93,7 +91,6 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
 
   return (
     <div className="max-w-xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-       {/* Presets Section */}
       <div className="bg-slate-50 p-6 border-b border-slate-200">
         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex justify-between">
             <span>Carregar Configuração Salva</span>
@@ -118,7 +115,6 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
             </div>
         </div>
         
-        {/* Preset List Management (Mini) */}
         {presets.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
                 {presets.map(p => (
@@ -143,7 +139,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
             Detalhes da Conexão
         </h2>
       
-        <div className="space-y-4">
+        <div className="space-y-5">
             <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Project URL</label>
             <div className="relative">
@@ -174,35 +170,42 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
             </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                 <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Tabela</label>
-                <input
-                    type="text"
-                    name="tableName"
-                    value={config.tableName}
-                    onChange={handleChange}
-                    placeholder="users"
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                />
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Tabela</label>
+                    <input
+                        type="text"
+                        name="tableName"
+                        value={config.tableName}
+                        onChange={handleChange}
+                        placeholder="users"
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                    />
                 </div>
-                <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Coluna ID (Opcional)
-                </label>
-                <input
-                    type="text"
-                    name="primaryKey"
-                    value={config.primaryKey || ''}
-                    onChange={handleChange}
-                    placeholder="id"
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                />
+                
+                <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                    <label className="block text-sm font-bold text-indigo-900 mb-1 flex items-center gap-2">
+                        <Fingerprint size={16} />
+                        Coluna Chave Única (ID)
+                    </label>
+                    <input
+                        type="text"
+                        name="primaryKey"
+                        value={config.primaryKey || ''}
+                        onChange={handleChange}
+                        placeholder="ex: id, email, sku"
+                        className="w-full px-3 py-1.5 border border-indigo-200 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition mb-1"
+                    />
+                     <div className="flex items-start gap-1.5 mt-2">
+                        <Info size={14} className="text-indigo-500 shrink-0 mt-0.5" />
+                        <p className="text-xs text-indigo-700 leading-snug">
+                            Obrigatório para <b>editar</b> linhas. Se o CSV tiver um ID que já existe no banco, ele será atualizado.
+                        </p>
+                    </div>
                 </div>
             </div>
 
-            {/* Save Preset Section */}
-            <div className="pt-4 border-t border-slate-100 mt-4">
+            <div className="pt-4 border-t border-slate-100 mt-2">
                 {!showSaveInput ? (
                     <button 
                         onClick={() => setShowSaveInput(true)}
@@ -211,16 +214,16 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
                         <Save size={16} /> Salvar esta configuração na nuvem
                     </button>
                 ) : (
-                    <div className="flex items-end gap-2 bg-indigo-50 p-3 rounded-lg">
+                    <div className="flex items-end gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
                         <div className="flex-1">
-                            <label className="block text-xs font-medium text-indigo-800 mb-1">Nome do Preset</label>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Nome do Preset</label>
                             <input 
                                 type="text"
                                 value={newPresetName}
                                 onChange={(e) => setNewPresetName(e.target.value)}
                                 placeholder="Ex: Produção - Vendas"
                                 disabled={isSaving}
-                                className="w-full px-3 py-1.5 text-sm border border-indigo-200 rounded focus:outline-none focus:border-indigo-400"
+                                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:border-indigo-400"
                             />
                         </div>
                         <button 

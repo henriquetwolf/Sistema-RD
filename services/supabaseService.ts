@@ -12,12 +12,19 @@ export const clearTableData = async (
 ) => {
   // To delete all rows in Supabase/PostgREST, we need a filter.
   // "not(primaryKey, is, null)" effectively selects all rows where the PK exists.
+  
+  // Validation
+  if (!primaryKey) throw new Error("Impossible to clear table: No target column specified.");
+
   const { error, count } = await client
     .from(tableName)
     .delete({ count: 'exact' })
     .not(primaryKey, 'is', null);
 
   if (error) {
+    if (error.code === '42703' || error.message.includes('column') && error.message.includes('does not exist')) {
+        throw new Error(`Erro: A coluna '${primaryKey}' não existe na tabela '${tableName}'. Configure a Chave Primária correta no painel.`);
+    }
     throw new Error(`Supabase Delete Error: ${error.message}`);
   }
 
@@ -44,7 +51,13 @@ export const batchUploadData = async (
     let error;
     
     if (config.primaryKey && config.primaryKey.trim() !== '') {
-        const result = await query.upsert(batch, { onConflict: config.primaryKey });
+        // We explicitly set ignoreDuplicates to FALSE. 
+        // This ensures that if a conflict occurs on the primaryKey, 
+        // Supabase performs an UPDATE instead of doing nothing.
+        const result = await query.upsert(batch, { 
+            onConflict: config.primaryKey,
+            ignoreDuplicates: false 
+        });
         error = result.error;
     } else {
         const result = await query.insert(batch);

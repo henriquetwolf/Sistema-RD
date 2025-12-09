@@ -8,13 +8,14 @@ interface StepIndicatorProps {
 }
 
 const steps = [
-  { id: AppStep.UPLOAD, label: 'Upload CSV', icon: Upload },
+  { id: AppStep.UPLOAD, label: 'Link CSV', icon: Upload },
   { id: AppStep.CONFIG, label: 'Configuração', icon: Database },
-  { id: AppStep.PREVIEW, label: 'Preview & SQL', icon: FileText },
-  { id: AppStep.SYNC, label: 'Sincronizar', icon: RefreshCw },
+  { id: AppStep.PREVIEW, label: 'Ativar', icon: FileText },
 ];
 
 export const StepIndicator: React.FC<StepIndicatorProps> = ({ currentStep }) => {
+  if (currentStep === AppStep.DASHBOARD) return null;
+
   return (
     <div className="w-full max-w-4xl mx-auto mb-8">
       <div className="flex items-center justify-between relative">

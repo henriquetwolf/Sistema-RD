@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SupabaseConfig, SavedPreset } from '../types';
-import { Key, Database, Link, Save, Trash2, ChevronDown, Plus } from 'lucide-react';
+import { Key, Database, Link, Save, Trash2, ChevronDown, Loader2 } from 'lucide-react';
+import { appBackend } from '../services/appBackend';
 
 interface ConfigPanelProps {
   config: SupabaseConfig;
@@ -11,19 +12,26 @@ interface ConfigPanelProps {
 
 export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onNext, onBack }) => {
   const [presets, setPresets] = useState<SavedPreset[]>([]);
+  const [isLoadingPresets, setIsLoadingPresets] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showSaveInput, setShowSaveInput] = useState(false);
   const [newPresetName, setNewPresetName] = useState('');
 
-  // Load presets from localStorage on mount
+  // Load presets from Supabase on mount
   useEffect(() => {
-    const saved = localStorage.getItem('supabase_sync_presets');
-    if (saved) {
+    const loadPresets = async () => {
+      setIsLoadingPresets(true);
       try {
-        setPresets(JSON.parse(saved));
+        const data = await appBackend.getPresets();
+        setPresets(data);
       } catch (e) {
-        console.error("Failed to load presets");
+        console.error("Failed to load presets from backend", e);
+        // Fallback or user notification could go here
+      } finally {
+        setIsLoadingPresets(false);
       }
-    }
+    };
+    loadPresets();
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,28 +57,35 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
     }
   };
 
-  const handleSavePreset = () => {
+  const handleSavePreset = async () => {
     if (!newPresetName.trim()) return;
+    setIsSaving(true);
 
-    const newPreset: SavedPreset = {
-      ...config,
-      id: Date.now().toString(),
-      name: newPresetName
-    };
+    try {
+      const newPreset = await appBackend.savePreset({
+        ...config,
+        name: newPresetName
+      });
 
-    const updatedPresets = [...presets, newPreset];
-    setPresets(updatedPresets);
-    localStorage.setItem('supabase_sync_presets', JSON.stringify(updatedPresets));
-    
-    setShowSaveInput(false);
-    setNewPresetName('');
+      setPresets([newPreset, ...presets]); // Add to top of list
+      setShowSaveInput(false);
+      setNewPresetName('');
+    } catch (e) {
+      alert('Erro ao salvar configuração no servidor.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeletePreset = (id: string) => {
+  const handleDeletePreset = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta configuração salva?')) {
-        const updatedPresets = presets.filter(p => p.id !== id);
-        setPresets(updatedPresets);
-        localStorage.setItem('supabase_sync_presets', JSON.stringify(updatedPresets));
+        try {
+          await appBackend.deletePreset(id);
+          const updatedPresets = presets.filter(p => p.id !== id);
+          setPresets(updatedPresets);
+        } catch (e) {
+          alert('Erro ao excluir configuração.');
+        }
     }
   };
 
@@ -80,18 +95,22 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
     <div className="max-w-xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
        {/* Presets Section */}
       <div className="bg-slate-50 p-6 border-b border-slate-200">
-        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-            Carregar Configuração Salva
+        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex justify-between">
+            <span>Carregar Configuração Salva</span>
+            {isLoadingPresets && <Loader2 size={14} className="animate-spin text-indigo-600" />}
         </label>
         <div className="flex gap-2">
             <div className="relative flex-1">
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                 <select 
-                    className="w-full appearance-none bg-white border border-slate-300 text-slate-700 py-2 pl-4 pr-8 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full appearance-none bg-white border border-slate-300 text-slate-700 py-2 pl-4 pr-8 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
                     onChange={handleLoadPreset}
                     defaultValue=""
+                    disabled={isLoadingPresets}
                 >
-                    <option value="" disabled>Selecione um preset...</option>
+                    <option value="" disabled>
+                        {isLoadingPresets ? 'Carregando...' : 'Selecione um preset...'}
+                    </option>
                     {presets.map(p => (
                         <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
@@ -189,7 +208,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
                         onClick={() => setShowSaveInput(true)}
                         className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
                     >
-                        <Save size={16} /> Salvar esta configuração para depois
+                        <Save size={16} /> Salvar esta configuração na nuvem
                     </button>
                 ) : (
                     <div className="flex items-end gap-2 bg-indigo-50 p-3 rounded-lg">
@@ -200,14 +219,16 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
                                 value={newPresetName}
                                 onChange={(e) => setNewPresetName(e.target.value)}
                                 placeholder="Ex: Produção - Vendas"
+                                disabled={isSaving}
                                 className="w-full px-3 py-1.5 text-sm border border-indigo-200 rounded focus:outline-none focus:border-indigo-400"
                             />
                         </div>
                         <button 
                             onClick={handleSavePreset}
-                            className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-indigo-700"
+                            disabled={isSaving}
+                            className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
                         >
-                            Salvar
+                            {isSaving ? <Loader2 size={12} className="animate-spin" /> : 'Salvar'}
                         </button>
                         <button 
                             onClick={() => setShowSaveInput(false)}

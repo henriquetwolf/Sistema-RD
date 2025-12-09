@@ -25,7 +25,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
   const previewRows = files[0]?.data.slice(0, 5) || [];
 
   // Infer types and generate SQL
-  // We use useMemo to avoid recalculating on every render, though with 5k rows it's fast.
+  // We use useMemo to avoid recalculating on every render.
   const sqlCode = useMemo(() => {
     if (!files.length) return '';
 
@@ -33,9 +33,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
     // Filter out empty headers just in case
     const headers = files[0].headers.filter(h => h && h.trim() !== '');
     
-    // We scan ALL data to ensure we don't miss a decimal value in row 5000 that would crash a bigint column
-    // For very large datasets, we might want to limit this, but for client-side CSV processing, 
-    // iterating 10-100k rows is usually acceptable.
+    // Scan ALL data to ensure we don't miss a decimal value
     const allData = files.flatMap(f => f.data);
 
     // Check if ID column exists (case insensitive)
@@ -58,7 +56,6 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
         hasData = true;
         
         if (typeof val === 'boolean') {
-            // It's a boolean
             isInt = false;
             isFloat = false;
         } else if (typeof val === 'number') {
@@ -68,21 +65,14 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
                 isFloat = true;
             }
         } else {
-            // It's a string
-            // Check if it looks like a number that PapaParse missed or was quoted
-            // But PapaParse dynamicTyping usually handles unquoted numbers.
-            // If it's a string here, it's likely text.
+            // It's a string or other object
             isBoolean = false;
             isInt = false;
             isFloat = false;
         }
 
-        // Optimization: if we already know it's not boolean and not int (so it's float or text),
-        // and if it's already identified as text, we can stop checking strictly for types, 
-        // BUT we need to distinguish between Float and Text. 
-        // If we found a string that is NOT a number, it's TEXT.
+        // If it's definitely text, stop checking
         if (!isBoolean && !isInt && !isFloat) {
-             // It is text.
              break; 
         }
       }
@@ -96,9 +86,6 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
 
       // Force ID to be primary key if it exists
       if (isExplicitId) {
-          // If the ID column has floats, we must use numeric or text, but usually IDs are ints or UUIDs (text).
-          // If inference says 'numeric' (float), we trust it. If 'bigint', trust it. 
-          // If 'text', trust it.
           return `  "${header}" ${type} primary key`;
       }
 
@@ -107,7 +94,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
 
     let sql = `CREATE TABLE IF NOT EXISTS "${safeTableName}" (\n`;
     
-    // If no ID column found, inject an auto-generated one so Supabase UI works
+    // If no ID column found, inject an auto-generated one
     if (!hasId) {
         sql += `  "id" bigint generated always as identity primary key,\n`;
     }
@@ -115,7 +102,10 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
     sql += columnDefs.join(',\n');
     sql += `\n);\n`;
     
-    sql += `\n-- Habilitar Row Level Security (Recomendado)\nALTER TABLE "${safeTableName}" ENABLE ROW LEVEL SECURITY;`;
+    // ADDED: Create Policy to avoid RLS error immediately after creation
+    sql += `\n-- Habilitar Row Level Security (Recomendado)\nALTER TABLE "${safeTableName}" ENABLE ROW LEVEL SECURITY;\n`;
+    sql += `\n-- Criar política para permitir acesso total (leitura e escrita)\n`;
+    sql += `CREATE POLICY "Permitir acesso total" ON "${safeTableName}" FOR ALL USING (true) WITH CHECK (true);`;
 
     return sql;
   }, [files, tableName]);
@@ -141,7 +131,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
                     Se você ainda não configurou seu banco de dados, copie o código abaixo e execute no <strong>SQL Editor</strong> do Supabase.
                     <br/>
                     <span className="text-xs opacity-80 mt-1 block">
-                        * O código foi gerado analisando todas as linhas dos arquivos para garantir os tipos corretos (Inteiro vs Decimal).
+                        * O código detecta tipos automaticamente (Inteiro vs Decimal) e cria a política de segurança (RLS) necessária.
                     </span>
                 </p>
                 

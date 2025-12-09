@@ -94,6 +94,10 @@ function App() {
       if (msg.includes('invalid input syntax for type bigint') || msg.includes('invalid input syntax for type integer')) {
           msg = `ERRO DE TIPO: O banco de dados espera um número inteiro (bigint) na coluna, mas encontrou um valor decimal (ex: "0.01"). \n\nSOLUÇÃO: No painel do Supabase, exclua a tabela "${config.tableName}" e recrie-a utilizando o código SQL gerado na etapa "Preview & SQL". O novo código SQL detectará automaticamente o tipo correto (numeric).`;
       }
+      // Check for RLS Policy error
+      else if (msg.includes('row-level security policy') || msg.includes('new row violates row-level security policy')) {
+         msg = `ERRO DE PERMISSÃO (RLS): O banco de dados bloqueou a gravação dos dados.\n\nSOLUÇÃO: A tabela está com a segurança ativada (RLS), mas não possui uma regra permitindo inserção.\n\nExecute o seguinte comando no SQL Editor do Supabase:\nCREATE POLICY "Acesso Total" ON "${config.tableName}" FOR ALL USING (true) WITH CHECK (true);`;
+      }
       
       setErrorMessage(msg);
       setStatus('error');

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, Session } from '@supabase/supabase-js';
 import { SavedPreset } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
@@ -12,6 +12,38 @@ const supabase = createClient(APP_URL, APP_KEY);
 const TABLE_NAME = 'app_presets';
 
 export const appBackend = {
+  auth: {
+    signIn: async (email: string, password: string) => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+      return data;
+    },
+    signUp: async (email: string, password: string) => {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (error) throw error;
+      return data;
+    },
+    signOut: async () => {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    },
+    getSession: async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session;
+    },
+    onAuthStateChange: (callback: (session: Session | null) => void) => {
+      return supabase.auth.onAuthStateChange((_event, session) => {
+        callback(session);
+      });
+    }
+  },
+
   /**
    * Fetch all saved presets from Supabase
    */

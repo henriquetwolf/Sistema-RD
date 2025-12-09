@@ -3,14 +3,20 @@ import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
 import { UploadPanel } from './components/UploadPanel';
 import { PreviewPanel } from './components/PreviewPanel';
+import { LoginPanel } from './components/LoginPanel';
 import { SupabaseConfig, FileData, AppStep, UploadStatus } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
-import { CheckCircle, AlertTriangle, Loader2, Database } from 'lucide-react';
+import { appBackend } from './services/appBackend';
+import { CheckCircle, AlertTriangle, Loader2, Database, LogOut } from 'lucide-react';
 import clsx from 'clsx';
 
 function App() {
-  // State
+  // Auth State
+  const [session, setSession] = useState<any>(null);
+  const [isLoadingSession, setIsLoadingSession] = useState(true);
+
+  // App State
   // Default to UPLOAD step now
   const [step, setStep] = useState<AppStep>(AppStep.UPLOAD);
   const [config, setConfig] = useState<SupabaseConfig>({
@@ -24,7 +30,27 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Note: We removed the auto-load of single config on mount to allow the Preset system in ConfigPanel to handle it more gracefully.
+  // Auth Effect
+  useEffect(() => {
+    // Check active session
+    appBackend.auth.getSession().then((s) => {
+      setSession(s);
+      setIsLoadingSession(false);
+    });
+
+    // Listen for changes
+    const { data: { subscription } } = appBackend.auth.onAuthStateChange((s) => {
+      setSession(s);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await appBackend.auth.signOut();
+  };
   
   // Handlers
   const handleFilesSelected = async (files: File[]) => {
@@ -138,6 +164,21 @@ function App() {
       setStep(AppStep.UPLOAD);
   };
 
+  // Loading Screen
+  if (isLoadingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-indigo-600" size={40} />
+      </div>
+    );
+  }
+
+  // Not Logged In Screen
+  if (!session) {
+    return <LoginPanel />;
+  }
+
+  // Main App
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       {/* Header */}
@@ -147,16 +188,30 @@ function App() {
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
                <Database size={18} />
             </div>
-            <h1 className="text-xl font-bold text-slate-800">CSV to Supabase</h1>
+            <h1 className="text-xl font-bold text-slate-800 hidden sm:block">CSV to Supabase</h1>
           </div>
-          {step > AppStep.UPLOAD && (
+          
+          <div className="flex items-center gap-4">
+            {step > AppStep.UPLOAD && (
+              <button 
+                  onClick={resetProcess}
+                  className="text-sm text-slate-500 hover:text-indigo-600 transition"
+              >
+                  Reiniciar Processo
+              </button>
+            )}
+            
+            <div className="h-4 w-px bg-slate-200"></div>
+
             <button 
-                onClick={resetProcess}
-                className="text-sm text-slate-500 hover:text-indigo-600 transition"
+                onClick={handleLogout}
+                className="text-sm text-slate-500 hover:text-red-600 transition flex items-center gap-1"
+                title="Sair"
             >
-                Reiniciar
+                <LogOut size={16} />
+                <span className="hidden sm:inline">Sair</span>
             </button>
-          )}
+          </div>
         </div>
       </header>
 

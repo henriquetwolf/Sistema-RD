@@ -5,7 +5,7 @@ import { UploadPanel } from './components/UploadPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { SupabaseConfig, FileData, AppStep, UploadStatus } from './types';
 import { parseCsvFile } from './utils/csvParser';
-import { createSupabaseClient, batchUploadData } from './services/supabaseService';
+import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
 import { CheckCircle, AlertTriangle, Loader2, Database } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -67,6 +67,24 @@ function App() {
     // ConfigPanel handles saving presets internally.
     // We just move to preview now that we have both Data and Config.
     setStep(AppStep.PREVIEW);
+  };
+
+  const handleClearTable = async () => {
+    setErrorMessage(null);
+    try {
+        const client = createSupabaseClient(config.url, config.key);
+        // Default to 'id' if no PK specified, as we need a column to filter 'not null' on.
+        const pk = config.primaryKey && config.primaryKey.trim() !== '' ? config.primaryKey : 'id';
+        await clearTableData(client, config.tableName, pk);
+    } catch (e: any) {
+        console.error(e);
+        let msg = e.message || "Falha ao limpar dados da tabela.";
+        if (msg.includes('row-level security policy')) {
+             msg = `ERRO DE PERMISSÃO (RLS): O banco de dados bloqueou a exclusão dos dados.\n\nSOLUÇÃO: Verifique se a tabela possui uma política permitindo DELETE. Use o SQL gerado para habilitar acesso total.`;
+        }
+        setErrorMessage(msg);
+        throw e; // Propagate to component to handle loading state
+    }
   };
 
   const handleSync = async () => {
@@ -185,6 +203,7 @@ function App() {
             tableName={config.tableName}
             onSync={handleSync}
             onBack={goBackToConfig}
+            onClearTable={handleClearTable}
           />
         )}
 

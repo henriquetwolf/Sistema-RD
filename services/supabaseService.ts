@@ -5,6 +5,25 @@ export const createSupabaseClient = (url: string, key: string): SupabaseClient =
   return createClient(url, key);
 };
 
+export const clearTableData = async (
+  client: SupabaseClient, 
+  tableName: string, 
+  primaryKey: string = 'id'
+) => {
+  // To delete all rows in Supabase/PostgREST, we need a filter.
+  // "not(primaryKey, is, null)" effectively selects all rows where the PK exists.
+  const { error, count } = await client
+    .from(tableName)
+    .delete({ count: 'exact' })
+    .not(primaryKey, 'is', null);
+
+  if (error) {
+    throw new Error(`Supabase Delete Error: ${error.message}`);
+  }
+
+  return count;
+};
+
 export const batchUploadData = async (
   client: SupabaseClient,
   config: SupabaseConfig,

@@ -2,8 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { SavedPreset } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
-const APP_URL = 'https://wfrzsnwisypmgsbeccfj.supabase.co';
-const APP_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indmcnpzbndpc3lwbWdzYmVjY2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMTg5MzMsImV4cCI6MjA4MDc5NDkzM30.8el-0CN3LCFn7Wv7znpq_Aj6-tBJPju7zOtbdqCHbFo';
+// We try to read from Environment Variables first (Vercel), otherwise fallback to hardcoded (Dev/Local)
+// Casting import.meta to any to resolve TS error "Property 'env' does not exist on type 'ImportMeta'"
+const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL || 'https://wfrzsnwisypmgsbeccfj.supabase.co';
+const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indmcnpzbndpc3lwbWdzYmVjY2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMTg5MzMsImV4cCI6MjA4MDc5NDkzM30.8el-0CN3LCFn7Wv7znpq_Aj6-tBJPju7zOtbdqCHbFo';
 
 const supabase = createClient(APP_URL, APP_KEY);
 

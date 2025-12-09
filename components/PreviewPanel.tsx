@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { FileData, CsvRow } from '../types';
-import { Table, AlertCircle, FileText, ArrowRight, Code, Copy, Check } from 'lucide-react';
+import { Table, AlertCircle, FileText, ArrowRight, Code, Copy, Check, Trash2, ShieldAlert, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 
 interface PreviewPanelProps {
@@ -8,11 +8,16 @@ interface PreviewPanelProps {
   tableName: string;
   onSync: () => void;
   onBack: () => void;
+  onClearTable: () => Promise<void>; // New prop for clearing table
 }
 
-export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, onSync, onBack }) => {
+export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, onSync, onBack, onClearTable }) => {
   const [showSql, setShowSql] = useState(false);
   const [copied, setCopied] = useState(false);
+  
+  // Admin states
+  const [isClearing, setIsClearing] = useState(false);
+  const [clearStatus, setClearStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   const totalRows = files.reduce((acc, f) => acc + f.rowCount, 0);
   const totalFiles = files.length;
@@ -116,6 +121,22 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleClearClick = async () => {
+    if (window.confirm(`ATENÇÃO: Isso apagará TODOS os dados da tabela "${tableName}" no Supabase.\n\nEssa ação não pode ser desfeita. Deseja continuar?`)) {
+      setIsClearing(true);
+      setClearStatus('idle');
+      try {
+        await onClearTable();
+        setClearStatus('success');
+        setTimeout(() => setClearStatus('idle'), 3000);
+      } catch (e) {
+        setClearStatus('error');
+      } finally {
+        setIsClearing(false);
+      }
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       
@@ -131,7 +152,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
                     Se você ainda não configurou seu banco de dados, copie o código abaixo e execute no <strong>SQL Editor</strong> do Supabase.
                     <br/>
                     <span className="text-xs opacity-80 mt-1 block">
-                        * O código detecta tipos automaticamente (Inteiro vs Decimal) e cria a política de segurança (RLS) necessária.
+                        * O código detecta tipos automaticamente e cria a política de segurança (RLS).
                     </span>
                 </p>
                 
@@ -157,6 +178,42 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
                     </div>
                 )}
             </div>
+        </div>
+      </div>
+
+       {/* Admin / Danger Zone */}
+       <div className="bg-white border border-red-100 rounded-xl p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <div className="bg-red-50 text-red-600 p-2 rounded-lg">
+                    <ShieldAlert size={20} />
+                </div>
+                <div>
+                    <h3 className="text-base font-bold text-slate-800">Administração da Tabela</h3>
+                    <p className="text-sm text-slate-500">
+                        Ações destrutivas para a tabela <strong>{tableName}</strong>
+                    </p>
+                </div>
+            </div>
+            
+            <button
+                onClick={handleClearClick}
+                disabled={isClearing}
+                className={clsx(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    clearStatus === 'success' 
+                        ? "bg-green-100 text-green-700"
+                        : "bg-white border border-red-200 text-red-600 hover:bg-red-50"
+                )}
+            >
+                {isClearing ? (
+                    <Loader2 size={16} className="animate-spin" />
+                ) : clearStatus === 'success' ? (
+                    <><Check size={16} /> Dados Limpos</>
+                ) : (
+                    <><Trash2 size={16} /> Limpar Tabela</>
+                )}
+            </button>
         </div>
       </div>
 

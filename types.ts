@@ -4,6 +4,7 @@ export interface SupabaseConfig {
   key: string;
   tableName: string;
   primaryKey?: string; // Optional: Used for Upsert logic
+  intervalMinutes?: number; // New: Selected sync interval
 }
 
 export interface SavedPreset extends SupabaseConfig {
@@ -48,4 +49,5 @@ export interface SyncJob {
   status: 'idle' | 'syncing' | 'success' | 'error';
   lastMessage: string | null;
   active: boolean;
+  intervalMinutes: number; // Required for the job logic
 }

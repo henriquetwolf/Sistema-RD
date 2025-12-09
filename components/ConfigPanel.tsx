@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SupabaseConfig, SavedPreset } from '../types';
-import { Key, Database, Link, Save, Trash2, ChevronDown, Loader2, Fingerprint, Info } from 'lucide-react';
+import { Key, Database, Link, Save, Trash2, ChevronDown, Loader2, Fingerprint, Info, Clock } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 
 interface ConfigPanelProps {
@@ -16,6 +16,13 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveInput, setShowSaveInput] = useState(false);
   const [newPresetName, setNewPresetName] = useState('');
+
+  // Defaults
+  useEffect(() => {
+     if (!config.intervalMinutes) {
+         setConfig({ ...config, intervalMinutes: 5 });
+     }
+  }, []);
 
   // Load presets from Supabase on mount
   useEffect(() => {
@@ -33,7 +40,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
     loadPresets();
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setConfig({ ...config, [name]: value });
   };
@@ -50,7 +57,8 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
         url: selected.url,
         key: selected.key,
         tableName: tableNameToUse,
-        primaryKey: selected.primaryKey
+        primaryKey: selected.primaryKey,
+        intervalMinutes: selected.intervalMinutes || 5
       });
     }
   };
@@ -62,7 +70,8 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
     try {
       const newPreset = await appBackend.savePreset({
         ...config,
-        name: newPresetName
+        name: newPresetName,
+        intervalMinutes: config.intervalMinutes || 5
       });
 
       setPresets([newPreset, ...presets]);
@@ -182,26 +191,48 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
                     />
                 </div>
-                
-                <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
-                    <label className="block text-sm font-bold text-indigo-900 mb-1 flex items-center gap-2">
-                        <Fingerprint size={16} />
-                        Coluna Chave Única (ID)
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                        <Clock size={16} className="text-slate-500" /> Intervalo
                     </label>
-                    <input
-                        type="text"
-                        name="primaryKey"
-                        value={config.primaryKey || ''}
-                        onChange={handleChange}
-                        placeholder="ex: id, email, sku"
-                        className="w-full px-3 py-1.5 border border-indigo-200 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition mb-1"
-                    />
-                     <div className="flex items-start gap-1.5 mt-2">
-                        <Info size={14} className="text-indigo-500 shrink-0 mt-0.5" />
-                        <p className="text-xs text-indigo-700 leading-snug">
-                            Obrigatório para <b>editar</b> linhas. Se o CSV tiver um ID que já existe no banco, ele será atualizado.
-                        </p>
+                    <div className="relative">
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                        <select
+                            name="intervalMinutes"
+                            value={config.intervalMinutes || 5}
+                            onChange={handleChange}
+                            className="w-full appearance-none px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition bg-white"
+                        >
+                            <option value={5}>A cada 5 minutos</option>
+                            <option value={15}>A cada 15 minutos</option>
+                            <option value={30}>A cada 30 minutos</option>
+                            <option value={60}>A cada 1 hora</option>
+                            <option value={120}>A cada 2 horas</option>
+                            <option value={1440}>A cada 24 horas</option>
+                        </select>
                     </div>
+                </div>
+            </div>
+
+            <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                <label className="block text-sm font-bold text-indigo-900 mb-1 flex items-center gap-2">
+                    <Fingerprint size={16} />
+                    Coluna Chave Única (ID)
+                </label>
+                <input
+                    type="text"
+                    name="primaryKey"
+                    value={config.primaryKey || ''}
+                    onChange={handleChange}
+                    placeholder="ex: id, email, sku"
+                    className="w-full px-3 py-1.5 border border-indigo-200 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition mb-1"
+                />
+                    <div className="flex items-start gap-1.5 mt-2">
+                    <Info size={14} className="text-indigo-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-indigo-700 leading-snug">
+                        Obrigatório para <b>editar</b> linhas. Se o CSV tiver um ID que já existe no banco, ele será atualizado.
+                    </p>
                 </div>
             </div>
 

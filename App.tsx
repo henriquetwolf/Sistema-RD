@@ -25,7 +25,7 @@ function App() {
   
   // Wizard/Creation State
   const [step, setStep] = useState<AppStep>(AppStep.DASHBOARD);
-  const [config, setConfig] = useState<SupabaseConfig>({ url: '', key: '', tableName: '', primaryKey: '' });
+  const [config, setConfig] = useState<SupabaseConfig>({ url: '', key: '', tableName: '', primaryKey: '', intervalMinutes: 5 });
   const [filesData, setFilesData] = useState<FileData[]>([]);
   const [tempSheetUrl, setTempSheetUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>('idle');
@@ -33,7 +33,9 @@ function App() {
 
   // Sync Timer Ref
   const intervalRef = useRef<number | null>(null);
-  const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 Minutes
+  // CHECK FREQUENCY: Run the check loop every 1 minute.
+  // We don't sync every minute, we just CHECK if the specific job interval has passed.
+  const CHECK_INTERVAL_MS = 60 * 1000; 
 
   // --- INIT & AUTH ---
   useEffect(() => {
@@ -47,7 +49,9 @@ function App() {
           ...j,
           lastSync: j.lastSync ? new Date(j.lastSync) : null,
           status: j.status === 'syncing' ? 'idle' : j.status, // Reset stuck jobs
-          lastMessage: j.status === 'syncing' ? 'Sincronização interrompida' : j.lastMessage
+          lastMessage: j.status === 'syncing' ? 'Sincronização interrompida' : j.lastMessage,
+          // BACKWARD COMPATIBILITY: If intervalMinutes is missing, default to 5
+          intervalMinutes: j.intervalMinutes || 5 
         }));
         setJobs(fixed);
       } catch (e) {
@@ -87,7 +91,7 @@ function App() {
     // Setup new loop - independent of 'jobs' state changes thanks to ref
     intervalRef.current = window.setInterval(() => {
        runAllActiveJobs();
-    }, SYNC_INTERVAL_MS);
+    }, CHECK_INTERVAL_MS);
 
     return () => {
        if (intervalRef.current) clearInterval(intervalRef.current);
@@ -96,8 +100,22 @@ function App() {
 
   const runAllActiveJobs = () => {
     const currentJobs = jobsRef.current;
+    const now = new Date();
+
     // Only run jobs that are active AND have a sheetUrl (Auto-Sync jobs)
-    const jobsToRun = currentJobs.filter(j => j.active && j.sheetUrl && j.status !== 'syncing');
+    // AND meet their time interval criteria
+    const jobsToRun = currentJobs.filter(j => {
+        if (!j.active || !j.sheetUrl || j.status === 'syncing') return false;
+        
+        // If never synced, run now
+        if (!j.lastSync) return true;
+
+        // Calculate difference in minutes
+        const diffMs = now.getTime() - new Date(j.lastSync).getTime();
+        const diffMinutes = diffMs / (1000 * 60);
+
+        return diffMinutes >= (j.intervalMinutes || 5);
+    });
 
     jobsToRun.forEach(job => {
         performJobSync(job);
@@ -186,7 +204,8 @@ function App() {
   const handleStartWizard = () => {
     setStep(AppStep.UPLOAD);
     setFilesData([]);
-    setConfig({ url: '', key: '', tableName: '', primaryKey: '' });
+    // Default interval to 5 min
+    setConfig({ url: '', key: '', tableName: '', primaryKey: '', intervalMinutes: 5 });
     setTempSheetUrl(null);
     setErrorMessage(null);
   };
@@ -222,7 +241,8 @@ function App() {
           active: isAutoSync, // Only active if it has a URL
           status: isAutoSync ? 'idle' : 'success', // Static starts as success (assumed manual upload done)
           lastSync: isAutoSync ? null : new Date(),
-          lastMessage: isAutoSync ? 'Aguardando primeira sincronização...' : 'Upload manual realizado.'
+          lastMessage: isAutoSync ? 'Aguardando primeira sincronização...' : 'Upload manual realizado.',
+          intervalMinutes: config.intervalMinutes || 5
       };
 
       setJobs(prev => [...prev, newJob]);
@@ -254,6 +274,12 @@ function App() {
 
   const handleLogout = async () => {
     await appBackend.auth.signOut();
+  };
+
+  const getIntervalLabel = (minutes: number) => {
+      if (minutes >= 1440) return '24h';
+      if (minutes >= 60) return `${Math.floor(minutes / 60)}h`;
+      return `${minutes}min`;
   };
 
   // --- RENDER ---
@@ -294,7 +320,7 @@ function App() {
                 <div className="flex justify-between items-end mb-6">
                     <div>
                         <h2 className="text-2xl font-bold text-slate-800">Painel de Conexões</h2>
-                        <p className="text-slate-500 text-sm mt-1">Gerencie suas sincronizações automáticas (Ciclo: 5 minutos)</p>
+                        <p className="text-slate-500 text-sm mt-1">Gerencie suas sincronizações automáticas</p>
                     </div>
                     <button 
                         onClick={handleStartWizard}
@@ -329,7 +355,7 @@ function App() {
                                             {/* Status Badge */}
                                             {job.sheetUrl ? (
                                                 <span className={clsx("px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide", job.active ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
-                                                    {job.active ? "Auto-Sync (5min)" : "Pausado"}
+                                                    {job.active ? `Auto-Sync (${getIntervalLabel(job.intervalMinutes)})` : "Pausado"}
                                                 </span>
                                             ) : (
                                                 <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide bg-slate-100 text-slate-600 border border-slate-200">

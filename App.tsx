@@ -108,18 +108,16 @@ function App() {
     setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'syncing', lastMessage: 'Iniciando...' } : j));
 
     try {
-        // Setup Timeout (30 seconds)
+        // Setup Timeout (120 seconds now, because we have a 60s wait inside)
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-        // 2. Fetch CSV
+        // --- STEP 1: Fetch CSV (Download first to ensure safety) ---
         const response = await fetch(job.sheetUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
-
+        
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const text = await response.text();
         
-        // Check for HTML response (Login page usually)
         if (text.trim().startsWith('<') || text.includes('<!DOCTYPE html')) {
              throw new Error("O link retornou HTML/Login. Verifique se está publicado como CSV.");
         }
@@ -127,16 +125,36 @@ function App() {
         const file = new File([text], "sync.csv", { type: 'text/csv' });
         const parsed = await parseCsvFile(file);
 
-        // 3. Upload to Supabase
         const client = createSupabaseClient(job.config.url, job.config.key);
+
+        // --- STEP 2: Clear Table ---
+        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, lastMessage: 'Limpando tabela...' } : j));
+        
+        // Determine target column for deletion
+        const targetColumn = job.config.primaryKey || (parsed.headers.length > 0 ? parsed.headers[0] : 'id');
+        await clearTableData(client, job.config.tableName, targetColumn);
+
+        // --- STEP 3: Wait 60 Seconds ---
+        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, lastMessage: 'Aguardando 60s...' } : j));
+        
+        // Wait promise
+        await new Promise(resolve => setTimeout(resolve, 60000));
+        
+        // --- STEP 4: Upload New Data ---
+        // Check if aborted during wait
+        if (controller.signal.aborted) throw new Error("Tempo limite excedido.");
+
+        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, lastMessage: 'Enviando dados...' } : j));
         await batchUploadData(client, job.config, parsed.data, () => {});
 
-        // 4. Update Success State
+        clearTimeout(timeoutId);
+
+        // --- FINISH: Update Success State ---
         setJobs(prev => prev.map(j => j.id === job.id ? { 
             ...j, 
             status: 'success', 
             lastSync: new Date(),
-            lastMessage: `OK: ${parsed.rowCount} registros.`
+            lastMessage: `Ciclo Completo: ${parsed.rowCount} linhas.`
         } : j));
 
     } catch (e: any) {
@@ -144,13 +162,12 @@ function App() {
         
         let msg = e.message || "Erro desconhecido";
         
-        // Improve error messages for users
-        if (e.name === 'AbortError') msg = "Tempo limite excedido (30s)";
+        if (e.name === 'AbortError') msg = "Timeout (120s) excedido";
         if (msg.includes('duplicate key') || msg.includes('unique constraint')) {
-            msg = "Erro: Registros duplicados. Configure a 'Chave Única' (PK) para corrigir.";
+            msg = "Erro: Registros duplicados detectados.";
         }
         
-        // 5. Update Error State
+        // Update Error State
         setJobs(prev => prev.map(j => j.id === job.id ? { 
             ...j, 
             status: 'error', 

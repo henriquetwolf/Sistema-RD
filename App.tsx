@@ -10,7 +10,7 @@ import { createSupabaseClient, batchUploadData, clearTableData } from './service
 import { appBackend } from './services/appBackend';
 import { 
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
-  Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock 
+  Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput 
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -96,7 +96,8 @@ function App() {
 
   const runAllActiveJobs = () => {
     const currentJobs = jobsRef.current;
-    const jobsToRun = currentJobs.filter(j => j.active && j.status !== 'syncing');
+    // Only run jobs that are active AND have a sheetUrl (Auto-Sync jobs)
+    const jobsToRun = currentJobs.filter(j => j.active && j.sheetUrl && j.status !== 'syncing');
 
     jobsToRun.forEach(job => {
         performJobSync(job);
@@ -104,11 +105,14 @@ function App() {
   };
 
   const performJobSync = async (job: SyncJob) => {
+    // Safety check
+    if (!job.sheetUrl) return;
+
     // 1. Set Status to Syncing
-    setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'syncing', lastMessage: 'Iniciando...' } : j));
+    setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'syncing', lastMessage: 'Iniciando ciclo...' } : j));
 
     try {
-        // Setup Timeout (120 seconds now, because we have a 60s wait inside)
+        // Setup Timeout (120 seconds for clear + wait + sync)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000);
 
@@ -207,28 +211,27 @@ function App() {
   };
 
   const handleCreateConnection = () => {
-      // Create new Job from current Wizard State
-      if (!tempSheetUrl) {
-          alert("Para criar uma conexão automática, você deve usar a opção 'Google Sheets' na etapa 1.");
-          return;
-      }
+      // Determine if this is an Auto-Sync job (Sheet URL) or Static (File Upload)
+      const isAutoSync = !!tempSheetUrl;
 
       const newJob: SyncJob = {
           id: crypto.randomUUID(),
           name: config.tableName || "Nova Conexão",
-          sheetUrl: tempSheetUrl,
+          sheetUrl: tempSheetUrl || "", // Store empty string if manual
           config: { ...config },
-          active: true,
-          status: 'idle',
-          lastSync: null,
-          lastMessage: 'Aguardando primeira sincronização...'
+          active: isAutoSync, // Only active if it has a URL
+          status: isAutoSync ? 'idle' : 'success', // Static starts as success (assumed manual upload done)
+          lastSync: isAutoSync ? null : new Date(),
+          lastMessage: isAutoSync ? 'Aguardando primeira sincronização...' : 'Upload manual realizado.'
       };
 
       setJobs(prev => [...prev, newJob]);
       setStep(AppStep.DASHBOARD);
       
-      // Trigger immediate sync
-      setTimeout(() => performJobSync(newJob), 500);
+      // Trigger immediate sync ONLY for Auto-Sync jobs
+      if (isAutoSync) {
+         setTimeout(() => performJobSync(newJob), 500);
+      }
   };
 
   // --- JOB ACTIONS ---
@@ -246,7 +249,7 @@ function App() {
 
   const handleManualSync = (id: string) => {
       const job = jobs.find(j => j.id === id);
-      if (job) performJobSync(job);
+      if (job && job.sheetUrl) performJobSync(job);
   };
 
   const handleLogout = async () => {
@@ -322,9 +325,17 @@ function App() {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-1">
                                             <h3 className="font-bold text-lg text-slate-800">{job.name}</h3>
-                                            <span className={clsx("px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide", job.active ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-500")}>
-                                                {job.active ? "Ativo" : "Pausado"}
-                                            </span>
+                                            
+                                            {/* Status Badge */}
+                                            {job.sheetUrl ? (
+                                                <span className={clsx("px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide", job.active ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
+                                                    {job.active ? "Auto-Sync (5min)" : "Pausado"}
+                                                </span>
+                                            ) : (
+                                                <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide bg-slate-100 text-slate-600 border border-slate-200">
+                                                    Upload Manual
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-4 text-xs text-slate-500 font-mono">
                                             <span title="Tabela Supabase" className="flex items-center gap-1"><Database size={12}/> {job.config.tableName}</span>
@@ -351,7 +362,7 @@ function App() {
                                                     job.status === 'success' ? 'text-green-700' : 
                                                     job.status === 'error' ? 'text-red-700' : 'text-slate-600'
                                                 )}>
-                                                    {job.status === 'syncing' ? 'Sincronizando...' : job.status === 'idle' ? 'Aguardando' : job.status === 'success' ? 'Sincronizado' : 'Erro'}
+                                                    {job.status === 'syncing' ? 'Sincronizando...' : job.status === 'idle' ? 'Aguardando' : job.status === 'success' ? 'Conexão OK' : 'Erro'}
                                                 </span>
                                             </div>
                                             <p className="text-xs text-slate-400">
@@ -364,30 +375,39 @@ function App() {
 
                                         {/* Controls */}
                                         <div className="flex items-center gap-2 border-l border-slate-100 pl-4">
-                                            <button 
-                                                onClick={() => handleManualSync(job.id)}
-                                                disabled={job.status === 'syncing' || !job.active}
-                                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-30"
-                                                title="Forçar sincronização agora"
-                                            >
-                                                <Clock size={18} />
-                                            </button>
-                                            <button 
-                                                onClick={() => toggleJob(job.id)}
-                                                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                                                title={job.active ? "Pausar" : "Retomar"}
-                                            >
-                                                {job.active ? <Pause size={18} /> : <Play size={18} />}
-                                            </button>
-                                            <a 
-                                                href={job.sheetUrl} 
-                                                target="_blank" 
-                                                rel="noreferrer"
-                                                className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                title="Abrir planilha original"
-                                            >
-                                                <ExternalLink size={18} />
-                                            </a>
+                                            {job.sheetUrl ? (
+                                                <>
+                                                    <button 
+                                                        onClick={() => handleManualSync(job.id)}
+                                                        disabled={job.status === 'syncing' || !job.active}
+                                                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-30"
+                                                        title="Forçar sincronização agora"
+                                                    >
+                                                        <Clock size={18} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => toggleJob(job.id)}
+                                                        className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        title={job.active ? "Pausar" : "Retomar"}
+                                                    >
+                                                        {job.active ? <Pause size={18} /> : <Play size={18} />}
+                                                    </button>
+                                                    <a 
+                                                        href={job.sheetUrl} 
+                                                        target="_blank" 
+                                                        rel="noreferrer"
+                                                        className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                        title="Abrir planilha original"
+                                                    >
+                                                        <ExternalLink size={18} />
+                                                    </a>
+                                                </>
+                                            ) : (
+                                                <div className="px-2 text-slate-300 pointer-events-none">
+                                                    <FileInput size={18} />
+                                                </div>
+                                            )}
+                                            
                                             <button 
                                                 onClick={() => deleteJob(job.id)}
                                                 className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -462,8 +482,8 @@ function App() {
                                             <CheckCircle size={14} /> Modo Auto-Sync Habilitado
                                         </span>
                                     ) : (
-                                        <span className="flex items-center gap-2 text-amber-600 bg-amber-50 px-2 py-1 rounded">
-                                            <AlertTriangle size={14} /> Modo Manual (Sem URL da Planilha)
+                                        <span className="flex items-center gap-2 text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                                            <FileInput size={14} /> Modo Upload Manual (Sem Atualização)
                                         </span>
                                     )}
                                 </div>
@@ -473,10 +493,16 @@ function App() {
                                     </button>
                                     <button 
                                         onClick={handleCreateConnection}
-                                        disabled={!tempSheetUrl}
-                                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-bold shadow-md flex items-center gap-2"
+                                        className={clsx(
+                                            "text-white px-6 py-2 rounded-lg font-bold shadow-md flex items-center gap-2",
+                                            tempSheetUrl ? "bg-indigo-600 hover:bg-indigo-700" : "bg-slate-600 hover:bg-slate-700"
+                                        )}
                                     >
-                                        <Clock size={18} /> Criar Conexão Automática (5 min)
+                                        {tempSheetUrl ? (
+                                            <><Clock size={18} /> Criar Conexão Automática</>
+                                        ) : (
+                                            <><CheckCircle size={18} /> Salvar no Histórico</>
+                                        )}
                                     </button>
                                 </div>
                             </div>

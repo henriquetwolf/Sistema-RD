@@ -1,17 +1,32 @@
 import React, { useState, useMemo } from 'react';
-import { FileData, CsvRow } from '../types';
-import { Table, AlertCircle, FileText, ArrowRight, Code, Copy, Check, Trash2, ShieldAlert, Loader2 } from 'lucide-react';
+import { FileData, SupabaseConfig } from '../types';
+import { 
+    Table, AlertCircle, FileText, ArrowRight, Code, Copy, Check, 
+    Trash2, ShieldAlert, Loader2, Edit2, X, Plus, GripVertical 
+} from 'lucide-react';
 import clsx from 'clsx';
 
 interface PreviewPanelProps {
   files: FileData[];
   tableName: string;
+  config: SupabaseConfig;
+  onUpdateFiles: (files: FileData[]) => void;
+  onUpdateConfig: (config: SupabaseConfig) => void;
   onSync: () => void;
   onBack: () => void;
   onClearTable: () => Promise<void>; 
 }
 
-export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, onSync, onBack, onClearTable }) => {
+export const PreviewPanel: React.FC<PreviewPanelProps> = ({ 
+    files, 
+    tableName, 
+    config,
+    onUpdateFiles, 
+    onUpdateConfig,
+    onSync, 
+    onBack, 
+    onClearTable 
+}) => {
   const [showSql, setShowSql] = useState(false);
   const [copied, setCopied] = useState(false);
   
@@ -20,15 +35,17 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
   const [clearStatus, setClearStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [clearErrorMsg, setClearErrorMsg] = useState<string | null>(null);
 
+  // Edit states
+  const [editingCol, setEditingCol] = useState<string | null>(null);
+  const [tempColName, setTempColName] = useState('');
+
   const totalRows = files.reduce((acc, f) => acc + f.rowCount, 0);
-  const totalFiles = files.length;
   
-  // Get columns from the first file
-  const previewColumns = files[0]?.headers.slice(0, 5) || [];
-  const extraColumnsCount = (files[0]?.headers.length || 0) - 5;
+  // Get columns from the first file (assuming structure consistency for headers)
+  const previewColumns = files[0]?.headers || [];
   
-  // Get first 5 rows for preview
-  const previewRows = files[0]?.data.slice(0, 5) || [];
+  // Get first 10 rows for preview
+  const previewRows = files[0]?.data.slice(0, 10) || [];
 
   // Infer types and generate SQL
   const sqlCode = useMemo(() => {
@@ -36,7 +53,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
 
     const safeTableName = tableName.trim() || 'minha_tabela_importada';
     const headers = files[0].headers.filter(h => h && h.trim() !== '');
-    const allData = files.flatMap(f => f.data);
+    const allData = files.flatMap(f => f.data.slice(0, 50)); // Sample first 50 rows for type inference
     const idColumnIndex = headers.findIndex(h => h.toLowerCase() === 'id');
     const hasId = idColumnIndex !== -1;
 
@@ -107,83 +124,164 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
     }
   };
 
+  // --- TRANSFORMATION LOGIC ---
+
+  const startEditing = (colName: string) => {
+    setEditingCol(colName);
+    setTempColName(colName);
+  };
+
+  const cancelEditing = () => {
+    setEditingCol(null);
+    setTempColName('');
+  };
+
+  const saveRename = () => {
+    if (!editingCol || !tempColName.trim()) return;
+    if (editingCol === tempColName) {
+        cancelEditing();
+        return;
+    }
+
+    const oldName = editingCol;
+    const newName = tempColName.trim();
+
+    // Check duplicate
+    if (files[0].headers.includes(newName)) {
+        alert('Já existe uma coluna com este nome.');
+        return;
+    }
+
+    // Apply transformation to ALL files
+    const newFiles = files.map(file => {
+        // 1. Rename in Headers
+        const newHeaders = file.headers.map(h => h === oldName ? newName : h);
+        
+        // 2. Rename in Data Rows
+        const newData = file.data.map(row => {
+            const newRow = { ...row };
+            // Move value to new key
+            newRow[newName] = newRow[oldName];
+            // Delete old key
+            delete newRow[oldName];
+            return newRow;
+        });
+
+        return { ...file, headers: newHeaders, data: newData };
+    });
+
+    onUpdateFiles(newFiles);
+
+    // Update Config if PK was renamed
+    if (config.primaryKey === oldName) {
+        onUpdateConfig({ ...config, primaryKey: newName });
+    }
+
+    cancelEditing();
+  };
+
+  const deleteColumn = () => {
+    if (!editingCol) return;
+    const colName = editingCol;
+
+    if (!window.confirm(`Tem certeza que deseja excluir a coluna "${colName}"? Isso removerá os dados dela.`)) {
+        return;
+    }
+
+    // Apply transformation to ALL files
+    const newFiles = files.map(file => {
+        // 1. Remove from Headers
+        const newHeaders = file.headers.filter(h => h !== colName);
+        
+        // 2. Remove from Data Rows
+        const newData = file.data.map(row => {
+            const newRow = { ...row };
+            delete newRow[colName];
+            return newRow;
+        });
+
+        return { ...file, headers: newHeaders, data: newData };
+    });
+
+    onUpdateFiles(newFiles);
+
+    // Warn if deleting PK
+    if (config.primaryKey === colName) {
+        onUpdateConfig({ ...config, primaryKey: '' });
+        alert('Atenção: Você excluiu a coluna que estava definida como Chave Primária.');
+    }
+
+    cancelEditing();
+  };
+
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
+    <div className="max-w-6xl mx-auto space-y-6 pb-20">
       
-      {/* SQL Generator Section */}
-      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6">
+      {/* Transformation Banner */}
+      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
         <div className="flex items-start gap-4">
-            <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600 hidden sm:block">
-                <Code size={24} />
+            <div className="bg-orange-100 p-2 rounded-lg text-orange-600 hidden sm:block">
+                <Edit2 size={24} />
             </div>
             <div className="flex-1">
-                <h3 className="text-lg font-bold text-indigo-900 mb-1">Código SQL para Criação</h3>
-                <p className="text-indigo-700 text-sm mb-4">
-                   Copie e execute no Supabase se a tabela ainda não existir.
+                <h3 className="text-lg font-bold text-slate-900 mb-1">Editor de Dados (Transformações)</h3>
+                <p className="text-slate-600 text-sm mb-4">
+                   Passe o mouse sobre os cabeçalhos da tabela abaixo para <b>Renomear</b> ou <b>Excluir</b> colunas. 
+                   As alterações serão aplicadas a todas as linhas antes da sincronização.
                 </p>
-                
-                {!showSql ? (
-                    <button onClick={() => setShowSql(true)} className="text-sm bg-white border border-indigo-200 text-indigo-700 px-4 py-2 rounded-lg font-medium hover:bg-indigo-50 transition-colors shadow-sm">
-                        Ver Código SQL
-                    </button>
-                ) : (
-                    <div className="relative">
-                         <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-xs overflow-x-auto border border-indigo-200 font-mono whitespace-pre-wrap">{sqlCode}</pre>
-                        <button onClick={handleCopy} className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-md transition-colors">
-                            {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
-                        </button>
-                    </div>
-                )}
+                <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span className="bg-slate-100 px-2 py-1 rounded border border-slate-200 flex items-center gap-1"><Edit2 size={10}/> Clique no cabeçalho para editar</span>
+                    <span className="bg-slate-100 px-2 py-1 rounded border border-slate-200 flex items-center gap-1"><Trash2 size={10}/> Use a lixeira para remover</span>
+                </div>
             </div>
         </div>
       </div>
 
-       {/* Admin / Danger Zone */}
-       <div className="bg-white border border-red-100 rounded-xl p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-                <div className="bg-red-50 text-red-600 p-2 rounded-lg">
-                    <ShieldAlert size={20} />
-                </div>
-                <div>
-                    <h3 className="text-base font-bold text-slate-800">Limpar Dados Existentes</h3>
-                    <p className="text-sm text-slate-500">
-                        Útil para resetar a tabela antes da primeira sincronização completa.
-                    </p>
-                </div>
-            </div>
-            
-            <div className="flex flex-col items-end gap-2">
-                <button onClick={handleClearClick} disabled={isClearing} className={clsx("flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all w-full md:w-auto justify-center", clearStatus === 'success' ? "bg-green-100 text-green-700" : "bg-white border border-red-200 text-red-600 hover:bg-red-50")}>
-                    {isClearing ? <Loader2 size={16} className="animate-spin" /> : clearStatus === 'success' ? <><Check size={16} /> Dados Limpos</> : <><Trash2 size={16} /> Limpar Tabela</>}
-                </button>
-                
-                {clearStatus === 'error' && clearErrorMsg && (
-                    <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded max-w-xs text-right">
-                        {clearErrorMsg}
-                    </span>
-                )}
-            </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-200 bg-slate-50">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+        <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <FileText className="text-indigo-600" size={20} />
-              Visualização dos Dados ({totalRows} linhas)
+              Pré-visualização
             </h2>
+            <span className="text-xs font-mono text-slate-500 bg-slate-200 px-2 py-1 rounded">{totalRows} linhas</span>
         </div>
 
-        <div className="p-6">
-          <div className="overflow-x-auto border rounded-lg">
-            <table className="w-full text-left text-sm text-slate-600">
+        <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-600 border-collapse">
               <thead className="bg-slate-100 text-slate-800 font-semibold uppercase text-xs">
                 <tr>
                   {previewColumns.map((col) => (
-                    <th key={col} className="px-4 py-3 border-b">{col}</th>
+                    <th key={col} className="border-b border-r border-slate-200 min-w-[150px] relative group p-0">
+                        {editingCol === col ? (
+                            <div className="p-1 flex items-center bg-white inset-0 absolute z-10 border-2 border-indigo-500">
+                                <input 
+                                    autoFocus
+                                    className="flex-1 min-w-0 px-1 py-0.5 outline-none text-xs font-mono"
+                                    value={tempColName}
+                                    onChange={(e) => setTempColName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') saveRename();
+                                        if (e.key === 'Escape') cancelEditing();
+                                    }}
+                                />
+                                <div className="flex items-center gap-1 ml-1">
+                                    <button onClick={saveRename} className="p-0.5 text-green-600 hover:bg-green-50 rounded"><Check size={14}/></button>
+                                    <button onClick={deleteColumn} className="p-0.5 text-red-600 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                                    <button onClick={cancelEditing} className="p-0.5 text-slate-400 hover:bg-slate-100 rounded"><X size={14}/></button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div 
+                                onClick={() => startEditing(col)}
+                                className="px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-white hover:text-indigo-700 transition-colors h-full select-none"
+                            >
+                                <span>{col}</span>
+                                <Edit2 size={12} className="opacity-0 group-hover:opacity-100 text-slate-400" />
+                            </div>
+                        )}
+                    </th>
                   ))}
-                  {extraColumnsCount > 0 && <th className="px-4 py-3 border-b">...mais {extraColumnsCount}</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -194,14 +292,76 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ files, tableName, on
                         {String(row[col] ?? '')}
                       </td>
                     ))}
-                    {extraColumnsCount > 0 && <td className="px-4 py-2 text-slate-400">...</td>}
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
         </div>
+        {totalRows > 10 && (
+             <div className="p-2 bg-slate-50 text-center text-xs text-slate-400 border-t border-slate-200">
+                Mostrando as primeiras 10 linhas. As transformações serão aplicadas em todo o conjunto de dados.
+             </div>
+        )}
       </div>
+
+      {/* Admin / SQL / Clear Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* SQL Generator */}
+        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6">
+            <div className="flex items-start gap-3 mb-4">
+                <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600">
+                    <Code size={20} />
+                </div>
+                <div>
+                    <h3 className="font-bold text-indigo-900">SQL para Criação</h3>
+                    <p className="text-indigo-700 text-xs">Baseado nas colunas atuais.</p>
+                </div>
+            </div>
+            
+            {!showSql ? (
+                <button onClick={() => setShowSql(true)} className="w-full text-sm bg-white border border-indigo-200 text-indigo-700 px-4 py-2 rounded-lg font-medium hover:bg-indigo-50 transition-colors shadow-sm">
+                    Ver Código SQL
+                </button>
+            ) : (
+                <div className="relative">
+                        <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-xs overflow-x-auto border border-indigo-200 font-mono whitespace-pre-wrap max-h-[300px] overflow-y-auto">{sqlCode}</pre>
+                    <button onClick={handleCopy} className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-md transition-colors">
+                        {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+                    </button>
+                </div>
+            )}
+        </div>
+
+        {/* Danger Zone */}
+        <div className="bg-white border border-red-100 rounded-xl p-6 shadow-sm flex flex-col justify-between">
+            <div className="flex items-start gap-3 mb-4">
+                <div className="bg-red-50 text-red-600 p-2 rounded-lg">
+                    <ShieldAlert size={20} />
+                </div>
+                <div>
+                    <h3 className="font-bold text-slate-800">Limpar Tabela</h3>
+                    <p className="text-slate-500 text-xs">
+                        Apaga todos os dados da tabela "{tableName}" no Supabase.
+                    </p>
+                </div>
+            </div>
+            
+            <div className="flex flex-col gap-2">
+                <button onClick={handleClearClick} disabled={isClearing} className={clsx("flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all justify-center", clearStatus === 'success' ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600 hover:bg-red-100 border border-red-200")}>
+                    {isClearing ? <Loader2 size={16} className="animate-spin" /> : clearStatus === 'success' ? <><Check size={16} /> Limpo com sucesso</> : <><Trash2 size={16} /> Resetar Dados no DB</>}
+                </button>
+                
+                {clearStatus === 'error' && clearErrorMsg && (
+                    <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded text-center">
+                        {clearErrorMsg}
+                    </span>
+                )}
+            </div>
+        </div>
+
+      </div>
+
     </div>
   );
 };

@@ -502,6 +502,9 @@ function App() {
                         <PreviewPanel 
                             files={filesData} 
                             tableName={config.tableName}
+                            config={config}
+                            onUpdateFiles={setFilesData}
+                            onUpdateConfig={setConfig}
                             onSync={() => setStep(AppStep.SYNC)} // Just goes to next step, doesn't actually sync yet if we want dashboard
                             onBack={() => setStep(AppStep.CONFIG)}
                             onClearTable={async () => {

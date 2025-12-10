@@ -233,9 +233,30 @@ function App() {
     }
   };
 
-  const handleCreateConnection = () => {
-      // Determine if this is an Auto-Sync job (Sheet URL) or Static (File Upload)
+  const handleCreateConnection = async () => {
       const isAutoSync = !!tempSheetUrl;
+
+      // Se for upload manual (não tem URL de Sheet), precisamos fazer o upload agora
+      if (!isAutoSync) {
+          setStatus('uploading');
+          setErrorMessage(null);
+
+          try {
+             const client = createSupabaseClient(config.url, config.key);
+             const allData = filesData.flatMap(f => f.data);
+             
+             if (allData.length > 0) {
+                 await batchUploadData(client, config, allData, () => {});
+             }
+          } catch (e: any) {
+              console.error(e);
+              setErrorMessage(`Erro ao enviar dados: ${e.message}`);
+              setStatus('error');
+              return; // Aborta e mantém na tela para o usuário tentar novamente
+          }
+      }
+
+      const rowCount = filesData.reduce((acc, f) => acc + f.rowCount, 0);
 
       const newJob: SyncJob = {
           id: crypto.randomUUID(),
@@ -245,12 +266,13 @@ function App() {
           active: isAutoSync, // Only active if it has a URL
           status: isAutoSync ? 'idle' : 'success', // Static starts as success (assumed manual upload done)
           lastSync: isAutoSync ? null : new Date(),
-          lastMessage: isAutoSync ? 'Aguardando primeira sincronização...' : 'Upload manual realizado.',
+          lastMessage: isAutoSync ? 'Aguardando primeira sincronização...' : `Upload manual: ${rowCount} linhas.`,
           intervalMinutes: config.intervalMinutes || 5
       };
 
       setJobs(prev => [...prev, newJob]);
       setStep(AppStep.DASHBOARD);
+      setStatus('idle');
       
       // Trigger immediate sync ONLY for Auto-Sync jobs
       if (isAutoSync) {
@@ -538,15 +560,19 @@ function App() {
                                     </button>
                                     <button 
                                         onClick={handleCreateConnection}
+                                        disabled={status === 'uploading'}
                                         className={clsx(
-                                            "text-white px-6 py-2 rounded-lg font-bold shadow-md flex items-center gap-2",
-                                            tempSheetUrl ? "bg-indigo-600 hover:bg-indigo-700" : "bg-slate-600 hover:bg-slate-700"
+                                            "text-white px-6 py-2 rounded-lg font-bold shadow-md flex items-center gap-2 transition-all",
+                                            tempSheetUrl ? "bg-indigo-600 hover:bg-indigo-700" : "bg-slate-600 hover:bg-slate-700",
+                                            status === 'uploading' && "opacity-75 cursor-wait"
                                         )}
                                     >
-                                        {tempSheetUrl ? (
+                                        {status === 'uploading' ? (
+                                            <><Loader2 size={18} className="animate-spin" /> Enviando...</>
+                                        ) : tempSheetUrl ? (
                                             <><Clock size={18} /> Criar Conexão Automática</>
                                         ) : (
-                                            <><CheckCircle size={18} /> Salvar no Histórico</>
+                                            <><CheckCircle size={18} /> Enviar e Salvar no Histórico</>
                                         )}
                                     </button>
                                 </div>

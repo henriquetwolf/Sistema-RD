@@ -66,6 +66,7 @@ export const appBackend = {
       key: row.api_key,
       tableName: row.target_table_name,
       primaryKey: row.target_primary_key || '',
+      intervalMinutes: row.interval_minutes || 5, // Map from DB
     }));
   },
 
@@ -79,6 +80,7 @@ export const appBackend = {
       api_key: preset.key,
       target_table_name: preset.tableName,
       target_primary_key: preset.primaryKey || null,
+      interval_minutes: preset.intervalMinutes || 5, // Save to DB
     };
 
     const { data, error } = await supabase
@@ -99,6 +101,7 @@ export const appBackend = {
       key: data.api_key,
       tableName: data.target_table_name,
       primaryKey: data.target_primary_key || '',
+      intervalMinutes: data.interval_minutes || 5,
     };
   },
 

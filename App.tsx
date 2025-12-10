@@ -4,13 +4,14 @@ import { ConfigPanel } from './components/ConfigPanel';
 import { UploadPanel } from './components/UploadPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { LoginPanel } from './components/LoginPanel';
+import { IntegrationHelp } from './components/IntegrationHelp';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
 import { appBackend } from './services/appBackend';
 import { 
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
-  Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput 
+  Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -30,6 +31,9 @@ function App() {
   const [tempSheetUrl, setTempSheetUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // UI State
+  const [showHelp, setShowHelp] = useState(false);
 
   // Sync Timer Ref
   const intervalRef = useRef<number | null>(null);
@@ -289,6 +293,9 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       
+      {/* Helper Modal */}
+      <IntegrationHelp isOpen={showHelp} onClose={() => setShowHelp(false)} config={config} />
+
       {/* Header */}
       <header className="bg-white border-b border-slate-200 py-4 mb-8 sticky top-0 z-10 shadow-sm">
         <div className="container mx-auto px-4 flex items-center justify-between">
@@ -304,7 +311,16 @@ function App() {
                     Cancelar
                 </button>
              )}
+             
+             <button 
+                onClick={() => setShowHelp(true)}
+                className="text-sm font-medium text-slate-600 hover:text-indigo-600 flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-md hover:bg-slate-100 transition-colors"
+             >
+                <HelpCircle size={16} /> <span className="hidden sm:inline">Guia Power BI</span>
+             </button>
+
              <div className="h-4 w-px bg-slate-200"></div>
+             
              <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600 flex items-center gap-1">
                 <LogOut size={16} /> <span className="hidden sm:inline">Sair</span>
             </button>

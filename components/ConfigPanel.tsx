@@ -77,8 +77,8 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
       setPresets([newPreset, ...presets]);
       setShowSaveInput(false);
       setNewPresetName('');
-    } catch (e) {
-      alert('Erro ao salvar configuração no servidor.');
+    } catch (e: any) {
+      alert(`Erro ao salvar: ${e.message || 'Ocorreu um erro desconhecido.'}`);
     } finally {
       setIsSaving(false);
     }

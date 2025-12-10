@@ -74,7 +74,11 @@ export const appBackend = {
    * Save a new preset to Supabase
    */
   savePreset: async (preset: Omit<SavedPreset, 'id'>): Promise<SavedPreset> => {
+    // Get current user to ensure user_id is set for RLS policies
+    const { data: { user } } = await supabase.auth.getUser();
+
     const payload = {
+      user_id: user?.id, // Explicitly adding user_id
       name: preset.name,
       project_url: preset.url,
       api_key: preset.key,

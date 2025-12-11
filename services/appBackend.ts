@@ -16,10 +16,33 @@ const supabase = createClient(
 
 const TABLE_NAME = 'app_presets';
 
+// MOCK SESSION FOR LOCAL MODE
+const MOCK_SESSION = {
+  access_token: 'mock-token',
+  refresh_token: 'mock-refresh-token',
+  expires_in: 3600,
+  token_type: 'bearer',
+  user: {
+    id: 'local-user',
+    aud: 'authenticated',
+    role: 'authenticated',
+    email: 'local@admin.com',
+    app_metadata: { provider: 'email' },
+    user_metadata: {},
+    created_at: new Date().toISOString(),
+  }
+};
+
 export const appBackend = {
+  // Public flag to check if we are in local mode
+  isLocalMode: !isConfigured,
+
   auth: {
     signIn: async (email: string, password: string) => {
-      if (!isConfigured) throw new Error("VITE_APP_SUPABASE_URL and VITE_APP_SUPABASE_ANON_KEY are missing.");
+      if (!isConfigured) {
+        // In local mode, we accept any login or simply rely on getSession returning true
+        return { data: { user: MOCK_SESSION.user, session: MOCK_SESSION }, error: null };
+      }
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -37,17 +60,26 @@ export const appBackend = {
       return data;
     },
     signOut: async () => {
-      if (!isConfigured) return;
+      if (!isConfigured) {
+        // In local mode, just reload to 'reset' state, although we will auto-login again.
+        window.location.reload(); 
+        return;
+      }
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     },
     getSession: async () => {
-      if (!isConfigured) return null;
+      if (!isConfigured) {
+          return MOCK_SESSION as unknown as Session;
+      }
       const { data } = await supabase.auth.getSession();
       return data.session;
     },
     onAuthStateChange: (callback: (session: Session | null) => void) => {
-      if (!isConfigured) return { data: { subscription: { unsubscribe: () => {} } } };
+      if (!isConfigured) {
+          callback(MOCK_SESSION as unknown as Session);
+          return { data: { subscription: { unsubscribe: () => {} } } };
+      }
       return supabase.auth.onAuthStateChange((_event, session) => {
         callback(session);
       });
@@ -55,10 +87,13 @@ export const appBackend = {
   },
 
   /**
-   * Fetch all saved presets from Supabase
+   * Fetch all saved presets from Supabase or LocalStorage
    */
   getPresets: async (): Promise<SavedPreset[]> => {
-    if (!isConfigured) return [];
+    if (!isConfigured) {
+        const local = localStorage.getItem('csv_syncer_presets');
+        return local ? JSON.parse(local) : [];
+    }
     
     const { data, error } = await supabase
       .from(TABLE_NAME)
@@ -83,10 +118,17 @@ export const appBackend = {
   },
 
   /**
-   * Save a new preset to Supabase
+   * Save a new preset to Supabase or LocalStorage
    */
   savePreset: async (preset: Omit<SavedPreset, 'id'>): Promise<SavedPreset> => {
-    if (!isConfigured) throw new Error("Backend not configured.");
+    if (!isConfigured) {
+        const local = JSON.parse(localStorage.getItem('csv_syncer_presets') || '[]');
+        const newPreset = { ...preset, id: crypto.randomUUID() };
+        // Add to beginning
+        const updated = [newPreset, ...local];
+        localStorage.setItem('csv_syncer_presets', JSON.stringify(updated));
+        return newPreset as SavedPreset;
+    }
     
     // Get current user to ensure user_id is set for RLS policies
     const { data: { user } } = await supabase.auth.getUser();
@@ -127,7 +169,12 @@ export const appBackend = {
    * Delete a preset by ID
    */
   deletePreset: async (id: string): Promise<void> => {
-    if (!isConfigured) throw new Error("Backend not configured.");
+    if (!isConfigured) {
+        const local = JSON.parse(localStorage.getItem('csv_syncer_presets') || '[]');
+        const updated = local.filter((p: any) => p.id !== id);
+        localStorage.setItem('csv_syncer_presets', JSON.stringify(updated));
+        return;
+    }
 
     const { error } = await supabase
       .from(TABLE_NAME)

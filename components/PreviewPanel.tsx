@@ -312,7 +312,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         </button>
 
         <div className="flex-1 text-right text-xs text-slate-400">
-            {totalRows} linhas carregadas
+            {files.length} arquivo{files.length !== 1 && 's'} • {totalRows} linhas carregadas
         </div>
       </div>
 

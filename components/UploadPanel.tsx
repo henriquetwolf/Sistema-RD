@@ -195,7 +195,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                 Arraste e solte seus arquivos CSV aqui
                 </p>
                 <p className="text-sm text-slate-500">
-                ou clique para selecionar arquivos do computador
+                Você pode selecionar <strong>vários arquivos</strong> com as mesmas colunas
                 </p>
             </div>
             )}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogIn, Loader2, AlertCircle, Settings } from 'lucide-react';
+import { LogIn, Loader2, AlertCircle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 
 export const LoginPanel: React.FC = () => {

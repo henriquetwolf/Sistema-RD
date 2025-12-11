@@ -11,7 +11,7 @@ import { createSupabaseClient, batchUploadData, clearTableData } from './service
 import { appBackend } from './services/appBackend';
 import { 
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
-  Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle
+  Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -218,6 +218,18 @@ function App() {
     setStatus('parsing');
     try {
       const parsedFiles = await Promise.all(files.map(parseCsvFile));
+
+      // VALIDATION: Ensure all files have the same headers
+      if (parsedFiles.length > 1) {
+          const normalize = (headers: string[]) => headers.map(h => h.trim().toLowerCase()).sort().join(',');
+          const refHeaders = normalize(parsedFiles[0].headers);
+          
+          const inconsistentFile = parsedFiles.find(f => normalize(f.headers) !== refHeaders);
+          if (inconsistentFile) {
+              throw new Error(`Estrutura incompatível: O arquivo "${inconsistentFile.fileName}" possui colunas diferentes de "${parsedFiles[0].fileName}". Todos os arquivos devem ter a mesma formatação.`);
+          }
+      }
+
       setFilesData(parsedFiles);
       
       // Suggest Table Name
@@ -312,6 +324,8 @@ function App() {
   if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>;
   if (!session) return <LoginPanel />;
 
+  const isLocalMode = session?.user?.id === 'local-user';
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       
@@ -326,6 +340,11 @@ function App() {
                <Database size={18} />
             </div>
             <h1 className="text-xl font-bold text-slate-800 hidden sm:block">Supabase Syncer</h1>
+            {isLocalMode && (
+                <span className="ml-2 px-2 py-0.5 bg-slate-100 text-slate-500 text-xs font-mono rounded border border-slate-200 flex items-center gap-1">
+                    <HardDrive size={10} /> Local Mode
+                </span>
+            )}
           </div>
           <div className="flex items-center gap-4">
              {step !== AppStep.DASHBOARD && (
@@ -487,100 +506,6 @@ function App() {
                     </div>
                 )}
             </div>
-        )}
-
-        {/* WIZARD FLOW */}
-        {step !== AppStep.DASHBOARD && (
-            <>
-                <StepIndicator currentStep={step} />
-                
-                {errorMessage && (
-                    <div className="max-w-4xl mx-auto mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-4 rounded-lg flex items-start gap-3">
-                        <AlertTriangle className="shrink-0 mt-1" size={20} />
-                        <div className="flex-1">{errorMessage}</div>
-                        <button onClick={() => setErrorMessage(null)} className="text-red-400 hover:text-red-600">×</button>
-                    </div>
-                )}
-
-                {step === AppStep.UPLOAD && (
-                    <UploadPanel 
-                        onFilesSelected={handleFilesSelected} 
-                        onUrlConfirmed={setTempSheetUrl} 
-                        isLoading={status === 'parsing'}
-                    />
-                )}
-
-                {step === AppStep.CONFIG && (
-                    <ConfigPanel 
-                        config={config} 
-                        setConfig={setConfig} 
-                        onNext={() => setStep(AppStep.PREVIEW)}
-                        onBack={() => setStep(AppStep.UPLOAD)}
-                    />
-                )}
-
-                {step === AppStep.PREVIEW && (
-                    <div className="space-y-6">
-                        <PreviewPanel 
-                            files={filesData} 
-                            tableName={config.tableName}
-                            config={config}
-                            onUpdateFiles={setFilesData}
-                            onUpdateConfig={setConfig}
-                            onSync={() => setStep(AppStep.SYNC)} // Just goes to next step, doesn't actually sync yet if we want dashboard
-                            onBack={() => setStep(AppStep.CONFIG)}
-                            onClearTable={async () => {
-                                 const client = createSupabaseClient(config.url, config.key);
-                                 // IMPORTANT FIX: 
-                                 // 1. Try config.primaryKey
-                                 // 2. Try the FIRST column of the CSV (most likely the ID)
-                                 // 3. Fallback to 'id' as a last resort.
-                                 const targetColumn = config.primaryKey || (filesData.length > 0 && filesData[0].headers[0]) || 'id';
-                                 
-                                 await clearTableData(client, config.tableName, targetColumn);
-                            }}
-                        />
-                         {/* Action Bar for "Create Connection" */}
-                        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-lg z-20">
-                            <div className="container mx-auto max-w-4xl flex items-center justify-between">
-                                <div className="text-sm text-slate-500">
-                                    {tempSheetUrl ? (
-                                        <span className="flex items-center gap-2 text-green-600 bg-green-50 px-2 py-1 rounded">
-                                            <CheckCircle size={14} /> Modo Auto-Sync Habilitado
-                                        </span>
-                                    ) : (
-                                        <span className="flex items-center gap-2 text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                                            <FileInput size={14} /> Modo Upload Manual (Sem Atualização)
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex gap-3">
-                                    <button onClick={() => setStep(AppStep.DASHBOARD)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">
-                                        Cancelar
-                                    </button>
-                                    <button 
-                                        onClick={handleCreateConnection}
-                                        disabled={status === 'uploading'}
-                                        className={clsx(
-                                            "text-white px-6 py-2 rounded-lg font-bold shadow-md flex items-center gap-2 transition-all",
-                                            tempSheetUrl ? "bg-indigo-600 hover:bg-indigo-700" : "bg-slate-600 hover:bg-slate-700",
-                                            status === 'uploading' && "opacity-75 cursor-wait"
-                                        )}
-                                    >
-                                        {status === 'uploading' ? (
-                                            <><Loader2 size={18} className="animate-spin" /> Enviando...</>
-                                        ) : tempSheetUrl ? (
-                                            <><Clock size={18} /> Criar Conexão Automática</>
-                                        ) : (
-                                            <><CheckCircle size={18} /> Enviar e Salvar no Histórico</>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </>
         )}
 
       </main>

@@ -2,18 +2,24 @@ import { createClient, Session } from '@supabase/supabase-js';
 import { SavedPreset } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
-// We try to read from Environment Variables first (Vercel), otherwise fallback to hardcoded (Dev/Local)
-// Casting import.meta to any to resolve TS error "Property 'env' does not exist on type 'ImportMeta'"
-const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL || 'https://wfrzsnwisypmgsbeccfj.supabase.co';
-const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indmcnpzbndpc3lwbWdzYmVjY2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMTg5MzMsImV4cCI6MjA4MDc5NDkzM30.8el-0CN3LCFn7Wv7znpq_Aj6-tBJPju7zOtbdqCHbFo';
+// We rely on Environment Variables.
+const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
+const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
 
-const supabase = createClient(APP_URL, APP_KEY);
+const isConfigured = !!APP_URL && !!APP_KEY;
+
+// Prevent crash if env vars are missing, but requests will fail if used.
+const supabase = createClient(
+  APP_URL || 'https://placeholder.supabase.co', 
+  APP_KEY || 'placeholder'
+);
 
 const TABLE_NAME = 'app_presets';
 
 export const appBackend = {
   auth: {
     signIn: async (email: string, password: string) => {
+      if (!isConfigured) throw new Error("VITE_APP_SUPABASE_URL and VITE_APP_SUPABASE_ANON_KEY are missing.");
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -22,6 +28,7 @@ export const appBackend = {
       return data;
     },
     signUp: async (email: string, password: string) => {
+      if (!isConfigured) throw new Error("Backend not configured.");
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -30,14 +37,17 @@ export const appBackend = {
       return data;
     },
     signOut: async () => {
+      if (!isConfigured) return;
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     },
     getSession: async () => {
+      if (!isConfigured) return null;
       const { data } = await supabase.auth.getSession();
       return data.session;
     },
     onAuthStateChange: (callback: (session: Session | null) => void) => {
+      if (!isConfigured) return { data: { subscription: { unsubscribe: () => {} } } };
       return supabase.auth.onAuthStateChange((_event, session) => {
         callback(session);
       });
@@ -48,6 +58,8 @@ export const appBackend = {
    * Fetch all saved presets from Supabase
    */
   getPresets: async (): Promise<SavedPreset[]> => {
+    if (!isConfigured) return [];
+    
     const { data, error } = await supabase
       .from(TABLE_NAME)
       .select('*')
@@ -74,6 +86,8 @@ export const appBackend = {
    * Save a new preset to Supabase
    */
   savePreset: async (preset: Omit<SavedPreset, 'id'>): Promise<SavedPreset> => {
+    if (!isConfigured) throw new Error("Backend not configured.");
+    
     // Get current user to ensure user_id is set for RLS policies
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -113,6 +127,8 @@ export const appBackend = {
    * Delete a preset by ID
    */
   deletePreset: async (id: string): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured.");
+
     const { error } = await supabase
       .from(TABLE_NAME)
       .delete()

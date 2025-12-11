@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { LogIn, Loader2, AlertCircle } from 'lucide-react';
+import { LogIn, Loader2, AlertCircle, Settings } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 
 export const LoginPanel: React.FC = () => {
-  // Pre-filling credentials as requested
-  const [email, setEmail] = useState('macho@alfa.com');
-  const [password, setPassword] = useState('bittar24');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +26,8 @@ export const LoginPanel: React.FC = () => {
       console.error(err);
       if (err.message === 'Invalid login credentials') {
         setError('Email ou senha incorretos.');
+      } else if (err.message.includes('VITE_APP_SUPABASE')) {
+        setError('Configuração do servidor ausente (VITE_APP_SUPABASE_URL).');
       } else {
          setError(err.message || 'Erro ao realizar login.');
       }
@@ -98,6 +99,12 @@ export const LoginPanel: React.FC = () => {
               )}
             </button>
           </form>
+          
+          <div className="mt-6 text-center">
+             <p className="text-xs text-slate-400">
+                Este app requer VITE_APP_SUPABASE_URL e VITE_APP_SUPABASE_ANON_KEY configurados no ambiente.
+             </p>
+          </div>
         </div>
       </div>
     </div>

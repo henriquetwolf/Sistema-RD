@@ -44,11 +44,17 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
   };
 
   const validateAndPassFiles = (files: File[]) => {
-    const csvFiles = files.filter(f => f.type === 'text/csv' || f.name.endsWith('.csv'));
-    if (csvFiles.length > 0) {
-      onFilesSelected(csvFiles);
+    const validFiles = files.filter(f => 
+      f.type === 'text/csv' || 
+      f.name.endsWith('.csv') || 
+      f.name.endsWith('.xlsx') ||
+      f.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+
+    if (validFiles.length > 0) {
+      onFilesSelected(validFiles);
     } else {
-      alert('Por favor, selecione apenas arquivos CSV.');
+      alert('Por favor, selecione apenas arquivos CSV ou Excel (.xlsx).');
     }
   };
 
@@ -175,7 +181,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
             className="hidden"
             type="file"
             multiple
-            accept=".csv"
+            accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={handleChange}
             />
             
@@ -192,10 +198,10 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                 <Upload size={32} />
                 </div>
                 <p className="text-lg font-medium text-slate-700 mb-1">
-                Arraste e solte seus arquivos CSV aqui
+                Arraste seus arquivos <span className="text-indigo-600 font-bold">CSV</span> ou <span className="text-indigo-600 font-bold">Excel (.xlsx)</span>
                 </p>
                 <p className="text-sm text-slate-500">
-                Você pode selecionar <strong>vários arquivos</strong> com as mesmas colunas
+                Você pode selecionar vários arquivos com as mesmas colunas
                 </p>
             </div>
             )}

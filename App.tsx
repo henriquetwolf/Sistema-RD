@@ -8,6 +8,7 @@ import { IntegrationHelp } from './components/IntegrationHelp';
 import { TableViewer } from './components/TableViewer';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob } from './types';
 import { parseCsvFile } from './utils/csvParser';
+import { parseExcelFile } from './utils/excelParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
 import { appBackend } from './services/appBackend';
 import { 
@@ -222,7 +223,14 @@ function App() {
   const handleFilesSelected = async (files: File[]) => {
     setStatus('parsing');
     try {
-      const parsedFiles = await Promise.all(files.map(parseCsvFile));
+      // Process files based on extension
+      const parsedFiles = await Promise.all(files.map(file => {
+          if (file.name.endsWith('.xlsx')) {
+              return parseExcelFile(file);
+          } else {
+              return parseCsvFile(file);
+          }
+      }));
 
       // VALIDATION: Ensure all files have the same headers
       if (parsedFiles.length > 1) {
@@ -237,9 +245,12 @@ function App() {
 
       setFilesData(parsedFiles);
       
-      // Suggest Table Name
+      // Suggest Table Name from the first file
       if (!config.tableName && files.length > 0) {
-          const suggestedName = files[0].name.replace(/\.csv$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+          const suggestedName = files[0].name
+            .replace(/\.(csv|xlsx)$/i, '')
+            .replace(/[^a-zA-Z0-9_]/g, '_')
+            .toLowerCase();
           setConfig(prev => ({ ...prev, tableName: suggestedName }));
       }
       setStep(AppStep.CONFIG);

@@ -145,7 +145,11 @@ function App() {
         const timeoutId = setTimeout(() => controller.abort(), 120000);
 
         // --- STEP 1: Fetch Content (Binary or Text) ---
-        const response = await fetch(job.sheetUrl, { signal: controller.signal });
+        // Cache Busting: Add timestamp to prevent OneDrive/Browser from serving cached file
+        const separator = job.sheetUrl.includes('?') ? '&' : '?';
+        const fetchUrlWithCache = `${job.sheetUrl}${separator}_t=${Date.now()}`;
+        
+        const response = await fetch(fetchUrlWithCache, { signal: controller.signal });
         
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         
@@ -596,7 +600,7 @@ function App() {
                                                         {/* Status Badge */}
                                                         {job.sheetUrl ? (
                                                             <span className={clsx("px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide", job.active ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
-                                                                {job.active ? `Auto-Sync (${getIntervalLabel(job.intervalMinutes)})` : "Pausado"}
+                                                                {job.active ? `Link na Nuvem (${getIntervalLabel(job.intervalMinutes)})` : "Pausado"}
                                                             </span>
                                                         ) : (
                                                             <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide bg-slate-100 text-slate-600 border border-slate-200">

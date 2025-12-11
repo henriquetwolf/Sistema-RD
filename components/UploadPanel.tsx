@@ -345,7 +345,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                         <li>No Excel Online ou OneDrive, clique em <b>Compartilhar</b>.</li>
                         <li>Certifique-se de configurar para <b>"Qualquer pessoa com o link"</b> (Público).</li>
                         <li>Copie o link e cole acima.</li>
-                        <li>O sistema tentará baixar o arquivo automaticamente.</li>
+                        <li>A planilha será <b>monitorada e sincronizada</b> automaticamente.</li>
                     </ul>
                 </div>
 
@@ -354,7 +354,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                     disabled={!oneDriveUrl || isFetching || isLoading}
                     className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 mt-2"
                 >
-                    {isFetching || isLoading ? 'Processando Excel...' : 'Carregar Excel'}
+                    {isFetching || isLoading ? 'Verificando...' : 'Conectar e Sincronizar'}
                 </button>
              </div>
         </div>

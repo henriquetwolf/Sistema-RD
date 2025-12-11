@@ -508,6 +508,80 @@ function App() {
             </div>
         )}
 
+        {/* WIZARD STEPS */}
+        {step !== AppStep.DASHBOARD && (
+             <div className="max-w-4xl mx-auto">
+                <StepIndicator currentStep={step} />
+                
+                {step === AppStep.UPLOAD && (
+                    <UploadPanel 
+                        onFilesSelected={handleFilesSelected} 
+                        isLoading={status === 'parsing' || status === 'uploading'}
+                        onUrlConfirmed={(url) => setTempSheetUrl(url)}
+                    />
+                )}
+
+                {step === AppStep.CONFIG && (
+                    <ConfigPanel 
+                        config={config} 
+                        setConfig={setConfig} 
+                        onNext={() => setStep(AppStep.PREVIEW)}
+                        onBack={() => setStep(AppStep.UPLOAD)}
+                    />
+                )}
+
+                {step === AppStep.PREVIEW && (
+                    <div className="space-y-6">
+                         {/* Status Messages */}
+                         {status === 'uploading' && (
+                            <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 p-4 rounded-lg flex items-center gap-2">
+                                <Loader2 className="animate-spin" size={20} />
+                                Enviando dados para o Supabase...
+                            </div>
+                         )}
+                         {errorMessage && (
+                            <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg flex items-center gap-2">
+                                <AlertTriangle size={20} />
+                                {errorMessage}
+                            </div>
+                        )}
+
+                        <PreviewPanel 
+                            files={filesData}
+                            tableName={config.tableName}
+                            config={config}
+                            onUpdateFiles={setFilesData}
+                            onUpdateConfig={(c) => setConfig(prev => ({...prev, ...c}))}
+                            onBack={() => setStep(AppStep.CONFIG)}
+                            onSync={handleCreateConnection}
+                            onClearTable={async () => {
+                                 const client = createSupabaseClient(config.url, config.key);
+                                 await clearTableData(client, config.tableName, config.primaryKey || 'id');
+                            }}
+                        />
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3 pt-4 border-t border-slate-200">
+                             <button
+                                onClick={() => setStep(AppStep.CONFIG)}
+                                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 rounded-lg transition-colors"
+                             >
+                                Voltar
+                             </button>
+                             <button
+                                onClick={handleCreateConnection}
+                                disabled={status === 'uploading'}
+                                className="flex-[2] bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm"
+                             >
+                                {status === 'uploading' ? <Loader2 className="animate-spin" /> : <CheckCircle />}
+                                {tempSheetUrl ? 'Salvar Conexão Automática' : 'Fazer Upload e Salvar'}
+                             </button>
+                        </div>
+                    </div>
+                )}
+             </div>
+        )}
+
       </main>
     </div>
   );

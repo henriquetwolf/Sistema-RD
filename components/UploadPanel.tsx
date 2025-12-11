@@ -134,12 +134,21 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
         let fetchUrl = oneDriveUrl.trim();
         
         // Transformação de Link do OneDrive / SharePoint
-        // Remove query params existentes e adiciona download=1
+        // Remove query params existentes e adiciona download=1 para forçar o binário
         const baseUrl = fetchUrl.split('?')[0];
         fetchUrl = `${baseUrl}?download=1`;
 
-        // Tentativa de Fetch
-        const response = await fetch(fetchUrl);
+        // ESTRATÉGIA HÍBRIDA: Tentar Direto -> Falhar -> Tentar Proxy
+        let response;
+        try {
+            response = await fetch(fetchUrl);
+            if (!response.ok) throw new Error('Direct fetch failed');
+        } catch (directErr) {
+            console.warn("Download direto falhou (provável CORS), tentando via proxy...");
+            // Fallback para Proxy CORS público para contornar restrição do SharePoint
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(fetchUrl)}`;
+            response = await fetch(proxyUrl);
+        }
 
         if (!response.ok) {
             throw new Error(`Erro (${response.status}). Verifique se o link é "Qualquer pessoa" (Público).`);
@@ -159,6 +168,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
         // Tenta parsear aqui mesmo para garantir que é um Excel válido antes de prosseguir
         await parseExcelFile(file);
 
+        // Se passar, salva a URL original (com download=1) para o job
         if (onUrlConfirmed) onUrlConfirmed(fetchUrl);
         onFilesSelected([file]);
 
@@ -166,7 +176,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
         console.error(err);
         let msg = err.message;
         if (msg.includes('Failed to fetch')) {
-            msg = "Bloqueio de CORS detectado. O OneDrive Business pode bloquear downloads via navegador. Tente baixar o arquivo manualmente e fazer upload.";
+            msg = "Erro de conexão. Verifique se o link está correto e acessível publicamente.";
         }
         setFetchError(msg);
     } finally {

@@ -149,7 +149,17 @@ function App() {
         const separator = job.sheetUrl.includes('?') ? '&' : '?';
         const fetchUrlWithCache = `${job.sheetUrl}${separator}_t=${Date.now()}`;
         
-        const response = await fetch(fetchUrlWithCache, { signal: controller.signal });
+        // Fetch Strategy: Try Direct, then fallback to Proxy
+        let response;
+        try {
+            response = await fetch(fetchUrlWithCache, { signal: controller.signal });
+            if (!response.ok) throw new Error('Direct fetch failed');
+        } catch (directError) {
+             console.log(`Direct sync failed for ${job.name}, retrying with proxy...`);
+             // Proxy Fallback for OneDrive/CORS issues
+             const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(fetchUrlWithCache)}`;
+             response = await fetch(proxyUrl, { signal: controller.signal });
+        }
         
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         

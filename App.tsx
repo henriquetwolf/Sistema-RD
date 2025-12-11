@@ -144,18 +144,44 @@ function App() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-        // --- STEP 1: Fetch CSV (Download first to ensure safety) ---
+        // --- STEP 1: Fetch Content (Binary or Text) ---
         const response = await fetch(job.sheetUrl, { signal: controller.signal });
         
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const text = await response.text();
         
-        if (text.trim().startsWith('<') || text.includes('<!DOCTYPE html')) {
-             throw new Error("O link retornou HTML/Login. Verifique se está publicado como CSV.");
+        // We get the blob first to support both binary Excel and text CSV
+        const blob = await response.blob();
+        
+        // Basic check for HTML/Login pages masquerading as files
+        if (blob.type.includes('text/html')) {
+            throw new Error("O link retornou HTML/Login. Verifique permissões.");
         }
 
-        const file = new File([text], "sync.csv", { type: 'text/csv' });
-        const parsed = await parseCsvFile(file);
+        let parsed: FileData;
+
+        // Hybrid Parsing Strategy:
+        // 1. Try to parse as Excel first (since read-excel-file detects zip signature)
+        try {
+            // We give it a dummy .xlsx name to help the parser hint, 
+            // though read-excel-file mainly looks at content
+            const file = new File([blob], "temp_sync.xlsx", { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            parsed = await parseExcelFile(file);
+        } catch (excelError) {
+            // 2. If Excel parsing fails, fallback to CSV text parsing
+            try {
+                const text = await blob.text();
+                 // Double check text content for HTML just in case
+                if (text.trim().startsWith('<') || text.includes('<!DOCTYPE html')) {
+                     throw new Error("Conteúdo inválido (HTML detectado).");
+                }
+                
+                const file = new File([text], "temp_sync.csv", { type: 'text/csv' });
+                parsed = await parseCsvFile(file);
+            } catch (csvError) {
+                // If both fail, throw the original excel error or a generic one
+                throw new Error("Falha ao processar arquivo: Não é um CSV nem um Excel válido.");
+            }
+        }
 
         const client = createSupabaseClient(job.config.url, job.config.key);
 
@@ -365,7 +391,7 @@ function App() {
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
                <Database size={18} />
             </div>
-            <h1 className="text-xl font-bold text-slate-800 hidden sm:block">Supabase Syncer</h1>
+            <h1 className="text-xl font-bold text-slate-800 hidden sm:block">Sincronizador VOLL</h1>
             {isLocalMode && (
                 <span className="ml-2 px-2 py-0.5 bg-slate-100 text-slate-500 text-xs font-mono rounded border border-slate-200 flex items-center gap-1">
                     <HardDrive size={10} /> Local Mode

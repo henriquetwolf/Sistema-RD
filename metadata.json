@@ -1,5 +1,5 @@
 {
-  "name": "CSV to Supabase Syncer",
+  "name": "Sincronizador VOLL",
   "description": "A robust utility to parse multiple CSV files and batch upload/upsert records into a Supabase database.",
   "requestFramePermissions": []
 }

@@ -5,6 +5,7 @@ import { UploadPanel } from './components/UploadPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { LoginPanel } from './components/LoginPanel';
 import { IntegrationHelp } from './components/IntegrationHelp';
+import { TableViewer } from './components/TableViewer';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
@@ -12,7 +13,7 @@ import { appBackend } from './services/appBackend';
 import { 
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
-  LayoutDashboard, Settings, BarChart3, ArrowRight
+  LayoutDashboard, Settings, BarChart3, ArrowRight, Table
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -26,7 +27,7 @@ function App() {
   const jobsRef = useRef<SyncJob[]>([]); // Ref to access latest jobs inside interval without resetting it
   
   // Dashboard UI State
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables'>('overview');
 
   // Wizard/Creation State
   const [step, setStep] = useState<AppStep>(AppStep.DASHBOARD);
@@ -406,6 +407,18 @@ function App() {
                                 Visão Geral
                             </button>
                             <button
+                                onClick={() => setDashboardTab('tables')}
+                                className={clsx(
+                                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                                    dashboardTab === 'tables' 
+                                        ? "bg-indigo-50 text-indigo-700" 
+                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                )}
+                            >
+                                <Table size={18} />
+                                Tabelas
+                            </button>
+                            <button
                                 onClick={() => setDashboardTab('settings')}
                                 className={clsx(
                                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
@@ -491,6 +504,17 @@ function App() {
                                     Ir para Configurações <ArrowRight size={16} />
                                 </button>
                              </div>
+                        </div>
+                    )}
+
+                    {/* TAB: TABELAS (VIEWER) */}
+                    {dashboardTab === 'tables' && (
+                        <div className="animate-in fade-in duration-300">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-slate-800">Visualizador de Tabelas</h2>
+                                <p className="text-slate-500 text-sm">Inspecione os dados sincronizados diretamente do Supabase.</p>
+                            </div>
+                            <TableViewer jobs={jobs} />
                         </div>
                     )}
 

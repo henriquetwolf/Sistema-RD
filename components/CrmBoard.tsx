@@ -3,10 +3,11 @@ import {
   Plus, Search, Filter, MoreHorizontal, Calendar, 
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
-  Building, X, Save, Trash2, Briefcase, CreditCard
+  Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw
 } from 'lucide-react';
 import clsx from 'clsx';
-import { MOCK_COLLABORATORS, Collaborator } from './CollaboratorsManager';
+import { MOCK_COLLABORATORS } from './CollaboratorsManager';
+import { appBackend } from '../services/appBackend';
 
 // --- Types ---
 type DealStage = 'new' | 'contacted' | 'proposal' | 'negotiation' | 'closed';
@@ -17,7 +18,7 @@ interface Deal {
   contactName: string;
   companyName: string;
   value: number;
-  paymentMethod?: string; // Novo campo
+  paymentMethod?: string;
   stage: DealStage;
   owner: string; // ID of the collaborator
   createdAt: Date;
@@ -38,7 +39,7 @@ interface Team {
   members: string[]; // IDs of collaborators
 }
 
-// --- Mock Data ---
+// --- Mock Columns ---
 const COLUMNS: Column[] = [
   { id: 'new', title: 'Sem Contato', color: 'border-slate-300' },
   { id: 'contacted', title: 'Contatado', color: 'border-blue-400' },
@@ -53,35 +54,24 @@ const getOwnerName = (id: string) => {
     return owner ? owner.name : 'Desconhecido';
 };
 
-const INITIAL_DEALS: Deal[] = [
-  { id: '1', title: 'Licença Enterprise', contactName: 'Roberto Silva', companyName: 'TechCorp S.A.', value: 12500, paymentMethod: 'Boleto', stage: 'new', owner: '4', createdAt: new Date(), status: 'warm', nextTask: 'Ligar amanhã' },
-  { id: '2', title: 'Consultoria Mensal', contactName: 'Mariana Costa', companyName: 'Varejo Bom', value: 3200, paymentMethod: 'Pix', stage: 'new', owner: '6', createdAt: new Date(), status: 'cold' },
-  { id: '3', title: 'Implantação CRM', contactName: 'João Souza', companyName: 'Logística Rapida', value: 8900, stage: 'contacted', owner: '4', createdAt: new Date(), status: 'hot', nextTask: 'Enviar Apresentação' },
-  { id: '4', title: 'Plano Anual', contactName: 'Fernanda Lima', companyName: 'StartUp Hub', value: 24000, paymentMethod: 'Cartão de Crédito', stage: 'proposal', owner: '6', createdAt: new Date(), status: 'hot' },
-  { id: '5', title: 'Expansão de Cloud', contactName: 'Pedro Santos', companyName: 'Mega Data', value: 45000, stage: 'negotiation', owner: '4', createdAt: new Date(), status: 'warm' },
-];
-
-const INITIAL_TEAMS: Team[] = [
-    { id: 't1', name: 'Equipe Alpha', description: 'Focada em grandes contas (Enterprise).', members: ['4', '6'] }, // Carlos & Roberto
-];
-
 export const CrmBoard: React.FC = () => {
   // Views
   const [activeView, setActiveView] = useState<'pipeline' | 'teams'>('pipeline');
 
-  // Kanban State
-  const [deals, setDeals] = useState<Deal[]>(INITIAL_DEALS);
+  // State
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  
   const [searchTerm, setSearchTerm] = useState('');
   
   // Drag and Drop State
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
 
-  // Teams State
-  const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
+  // Modal States
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [newTeamData, setNewTeamData] = useState({ name: '', description: '', members: [] as string[] });
 
-  // Deal Modal State
   const [showDealModal, setShowDealModal] = useState(false);
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormData, setDealFormData] = useState<Partial<Deal>>({
@@ -89,10 +79,57 @@ export const CrmBoard: React.FC = () => {
       paymentMethod: '', status: 'warm', stage: 'new', nextTask: '', owner: ''
   });
 
+  // --- INITIAL LOAD (FROM DB) ---
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+      setIsLoading(true);
+      try {
+          // 1. Fetch Deals
+          const { data: dealsData, error: dealsError } = await appBackend.client
+              .from('crm_deals')
+              .select('*');
+          
+          if (dealsError) throw dealsError;
+
+          // Map DB snake_case to Frontend camelCase
+          const mappedDeals: Deal[] = (dealsData || []).map((d: any) => ({
+              id: d.id,
+              title: d.title,
+              contactName: d.contact_name,
+              companyName: d.company_name,
+              value: Number(d.value),
+              paymentMethod: d.payment_method,
+              stage: d.stage as DealStage,
+              owner: d.owner_id,
+              status: d.status,
+              nextTask: d.next_task,
+              createdAt: new Date(d.created_at)
+          }));
+          setDeals(mappedDeals);
+
+          // 2. Fetch Teams
+          const { data: teamsData, error: teamsError } = await appBackend.client
+              .from('crm_teams')
+              .select('*');
+          
+          if (teamsError) throw teamsError;
+          
+          setTeams(teamsData || []);
+
+      } catch (e) {
+          console.error("Erro ao carregar dados do CRM:", e);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
   // --- Helpers & Logic ---
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  const moveDeal = (dealId: string, currentStage: DealStage, direction: 'next' | 'prev') => {
+  const moveDeal = async (dealId: string, currentStage: DealStage, direction: 'next' | 'prev') => {
     const stageOrder: DealStage[] = ['new', 'contacted', 'proposal', 'negotiation', 'closed'];
     const currentIndex = stageOrder.indexOf(currentStage);
     
@@ -101,7 +138,14 @@ export const CrmBoard: React.FC = () => {
 
     const newStage = stageOrder[newIndex];
 
+    // Optimistic Update
     setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage } : d));
+
+    // DB Update
+    await appBackend.client
+        .from('crm_deals')
+        .update({ stage: newStage })
+        .eq('id', dealId);
   };
 
   const getStageSummary = (stage: DealStage) => {
@@ -127,16 +171,27 @@ export const CrmBoard: React.FC = () => {
     e.dataTransfer.dropEffect = "move";
   };
 
-  const handleDrop = (e: React.DragEvent, targetStage: DealStage) => {
+  const handleDrop = async (e: React.DragEvent, targetStage: DealStage) => {
     e.preventDefault();
     if (!draggedDealId) return;
+
+    // Optimistic Update
     setDeals(prev => prev.map(d => 
       d.id === draggedDealId ? { ...d, stage: targetStage } : d
     ));
+
+    // DB Update
+    await appBackend.client
+        .from('crm_deals')
+        .update({ stage: targetStage })
+        .eq('id', draggedDealId);
+
     setDraggedDealId(null);
   };
 
   // --- Deal Modal Handlers ---
+  const commercialCollaborators = MOCK_COLLABORATORS.filter(c => c.department === 'Comercial' || c.role === 'admin');
+
   const openNewDealModal = () => {
       setEditingDealId(null);
       setDealFormData({
@@ -152,54 +207,103 @@ export const CrmBoard: React.FC = () => {
       setShowDealModal(true);
   };
 
-  const handleSaveDeal = () => {
+  const handleSaveDeal = async () => {
       if (!dealFormData.title || !dealFormData.companyName) return;
 
-      if (editingDealId) {
-          // Edit
-          setDeals(prev => prev.map(d => d.id === editingDealId ? { ...d, ...dealFormData } as Deal : d));
-      } else {
-          // Create
-          const newDeal: Deal = {
-              id: Math.random().toString(36).substr(2, 9),
-              title: dealFormData.title!,
-              companyName: dealFormData.companyName!,
-              contactName: dealFormData.contactName || '',
-              value: Number(dealFormData.value) || 0,
-              paymentMethod: dealFormData.paymentMethod || '',
-              stage: (dealFormData.stage as DealStage) || 'new',
-              owner: dealFormData.owner || '1',
-              status: (dealFormData.status as any) || 'warm',
-              nextTask: dealFormData.nextTask,
-              createdAt: new Date()
-          };
-          setDeals(prev => [...prev, newDeal]);
+      const payload = {
+          title: dealFormData.title,
+          company_name: dealFormData.companyName,
+          contact_name: dealFormData.contactName,
+          value: Number(dealFormData.value) || 0,
+          payment_method: dealFormData.paymentMethod,
+          stage: dealFormData.stage || 'new',
+          owner_id: dealFormData.owner,
+          status: dealFormData.status || 'warm',
+          next_task: dealFormData.nextTask
+      };
+
+      try {
+          if (editingDealId) {
+              // Edit DB
+              const { error } = await appBackend.client
+                  .from('crm_deals')
+                  .update(payload)
+                  .eq('id', editingDealId);
+              if (error) throw error;
+              
+              // Local Update
+              setDeals(prev => prev.map(d => d.id === editingDealId ? { ...d, ...dealFormData } as Deal : d));
+          } else {
+              // Create DB
+              const { data, error } = await appBackend.client
+                  .from('crm_deals')
+                  .insert([payload])
+                  .select()
+                  .single();
+              
+              if (error) throw error;
+
+              // Local Update
+              const newDeal: Deal = {
+                  id: data.id,
+                  title: data.title,
+                  companyName: data.company_name,
+                  contactName: data.contact_name,
+                  value: Number(data.value),
+                  paymentMethod: data.payment_method,
+                  stage: data.stage,
+                  owner: data.owner_id,
+                  status: data.status,
+                  nextTask: data.next_task,
+                  createdAt: new Date(data.created_at)
+              };
+              setDeals(prev => [...prev, newDeal]);
+          }
+          setShowDealModal(false);
+      } catch (e) {
+          alert('Erro ao salvar negociação.');
+          console.error(e);
       }
-      setShowDealModal(false);
   };
 
-  const handleDeleteDeal = () => {
+  const handleDeleteDeal = async () => {
       if (editingDealId && window.confirm("Tem certeza que deseja excluir esta negociação?")) {
-          setDeals(prev => prev.filter(d => d.id !== editingDealId));
-          setShowDealModal(false);
+          try {
+            await appBackend.client.from('crm_deals').delete().eq('id', editingDealId);
+            setDeals(prev => prev.filter(d => d.id !== editingDealId));
+            setShowDealModal(false);
+          } catch(e) {
+            alert('Erro ao excluir.');
+          }
       }
   };
 
 
   // --- Team Logic ---
-  const commercialCollaborators = MOCK_COLLABORATORS.filter(c => c.department === 'Comercial' || c.role === 'admin');
-
-  const handleCreateTeam = () => {
+  const handleCreateTeam = async () => {
       if (!newTeamData.name) return;
-      const team: Team = {
-          id: Math.random().toString(36).substr(2, 9),
+
+      const payload = {
           name: newTeamData.name,
           description: newTeamData.description,
           members: newTeamData.members
       };
-      setTeams([...teams, team]);
-      setShowTeamModal(false);
-      setNewTeamData({ name: '', description: '', members: [] });
+
+      try {
+          const { data, error } = await appBackend.client
+              .from('crm_teams')
+              .insert([payload])
+              .select()
+              .single();
+          
+          if (error) throw error;
+
+          setTeams([...teams, data]);
+          setShowTeamModal(false);
+          setNewTeamData({ name: '', description: '', members: [] });
+      } catch(e) {
+          alert("Erro ao criar equipe.");
+      }
   };
 
   const toggleTeamMember = (collabId: string) => {
@@ -211,7 +315,7 @@ export const CrmBoard: React.FC = () => {
   };
 
   const getMemberDetails = (ids: string[]) => {
-      return MOCK_COLLABORATORS.filter(c => ids.includes(c.id));
+      return MOCK_COLLABORATORS.filter(c => ids && ids.includes(c.id));
   };
 
   return (
@@ -221,24 +325,34 @@ export const CrmBoard: React.FC = () => {
       <div className="bg-white border-b border-slate-200 px-6 py-2 flex flex-col md:flex-row md:items-center justify-between shadow-sm z-10 gap-4">
         
         {/* Navigation Tabs */}
-        <div className="flex items-center bg-slate-100 rounded-lg p-1 self-start md:self-auto">
+        <div className="flex items-center gap-2">
+            <div className="flex items-center bg-slate-100 rounded-lg p-1 self-start md:self-auto">
+                <button 
+                    onClick={() => setActiveView('pipeline')}
+                    className={clsx(
+                        "px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all",
+                        activeView === 'pipeline' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    )}
+                >
+                    <LayoutGrid size={16} /> Pipeline
+                </button>
+                <button 
+                    onClick={() => setActiveView('teams')}
+                    className={clsx(
+                        "px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all",
+                        activeView === 'teams' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    )}
+                >
+                    <Users size={16} /> Equipes
+                </button>
+            </div>
+            
             <button 
-                onClick={() => setActiveView('pipeline')}
-                className={clsx(
-                    "px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all",
-                    activeView === 'pipeline' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                )}
+                onClick={fetchData} 
+                className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors" 
+                title="Atualizar dados"
             >
-                <LayoutGrid size={16} /> Pipeline
-            </button>
-            <button 
-                onClick={() => setActiveView('teams')}
-                className={clsx(
-                    "px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all",
-                    activeView === 'teams' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                )}
-            >
-                <Users size={16} /> Equipes
+                <RefreshCw size={18} className={clsx(isLoading && "animate-spin")} />
             </button>
         </div>
 
@@ -278,167 +392,175 @@ export const CrmBoard: React.FC = () => {
       {/* --- CONTENT AREA --- */}
       <div className="flex-1 overflow-x-auto bg-slate-100/50 p-6 relative">
         
-        {/* VIEW: PIPELINE */}
-        {activeView === 'pipeline' && (
-            <div className="flex gap-4 h-full min-w-max">
-            {COLUMNS.map(column => {
-                const summary = getStageSummary(column.id);
-                const columnDeals = filteredDeals.filter(d => d.stage === column.id);
-
-                return (
-                <div 
-                  key={column.id} 
-                  className="w-[320px] flex flex-col h-full rounded-xl bg-slate-50/50 border border-slate-200 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-100/50"
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, column.id)}
-                >
-                    
-                    {/* Column Header */}
-                    <div className={clsx("p-3 border-t-4 bg-white rounded-t-xl border-b border-b-slate-100", column.color)}>
-                    <div className="flex justify-between items-start mb-1">
-                        <h3 className="font-semibold text-slate-700">{column.title}</h3>
-                        <button className="text-slate-400 hover:text-slate-600"><MoreHorizontal size={16} /></button>
-                    </div>
-                    <div className="flex justify-between items-end">
-                        <span className="text-xs text-slate-500 font-medium">{summary.count} negócios</span>
-                        <span className="text-xs font-bold text-slate-800">{formatCurrency(summary.total)}</span>
-                    </div>
-                    </div>
-
-                    {/* Cards Container */}
-                    <div className="flex-1 overflow-y-auto p-2 space-y-3 custom-scrollbar">
-                    {columnDeals.length === 0 ? (
-                        <div className="h-24 border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs">
-                            Arraste aqui
-                        </div>
-                    ) : (
-                        columnDeals.map(deal => (
-                        <div 
-                            key={deal.id} 
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, deal.id)}
-                            onClick={() => openEditDealModal(deal)}
-                            className={clsx(
-                              "group bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all relative cursor-grab active:cursor-grabbing",
-                              draggedDealId === deal.id ? "opacity-40 ring-2 ring-indigo-400 border-indigo-400" : ""
-                            )}
-                        >
-                            
-                            {/* Card Status Stripe */}
-                            <div className={clsx("absolute left-0 top-3 bottom-3 w-1 rounded-r", 
-                                deal.status === 'hot' ? 'bg-red-400' : 
-                                deal.status === 'warm' ? 'bg-yellow-400' : 'bg-blue-300'
-                            )}></div>
-
-                            <div className="pl-3">
-                                <div className="flex justify-between items-start mb-1">
-                                    <h4 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight">{deal.title}</h4>
-                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex">
-                                        {column.id !== 'new' && (
-                                            <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, 'prev')}} className="p-1 hover:bg-slate-100 rounded text-slate-500"><ChevronRight size={14} className="rotate-180"/></button>
-                                        )}
-                                        {column.id !== 'closed' && (
-                                            <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, 'next')}} className="p-1 hover:bg-green-50 rounded text-green-600"><ChevronRight size={14} /></button>
-                                        )}
-                                    </div>
-                                </div>
-                                
-                                <p className="text-xs text-slate-500 mb-2 truncate">{deal.companyName}</p>
-
-                                {/* Forma de Pagamento no Card */}
-                                {deal.paymentMethod && (
-                                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-2" title="Forma de Pagamento">
-                                        <CreditCard size={12} />
-                                        <span className="truncate">{deal.paymentMethod}</span>
-                                    </div>
-                                )}
-                                
-                                {/* Next Task Alert */}
-                                {deal.nextTask && deal.stage !== 'closed' && (
-                                    <div className="flex items-center gap-1.5 mb-2.5 bg-amber-50 px-2 py-1 rounded text-[10px] text-amber-700 font-medium w-fit">
-                                        <AlertCircle size={10} /> {deal.nextTask}
-                                    </div>
-                                )}
-
-                                <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                                    <span className="font-bold text-slate-700 text-sm">{formatCurrency(deal.value)}</span>
-                                    
-                                    <div className="flex items-center gap-2">
-                                        <div 
-                                            className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm"
-                                            title={`Responsável: ${getOwnerName(deal.owner)}`}
-                                        >
-                                            {getOwnerName(deal.owner).charAt(0)}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        ))
-                    )}
-                    </div>
-                </div>
-                );
-            })}
+        {isLoading && deals.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+                <Loader2 className="animate-spin text-indigo-600" size={40} />
             </div>
-        )}
+        ) : (
+        <>
+            {/* VIEW: PIPELINE */}
+            {activeView === 'pipeline' && (
+                <div className="flex gap-4 h-full min-w-max">
+                {COLUMNS.map(column => {
+                    const summary = getStageSummary(column.id);
+                    const columnDeals = filteredDeals.filter(d => d.stage === column.id);
 
-        {/* VIEW: TEAMS */}
-        {activeView === 'teams' && (
-            <div className="max-w-6xl mx-auto animate-in fade-in zoom-in-95 duration-200">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {teams.map(team => (
-                        <div key={team.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
-                                    <Target size={24} />
-                                </div>
-                                <button className="text-slate-400 hover:text-slate-600">
-                                    <MoreHorizontal size={20} />
-                                </button>
+                    return (
+                    <div 
+                    key={column.id} 
+                    className="w-[320px] flex flex-col h-full rounded-xl bg-slate-50/50 border border-slate-200 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-100/50"
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, column.id)}
+                    >
+                        
+                        {/* Column Header */}
+                        <div className={clsx("p-3 border-t-4 bg-white rounded-t-xl border-b border-b-slate-100", column.color)}>
+                        <div className="flex justify-between items-start mb-1">
+                            <h3 className="font-semibold text-slate-700">{column.title}</h3>
+                            <button className="text-slate-400 hover:text-slate-600"><MoreHorizontal size={16} /></button>
+                        </div>
+                        <div className="flex justify-between items-end">
+                            <span className="text-xs text-slate-500 font-medium">{summary.count} negócios</span>
+                            <span className="text-xs font-bold text-slate-800">{formatCurrency(summary.total)}</span>
+                        </div>
+                        </div>
+
+                        {/* Cards Container */}
+                        <div className="flex-1 overflow-y-auto p-2 space-y-3 custom-scrollbar">
+                        {columnDeals.length === 0 ? (
+                            <div className="h-24 border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs">
+                                Arraste aqui
                             </div>
-                            
-                            <h3 className="text-lg font-bold text-slate-800 mb-1">{team.name}</h3>
-                            <p className="text-sm text-slate-500 mb-6 min-h-[40px]">{team.description}</p>
-                            
-                            <div className="pt-4 border-t border-slate-100">
-                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Membros da Equipe</p>
-                                <div className="flex items-center -space-x-2 overflow-hidden">
-                                    {getMemberDetails(team.members).map((member, i) => (
-                                        <div 
-                                            key={member.id} 
-                                            title={`${member.name} (${member.department})`}
-                                            className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold"
-                                        >
-                                            {member.name.charAt(0)}
+                        ) : (
+                            columnDeals.map(deal => (
+                            <div 
+                                key={deal.id} 
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, deal.id)}
+                                onClick={() => openEditDealModal(deal)}
+                                className={clsx(
+                                "group bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all relative cursor-grab active:cursor-grabbing",
+                                draggedDealId === deal.id ? "opacity-40 ring-2 ring-indigo-400 border-indigo-400" : ""
+                                )}
+                            >
+                                
+                                {/* Card Status Stripe */}
+                                <div className={clsx("absolute left-0 top-3 bottom-3 w-1 rounded-r", 
+                                    deal.status === 'hot' ? 'bg-red-400' : 
+                                    deal.status === 'warm' ? 'bg-yellow-400' : 'bg-blue-300'
+                                )}></div>
+
+                                <div className="pl-3">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <h4 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight">{deal.title}</h4>
+                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex">
+                                            {column.id !== 'new' && (
+                                                <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, 'prev')}} className="p-1 hover:bg-slate-100 rounded text-slate-500"><ChevronRight size={14} className="rotate-180"/></button>
+                                            )}
+                                            {column.id !== 'closed' && (
+                                                <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, 'next')}} className="p-1 hover:bg-green-50 rounded text-green-600"><ChevronRight size={14} /></button>
+                                            )}
                                         </div>
-                                    ))}
-                                    {team.members.length === 0 && (
-                                        <span className="text-xs text-slate-400 italic">Nenhum membro atribuído</span>
+                                    </div>
+                                    
+                                    <p className="text-xs text-slate-500 mb-2 truncate">{deal.companyName}</p>
+
+                                    {/* Forma de Pagamento no Card */}
+                                    {deal.paymentMethod && (
+                                        <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-2" title="Forma de Pagamento">
+                                            <CreditCard size={12} />
+                                            <span className="truncate">{deal.paymentMethod}</span>
+                                        </div>
+                                    )}
+                                    
+                                    {/* Next Task Alert */}
+                                    {deal.nextTask && deal.stage !== 'closed' && (
+                                        <div className="flex items-center gap-1.5 mb-2.5 bg-amber-50 px-2 py-1 rounded text-[10px] text-amber-700 font-medium w-fit">
+                                            <AlertCircle size={10} /> {deal.nextTask}
+                                        </div>
+                                    )}
+
+                                    <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                                        <span className="font-bold text-slate-700 text-sm">{formatCurrency(deal.value)}</span>
+                                        
+                                        <div className="flex items-center gap-2">
+                                            <div 
+                                                className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm"
+                                                title={`Responsável: ${getOwnerName(deal.owner)}`}
+                                            >
+                                                {getOwnerName(deal.owner).charAt(0)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            ))
+                        )}
+                        </div>
+                    </div>
+                    );
+                })}
+                </div>
+            )}
+
+            {/* VIEW: TEAMS */}
+            {activeView === 'teams' && (
+                <div className="max-w-6xl mx-auto animate-in fade-in zoom-in-95 duration-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {teams.map(team => (
+                            <div key={team.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+                                        <Target size={24} />
+                                    </div>
+                                    <button className="text-slate-400 hover:text-slate-600">
+                                        <MoreHorizontal size={20} />
+                                    </button>
+                                </div>
+                                
+                                <h3 className="text-lg font-bold text-slate-800 mb-1">{team.name}</h3>
+                                <p className="text-sm text-slate-500 mb-6 min-h-[40px]">{team.description}</p>
+                                
+                                <div className="pt-4 border-t border-slate-100">
+                                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Membros da Equipe</p>
+                                    <div className="flex items-center -space-x-2 overflow-hidden">
+                                        {getMemberDetails(team.members).map((member, i) => (
+                                            <div 
+                                                key={member.id} 
+                                                title={`${member.name} (${member.department})`}
+                                                className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold"
+                                            >
+                                                {member.name.charAt(0)}
+                                            </div>
+                                        ))}
+                                        {(!team.members || team.members.length === 0) && (
+                                            <span className="text-xs text-slate-400 italic">Nenhum membro atribuído</span>
+                                        )}
+                                    </div>
+                                    {team.members && team.members.length > 0 && (
+                                        <p className="mt-2 text-xs text-slate-500">
+                                            {team.members.length} colaboradores do setor Comercial.
+                                        </p>
                                     )}
                                 </div>
-                                {team.members.length > 0 && (
-                                    <p className="mt-2 text-xs text-slate-500">
-                                        {team.members.length} colaboradores do setor Comercial.
-                                    </p>
-                                )}
                             </div>
-                        </div>
-                    ))}
+                        ))}
 
-                     {/* Create New Team Card */}
-                    <button 
-                        onClick={() => setShowTeamModal(true)}
-                        className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all min-h-[250px]"
-                    >
-                        <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mb-3">
-                            <Plus size={28} />
-                        </div>
-                        <span className="font-bold text-lg">Criar Nova Equipe</span>
-                        <span className="text-sm font-normal mt-1">Defina metas e membros</span>
-                    </button>
+                        {/* Create New Team Card */}
+                        <button 
+                            onClick={() => setShowTeamModal(true)}
+                            className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all min-h-[250px]"
+                        >
+                            <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                                <Plus size={28} />
+                            </div>
+                            <span className="font-bold text-lg">Criar Nova Equipe</span>
+                            <span className="text-sm font-normal mt-1">Defina metas e membros</span>
+                        </button>
+                    </div>
                 </div>
-            </div>
+            )}
+        </>
         )}
       </div>
 

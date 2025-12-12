@@ -36,6 +36,9 @@ const MOCK_SESSION = {
 export const appBackend = {
   // Public flag to check if we are in local mode
   isLocalMode: !isConfigured,
+  
+  // Expose the raw client for custom tables (like CRM)
+  client: supabase,
 
   auth: {
     signIn: async (email: string, password: string) => {

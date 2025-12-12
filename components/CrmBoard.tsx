@@ -22,6 +22,7 @@ interface Deal {
   stage: DealStage;
   owner: string; // ID of the collaborator
   createdAt: Date;
+  closedAt?: Date; // Data de fechamento
   status: 'hot' | 'warm' | 'cold';
   nextTask?: string;
 }
@@ -107,7 +108,8 @@ export const CrmBoard: React.FC = () => {
               owner: d.owner_id,
               status: d.status,
               nextTask: d.next_task,
-              createdAt: new Date(d.created_at)
+              createdAt: new Date(d.created_at),
+              closedAt: d.closed_at ? new Date(d.closed_at) : undefined
           }));
           setDeals(mappedDeals);
 
@@ -142,15 +144,38 @@ export const CrmBoard: React.FC = () => {
     if (newIndex < 0 || newIndex >= stageOrder.length) return;
 
     const newStage = stageOrder[newIndex];
+    const now = new Date();
+
+    // Determine closedAt logic
+    let newClosedAt: Date | undefined | null = undefined;
+    if (newStage === 'closed') {
+        newClosedAt = now;
+    } else if (currentStage === 'closed') {
+        // Moving OUT of closed -> clear date
+        newClosedAt = null; // for DB
+    }
 
     // Optimistic Update
-    setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage } : d));
+    setDeals(prev => prev.map(d => {
+        if (d.id === dealId) {
+            return { 
+                ...d, 
+                stage: newStage,
+                closedAt: newStage === 'closed' ? now : (currentStage === 'closed' ? undefined : d.closedAt)
+            };
+        }
+        return d;
+    }));
 
     // DB Update
     try {
+        const updates: any = { stage: newStage };
+        if (newStage === 'closed') updates.closed_at = now.toISOString();
+        if (currentStage === 'closed' && newStage !== 'closed') updates.closed_at = null;
+
         const { error } = await appBackend.client
             .from('crm_deals')
-            .update({ stage: newStage })
+            .update(updates)
             .eq('id', dealId);
         
         if (error) throw error;
@@ -158,7 +183,7 @@ export const CrmBoard: React.FC = () => {
         console.error("Erro ao mover card:", e);
         alert("Erro ao salvar o novo estágio. Verifique sua conexão.");
         // Revert optimistic update
-        setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: currentStage } : d));
+        fetchData(); // Simplest way to revert is refetch
     }
   };
 
@@ -189,23 +214,49 @@ export const CrmBoard: React.FC = () => {
     e.preventDefault();
     if (!draggedDealId) return;
 
+    const currentDeal = deals.find(d => d.id === draggedDealId);
+    if (!currentDeal) return;
+    
+    if (currentDeal.stage === targetStage) {
+        setDraggedDealId(null);
+        return;
+    }
+
+    const now = new Date();
+
     // Local update first
-    const originalDeals = [...deals];
-    setDeals(prev => prev.map(d => 
-      d.id === draggedDealId ? { ...d, stage: targetStage } : d
-    ));
+    setDeals(prev => prev.map(d => {
+      if (d.id === draggedDealId) {
+          return { 
+              ...d, 
+              stage: targetStage,
+              closedAt: targetStage === 'closed' ? now : (d.stage === 'closed' ? undefined : d.closedAt)
+          };
+      }
+      return d;
+    }));
 
     try {
+        const updates: any = { stage: targetStage };
+        // Set closed_at if moving to closed
+        if (targetStage === 'closed') {
+            updates.closed_at = now.toISOString();
+        } 
+        // Clear closed_at if moving OUT of closed
+        else if (currentDeal.stage === 'closed') {
+            updates.closed_at = null;
+        }
+
         const { error } = await appBackend.client
             .from('crm_deals')
-            .update({ stage: targetStage })
+            .update(updates)
             .eq('id', draggedDealId);
         
         if (error) throw error;
     } catch (e) {
         console.error(e);
         alert("Erro ao salvar alteração.");
-        setDeals(originalDeals); // Revert
+        fetchData(); // Revert
     }
 
     setDraggedDealId(null);
@@ -235,6 +286,20 @@ export const CrmBoard: React.FC = () => {
           return;
       }
 
+      // Logic for closed_at
+      const currentDeal = editingDealId ? deals.find(d => d.id === editingDealId) : null;
+      let closedAtValue = currentDeal?.closedAt;
+      
+      if (dealFormData.stage === 'closed') {
+          // If entering closed stage and didn't have a date (or wasn't closed before), set it to NOW
+          if (!closedAtValue || (currentDeal && currentDeal.stage !== 'closed')) {
+              closedAtValue = new Date();
+          }
+      } else {
+          // If not closed, ensure date is cleared
+          closedAtValue = undefined;
+      }
+
       const payload = {
           title: dealFormData.title,
           company_name: dealFormData.companyName,
@@ -244,7 +309,8 @@ export const CrmBoard: React.FC = () => {
           stage: dealFormData.stage || 'new',
           owner_id: dealFormData.owner,
           status: dealFormData.status || 'warm',
-          next_task: dealFormData.nextTask
+          next_task: dealFormData.nextTask,
+          closed_at: closedAtValue ? closedAtValue.toISOString() : null
       };
 
       try {
@@ -258,7 +324,11 @@ export const CrmBoard: React.FC = () => {
               if (error) throw error;
               
               // Local Update
-              setDeals(prev => prev.map(d => d.id === editingDealId ? { ...d, ...dealFormData } as Deal : d));
+              setDeals(prev => prev.map(d => d.id === editingDealId ? { 
+                  ...d, 
+                  ...dealFormData, 
+                  closedAt: closedAtValue 
+              } as Deal : d));
           } else {
               // Create DB
               const { data, error } = await appBackend.client
@@ -281,7 +351,8 @@ export const CrmBoard: React.FC = () => {
                   owner: data.owner_id,
                   status: data.status,
                   nextTask: data.next_task,
-                  createdAt: new Date(data.created_at)
+                  createdAt: new Date(data.created_at),
+                  closedAt: data.closed_at ? new Date(data.closed_at) : undefined
               };
               setDeals(prev => [newDeal, ...prev]); // Add to top
           }
@@ -517,6 +588,13 @@ export const CrmBoard: React.FC = () => {
                                     {deal.nextTask && deal.stage !== 'closed' && (
                                         <div className="flex items-center gap-1.5 mb-2.5 bg-amber-50 px-2 py-1 rounded text-[10px] text-amber-700 font-medium w-fit">
                                             <AlertCircle size={10} /> {deal.nextTask}
+                                        </div>
+                                    )}
+                                    
+                                    {/* Date Info */}
+                                    {deal.stage === 'closed' && deal.closedAt && (
+                                        <div className="text-[10px] text-green-600 font-medium mb-2 bg-green-50 px-1.5 py-0.5 rounded w-fit">
+                                            Vendido em {deal.closedAt.toLocaleDateString()}
                                         </div>
                                     )}
 

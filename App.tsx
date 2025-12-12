@@ -139,9 +139,10 @@ function App() {
               .from('crm_deals')
               .select('*')
               .eq('stage', 'closed')
-              .gte('created_at', salesDateRange.start)
-              .lte('created_at', endDateTime.toISOString())
-              .order('created_at', { ascending: false });
+              // Use closed_at for filtering realized sales
+              .gte('closed_at', salesDateRange.start)
+              .lte('closed_at', endDateTime.toISOString())
+              .order('closed_at', { ascending: false });
 
           if (error) {
               // Ignore error if table doesn't exist yet
@@ -664,7 +665,7 @@ function App() {
                                                             salesStats.deals.map((deal, idx) => (
                                                                 <tr key={idx} className="hover:bg-slate-50">
                                                                     <td className="px-4 py-3 text-slate-500 font-mono text-xs">
-                                                                        {new Date(deal.created_at).toLocaleDateString()}
+                                                                        {deal.closed_at ? new Date(deal.closed_at).toLocaleDateString() : new Date(deal.created_at).toLocaleDateString()}
                                                                     </td>
                                                                     <td className="px-4 py-3 font-medium text-slate-700">
                                                                         {deal.company_name}

@@ -19,7 +19,7 @@ import {
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
-  Users, GraduationCap, School
+  Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -35,6 +35,14 @@ function App() {
   // Dashboard UI State
   // Extended types to include management tabs
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'collaborators' | 'classes' | 'teachers'>('overview');
+
+  // Sales Widget State
+  const [salesDateRange, setSalesDateRange] = useState({
+    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], // 1st of current month
+    end: new Date().toISOString().split('T')[0] // Today
+  });
+  const [salesStats, setSalesStats] = useState({ totalValue: 0, count: 0, deals: [] as any[] });
+  const [isLoadingSales, setIsLoadingSales] = useState(false);
 
   // Wizard/Creation State
   const [step, setStep] = useState<AppStep>(AppStep.DASHBOARD);
@@ -112,6 +120,46 @@ function App() {
        if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []); // Run once on mount
+
+  // --- FETCH SALES DATA (WIDGET) ---
+  useEffect(() => {
+      if (dashboardTab === 'overview') {
+          fetchSalesData();
+      }
+  }, [dashboardTab, salesDateRange]);
+
+  const fetchSalesData = async () => {
+      setIsLoadingSales(true);
+      try {
+          // Add end of day time to the end date
+          const endDateTime = new Date(salesDateRange.end);
+          endDateTime.setHours(23, 59, 59, 999);
+
+          const { data, error } = await appBackend.client
+              .from('crm_deals')
+              .select('*')
+              .eq('stage', 'closed')
+              .gte('created_at', salesDateRange.start)
+              .lte('created_at', endDateTime.toISOString())
+              .order('created_at', { ascending: false });
+
+          if (error) {
+              // Ignore error if table doesn't exist yet
+              if (!error.message.includes('does not exist')) {
+                  console.error('Error fetching sales:', error);
+              }
+              setSalesStats({ totalValue: 0, count: 0, deals: [] });
+          } else {
+              const deals = data || [];
+              const total = deals.reduce((acc: number, curr: any) => acc + (Number(curr.value) || 0), 0);
+              setSalesStats({ totalValue: total, count: deals.length, deals });
+          }
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsLoadingSales(false);
+      }
+  };
 
   const runAllActiveJobs = () => {
     const currentJobs = jobsRef.current;
@@ -348,6 +396,9 @@ function App() {
       return `${minutes}min`;
   };
 
+  // Helper formatting
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
   // --- RENDER ---
   if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>;
   if (!session) return <LoginPanel />;
@@ -520,6 +571,118 @@ function App() {
                                     </div>
                                     <h3 className={clsx("text-3xl font-bold", errorJobs > 0 ? "text-red-600" : "text-slate-800")}>{errorJobs}</h3>
                                     <p className="text-xs text-slate-500 font-medium">Erros Recentes</p>
+                                </div>
+                             </div>
+
+                             {/* --- WIDGET: VENDAS REALIZADAS --- */}
+                             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="p-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                                            <TrendingUp size={20} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-bold text-slate-800">Vendas Realizadas</h3>
+                                            <p className="text-xs text-slate-500">Negociações concluídas no período.</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                                        <div className="flex items-center gap-2 px-2 py-1 bg-white border border-slate-200 rounded text-xs text-slate-600">
+                                            <Calendar size={14} className="text-slate-400" />
+                                            <span className="font-semibold text-slate-500">De:</span>
+                                            <input 
+                                                type="date" 
+                                                value={salesDateRange.start}
+                                                onChange={e => setSalesDateRange({...salesDateRange, start: e.target.value})}
+                                                className="outline-none text-slate-700 bg-transparent w-24"
+                                            />
+                                        </div>
+                                        <span className="text-slate-300">-</span>
+                                        <div className="flex items-center gap-2 px-2 py-1 bg-white border border-slate-200 rounded text-xs text-slate-600">
+                                            <Calendar size={14} className="text-slate-400" />
+                                            <span className="font-semibold text-slate-500">Até:</span>
+                                            <input 
+                                                type="date" 
+                                                value={salesDateRange.end}
+                                                onChange={e => setSalesDateRange({...salesDateRange, end: e.target.value})}
+                                                className="outline-none text-slate-700 bg-transparent w-24"
+                                            />
+                                        </div>
+                                        <button 
+                                            onClick={fetchSalesData}
+                                            className="p-1.5 hover:bg-indigo-50 text-indigo-600 rounded"
+                                            title="Filtrar"
+                                        >
+                                            <Filter size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="p-6">
+                                    {isLoadingSales ? (
+                                        <div className="flex justify-center py-8">
+                                            <Loader2 size={32} className="animate-spin text-indigo-600" />
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                                <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100 flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Total em Vendas</p>
+                                                        <p className="text-2xl font-bold text-emerald-900">{formatCurrency(salesStats.totalValue)}</p>
+                                                    </div>
+                                                    <DollarSign size={32} className="text-emerald-200" />
+                                                </div>
+                                                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Quantidade de Negócios</p>
+                                                        <p className="text-2xl font-bold text-blue-900">{salesStats.count}</p>
+                                                    </div>
+                                                    <CheckCircle size={32} className="text-blue-200" />
+                                                </div>
+                                            </div>
+
+                                            <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                                <table className="w-full text-sm text-left">
+                                                    <thead className="bg-slate-50 text-xs text-slate-500 uppercase font-semibold">
+                                                        <tr>
+                                                            <th className="px-4 py-3">Data</th>
+                                                            <th className="px-4 py-3">Cliente</th>
+                                                            <th className="px-4 py-3">Oportunidade</th>
+                                                            <th className="px-4 py-3 text-right">Valor</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {salesStats.deals.length === 0 ? (
+                                                            <tr>
+                                                                <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic">
+                                                                    Nenhuma venda encontrada neste período.
+                                                                </td>
+                                                            </tr>
+                                                        ) : (
+                                                            salesStats.deals.map((deal, idx) => (
+                                                                <tr key={idx} className="hover:bg-slate-50">
+                                                                    <td className="px-4 py-3 text-slate-500 font-mono text-xs">
+                                                                        {new Date(deal.created_at).toLocaleDateString()}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 font-medium text-slate-700">
+                                                                        {deal.company_name}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-slate-600 truncate max-w-[200px]" title={deal.title}>
+                                                                        {deal.title}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right font-bold text-emerald-600">
+                                                                        {formatCurrency(Number(deal.value))}
+                                                                    </td>
+                                                                </tr>
+                                                            ))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                              </div>
 

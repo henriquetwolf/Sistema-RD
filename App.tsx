@@ -35,6 +35,11 @@ function App() {
   const DEFAULT_LOGO = "https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png";
   const [appLogo, setAppLogo] = useState<string>(DEFAULT_LOGO);
 
+  // Wrapper to handle logo changes safely (handling nulls)
+  const handleLogoChange = (newLogo: string | null) => {
+      setAppLogo(newLogo || DEFAULT_LOGO);
+  };
+
   // Auth State
   const [session, setSession] = useState<any>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
@@ -895,7 +900,7 @@ function App() {
                         {dashboardTab === 'classes' && <ClassesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={setAppLogo} currentLogo={appLogo} />}
+                        {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} />}
 
                         {/* TAB: CRM */}
                         {dashboardTab === 'crm' && (

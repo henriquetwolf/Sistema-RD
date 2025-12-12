@@ -10,6 +10,7 @@ import { CrmBoard } from './components/CrmBoard';
 import { CollaboratorsManager } from './components/CollaboratorsManager';
 import { ClassesManager } from './components/ClassesManager';
 import { TeachersManager } from './components/TeachersManager';
+import { FormsManager } from './components/FormsManager';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -19,7 +20,7 @@ import {
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
-  Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter
+  Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -34,7 +35,7 @@ function App() {
   
   // Dashboard UI State
   // Extended types to include management tabs
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'collaborators' | 'classes' | 'teachers'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'collaborators' | 'classes' | 'teachers' | 'forms'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -514,6 +515,18 @@ function App() {
                                 CRM <span className="ml-auto text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-bold">NOVO</span>
                             </button>
                             <button
+                                onClick={() => setDashboardTab('forms')}
+                                className={clsx(
+                                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                                    dashboardTab === 'forms' 
+                                        ? "bg-indigo-50 text-indigo-700" 
+                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                )}
+                            >
+                                <FileText size={18} />
+                                Formulários
+                            </button>
+                            <button
                                 onClick={() => setDashboardTab('tables')}
                                 className={clsx(
                                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
@@ -772,6 +785,7 @@ function App() {
                     {dashboardTab === 'collaborators' && <CollaboratorsManager onBack={() => setDashboardTab('overview')} />}
                     {dashboardTab === 'classes' && <ClassesManager onBack={() => setDashboardTab('overview')} />}
                     {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
+                    {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
 
                     {/* TAB: CRM */}
                     {dashboardTab === 'crm' && (

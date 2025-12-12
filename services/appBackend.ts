@@ -1,5 +1,5 @@
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset } from '../types';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -188,5 +188,90 @@ export const appBackend = {
       console.error('Error deleting preset:', error);
       throw error;
     }
+  },
+
+  // --- FORMS & CRM LOGIC (MOCKED BACKEND FOR FORMS, REAL FOR CRM) ---
+  
+  saveForm: async (form: FormModel): Promise<void> => {
+      // Simulating DB save in localStorage for forms
+      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+      const existingIdx = forms.findIndex((f: FormModel) => f.id === form.id);
+      
+      if (existingIdx >= 0) {
+          forms[existingIdx] = form;
+      } else {
+          forms.push(form);
+      }
+      
+      localStorage.setItem('app_forms', JSON.stringify(forms));
+  },
+
+  getForms: async (): Promise<FormModel[]> => {
+      return JSON.parse(localStorage.getItem('app_forms') || '[]');
+  },
+
+  deleteForm: async (id: string): Promise<void> => {
+      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+      const filtered = forms.filter((f: FormModel) => f.id !== id);
+      localStorage.setItem('app_forms', JSON.stringify(filtered));
+  },
+
+  submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean): Promise<void> => {
+      // 1. Save submission locally
+      const submission: FormSubmission = {
+          id: crypto.randomUUID(),
+          formId,
+          answers,
+          submittedAt: new Date().toISOString()
+      };
+
+      const submissionsKey = `app_forms_subs_${formId}`;
+      const subs = JSON.parse(localStorage.getItem(submissionsKey) || '[]');
+      subs.push(submission);
+      localStorage.setItem(submissionsKey, JSON.stringify(subs));
+
+      // Update form count
+      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+      const formIdx = forms.findIndex((f: FormModel) => f.id === formId);
+      if (formIdx >= 0) {
+          forms[formIdx].submissionsCount = (forms[formIdx].submissionsCount || 0) + 1;
+          localStorage.setItem('app_forms', JSON.stringify(forms));
+      }
+
+      // 2. LEAD CAPTURE TO CRM
+      if (isLeadCapture && isConfigured) {
+          // Heuristic to find relevant fields
+          const findValue = (keywords: string[]) => {
+              const answer = answers.find(a => 
+                  keywords.some(k => a.questionTitle.toLowerCase().includes(k))
+              );
+              return answer ? answer.value : '';
+          };
+
+          const name = findValue(['nome', 'name', 'completo']);
+          const email = findValue(['email', 'e-mail', 'correio']);
+          const phone = findValue(['telefone', 'celular', 'whatsapp', 'fone']);
+          const company = findValue(['empresa', 'organização', 'companhia', 'loja']);
+          
+          if (name) {
+              const payload = {
+                  title: `Lead: ${name}`,
+                  contact_name: name,
+                  company_name: company || 'Particular',
+                  value: 0,
+                  status: 'warm',
+                  stage: 'new',
+                  next_task: `Entrar em contato (${email || phone || 'sem dados'})`,
+                  created_at: new Date().toISOString()
+              };
+
+              // Insert directly into CRM table
+              const { error } = await supabase.from('crm_deals').insert([payload]);
+              if (error) {
+                  console.error("Failed to create lead in CRM:", error);
+                  // We don't throw here to avoid blocking the user form success message
+              }
+          }
+      }
   }
 };

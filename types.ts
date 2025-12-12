@@ -51,3 +51,38 @@ export interface SyncJob {
   active: boolean;
   intervalMinutes: number; // Required for the job logic
 }
+
+// --- FORMS & LEADS ---
+
+export type QuestionType = 'text' | 'paragraph' | 'email' | 'phone' | 'number' | 'date';
+
+export interface FormQuestion {
+  id: string;
+  title: string;
+  type: QuestionType;
+  required: boolean;
+  placeholder?: string;
+}
+
+export interface FormModel {
+  id: string;
+  title: string;
+  description: string;
+  isLeadCapture: boolean;
+  questions: FormQuestion[];
+  createdAt: string;
+  submissionsCount: number;
+}
+
+export interface FormAnswer {
+  questionId: string;
+  questionTitle: string;
+  value: string;
+}
+
+export interface FormSubmission {
+  id: string;
+  formId: string;
+  answers: FormAnswer[];
+  submittedAt: string;
+}

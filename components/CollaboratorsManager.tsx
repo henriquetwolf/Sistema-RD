@@ -51,7 +51,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Form State
-  const [formData, setFormData] = useState({ name: '', email: '', department: '', role: 'viewer' as const });
+  const [formData, setFormData] = useState({ name: '', email: '', department: '', role: 'viewer' as Collaborator['role'] });
 
   // Click outside to close menu
   useEffect(() => {
@@ -317,7 +317,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                         <label className="block text-sm font-medium text-slate-700 mb-1">Permissão</label>
                         <select 
                             value={formData.role}
-                            onChange={e => setFormData({...formData, role: e.target.value as any})}
+                            onChange={e => setFormData({...formData, role: e.target.value as Collaborator['role']})}
                             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                         >
                             <option value="viewer">Visualizador (Apenas Leitura)</option>

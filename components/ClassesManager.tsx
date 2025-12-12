@@ -1,24 +1,99 @@
 import React, { useState } from 'react';
 import { 
   GraduationCap, Plus, Search, Calendar, Clock, MapPin, 
-  ArrowLeft, Save, X, MoreHorizontal, BookOpen
+  ArrowLeft, Save, X, MoreHorizontal, BookOpen, CheckSquare, 
+  Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map
 } from 'lucide-react';
+import clsx from 'clsx';
 
+// --- Types ---
 interface ClassItem {
   id: string;
-  name: string;
-  period: string;
-  location: string;
-  studentsCount: number;
-  status: 'planning' | 'active' | 'finished';
-  startDate: string;
+  // General
+  status: string;
+  cityState: string;
+  classCode: string;
+  extraClass: string;
+  course: string;
+  createdAt: string;
+
+  // Module 1
+  dateMod1: string;
+  material: string;
+  studioMod1: string;
+  instructorMod1: string;
+  ticketMod1: string;
+  infrastructure: string; // Projector, TV, Chairs
+  coffeeMod1: string;
+  hotelMod1: string;
+  hotelLocMod1: string;
+  costHelp1: string;
+
+  // Module 2
+  dateMod2: string;
+  instructorMod2: string;
+  ticketMod2: string;
+  coffeeMod2: string;
+  hotelMod2: string;
+  hotelLocMod2: string;
+  costHelp2: string;
+
+  // Financial / Admin
+  studioRent: number;
+  contaAzulRD: string;
+
+  // Checklists
+  isReady: boolean;
+  onSite: boolean;
+  onCRM: boolean;
+
+  // Misc
+  observations: string;
+  attachments: string[]; // Mocked list of filenames
 }
 
+// --- Mock Data ---
 const INITIAL_CLASSES: ClassItem[] = [
-  { id: '1', name: 'Desenvolvimento Web - Turma A', period: 'Noturno', location: 'Sala 302', studentsCount: 24, status: 'active', startDate: '2024-02-15' },
-  { id: '2', name: 'Data Science - Intensivo', period: 'Sábado', location: 'Lab 01', studentsCount: 18, status: 'active', startDate: '2024-03-01' },
-  { id: '3', name: 'UX/UI Design', period: 'Vespertino', location: 'Online', studentsCount: 30, status: 'planning', startDate: '2024-05-10' },
+  { 
+    id: '1', 
+    status: 'Confirmado', 
+    cityState: 'São Paulo - SP', 
+    classCode: 'TURMA-2025-A', 
+    extraClass: 'Não', 
+    course: 'Formação Completa em Pilates', 
+    createdAt: '2024-01-15',
+    dateMod1: '2025-03-10',
+    material: 'Apostilas V1',
+    studioMod1: 'Studio Central',
+    instructorMod1: 'Dra. Ana',
+    ticketMod1: 'Ok',
+    infrastructure: 'Ok',
+    coffeeMod1: 'Buffet A',
+    hotelMod1: 'Ibis Paulista',
+    hotelLocMod1: 'Av Paulista',
+    costHelp1: 'R$ 500,00',
+    dateMod2: '2025-04-10',
+    instructorMod2: 'Dr. Carlos',
+    ticketMod2: 'Pendente',
+    coffeeMod2: 'Buffet A',
+    hotelMod2: 'Ibis Paulista',
+    hotelLocMod2: 'Av Paulista',
+    costHelp2: 'R$ 500,00',
+    studioRent: 1500.00,
+    contaAzulRD: 'Faturado',
+    isReady: true,
+    onSite: true,
+    onCRM: true,
+    observations: 'Turma lotada.',
+    attachments: ['contrato_locacao.pdf']
+  }
 ];
+
+// --- Dropdown Options Mock ---
+const CITIES = ['São Paulo - SP', 'Rio de Janeiro - RJ', 'Belo Horizonte - MG', 'Porto Alegre - RS', 'Campinas - SP', 'Curitiba - PR'];
+const COURSES = ['Formação Completa em Pilates', 'Pilates Clínico', 'Pilates Suspenso', 'Gestão de Studios', 'MIT Movimento Inteligente'];
+const INSTRUCTORS = ['Dra. Ana Silva', 'Dr. Carlos Souza', 'Ft. Mariana Lima', 'Ft. Roberto Junior', 'Equipe VOLL'];
+const STUDIOS = ['Studio Central', 'Espaço Vida', 'Pilates Zone', 'Clinica Integrada', 'Box Cross Pilates'];
 
 interface ClassesManagerProps {
   onBack: () => void;
@@ -27,22 +102,60 @@ interface ClassesManagerProps {
 export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [classes, setClasses] = useState<ClassItem[]>(INITIAL_CLASSES);
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({ name: '', period: '', location: '', startDate: '' });
+  
+  // Initial Empty Form State
+  const initialFormState: ClassItem = {
+      id: '',
+      status: 'Planejamento',
+      cityState: '',
+      classCode: '',
+      extraClass: '',
+      course: '',
+      createdAt: new Date().toISOString().split('T')[0], // Today formatted YYYY-MM-DD
+      dateMod1: '',
+      material: '',
+      studioMod1: '',
+      instructorMod1: '',
+      ticketMod1: '',
+      infrastructure: '',
+      coffeeMod1: '',
+      hotelMod1: '',
+      hotelLocMod1: '',
+      costHelp1: '',
+      dateMod2: '',
+      instructorMod2: '',
+      ticketMod2: '',
+      coffeeMod2: '',
+      hotelMod2: '',
+      hotelLocMod2: '',
+      costHelp2: '',
+      studioRent: 0,
+      contaAzulRD: '',
+      isReady: false,
+      onSite: false,
+      onCRM: false,
+      observations: '',
+      attachments: []
+  };
+
+  const [formData, setFormData] = useState<ClassItem>(initialFormState);
 
   const handleSave = () => {
-    if (!formData.name) return;
+    if (!formData.course || !formData.cityState) {
+        alert("Preencha ao menos o Curso e a Cidade.");
+        return;
+    }
     const newItem: ClassItem = {
+      ...formData,
       id: Math.random().toString(),
-      name: formData.name,
-      period: formData.period || 'Noturno',
-      location: formData.location || 'TBA',
-      startDate: formData.startDate || new Date().toISOString().split('T')[0],
-      status: 'planning',
-      studentsCount: 0
     };
     setClasses([...classes, newItem]);
     setShowModal(false);
-    setFormData({ name: '', period: '', location: '', startDate: '' });
+    setFormData(initialFormState);
+  };
+
+  const handleInputChange = (field: keyof ClassItem, value: any) => {
+      setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -54,13 +167,13 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             </button>
             <div>
                 <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                    <GraduationCap className="text-purple-600" /> Turmas
+                    <GraduationCap className="text-purple-600" /> Gestão de Turmas
                 </h2>
-                <p className="text-slate-500 text-sm">Planejamento e gestão de períodos letivos.</p>
+                <p className="text-slate-500 text-sm">Planejamento logístico e financeiro de cursos.</p>
             </div>
         </div>
         <button 
-            onClick={() => setShowModal(true)}
+            onClick={() => { setFormData(initialFormState); setShowModal(true); }}
             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
         >
             <Plus size={18} /> Nova Turma
@@ -79,103 +192,374 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                         <BookOpen size={24} />
                     </div>
                     <div>
-                        <h3 className="font-bold text-slate-800 leading-tight">{cls.name}</h3>
-                        <span className="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600 mt-1 inline-block">
-                            {cls.status === 'active' ? 'Em Andamento' : cls.status === 'planning' ? 'Planejamento' : 'Concluída'}
-                        </span>
+                        <h3 className="font-bold text-slate-800 leading-tight">{cls.course}</h3>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                             <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase", 
+                                 cls.status === 'Confirmado' ? 'bg-green-100 text-green-700' : 
+                                 cls.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                             )}>
+                                {cls.status}
+                             </span>
+                             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">
+                                {cls.classCode}
+                             </span>
+                        </div>
                     </div>
                 </div>
 
-                <div className="space-y-2 text-sm text-slate-600 mb-4">
+                <div className="space-y-2 text-sm text-slate-600 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex items-center gap-2">
-                        <Clock size={16} className="text-slate-400" /> {cls.period}
+                        <MapPin size={16} className="text-slate-400" /> <span className="font-medium">{cls.cityState}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                        <MapPin size={16} className="text-slate-400" /> {cls.location}
+                        <Calendar size={16} className="text-slate-400" /> Mod 1: {cls.dateMod1 ? new Date(cls.dateMod1).toLocaleDateString('pt-BR') : '--/--'}
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Calendar size={16} className="text-slate-400" /> Início: {new Date(cls.startDate).toLocaleDateString('pt-BR')}
-                    </div>
+                    {cls.dateMod2 && (
+                        <div className="flex items-center gap-2">
+                            <Calendar size={16} className="text-slate-400" /> Mod 2: {new Date(cls.dateMod2).toLocaleDateString('pt-BR')}
+                        </div>
+                    )}
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500">{cls.studentsCount} Alunos matriculados</span>
-                    <button className="text-sm font-medium text-purple-600 hover:underline">Detalhes</button>
+                <div className="pt-2 flex items-center justify-between text-xs text-slate-400">
+                    <div className="flex gap-2">
+                        {cls.isReady && <span title="Pronto" className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded flex items-center gap-1"><CheckSquare size={12}/> Pronto</span>}
+                        {cls.onSite && <span title="No Site" className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1"><FileText size={12}/> Site</span>}
+                    </div>
+                    <span>Criado: {new Date(cls.createdAt).toLocaleDateString()}</span>
                 </div>
             </div>
         ))}
         
         {/* Empty State / Add New Card */}
         <button 
-            onClick={() => setShowModal(true)}
+            onClick={() => { setFormData(initialFormState); setShowModal(true); }}
             className="border-2 border-dashed border-slate-200 rounded-xl p-5 flex flex-col items-center justify-center text-slate-400 hover:text-purple-600 hover:border-purple-200 hover:bg-purple-50 transition-all min-h-[200px]"
         >
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-2">
                 <Plus size={24} />
             </div>
-            <span className="font-medium">Criar nova turma</span>
+            <span className="font-medium">Cadastrar nova turma</span>
         </button>
       </div>
 
-      {/* Modal */}
+      {/* Modal Full Screen / Large */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-slate-800">Nova Turma</h3>
-                    <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
-                </div>
-                <div className="p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+                
+                {/* Header */}
+                <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 rounded-t-xl">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Turma</label>
-                        <input 
-                            type="text" 
-                            value={formData.name}
-                            onChange={e => setFormData({...formData, name: e.target.value})}
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            placeholder="Ex: Engenharia de Software 2025"
-                        />
+                        <h3 className="text-xl font-bold text-slate-800">Cadastro de Turma</h3>
+                        <p className="text-sm text-slate-500">Preencha todos os detalhes logísticos e financeiros.</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={24}/></button>
+                </div>
+                
+                {/* Body - Scrollable */}
+                <div className="p-8 overflow-y-auto custom-scrollbar space-y-8">
+                    
+                    {/* SEÇÃO 1: DADOS GERAIS */}
+                    <div>
+                        <h4 className="text-sm font-bold text-purple-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <BookOpen size={16} /> Informações Básicas
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">STATUS</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.status}
+                                    onChange={e => handleInputChange('status', e.target.value)}
+                                >
+                                    <option value="Planejamento">Planejamento</option>
+                                    <option value="Confirmado">Confirmado</option>
+                                    <option value="Concluído">Concluído</option>
+                                    <option value="Cancelado">Cancelado</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">CIDADE / ESTADO</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.cityState}
+                                    onChange={e => handleInputChange('cityState', e.target.value)}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Código da turma</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                    value={formData.classCode}
+                                    onChange={e => handleInputChange('classCode', e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Turma EXTRA</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                    placeholder="Sim/Não/Detalhes"
+                                    value={formData.extraClass}
+                                    onChange={e => handleInputChange('extraClass', e.target.value)}
+                                />
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Curso</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.course}
+                                    onChange={e => handleInputChange('course', e.target.value)}
+                                >
+                                    <option value="">Selecione o curso...</option>
+                                    {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data de criação</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500"
+                                    value={formData.createdAt}
+                                    readOnly
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* SEÇÃO 2: MÓDULO 1 */}
+                    <div>
+                        <h4 className="text-sm font-bold text-purple-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <Calendar size={16} /> Módulo 1 (Logística)
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data do Módulo 1</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-purple-500 focus:border-purple-500"
+                                    value={formData.dateMod1}
+                                    onChange={e => handleInputChange('dateMod1', e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Studio MOD I</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.studioMod1}
+                                    onChange={e => handleInputChange('studioMod1', e.target.value)}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {STUDIOS.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Instrutor Módulo 1</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.instructorMod1}
+                                    onChange={e => handleInputChange('instructorMod1', e.target.value)}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {INSTRUCTORS.map(i => <option key={i} value={i}>{i}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Passagem (Mod 1)</label>
+                                <div className="relative">
+                                    <Plane size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                    <input 
+                                        type="text" 
+                                        className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                        placeholder="Voo/Horário"
+                                        value={formData.ticketMod1}
+                                        onChange={e => handleInputChange('ticketMod1', e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">MATERIAL</label>
+                                <input type="text" placeholder="Apostilas, brindes..." className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.material} onChange={e => handleInputChange('material', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">PROJETOR, TV, CADEIRAS</label>
+                                <input type="text" placeholder="Status infra" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.infrastructure} onChange={e => handleInputChange('infrastructure', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Coffe Módulo 1</label>
+                                <div className="relative">
+                                    <Coffee size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                    <input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.coffeeMod1} onChange={e => handleInputChange('coffeeMod1', e.target.value)} />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">AJUDA DE CUSTO</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.costHelp1} onChange={e => handleInputChange('costHelp1', e.target.value)} />
+                            </div>
+                            
+                            {/* Hotel Row */}
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Hotel Módulo 1</label>
+                                <div className="relative">
+                                    <Bed size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                    <input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Nome do Hotel" value={formData.hotelMod1} onChange={e => handleInputChange('hotelMod1', e.target.value)} />
+                                </div>
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">LOCALIZAÇÃO HOTEL MÓDULO 1</label>
+                                <div className="relative">
+                                    <Map size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                    <input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Endereço / Link" value={formData.hotelLocMod1} onChange={e => handleInputChange('hotelLocMod1', e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* SEÇÃO 3: MÓDULO 2 */}
+                    <div>
+                        <h4 className="text-sm font-bold text-purple-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <Calendar size={16} /> Módulo 2 (Logística)
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data do Módulo 2</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                    value={formData.dateMod2}
+                                    onChange={e => handleInputChange('dateMod2', e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Instrutor Módulo 2</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.instructorMod2}
+                                    onChange={e => handleInputChange('instructorMod2', e.target.value)}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {INSTRUCTORS.map(i => <option key={i} value={i}>{i}</option>)}
+                                </select>
+                            </div>
+                             <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Passagem (Mod 2)</label>
+                                <div className="relative">
+                                    <Plane size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                    <input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.ticketMod2} onChange={e => handleInputChange('ticketMod2', e.target.value)} />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Coffe Módulo 2</label>
+                                <div className="relative">
+                                    <Coffee size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                    <input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.coffeeMod2} onChange={e => handleInputChange('coffeeMod2', e.target.value)} />
+                                </div>
+                            </div>
+
+                             {/* Hotel Row */}
+                             <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Hotel Módulo 2</label>
+                                <div className="relative">
+                                    <Bed size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                    <input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hotelMod2} onChange={e => handleInputChange('hotelMod2', e.target.value)} />
+                                </div>
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">LOCALIZAÇÃO HOTEL MÓDULO 2</label>
+                                <div className="relative">
+                                    <Map size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                    <input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hotelLocMod2} onChange={e => handleInputChange('hotelLocMod2', e.target.value)} />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">AJUDA DE CUSTO 2</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.costHelp2} onChange={e => handleInputChange('costHelp2', e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+
+                     {/* SEÇÃO 4: FINANCEIRO & CHECKLISTS */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Financeiro */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Período</label>
-                            <select 
-                                value={formData.period}
-                                onChange={e => setFormData({...formData, period: e.target.value})}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white"
-                            >
-                                <option value="">Selecione...</option>
-                                <option value="Matutino">Matutino</option>
-                                <option value="Vespertino">Vespertino</option>
-                                <option value="Noturno">Noturno</option>
-                                <option value="Integral">Integral</option>
-                            </select>
+                             <h4 className="text-sm font-bold text-purple-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                                <DollarSign size={16} /> Financeiro & Admin
+                            </h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">ALUGUEL DO STUDIO</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                        placeholder="0.00"
+                                        value={formData.studioRent || ''}
+                                        onChange={e => handleInputChange('studioRent', parseFloat(e.target.value))}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">CONTA AZUL E RD</label>
+                                    <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.contaAzulRD} onChange={e => handleInputChange('contaAzulRD', e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Checklists */}
+                        <div>
+                            <h4 className="text-sm font-bold text-purple-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                                <CheckSquare size={16} /> Checklist de Prontidão
+                            </h4>
+                            <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-white rounded transition-colors">
+                                    <span className="text-sm font-medium text-slate-700">Tudo pronto para o Curso?</span>
+                                    <input type="checkbox" className="w-5 h-5 rounded text-purple-600 focus:ring-purple-500" checked={formData.isReady} onChange={e => handleInputChange('isReady', e.target.checked)} />
+                                </label>
+                                <div className="h-px bg-slate-200"></div>
+                                <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-white rounded transition-colors">
+                                    <span className="text-sm font-medium text-slate-700">Cadastrado no site</span>
+                                    <input type="checkbox" className="w-5 h-5 rounded text-purple-600 focus:ring-purple-500" checked={formData.onSite} onChange={e => handleInputChange('onSite', e.target.checked)} />
+                                </label>
+                                <div className="h-px bg-slate-200"></div>
+                                <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-white rounded transition-colors">
+                                    <span className="text-sm font-medium text-slate-700">Cadastrado no CRM</span>
+                                    <input type="checkbox" className="w-5 h-5 rounded text-purple-600 focus:ring-purple-500" checked={formData.onCRM} onChange={e => handleInputChange('onCRM', e.target.checked)} />
+                                </label>
+                            </div>
+                        </div>
+                     </div>
+
+                    {/* SEÇÃO 5: OBSERVAÇÕES & ANEXOS */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">Observações</label>
+                            <textarea 
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-32 resize-none"
+                                value={formData.observations}
+                                onChange={e => handleInputChange('observations', e.target.value)}
+                            ></textarea>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Data Início</label>
-                            <input 
-                                type="date" 
-                                value={formData.startDate}
-                                onChange={e => setFormData({...formData, startDate: e.target.value})}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg"
-                            />
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">Anexos</label>
+                            <div className="border-2 border-dashed border-slate-300 rounded-lg h-32 flex flex-col items-center justify-center text-slate-400 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+                                <Paperclip size={24} className="mb-2" />
+                                <span className="text-sm">Arraste arquivos ou clique aqui</span>
+                                <input type="file" className="hidden" multiple />
+                            </div>
                         </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Local / Sala</label>
-                        <input 
-                            type="text" 
-                            value={formData.location}
-                            onChange={e => setFormData({...formData, location: e.target.value})}
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg"
-                            placeholder="Ex: Sala 101 ou Online"
-                        />
-                    </div>
+                     </div>
+
                 </div>
-                <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3">
-                    <button onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
-                    <button onClick={handleSave} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium text-sm flex items-center gap-2">
-                        <Save size={16} /> Criar Turma
+                
+                {/* Footer */}
+                <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100">
+                    <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                    <button onClick={handleSave} className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center gap-2">
+                        <Save size={18} /> Salvar Turma
                     </button>
                 </div>
             </div>

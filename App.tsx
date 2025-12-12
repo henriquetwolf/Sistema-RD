@@ -1059,10 +1059,9 @@ function App() {
 
                     </div>
                 </div>
+            </main>
         </>
       )}
-
-      </main>
     </div>
   );
 }

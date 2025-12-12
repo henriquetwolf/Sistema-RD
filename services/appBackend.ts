@@ -190,6 +190,15 @@ export const appBackend = {
     }
   },
 
+  // --- APP SETTINGS (LOGO) ---
+  getAppLogo: (): string | null => {
+      return localStorage.getItem('app_logo_url');
+  },
+
+  saveAppLogo: (url: string) => {
+      localStorage.setItem('app_logo_url', url);
+  },
+
   // --- FORMS & CRM LOGIC (MOCKED BACKEND FOR FORMS, REAL FOR CRM) ---
   
   saveForm: async (form: FormModel): Promise<void> => {

@@ -12,6 +12,7 @@ import { ClassesManager } from './components/ClassesManager';
 import { TeachersManager } from './components/TeachersManager';
 import { FormsManager } from './components/FormsManager';
 import { FormViewer } from './components/FormViewer';
+import { SettingsManager } from './components/SettingsManager';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -21,7 +22,7 @@ import {
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
-  Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft
+  Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -29,6 +30,10 @@ function App() {
   // Public Form State (Before Auth Check)
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
+
+  // App Settings State
+  const DEFAULT_LOGO = "https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png";
+  const [appLogo, setAppLogo] = useState<string>(DEFAULT_LOGO);
 
   // Auth State
   const [session, setSession] = useState<any>(null);
@@ -40,7 +45,7 @@ function App() {
   
   // Dashboard UI State
   // Extended types to include management tabs
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'collaborators' | 'classes' | 'teachers' | 'forms'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'global_settings'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -69,6 +74,12 @@ function App() {
   // --- INIT & AUTH ---
   useEffect(() => {
     const initApp = async () => {
+        // Load Custom Logo
+        const savedLogo = appBackend.getAppLogo();
+        if (savedLogo) {
+            setAppLogo(savedLogo);
+        }
+
         // 1. Check for Public URL Params (e.g. ?publicFormId=123)
         const params = new URLSearchParams(window.location.search);
         const publicFormId = params.get('publicFormId');
@@ -466,7 +477,7 @@ function App() {
                     <ArrowLeft size={20} /> Cancelar e Voltar
                 </button>
                 <div className="flex items-center gap-2">
-                    <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-8" />
+                    <img src={appLogo} alt="VOLL" className="h-8 max-w-[150px] object-contain" />
                 </div>
              </div>
 
@@ -542,7 +553,7 @@ function App() {
             <header className="bg-white border-b border-slate-200 py-4 sticky top-0 z-20 shadow-sm">
                 <div className="container mx-auto px-4 flex items-center justify-between">
                 <div className="flex items-center gap-3 cursor-pointer" onClick={() => setStep(AppStep.DASHBOARD)}>
-                    <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL Pilates Group" className="h-10 w-auto" />
+                    <img src={appLogo} alt="Logo" className="h-10 w-auto max-w-[180px] object-contain" />
                     {isLocalMode && (
                         <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-mono rounded border border-slate-200 flex items-center gap-1">
                             <HardDrive size={10} /> LOCAL
@@ -573,7 +584,7 @@ function App() {
                     
                     {/* SIDEBAR NAVIGATION */}
                     <aside className="w-full md:w-64 flex-shrink-0">
-                        <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24">
+                        <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto">
                             <nav className="space-y-1">
                                 <button
                                     onClick={() => setDashboardTab('overview')}
@@ -632,12 +643,27 @@ function App() {
                                             : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                                     )}
                                 >
-                                    <Settings size={18} />
+                                    <Database size={18} />
                                     Conexões
                                 </button>
                             </nav>
                             
-                            <div className="mt-4 pt-4 border-t border-slate-100 px-3">
+                            <div className="mt-4 pt-4 border-t border-slate-100">
+                                <button
+                                    onClick={() => setDashboardTab('global_settings')}
+                                    className={clsx(
+                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                        dashboardTab === 'global_settings' 
+                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
+                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    )}
+                                >
+                                    <Cog size={18} />
+                                    Configurações
+                                </button>
+                            </div>
+
+                            <div className="mt-2 pt-4 border-t border-slate-100 px-3">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Status do Sistema</p>
                                 <div className="flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1.5 rounded-lg border border-emerald-100">
                                     <Activity size={12} />
@@ -655,7 +681,7 @@ function App() {
                             <div className="space-y-6 animate-in fade-in duration-300">
                                 <div>
                                     <h2 className="text-2xl font-bold text-slate-800">Painel de Controle</h2>
-                                    <p className="text-slate-500 text-sm">Bem-vindo ao sistema de gestão VOLL Pilates Group.</p>
+                                    <p className="text-slate-500 text-sm">Bem-vindo ao sistema de gestão.</p>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -869,6 +895,7 @@ function App() {
                         {dashboardTab === 'classes' && <ClassesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={setAppLogo} currentLogo={appLogo} />}
 
                         {/* TAB: CRM */}
                         {dashboardTab === 'crm' && (

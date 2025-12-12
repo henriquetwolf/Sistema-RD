@@ -55,6 +55,26 @@ const getOwnerName = (id: string) => {
     return owner ? owner.name : 'Desconhecido';
 };
 
+// Helper for Error Handling
+const handleDbError = (e: any) => {
+    console.error("Erro de Banco de Dados:", e);
+    const msg = e.message || "Erro desconhecido";
+    
+    if (msg.includes('relation "crm_deals" does not exist')) {
+       alert("Erro Crítico: A tabela 'crm_deals' não existe no banco de dados. Por favor, execute o script SQL no Supabase.");
+    } else if (msg.includes('violates row-level security')) {
+       alert("Erro de Permissão: A política de segurança (RLS) impediu a gravação. Execute o script SQL para liberar acesso.");
+    } else if (msg.includes('violates foreign key constraint') || msg.includes('crm_deals_owner_id_fkey')) {
+       alert("Erro de Banco de Dados: O banco está exigindo que o 'Responsável' exista na tabela oficial de usuários (auth.users). \n\nSOLUÇÃO: Execute 'ALTER TABLE crm_deals DROP CONSTRAINT crm_deals_owner_id_fkey;' no SQL Editor.");
+    } else if (msg.includes('invalid input syntax for type uuid')) {
+       alert("Erro de Formato: O ID do colaborador antigo não é compatível (não é um UUID). Você precisa limpar o banco ou atualizar os dados antigos.");
+    } else if (msg.includes("Could not find the 'closed_at' column") || msg.includes('closed_at')) {
+       alert("Coluna Ausente: O sistema tentou salvar a Data de Fechamento, mas a coluna 'closed_at' não existe no banco.\n\nSOLUÇÃO: Execute este SQL no Supabase:\nALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;");
+    } else {
+       alert(`Erro ao salvar: ${msg}`);
+    }
+};
+
 export const CrmBoard: React.FC = () => {
   // Views
   const [activeView, setActiveView] = useState<'pipeline' | 'teams'>('pipeline');
@@ -180,9 +200,7 @@ export const CrmBoard: React.FC = () => {
         
         if (error) throw error;
     } catch (e: any) {
-        console.error("Erro ao mover card:", e);
-        alert("Erro ao salvar o novo estágio. Verifique sua conexão.");
-        // Revert optimistic update
+        handleDbError(e);
         fetchData(); // Simplest way to revert is refetch
     }
   };
@@ -254,8 +272,7 @@ export const CrmBoard: React.FC = () => {
         
         if (error) throw error;
     } catch (e) {
-        console.error(e);
-        alert("Erro ao salvar alteração.");
+        handleDbError(e);
         fetchData(); // Revert
     }
 
@@ -358,20 +375,7 @@ export const CrmBoard: React.FC = () => {
           }
           setShowDealModal(false);
       } catch (e: any) {
-          console.error("Erro detalhado ao salvar:", e);
-          const msg = e.message || "Erro desconhecido";
-          
-          if (msg.includes('relation "crm_deals" does not exist')) {
-             alert("Erro Crítico: A tabela 'crm_deals' não existe no banco de dados. Por favor, execute o script SQL no Supabase.");
-          } else if (msg.includes('violates row-level security')) {
-             alert("Erro de Permissão: A política de segurança (RLS) impediu a gravação. Execute o script SQL para liberar acesso.");
-          } else if (msg.includes('violates foreign key constraint') || msg.includes('crm_deals_owner_id_fkey')) {
-             alert("Erro de Banco de Dados: O banco está exigindo que o 'Responsável' exista na tabela oficial de usuários (auth.users), mas estamos usando colaboradores fictícios. \n\nSOLUÇÃO: Execute o script SQL 'ALTER TABLE crm_deals DROP CONSTRAINT...' para remover essa restrição.");
-          } else if (msg.includes('invalid input syntax for type uuid')) {
-             alert("Erro de Formato: O ID do colaborador antigo não é compatível (não é um UUID). Você precisa limpar o banco ou atualizar os dados antigos.");
-          } else {
-             alert(`Não foi possível salvar: ${msg}`);
-          }
+          handleDbError(e);
       }
   };
 

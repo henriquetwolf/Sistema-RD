@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, Plus, Search, MoreVertical, Shield, User, 
-  Mail, CheckCircle, X, ArrowLeft, Save, Briefcase
+  Mail, CheckCircle, X, ArrowLeft, Save, Briefcase, Edit2, Trash2
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -45,25 +45,80 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Actions State
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   // Form State
   const [formData, setFormData] = useState({ name: '', email: '', department: '', role: 'viewer' as const });
+
+  // Click outside to close menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest('.actions-menu-btn') === null) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const handleSave = () => {
     if (!formData.name || !formData.email || !formData.department) return;
     
-    const newCollaborator: Collaborator = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: formData.name,
-      email: formData.email,
-      department: formData.department,
-      role: formData.role,
-      status: 'active',
-      lastAccess: 'Nunca'
-    };
+    if (editingId) {
+        setCollaborators(prev => prev.map(c => c.id === editingId ? {
+            ...c,
+            name: formData.name,
+            email: formData.email,
+            department: formData.department,
+            role: formData.role
+        } : c));
+    } else {
+        const newCollaborator: Collaborator = {
+          id: Math.random().toString(36).substr(2, 9),
+          name: formData.name,
+          email: formData.email,
+          department: formData.department,
+          role: formData.role,
+          status: 'active',
+          lastAccess: 'Nunca'
+        };
+        setCollaborators([...collaborators, newCollaborator]);
+    }
 
-    setCollaborators([...collaborators, newCollaborator]);
-    setShowModal(false);
-    setFormData({ name: '', email: '', department: '', role: 'viewer' });
+    closeModal();
+  };
+
+  const handleEdit = (c: Collaborator) => {
+      setFormData({
+          name: c.name,
+          email: c.email,
+          department: c.department,
+          role: c.role
+      });
+      setEditingId(c.id);
+      setActiveMenuId(null);
+      setShowModal(true);
+  };
+
+  const handleDelete = (id: string) => {
+      if (window.confirm('Tem certeza que deseja remover este colaborador?')) {
+          setCollaborators(prev => prev.filter(c => c.id !== id));
+      }
+      setActiveMenuId(null);
+  };
+
+  const openNewModal = () => {
+      setFormData({ name: '', email: '', department: '', role: 'viewer' });
+      setEditingId(null);
+      setShowModal(true);
+  };
+
+  const closeModal = () => {
+      setShowModal(false);
+      setFormData({ name: '', email: '', department: '', role: 'viewer' });
+      setEditingId(null);
   };
 
   const filtered = collaborators.filter(c => 
@@ -89,7 +144,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
             </div>
         </div>
         <button 
-            onClick={() => setShowModal(true)}
+            onClick={openNewModal}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
         >
             <Plus size={18} /> Novo Colaborador
@@ -111,7 +166,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
       </div>
 
       {/* List */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto min-h-[400px]">
         <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500">
                 <tr>
@@ -125,7 +180,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
             </thead>
             <tbody className="divide-y divide-slate-100">
                 {filtered.map(c => (
-                    <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={c.id} className="hover:bg-slate-50 transition-colors relative">
                         <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
@@ -165,10 +220,38 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                         <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
                             {c.lastAccess}
                         </td>
-                        <td className="px-6 py-4 text-right">
-                            <button className="p-2 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600">
+                        <td className="px-6 py-4 text-right relative">
+                            <button 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveMenuId(activeMenuId === c.id ? null : c.id);
+                                }}
+                                className={clsx(
+                                    "p-2 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 actions-menu-btn transition-colors",
+                                    activeMenuId === c.id && "bg-slate-200 text-slate-600"
+                                )}
+                            >
                                 <MoreVertical size={16} />
                             </button>
+                            
+                            {/* Actions Dropdown */}
+                            {activeMenuId === c.id && (
+                                <div className="absolute right-10 top-8 w-40 bg-white rounded-lg shadow-xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                                    <button 
+                                        onClick={() => handleEdit(c)}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                    >
+                                        <Edit2 size={14} /> Editar
+                                    </button>
+                                    <div className="h-px bg-slate-100 my-0"></div>
+                                    <button 
+                                        onClick={() => handleDelete(c.id)}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                    >
+                                        <Trash2 size={14} /> Excluir
+                                    </button>
+                                </div>
+                            )}
                         </td>
                     </tr>
                 ))}
@@ -181,8 +264,8 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
                 <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-slate-800">Novo Colaborador</h3>
-                    <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                    <h3 className="font-bold text-slate-800">{editingId ? 'Editar Colaborador' : 'Novo Colaborador'}</h3>
+                    <button onClick={closeModal} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
                 </div>
                 <div className="p-6 space-y-4">
                     <div>
@@ -243,7 +326,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                     </div>
                 </div>
                 <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3">
-                    <button onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                    <button onClick={closeModal} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
                     <button onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm flex items-center gap-2">
                         <Save size={16} /> Salvar Cadastro
                     </button>

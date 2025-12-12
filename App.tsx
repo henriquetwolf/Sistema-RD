@@ -6,6 +6,10 @@ import { PreviewPanel } from './components/PreviewPanel';
 import { LoginPanel } from './components/LoginPanel';
 import { IntegrationHelp } from './components/IntegrationHelp';
 import { TableViewer } from './components/TableViewer';
+import { CrmBoard } from './components/CrmBoard'; 
+import { CollaboratorsManager } from './components/CollaboratorsManager';
+import { ClassesManager } from './components/ClassesManager';
+import { TeachersManager } from './components/TeachersManager';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -14,7 +18,8 @@ import { appBackend } from './services/appBackend';
 import { 
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
-  LayoutDashboard, Settings, BarChart3, ArrowRight, Table
+  LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
+  Users, GraduationCap, School
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -28,7 +33,8 @@ function App() {
   const jobsRef = useRef<SyncJob[]>([]); // Ref to access latest jobs inside interval without resetting it
   
   // Dashboard UI State
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables'>('overview');
+  // Extended types to include management tabs
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'collaborators' | 'classes' | 'teachers'>('overview');
 
   // Wizard/Creation State
   const [step, setStep] = useState<AppStep>(AppStep.DASHBOARD);
@@ -44,7 +50,6 @@ function App() {
   // Sync Timer Ref
   const intervalRef = useRef<number | null>(null);
   // CHECK FREQUENCY: Run the check loop every 1 minute.
-  // We don't sync every minute, we just CHECK if the specific job interval has passed.
   const CHECK_INTERVAL_MS = 60 * 1000; 
 
   // --- INIT & AUTH ---
@@ -112,8 +117,6 @@ function App() {
     const currentJobs = jobsRef.current;
     const now = new Date();
 
-    // Only run jobs that are active AND have a sheetUrl (Auto-Sync jobs)
-    // AND meet their time interval criteria
     const jobsToRun = currentJobs.filter(j => {
         if (!j.active || !j.sheetUrl || j.status === 'syncing') return false;
         
@@ -133,87 +136,65 @@ function App() {
   };
 
   const performJobSync = async (job: SyncJob) => {
-    // Safety check
     if (!job.sheetUrl) return;
 
-    // 1. Set Status to Syncing
     setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'syncing', lastMessage: 'Iniciando ciclo...' } : j));
 
     try {
-        // Setup Timeout (120 seconds for clear + wait + sync)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-        // --- STEP 1: Fetch Content (Binary or Text) ---
-        // Cache Busting: Add timestamp to prevent OneDrive/Browser from serving cached file
+        // Cache Busting & Proxy logic
         const separator = job.sheetUrl.includes('?') ? '&' : '?';
         const fetchUrlWithCache = `${job.sheetUrl}${separator}_t=${Date.now()}`;
         
-        // Fetch Strategy: Try Direct, then fallback to Proxy
         let response;
         try {
             response = await fetch(fetchUrlWithCache, { signal: controller.signal });
             if (!response.ok) throw new Error('Direct fetch failed');
         } catch (directError) {
              console.log(`Direct sync failed for ${job.name}, retrying with proxy...`);
-             // Proxy Fallback for OneDrive/CORS issues
              const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(fetchUrlWithCache)}`;
              response = await fetch(proxyUrl, { signal: controller.signal });
         }
         
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         
-        // We get the blob first to support both binary Excel and text CSV
         const blob = await response.blob();
         
-        // Basic check for HTML/Login pages masquerading as files
         if (blob.type.includes('text/html')) {
             throw new Error("O link retornou HTML/Login. Verifique permissões.");
         }
 
         let parsed: FileData;
 
-        // Hybrid Parsing Strategy:
-        // 1. Try to parse as Excel first (since read-excel-file detects zip signature)
         try {
-            // We give it a dummy .xlsx name to help the parser hint, 
-            // though read-excel-file mainly looks at content
             const file = new File([blob], "temp_sync.xlsx", { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             parsed = await parseExcelFile(file);
         } catch (excelError) {
-            // 2. If Excel parsing fails, fallback to CSV text parsing
             try {
                 const text = await blob.text();
-                 // Double check text content for HTML just in case
                 if (text.trim().startsWith('<') || text.includes('<!DOCTYPE html')) {
                      throw new Error("Conteúdo inválido (HTML detectado).");
                 }
-                
                 const file = new File([text], "temp_sync.csv", { type: 'text/csv' });
                 parsed = await parseCsvFile(file);
             } catch (csvError) {
-                // If both fail, throw the original excel error or a generic one
                 throw new Error("Falha ao processar arquivo: Não é um CSV nem um Excel válido.");
             }
         }
 
         const client = createSupabaseClient(job.config.url, job.config.key);
 
-        // --- STEP 2: Clear Table ---
         setJobs(prev => prev.map(j => j.id === job.id ? { ...j, lastMessage: 'Limpando tabela...' } : j));
         
-        // Determine target column for deletion
         const targetColumn = job.config.primaryKey || (parsed.headers.length > 0 ? parsed.headers[0] : 'id');
         await clearTableData(client, job.config.tableName, targetColumn);
 
-        // --- STEP 3: Wait 60 Seconds ---
         setJobs(prev => prev.map(j => j.id === job.id ? { ...j, lastMessage: 'Aguardando 60s...' } : j));
         
-        // Wait promise
         await new Promise(resolve => setTimeout(resolve, 60000));
         
-        // --- STEP 4: Upload New Data ---
-        // Check if aborted during wait
         if (controller.signal.aborted) throw new Error("Tempo limite excedido.");
 
         setJobs(prev => prev.map(j => j.id === job.id ? { ...j, lastMessage: 'Enviando dados...' } : j));
@@ -221,7 +202,6 @@ function App() {
 
         clearTimeout(timeoutId);
 
-        // --- FINISH: Update Success State ---
         setJobs(prev => prev.map(j => j.id === job.id ? { 
             ...j, 
             status: 'success', 
@@ -231,7 +211,6 @@ function App() {
 
     } catch (e: any) {
         console.error(`Job ${job.name} failed`, e);
-        
         let msg = e.message || "Erro desconhecido";
         
         if (e.name === 'AbortError') msg = "Timeout (120s) excedido";
@@ -239,7 +218,6 @@ function App() {
             msg = "Erro: Registros duplicados detectados.";
         }
         
-        // Update Error State
         setJobs(prev => prev.map(j => j.id === job.id ? { 
             ...j, 
             status: 'error', 
@@ -254,7 +232,6 @@ function App() {
   const handleStartWizard = () => {
     setStep(AppStep.UPLOAD);
     setFilesData([]);
-    // Default interval to 5 min
     setConfig({ url: '', key: '', tableName: '', primaryKey: '', intervalMinutes: 5 });
     setTempSheetUrl(null);
     setErrorMessage(null);
@@ -263,7 +240,6 @@ function App() {
   const handleFilesSelected = async (files: File[]) => {
     setStatus('parsing');
     try {
-      // Process files based on extension
       const parsedFiles = await Promise.all(files.map(file => {
           if (file.name.endsWith('.xlsx')) {
               return parseExcelFile(file);
@@ -272,7 +248,6 @@ function App() {
           }
       }));
 
-      // VALIDATION: Ensure all files have the same headers
       if (parsedFiles.length > 1) {
           const normalize = (headers: string[]) => headers.map(h => h.trim().toLowerCase()).sort().join(',');
           const refHeaders = normalize(parsedFiles[0].headers);
@@ -285,7 +260,6 @@ function App() {
 
       setFilesData(parsedFiles);
       
-      // Suggest Table Name from the first file
       if (!config.tableName && files.length > 0) {
           const suggestedName = files[0].name
             .replace(/\.(csv|xlsx)$/i, '')
@@ -304,7 +278,6 @@ function App() {
   const handleCreateConnection = async () => {
       const isAutoSync = !!tempSheetUrl;
 
-      // Se for upload manual (não tem URL de Sheet), precisamos fazer o upload agora
       if (!isAutoSync) {
           setStatus('uploading');
           setErrorMessage(null);
@@ -320,7 +293,7 @@ function App() {
               console.error(e);
               setErrorMessage(`Erro ao enviar dados: ${e.message}`);
               setStatus('error');
-              return; // Aborta e mantém na tela para o usuário tentar novamente
+              return; 
           }
       }
 
@@ -329,10 +302,10 @@ function App() {
       const newJob: SyncJob = {
           id: crypto.randomUUID(),
           name: config.tableName || "Nova Conexão",
-          sheetUrl: tempSheetUrl || "", // Store empty string if manual
+          sheetUrl: tempSheetUrl || "",
           config: { ...config },
-          active: isAutoSync, // Only active if it has a URL
-          status: isAutoSync ? 'idle' : 'success', // Static starts as success (assumed manual upload done)
+          active: isAutoSync,
+          status: isAutoSync ? 'idle' : 'success',
           lastSync: isAutoSync ? null : new Date(),
           lastMessage: isAutoSync ? 'Aguardando primeira sincronização...' : `Upload manual: ${rowCount} linhas.`,
           intervalMinutes: config.intervalMinutes || 5
@@ -340,10 +313,9 @@ function App() {
 
       setJobs(prev => [...prev, newJob]);
       setStep(AppStep.DASHBOARD);
-      setDashboardTab('settings'); // Go to settings to see the new connection
+      setDashboardTab('settings');
       setStatus('idle');
       
-      // Trigger immediate sync ONLY for Auto-Sync jobs
       if (isAutoSync) {
          setTimeout(() => performJobSync(newJob), 500);
       }
@@ -355,7 +327,6 @@ function App() {
   };
 
   const deleteJob = (id: string) => {
-      // Use window.confirm to ensure the user really wants to delete
       const confirmed = window.confirm("Tem certeza que deseja remover esta conexão?");
       if(confirmed) {
           setJobs(prev => prev.filter(j => j.id !== id));
@@ -395,11 +366,9 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       
-      {/* Helper Modal */}
       <IntegrationHelp isOpen={showHelp} onClose={() => setShowHelp(false)} config={config} />
 
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 py-4 mb-8 sticky top-0 z-10 shadow-sm">
+      <header className="bg-white border-b border-slate-200 py-4 sticky top-0 z-10 shadow-sm">
         <div className="container mx-auto px-4 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setStep(AppStep.DASHBOARD)}>
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
@@ -435,11 +404,11 @@ function App() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4">
+      <main className={clsx("container mx-auto px-4", dashboardTab === 'crm' ? "max-w-full py-4" : "py-8")}>
         
         {/* DASHBOARD VIEW with SIDEBAR */}
         {step === AppStep.DASHBOARD && (
-            <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                 
                 {/* SIDEBAR NAVIGATION */}
                 <aside className="w-full md:w-64 flex-shrink-0">
@@ -449,13 +418,25 @@ function App() {
                                 onClick={() => setDashboardTab('overview')}
                                 className={clsx(
                                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                                    dashboardTab === 'overview' 
+                                    (dashboardTab === 'overview' || ['collaborators', 'classes', 'teachers'].includes(dashboardTab))
                                         ? "bg-indigo-50 text-indigo-700" 
                                         : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                                 )}
                             >
                                 <LayoutDashboard size={18} />
                                 Visão Geral
+                            </button>
+                            <button
+                                onClick={() => setDashboardTab('crm')}
+                                className={clsx(
+                                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                                    dashboardTab === 'crm' 
+                                        ? "bg-indigo-50 text-indigo-700" 
+                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                )}
+                            >
+                                <Kanban size={18} />
+                                CRM <span className="ml-auto text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-bold">NOVO</span>
                             </button>
                             <button
                                 onClick={() => setDashboardTab('tables')}
@@ -494,7 +475,7 @@ function App() {
                 </aside>
 
                 {/* CONTENT AREA */}
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                     
                     {/* TAB: VISÃO GERAL (STATS) */}
                     {dashboardTab === 'overview' && (
@@ -542,19 +523,73 @@ function App() {
                                 </div>
                              </div>
 
+                             {/* --- SECTION: CADASTROS --- */}
+                             <div className="pt-2">
+                                <h3 className="text-lg font-bold text-slate-800 mb-4">Gestão Administrativa</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {/* Card Colaboradores */}
+                                    <div 
+                                        onClick={() => setDashboardTab('collaborators')}
+                                        className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"
+                                    >
+                                        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                            <Users size={24} />
+                                        </div>
+                                        <h4 className="font-bold text-slate-800 mb-1 group-hover:text-blue-700">Cadastro de Colaboradores</h4>
+                                        <p className="text-xs text-slate-500">Gerencie a equipe interna e acessos ao sistema.</p>
+                                    </div>
+
+                                    {/* Card Turmas */}
+                                    <div 
+                                        onClick={() => setDashboardTab('classes')}
+                                        className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-200 transition-all cursor-pointer group"
+                                    >
+                                        <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                                            <GraduationCap size={24} />
+                                        </div>
+                                        <h4 className="font-bold text-slate-800 mb-1 group-hover:text-purple-700">Cadastro de Turmas</h4>
+                                        <p className="text-xs text-slate-500">Organize cronogramas, alunos e períodos letivos.</p>
+                                    </div>
+
+                                    {/* Card Professores */}
+                                    <div 
+                                        onClick={() => setDashboardTab('teachers')}
+                                        className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group"
+                                    >
+                                        <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                                            <School size={24} />
+                                        </div>
+                                        <h4 className="font-bold text-slate-800 mb-1 group-hover:text-orange-700">Cadastro de Professores</h4>
+                                        <p className="text-xs text-slate-500">Administre o corpo docente e atribuições.</p>
+                                    </div>
+                                </div>
+                             </div>
+
                              {/* Call to Action for Quick Access */}
                              <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-xl p-6 text-white shadow-lg flex items-center justify-between">
                                 <div>
-                                    <h3 className="text-lg font-bold mb-1">Gerenciar Conexões</h3>
-                                    <p className="text-indigo-100 text-sm max-w-md">Configure novas tabelas, ajuste intervalos de sincronização ou verifique logs detalhados.</p>
+                                    <h3 className="text-lg font-bold mb-1">CRM Integrado</h3>
+                                    <p className="text-indigo-100 text-sm max-w-md">Gerencie suas oportunidades de vendas em um quadro visual.</p>
                                 </div>
                                 <button 
-                                    onClick={() => setDashboardTab('settings')}
+                                    onClick={() => setDashboardTab('crm')}
                                     className="bg-white text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
                                 >
-                                    Ir para Configurações <ArrowRight size={16} />
+                                    Acessar CRM <ArrowRight size={16} />
                                 </button>
                              </div>
+                        </div>
+                    )}
+                    
+                    {/* SUB-MODULES */}
+                    {dashboardTab === 'collaborators' && <CollaboratorsManager onBack={() => setDashboardTab('overview')} />}
+                    {dashboardTab === 'classes' && <ClassesManager onBack={() => setDashboardTab('overview')} />}
+                    {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
+
+                    {/* TAB: CRM */}
+                    {dashboardTab === 'crm' && (
+                        <div className="animate-in fade-in duration-300 h-full">
+                           <CrmBoard />
                         </div>
                     )}
 
@@ -708,80 +743,6 @@ function App() {
 
                 </div>
             </div>
-        )}
-
-        {/* WIZARD STEPS */}
-        {step !== AppStep.DASHBOARD && (
-             <div className="max-w-4xl mx-auto">
-                <StepIndicator currentStep={step} />
-                
-                {step === AppStep.UPLOAD && (
-                    <UploadPanel 
-                        onFilesSelected={handleFilesSelected} 
-                        isLoading={status === 'parsing' || status === 'uploading'}
-                        onUrlConfirmed={(url) => setTempSheetUrl(url)}
-                    />
-                )}
-
-                {step === AppStep.CONFIG && (
-                    <ConfigPanel 
-                        config={config} 
-                        setConfig={setConfig} 
-                        onNext={() => setStep(AppStep.PREVIEW)}
-                        onBack={() => setStep(AppStep.UPLOAD)}
-                    />
-                )}
-
-                {step === AppStep.PREVIEW && (
-                    <div className="space-y-6">
-                         {/* Status Messages */}
-                         {status === 'uploading' && (
-                            <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 p-4 rounded-lg flex items-center gap-2">
-                                <Loader2 className="animate-spin" size={20} />
-                                Enviando dados para o Supabase...
-                            </div>
-                         )}
-                         {errorMessage && (
-                            <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg flex items-center gap-2">
-                                <AlertTriangle size={20} />
-                                {errorMessage}
-                            </div>
-                        )}
-
-                        <PreviewPanel 
-                            files={filesData}
-                            tableName={config.tableName}
-                            config={config}
-                            onUpdateFiles={setFilesData}
-                            onUpdateConfig={(c) => setConfig(prev => ({...prev, ...c}))}
-                            onBack={() => setStep(AppStep.CONFIG)}
-                            onSync={handleCreateConnection}
-                            onClearTable={async () => {
-                                 const client = createSupabaseClient(config.url, config.key);
-                                 await clearTableData(client, config.tableName, config.primaryKey || 'id');
-                            }}
-                        />
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-3 pt-4 border-t border-slate-200">
-                             <button
-                                onClick={() => setStep(AppStep.CONFIG)}
-                                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 rounded-lg transition-colors"
-                             >
-                                Voltar
-                             </button>
-                             <button
-                                onClick={handleCreateConnection}
-                                disabled={status === 'uploading'}
-                                className="flex-[2] bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm"
-                             >
-                                {status === 'uploading' ? <Loader2 className="animate-spin" /> : <CheckCircle />}
-                                {tempSheetUrl ? 'Salvar Conexão Automática' : 'Fazer Upload e Salvar'}
-                             </button>
-                        </div>
-                    </div>
-                )}
-             </div>
         )}
 
       </main>

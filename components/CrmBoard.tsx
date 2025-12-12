@@ -294,6 +294,10 @@ export const CrmBoard: React.FC = () => {
              alert("Erro Crítico: A tabela 'crm_deals' não existe no banco de dados. Por favor, execute o script SQL no Supabase.");
           } else if (msg.includes('violates row-level security')) {
              alert("Erro de Permissão: A política de segurança (RLS) impediu a gravação. Execute o script SQL para liberar acesso.");
+          } else if (msg.includes('violates foreign key constraint') || msg.includes('crm_deals_owner_id_fkey')) {
+             alert("Erro de Banco de Dados: O banco está exigindo que o 'Responsável' exista na tabela oficial de usuários (auth.users), mas estamos usando colaboradores fictícios. \n\nSOLUÇÃO: Execute o script SQL 'ALTER TABLE crm_deals DROP CONSTRAINT...' para remover essa restrição.");
+          } else if (msg.includes('invalid input syntax for type uuid')) {
+             alert("Erro de Formato: O ID do colaborador antigo não é compatível (não é um UUID). Você precisa limpar o banco ou atualizar os dados antigos.");
           } else {
              alert(`Não foi possível salvar: ${msg}`);
           }

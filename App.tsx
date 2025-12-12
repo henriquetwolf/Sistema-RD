@@ -13,7 +13,6 @@ import { TeachersManager } from './components/TeachersManager';
 import { FormsManager } from './components/FormsManager';
 import { FormViewer } from './components/FormViewer';
 import { SettingsManager } from './components/SettingsManager';
-import { SalesAnalysis } from './components/SalesAnalysis';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -23,7 +22,7 @@ import {
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
-  Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart
+  Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -51,7 +50,7 @@ function App() {
   
   // Dashboard UI State
   // Extended types to include management tabs
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'global_settings'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'global_settings'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -617,18 +616,6 @@ function App() {
                                     CRM Comercial
                                 </button>
                                 <button
-                                    onClick={() => setDashboardTab('analysis')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'analysis' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <PieChart size={18} />
-                                    Análise de Vendas
-                                </button>
-                                <button
                                     onClick={() => setDashboardTab('forms')}
                                     className={clsx(
                                         "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
@@ -914,7 +901,6 @@ function App() {
                         {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} />}
-                        {dashboardTab === 'analysis' && <SalesAnalysis />}
 
                         {/* TAB: CRM */}
                         {dashboardTab === 'crm' && (

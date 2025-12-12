@@ -64,12 +64,21 @@ export interface FormQuestion {
   placeholder?: string;
 }
 
+export interface FormStyle {
+  backgroundType: 'color' | 'image' | 'texture' | 'none';
+  backgroundColor: string;
+  backgroundImage?: string; // Base64 or URL
+  backgroundTexture?: string; // CSS class or identifier
+  cardTransparent?: boolean; // Se o card branco do form deve ser transparente
+}
+
 export interface FormModel {
   id: string;
   title: string;
   description: string;
   isLeadCapture: boolean;
   questions: FormQuestion[];
+  style?: FormStyle; // New style property
   createdAt: string;
   submissionsCount: number;
 }

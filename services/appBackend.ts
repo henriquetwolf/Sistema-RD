@@ -1,5 +1,5 @@
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract } from '../types';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -290,8 +290,30 @@ export const appBackend = {
       }
   },
 
-  // --- CONTRACTS (MOCKED IN LOCALSTORAGE) ---
+  // --- CONTRACTS & FOLDERS (MOCKED IN LOCALSTORAGE) ---
   
+  getFolders: async (): Promise<ContractFolder[]> => {
+      return JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
+  },
+
+  saveFolder: async (folder: ContractFolder): Promise<void> => {
+      const folders = JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
+      folders.push(folder);
+      localStorage.setItem('app_contract_folders', JSON.stringify(folders));
+  },
+
+  deleteFolder: async (id: string): Promise<void> => {
+      // 1. Delete Folder
+      const folders = JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
+      const filtered = folders.filter((f: ContractFolder) => f.id !== id);
+      localStorage.setItem('app_contract_folders', JSON.stringify(filtered));
+
+      // 2. Move contents to root (remove folderId from contracts)
+      const contracts = await appBackend.getContracts();
+      const updatedContracts = contracts.map(c => c.folderId === id ? { ...c, folderId: null } : c);
+      localStorage.setItem('app_contracts', JSON.stringify(updatedContracts));
+  },
+
   getContracts: async (): Promise<Contract[]> => {
       return JSON.parse(localStorage.getItem('app_contracts') || '[]');
   },
@@ -318,14 +340,34 @@ export const appBackend = {
       localStorage.setItem('app_contracts', JSON.stringify(filtered));
   },
 
-  signContract: async (id: string, signatureBase64: string): Promise<void> => {
+  signContract: async (contractId: string, signerId: string, signatureBase64: string): Promise<void> => {
       const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
-      const idx = contracts.findIndex((c: Contract) => c.id === id);
+      const idx = contracts.findIndex((c: Contract) => c.id === contractId);
+      
       if (idx >= 0) {
-          contracts[idx].status = 'signed';
-          contracts[idx].signatureData = signatureBase64;
-          contracts[idx].signedAt = new Date().toISOString();
-          localStorage.setItem('app_contracts', JSON.stringify(contracts));
+          const contract = contracts[idx];
+          // Find the signer in the contract
+          const signerIdx = contract.signers.findIndex(s => s.id === signerId);
+          
+          if (signerIdx >= 0) {
+              // Update Signer Status
+              contract.signers[signerIdx].status = 'signed';
+              contract.signers[signerIdx].signatureData = signatureBase64;
+              contract.signers[signerIdx].signedAt = new Date().toISOString();
+
+              // Check if ALL signers have signed
+              const allSigned = contract.signers.every(s => s.status === 'signed');
+              if (allSigned) {
+                  contract.status = 'signed';
+              }
+
+              contracts[idx] = contract;
+              localStorage.setItem('app_contracts', JSON.stringify(contracts));
+          } else {
+              throw new Error("Signatário não encontrado.");
+          }
+      } else {
+          throw new Error("Contrato não encontrado.");
       }
   }
 };

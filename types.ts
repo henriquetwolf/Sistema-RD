@@ -98,14 +98,29 @@ export interface FormSubmission {
 
 // --- CONTRACTS ---
 
+export interface ContractFolder {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface ContractSigner {
+  id: string;
+  name: string;
+  email: string;
+  status: 'pending' | 'signed';
+  signatureData?: string; // Base64 image
+  signedAt?: string;
+}
+
 export interface Contract {
   id: string;
   title: string;
   content: string; // HTML or Markdown content of the contract
-  signerName: string;
-  signerEmail: string;
-  status: 'draft' | 'sent' | 'signed';
-  signatureData?: string; // Base64 image of signature
+  city: string;
+  contractDate: string; // ISO Date string or formatted string
+  signers: ContractSigner[];
+  status: 'draft' | 'sent' | 'signed'; // 'signed' only when ALL signers have signed
+  folderId?: string | null; // Optional folder association
   createdAt: string;
-  signedAt?: string;
 }

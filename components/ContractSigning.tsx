@@ -1,24 +1,33 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Contract } from '../types';
+import { Contract, ContractSigner } from '../types';
 import { appBackend } from '../services/appBackend';
-import { PenTool, CheckCircle, Loader2, Eraser, Calendar, User } from 'lucide-react';
+import { PenTool, CheckCircle, Loader2, Eraser, Calendar, User, MapPin } from 'lucide-react';
 import clsx from 'clsx';
 
 interface ContractSigningProps {
   contract: Contract;
 }
 
-export const ContractSigning: React.FC<ContractSigningProps> = ({ contract }) => {
+export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: initialContract }) => {
+  const [contract, setContract] = useState<Contract>(initialContract);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Selection State (Who is signing?)
+  const [currentSignerId, setCurrentSignerId] = useState<string | null>(null);
+  
+  // Signing State
   const [isDrawing, setIsDrawing] = useState(false);
-  const [isSigned, setIsSigned] = useState(!!contract.signedAt);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
+
+  const activeSigner = contract.signers.find(s => s.id === currentSignerId);
+  const pendingSigners = contract.signers.filter(s => s.status === 'pending');
+  const allSigned = contract.status === 'signed';
 
   // Canvas Logic
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas && !isSigned) {
+    if (canvas && currentSignerId && !allSigned) {
       // Set canvas size to match parent
       const parent = canvas.parentElement;
       if (parent) {
@@ -33,7 +42,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract }) =>
         ctx.strokeStyle = '#000000';
       }
     }
-  }, [isSigned]);
+  }, [currentSignerId, allSigned]);
 
   const getPos = (e: MouseEvent | TouchEvent) => {
     const canvas = canvasRef.current;
@@ -57,7 +66,6 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract }) =>
   };
 
   const startDrawing = (e: any) => {
-    if (isSigned) return;
     setIsDrawing(true);
     const { x, y } = getPos(e.nativeEvent);
     const ctx = canvasRef.current?.getContext('2d');
@@ -68,7 +76,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract }) =>
   };
 
   const draw = (e: any) => {
-    if (!isDrawing || isSigned) return;
+    if (!isDrawing) return;
     e.preventDefault(); // Prevent scrolling on touch
     const { x, y } = getPos(e.nativeEvent);
     const ctx = canvasRef.current?.getContext('2d');
@@ -93,7 +101,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract }) =>
   };
 
   const handleSubmit = async () => {
-    if (!hasSignature) {
+    if (!hasSignature || !currentSignerId) {
         alert("Por favor, assine no campo indicado.");
         return;
     }
@@ -102,8 +110,22 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract }) =>
     const signatureData = canvasRef.current?.toDataURL() || '';
     
     try {
-        await appBackend.signContract(contract.id, signatureData);
-        setIsSigned(true);
+        await appBackend.signContract(contract.id, currentSignerId, signatureData);
+        // Refresh local state to show signature immediately
+        const updatedSigners = contract.signers.map(s => s.id === currentSignerId ? { ...s, status: 'signed' as const, signatureData, signedAt: new Date().toISOString() } : s);
+        
+        // Check if all signed
+        const nowAllSigned = updatedSigners.every(s => s.status === 'signed');
+
+        setContract({
+            ...contract,
+            signers: updatedSigners,
+            status: nowAllSigned ? 'signed' : 'sent'
+        });
+        
+        setCurrentSignerId(null); // Reset selection
+        setHasSignature(false);
+
     } catch (e) {
         alert("Erro ao salvar assinatura. Tente novamente.");
     } finally {
@@ -113,7 +135,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract }) =>
 
   return (
     <div className="min-h-screen bg-slate-100 py-10 px-4 flex flex-col items-center">
-      <div className="bg-white max-w-3xl w-full rounded-xl shadow-xl overflow-hidden border border-slate-200">
+      <div className="bg-white max-w-4xl w-full rounded-xl shadow-xl overflow-hidden border border-slate-200">
         
         {/* Header */}
         <div className="bg-slate-900 text-white p-8 text-center">
@@ -121,114 +143,125 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract }) =>
             <p className="text-slate-400 text-sm">
                 Documento emitido em {new Date(contract.createdAt).toLocaleDateString()}
             </p>
+            {allSigned && (
+                <div className="inline-flex items-center gap-2 bg-green-500/20 text-green-400 px-3 py-1 rounded-full text-xs font-bold mt-4 border border-green-500/30">
+                    <CheckCircle size={14} /> DOCUMENTO FINALIZADO
+                </div>
+            )}
         </div>
 
         {/* Content Body */}
         <div className="p-8 md:p-12 space-y-8">
+            
+            {/* Step 1: Select Signer (if not all signed and no one selected) */}
+            {!allSigned && !currentSignerId && (
+                <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl text-center">
+                    <h3 className="font-bold text-indigo-900 text-lg mb-2">Quem está assinando?</h3>
+                    <p className="text-indigo-700 text-sm mb-6">Por favor, selecione seu nome na lista abaixo para prosseguir com a assinatura.</p>
+                    
+                    <div className="flex flex-wrap gap-3 justify-center">
+                        {pendingSigners.map(signer => (
+                            <button
+                                key={signer.id}
+                                onClick={() => setCurrentSignerId(signer.id)}
+                                className="bg-white hover:bg-white/80 border-2 border-indigo-200 hover:border-indigo-400 text-indigo-800 font-medium px-6 py-3 rounded-lg shadow-sm transition-all flex flex-col items-center min-w-[150px]"
+                            >
+                                <span className="text-sm font-bold">{signer.name}</span>
+                                <span className="text-xs text-indigo-400">{signer.email}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-indigo-100">
+                        <p className="text-xs text-indigo-400">
+                            {contract.signers.filter(s => s.status === 'signed').length} de {contract.signers.length} assinaturas coletadas.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Contract Text */}
-            <div className="prose prose-slate max-w-none text-slate-700 bg-slate-50 p-6 rounded-lg border border-slate-100 text-sm leading-relaxed whitespace-pre-wrap">
+            <div className="prose prose-slate max-w-none text-slate-700 bg-slate-50 p-8 rounded-lg border border-slate-100 text-sm leading-relaxed whitespace-pre-wrap font-serif shadow-inner">
                 {contract.content}
             </div>
 
+            {/* Contract Footer (Date/City) */}
+            <div className="text-center font-serif text-slate-800 mt-8">
+                 <p>{contract.city}, {new Date(contract.contractDate).toLocaleDateString()}</p>
+            </div>
+
             <div className="border-t border-slate-200 pt-8">
-                <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
-                    <PenTool className="text-teal-600" /> 
-                    {isSigned ? 'Assinatura Digital Realizada' : 'Assine Abaixo'}
+                <h3 className="font-bold text-slate-800 mb-8 flex items-center gap-2">
+                    <PenTool className="text-teal-600" /> Assinaturas
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Assinado por</label>
-                        <div className="flex items-center gap-3 bg-slate-50 p-3 rounded border border-slate-200">
-                            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold">
-                                <User size={20} />
-                            </div>
+                {/* Grid of Signatures */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    {contract.signers.map(signer => (
+                        <div key={signer.id} className="flex flex-col items-center">
+                             <div className="h-[120px] w-full border-b border-slate-800 mb-2 flex items-end justify-center relative">
+                                {signer.status === 'signed' && signer.signatureData ? (
+                                    <img src={signer.signatureData} alt={`Assinatura de ${signer.name}`} className="max-h-[100px] z-10" />
+                                ) : (
+                                    <span className="text-slate-300 text-xs italic mb-4">Aguardando assinatura...</span>
+                                )}
+                             </div>
+                             <p className="font-bold text-slate-800 text-sm">{signer.name}</p>
+                             <p className="text-xs text-slate-500">{signer.email}</p>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Signature Area (Only if a signer is selected) */}
+                {currentSignerId && activeSigner && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 mt-12 bg-slate-50 p-6 rounded-xl border border-slate-200">
+                         <div className="flex justify-between items-center mb-4">
                             <div>
-                                <p className="font-bold text-slate-800">{contract.signerName}</p>
-                                <p className="text-xs text-slate-500">{contract.signerEmail}</p>
+                                <h4 className="font-bold text-slate-800">Assinar como: <span className="text-teal-600">{activeSigner.name}</span></h4>
+                                <p className="text-xs text-slate-500">Desenhe sua assinatura no quadro abaixo.</p>
                             </div>
-                        </div>
-                    </div>
+                            <button onClick={() => { setCurrentSignerId(null); setHasSignature(false); }} className="text-xs text-red-500 hover:underline">Cancelar / Trocar Pessoa</button>
+                         </div>
 
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Data da Assinatura</label>
-                        <div className="flex items-center gap-3 bg-slate-50 p-3 rounded border border-slate-200 h-[66px]">
-                            <Calendar className="text-slate-400 ml-2" size={20} />
-                            <p className="font-medium text-slate-700">
-                                {isSigned && contract.signedAt 
-                                    ? new Date(contract.signedAt).toLocaleString() 
-                                    : new Date().toLocaleDateString() + " (Pendente)"
-                                }
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Signature Area */}
-                <div className="mt-8">
-                    <label className="block text-sm font-bold text-slate-700 mb-2">
-                        {isSigned ? 'Assinatura Registrada' : 'Desenhe sua assinatura aqui'}
-                    </label>
-                    
-                    <div className={clsx("relative border-2 border-dashed rounded-xl overflow-hidden bg-white", isSigned ? "border-green-200 bg-green-50/30" : "border-slate-300")}>
-                        {isSigned ? (
-                            <div className="h-[200px] flex items-center justify-center relative">
-                                <img src={contract.signatureData} alt="Assinatura" className="max-h-[180px] z-10" />
-                                <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-                                    <CheckCircle size={100} className="text-green-600" />
-                                </div>
+                        <div className="relative border-2 border-dashed border-slate-300 rounded-xl overflow-hidden bg-white hover:border-teal-400 transition-colors">
+                            <canvas
+                                ref={canvasRef}
+                                onMouseDown={startDrawing}
+                                onMouseMove={draw}
+                                onMouseUp={stopDrawing}
+                                onMouseLeave={stopDrawing}
+                                onTouchStart={startDrawing}
+                                onTouchMove={draw}
+                                onTouchEnd={stopDrawing}
+                                className="touch-none cursor-crosshair w-full block h-[200px]"
+                            />
+                            <div className="absolute bottom-2 right-2">
+                                <button 
+                                    onClick={clearSignature}
+                                    className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 bg-white/80 px-2 py-1 rounded shadow-sm border border-slate-200"
+                                >
+                                    <Eraser size={12} /> Limpar
+                                </button>
                             </div>
-                        ) : (
-                            <>
-                                <canvas
-                                    ref={canvasRef}
-                                    onMouseDown={startDrawing}
-                                    onMouseMove={draw}
-                                    onMouseUp={stopDrawing}
-                                    onMouseLeave={stopDrawing}
-                                    onTouchStart={startDrawing}
-                                    onTouchMove={draw}
-                                    onTouchEnd={stopDrawing}
-                                    className="touch-none cursor-crosshair w-full block"
-                                />
-                                <div className="absolute bottom-2 right-2">
-                                    <button 
-                                        onClick={clearSignature}
-                                        className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 bg-white/80 px-2 py-1 rounded shadow-sm border border-slate-200"
-                                    >
-                                        <Eraser size={12} /> Limpar
-                                    </button>
-                                </div>
-                                <div className="absolute top-1/2 left-4 right-4 h-px bg-slate-200 pointer-events-none -z-0"></div>
-                            </>
-                        )}
-                    </div>
-                </div>
+                            <div className="absolute top-1/2 left-4 right-4 h-px bg-slate-200 pointer-events-none -z-0"></div>
+                        </div>
 
-                {/* Actions */}
-                {!isSigned && (
-                    <div className="mt-8 flex justify-end">
-                        <button
-                            onClick={handleSubmit}
-                            disabled={isSubmitting || !hasSignature}
-                            className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all"
-                        >
-                            {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : <PenTool size={20} />}
-                            Confirmar Assinatura
-                        </button>
-                    </div>
-                )}
-
-                {isSigned && (
-                    <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-center gap-2 text-green-800 font-medium">
-                        <CheckCircle size={20} />
-                        Este contrato foi assinado digitalmente com sucesso.
+                        <div className="mt-6 flex justify-end">
+                            <button
+                                onClick={handleSubmit}
+                                disabled={isSubmitting || !hasSignature}
+                                className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all w-full md:w-auto justify-center"
+                            >
+                                {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : <PenTool size={20} />}
+                                Confirmar Minha Assinatura
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
         </div>
         
-        <div className="mt-8 text-center text-slate-400 text-xs">
+        <div className="mt-8 text-center text-slate-400 text-xs pb-10">
             <p>Sistema VOLL Pilates Group &copy; {new Date().getFullYear()}</p>
             <p>Autenticação digital segura</p>
         </div>

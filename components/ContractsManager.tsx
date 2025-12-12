@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Contract } from '../types';
+import { Contract, ContractSigner, ContractFolder } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
   FileSignature, Plus, Search, Eye, Trash2, Copy, CheckCircle, 
-  ArrowLeft, Save, X, PenTool, ExternalLink, RefreshCw
+  ArrowLeft, Save, X, PenTool, ExternalLink, RefreshCw, UserPlus, 
+  Users, MapPin, Calendar, Folder, FolderPlus, ChevronRight, LayoutGrid, List, Filter, MoveRight
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -11,10 +12,10 @@ interface ContractsManagerProps {
   onBack: () => void;
 }
 
-const INITIAL_CONTRACT: Omit<Contract, 'id' | 'createdAt' | 'status'> = {
+const INITIAL_CONTRACT_FORM = {
     title: '',
-    signerName: '',
-    signerEmail: '',
+    city: '',
+    contractDate: new Date().toISOString().split('T')[0],
     content: `CONTRATO DE PRESTAÇÃO DE SERVIÇOS
 
 ENTRE:
@@ -29,69 +30,173 @@ CLÁUSULA 2 - DO PRAZO
 O contrato terá vigência de...
 
 CLÁUSULA 3 - DO PAGAMENTO
-Pela prestação dos serviços, o CONTRATANTE pagará ao CONTRATADO...
-
-[Cidade], [Data].`
+Pela prestação dos serviços, o CONTRATANTE pagará ao CONTRATADO...`
 };
 
 export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) => {
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [folders, setFolders] = useState<ContractFolder[]>([]);
+  
+  // Navigation State
   const [view, setView] = useState<'list' | 'create' | 'preview'>('list');
-  const [formData, setFormData] = useState(INITIAL_CONTRACT);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  
+  // Form State
+  const [formData, setFormData] = useState(INITIAL_CONTRACT_FORM);
+  const [targetFolderId, setTargetFolderId] = useState<string>(''); // For creation
+  const [signersList, setSignersList] = useState<{name: string, email: string}[]>([{name: '', email: ''}]);
+  
+  // Selection State
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  
+  // Filters State
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'signed'>('all');
+  const [dateStart, setDateStart] = useState('');
+  const [dateEnd, setDateEnd] = useState('');
+
+  // UI State
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showMoveModal, setShowMoveModal] = useState<Contract | null>(null); // Contract to be moved
 
   useEffect(() => {
-    loadContracts();
+    loadData();
   }, []);
 
-  const loadContracts = async () => {
-    const data = await appBackend.getContracts();
-    setContracts(data);
+  const loadData = async () => {
+    const [c, f] = await Promise.all([
+        appBackend.getContracts(),
+        appBackend.getFolders()
+    ]);
+    setContracts(c);
+    setFolders(f);
   };
 
+  // --- FOLDER LOGIC ---
+
+  const handleCreateFolder = async () => {
+      if (!newFolderName.trim()) return;
+      
+      const newFolder: ContractFolder = {
+          id: crypto.randomUUID(),
+          name: newFolderName,
+          createdAt: new Date().toISOString()
+      };
+
+      await appBackend.saveFolder(newFolder);
+      await loadData();
+      setShowFolderModal(false);
+      setNewFolderName('');
+  };
+
+  const handleDeleteFolder = async (id: string) => {
+      if(window.confirm('Excluir esta pasta? Os contratos dentro dela serão movidos para "Todos os Contratos".')) {
+          await appBackend.deleteFolder(id);
+          if (currentFolderId === id) setCurrentFolderId(null);
+          loadData();
+      }
+  };
+
+  const handleMoveContract = async (contract: Contract, folderId: string | null) => {
+      const updated = { ...contract, folderId: folderId || null }; // ensure null if empty
+      await appBackend.saveContract(updated);
+      loadData();
+      setShowMoveModal(null);
+  };
+
+  // --- CONTRACT LOGIC ---
+
   const handleCreate = async () => {
-      if (!formData.title || !formData.signerName) return;
+      if (!formData.title || signersList.length === 0 || !signersList[0].name) {
+          alert("Preencha o título e pelo menos um signatário.");
+          return;
+      }
+
+      const formattedSigners: ContractSigner[] = signersList.map(s => ({
+          id: crypto.randomUUID(),
+          name: s.name,
+          email: s.email,
+          status: 'pending'
+      }));
 
       const newContract: Contract = {
           id: crypto.randomUUID(),
           createdAt: new Date().toISOString(),
           status: 'sent',
-          ...formData
+          title: formData.title,
+          content: formData.content,
+          city: formData.city || 'Cidade',
+          contractDate: formData.contractDate,
+          signers: formattedSigners,
+          folderId: targetFolderId || currentFolderId // Use selected in form or current folder
       };
 
       await appBackend.saveContract(newContract);
-      await loadContracts();
+      await loadData();
       setView('list');
-      setFormData(INITIAL_CONTRACT);
+      setFormData(INITIAL_CONTRACT_FORM);
+      setSignersList([{name: '', email: ''}]);
+      setTargetFolderId('');
   };
 
+  // --- FILTERING ---
+  
+  const filteredContracts = contracts.filter(c => {
+      // 1. Folder Filter
+      // If currentFolderId is set, show only matches. If null, show ALL (like a "Recent" or "All" view)
+      // Exception: If we wanted a "Root only" view, we would check strictly for null. 
+      // User request: "Guardar contratos salvos em pastas". Let's assume the main view shows ALL unless a folder is clicked.
+      // Better UX: Sidebar has "All", "Root", and specific folders.
+      // Current Logic: If currentFolderId is set, strict match. If null, show ALL.
+      if (currentFolderId && c.folderId !== currentFolderId) return false;
+
+      // 2. Text Search
+      const matchesSearch = c.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            c.signers.some(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      if (!matchesSearch) return false;
+
+      // 3. Status Filter
+      if (statusFilter === 'signed' && c.status !== 'signed') return false;
+      if (statusFilter === 'pending' && c.status === 'signed') return false;
+
+      // 4. Date Filter
+      if (dateStart) {
+          const d = new Date(c.createdAt).toISOString().split('T')[0];
+          if (d < dateStart) return false;
+      }
+      if (dateEnd) {
+          const d = new Date(c.createdAt).toISOString().split('T')[0];
+          if (d > dateEnd) return false;
+      }
+
+      return true;
+  });
+
+  // Helper
+  const handleAddSigner = () => setSignersList([...signersList, {name: '', email: ''}]);
+  const handleRemoveSigner = (idx: number) => {
+      const l = [...signersList]; l.splice(idx, 1); setSignersList(l);
+  };
+  const handleSignerChange = (idx: number, f: 'name'|'email', v: string) => {
+      const l = [...signersList]; l[idx][f] = v; setSignersList(l);
+  };
   const handleDelete = async (id: string) => {
-      if (window.confirm("Excluir este contrato permanentemente?")) {
+      if(window.confirm("Excluir contrato permanentemente?")) {
           await appBackend.deleteContract(id);
-          loadContracts();
+          loadData();
       }
   };
-
   const handleCopyLink = (id: string) => {
       const link = `${window.location.origin}${window.location.pathname}?contractId=${id}`;
       navigator.clipboard.writeText(link);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
   };
+  const openPreview = (c: Contract) => { setSelectedContract(c); setView('preview'); };
 
-  const openPreview = (c: Contract) => {
-      setSelectedContract(c);
-      setView('preview');
-  };
-
-  const filtered = contracts.filter(c => 
-      c.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      c.signerName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // --- VIEWS ---
+  // --- RENDER ---
 
   if (view === 'create') {
       return (
@@ -104,9 +209,10 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                     <button onClick={() => setView('list')} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
                 </div>
                 
-                <div className="p-6 space-y-6">
+                <div className="p-6 space-y-8">
+                    {/* Basic Info */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
+                        <div className="md:col-span-2">
                             <label className="block text-sm font-medium text-slate-700 mb-1">Título do Contrato</label>
                             <input 
                                 type="text" 
@@ -116,33 +222,89 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                                 onChange={e => setFormData({...formData, title: e.target.value})}
                             />
                         </div>
+                        
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Signatário</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1"><MapPin size={14} /> Cidade da Assinatura</label>
                             <input 
                                 type="text" 
                                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                placeholder="Nome completo do cliente"
-                                value={formData.signerName}
-                                onChange={e => setFormData({...formData, signerName: e.target.value})}
+                                placeholder="Ex: São Paulo"
+                                value={formData.city}
+                                onChange={e => setFormData({...formData, city: e.target.value})}
                             />
                         </div>
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Email do Signatário (Opcional)</label>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1"><Calendar size={14} /> Data do Documento</label>
                             <input 
-                                type="email" 
+                                type="date" 
                                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                placeholder="cliente@email.com"
-                                value={formData.signerEmail}
-                                onChange={e => setFormData({...formData, signerEmail: e.target.value})}
+                                value={formData.contractDate}
+                                onChange={e => setFormData({...formData, contractDate: e.target.value})}
                             />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1"><Folder size={14} /> Salvar na Pasta</label>
+                            <select 
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                value={targetFolderId}
+                                onChange={e => setTargetFolderId(e.target.value)}
+                            >
+                                <option value="">Sem pasta (Raiz)</option>
+                                {folders.map(f => (
+                                    <option key={f.id} value={f.id}>{f.name}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
 
+                    {/* Signers Section */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div className="flex justify-between items-center mb-3">
+                            <label className="block text-sm font-bold text-slate-700">Quem deve assinar? (Signatários)</label>
+                            <button onClick={handleAddSigner} className="text-xs flex items-center gap-1 text-teal-600 font-bold hover:bg-teal-100 px-2 py-1 rounded">
+                                <UserPlus size={14} /> Adicionar
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-3">
+                            {signersList.map((signer, idx) => (
+                                <div key={idx} className="flex gap-3 items-start animate-in fade-in slide-in-from-left-2">
+                                    <div className="flex-1">
+                                        <input 
+                                            type="text" 
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                            placeholder="Nome Completo"
+                                            value={signer.name}
+                                            onChange={e => handleSignerChange(idx, 'name', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <input 
+                                            type="email" 
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                            placeholder="Email (opcional)"
+                                            value={signer.email}
+                                            onChange={e => handleSignerChange(idx, 'email', e.target.value)}
+                                        />
+                                    </div>
+                                    {signersList.length > 1 && (
+                                        <button onClick={() => handleRemoveSigner(idx)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Contract Content */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Termos do Contrato</label>
                         <div className="border border-slate-300 rounded-lg p-2 focus-within:ring-2 focus-within:ring-teal-500">
                             <textarea 
-                                className="w-full h-96 p-2 resize-none outline-none text-sm font-mono text-slate-600"
+                                className="w-full h-80 p-2 resize-none outline-none text-sm font-mono text-slate-600"
                                 value={formData.content}
                                 onChange={e => setFormData({...formData, content: e.target.value})}
                             />
@@ -162,142 +324,351 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
       );
   }
 
+  // --- PREVIEW RENDER ---
   if (view === 'preview' && selectedContract) {
-      return (
-          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
-                  <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                      <h3 className="font-bold text-slate-800">Visualizar Contrato</h3>
-                      <button onClick={() => setView('list')} className="p-1 hover:bg-slate-200 rounded-full"><X size={20} /></button>
-                  </div>
-                  
-                  <div className="p-8 overflow-y-auto flex-1">
-                      <div className="text-center mb-8">
+    const signedCount = selectedContract.signers.filter(s => s.status === 'signed').length;
+    const totalSigners = selectedContract.signers.length;
+
+    return (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 className="font-bold text-slate-800">Visualizar Contrato</h3>
+                    <button onClick={() => setView('list')} className="p-1 hover:bg-slate-200 rounded-full"><X size={20} /></button>
+                </div>
+                
+                <div className="p-8 overflow-y-auto flex-1 bg-slate-50/50">
+                    <div className="bg-white p-8 shadow-sm border border-slate-200 min-h-[500px] mx-auto max-w-2xl rounded-lg">
+                      <div className="text-center mb-8 border-b border-slate-100 pb-6">
                           <h2 className="text-2xl font-bold text-slate-900">{selectedContract.title}</h2>
-                          <div className={clsx("inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold mt-2", selectedContract.status === 'signed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700')}>
-                              {selectedContract.status === 'signed' ? <CheckCircle size={12}/> : <ExternalLink size={12}/>}
-                              {selectedContract.status === 'signed' ? 'Assinado' : 'Aguardando Assinatura'}
+                          <div className="flex justify-center gap-2 mt-4">
+                              <span className={clsx("inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold", selectedContract.status === 'signed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700')}>
+                                  {selectedContract.status === 'signed' ? <CheckCircle size={12}/> : <ExternalLink size={12}/>}
+                                  Status: {selectedContract.status === 'signed' ? 'Finalizado' : 'Em andamento'}
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+                                  <Users size={12}/> {signedCount}/{totalSigners} Assinaturas
+                              </span>
                           </div>
                       </div>
 
-                      <div className="prose prose-sm max-w-none mb-10 text-slate-600 whitespace-pre-wrap">
+                      <div className="prose prose-sm max-w-none mb-10 text-slate-600 whitespace-pre-wrap font-serif leading-relaxed">
                           {selectedContract.content}
                       </div>
 
-                      {selectedContract.status === 'signed' && selectedContract.signatureData && (
-                          <div className="border-t border-slate-200 pt-6">
-                              <p className="text-xs font-bold text-slate-400 uppercase mb-4">Dados da Assinatura</p>
-                              <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200">
-                                  <div>
-                                      <p className="font-bold text-slate-800">{selectedContract.signerName}</p>
-                                      <p className="text-xs text-slate-500">{selectedContract.signerEmail}</p>
-                                      <p className="text-xs text-slate-400 mt-1">Assinado em: {new Date(selectedContract.signedAt!).toLocaleString()}</p>
-                                  </div>
-                                  <div className="bg-white p-2 border border-slate-200 rounded">
-                                      <img src={selectedContract.signatureData} alt="Assinatura" className="h-16" />
-                                  </div>
-                              </div>
-                          </div>
-                      )}
-                  </div>
-              </div>
-          </div>
-      );
-  }
+                      <div className="mt-12 mb-12 text-center font-serif text-slate-800">
+                           <p>{selectedContract.city}, {new Date(selectedContract.contractDate).toLocaleDateString()}</p>
+                      </div>
 
-  return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
-      
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-            <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
-                <ArrowLeft size={20} />
-            </button>
-            <div>
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                    <FileSignature className="text-teal-600" /> Gestão de Contratos
-                </h2>
-                <p className="text-slate-500 text-sm">Crie, envie e colete assinaturas digitais.</p>
+                      {/* Signatures List */}
+                      <div className="border-t border-slate-200 pt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+                          {selectedContract.signers.map(signer => (
+                              <div key={signer.id} className="flex flex-col items-center">
+                                  <div className="h-20 w-full border-b border-slate-800 mb-2 flex items-end justify-center">
+                                      {signer.status === 'signed' && signer.signatureData ? (
+                                          <img src={signer.signatureData} alt="Assinatura" className="max-h-16" />
+                                      ) : (
+                                          <span className="text-xs text-slate-400 italic mb-2">Pendente...</span>
+                                      )}
+                                  </div>
+                                  <p className="font-bold text-slate-800 text-sm">{signer.name}</p>
+                                  <p className="text-xs text-slate-500">{signer.email}</p>
+                                  {signer.signedAt && (
+                                      <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
+                                          <CheckCircle size={10} /> {new Date(signer.signedAt).toLocaleString()}
+                                      </p>
+                                  )}
+                              </div>
+                          ))}
+                      </div>
+                    </div>
+                </div>
             </div>
         </div>
-        <button 
-            onClick={() => setView('create')}
-            className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
-        >
-            <Plus size={18} /> Novo Contrato
-        </button>
-      </div>
+    );
+  }
 
-      {/* Toolbar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex gap-4">
-         <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-                type="text" 
-                placeholder="Buscar por título ou signatário..." 
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
-            />
-         </div>
-         <button onClick={loadContracts} className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors">
-             <RefreshCw size={20} />
-         </button>
-      </div>
+  // --- MAIN VIEW WITH SIDEBAR ---
 
-      {/* List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.length === 0 && (
-              <div className="col-span-full text-center py-12 bg-white rounded-xl border border-dashed border-slate-200">
-                  <FileSignature size={48} className="mx-auto text-slate-300 mb-4" />
-                  <p className="text-slate-500">Nenhum contrato encontrado.</p>
-              </div>
-          )}
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 h-full flex flex-col md:flex-row gap-6 pb-20">
+        
+        {/* SIDEBAR: FOLDERS */}
+        <aside className="w-full md:w-64 flex-shrink-0 space-y-4">
+             {/* Header Actions */}
+             <div>
+                <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm font-medium mb-4">
+                    <ArrowLeft size={16} /> Voltar ao Painel
+                </button>
+                <button 
+                    onClick={() => setView('create')}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-sm transition-all flex items-center justify-center gap-2 mb-4"
+                >
+                    <Plus size={18} /> Novo Contrato
+                </button>
+             </div>
 
-          {filtered.map(contract => (
-              <div key={contract.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col overflow-hidden">
-                  <div className={clsx("h-1.5 w-full", contract.status === 'signed' ? "bg-green-500" : "bg-amber-400")}></div>
-                  
-                  <div className="p-5 flex-1">
-                      <div className="flex justify-between items-start mb-3">
-                          <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide", 
-                              contract.status === 'signed' ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                          )}>
-                              {contract.status === 'signed' ? 'Assinado' : 'Pendente'}
-                          </span>
-                          <button onClick={() => handleDelete(contract.id)} className="text-slate-300 hover:text-red-500 transition-colors">
-                              <Trash2 size={16} />
-                          </button>
-                      </div>
+             <div className="bg-white rounded-xl border border-slate-200 p-2 shadow-sm">
+                <p className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Navegação</p>
+                
+                <button 
+                    onClick={() => setCurrentFolderId(null)}
+                    className={clsx(
+                        "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors mb-1",
+                        currentFolderId === null ? "bg-teal-50 text-teal-700" : "text-slate-600 hover:bg-slate-50"
+                    )}
+                >
+                    <span className="flex items-center gap-2"><LayoutGrid size={16} /> Todos os Contratos</span>
+                    <span className="text-xs opacity-60 bg-white px-1.5 rounded-full border border-slate-100">{contracts.length}</span>
+                </button>
 
-                      <h3 className="font-bold text-slate-800 mb-1 truncate" title={contract.title}>{contract.title}</h3>
-                      <p className="text-sm text-slate-500 mb-4">
-                          Signatário: <span className="font-medium text-slate-700">{contract.signerName}</span>
-                      </p>
+                <div className="mt-4 flex items-center justify-between px-3 mb-2">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pastas</p>
+                    <button onClick={() => setShowFolderModal(true)} className="text-slate-400 hover:text-teal-600" title="Nova Pasta">
+                        <FolderPlus size={14} />
+                    </button>
+                </div>
 
-                      <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                          <button 
-                            onClick={() => openPreview(contract)}
-                            className="text-sm font-medium text-slate-600 hover:text-teal-600 flex items-center gap-1.5"
-                          >
-                              <Eye size={16} /> Visualizar
-                          </button>
-                          
-                          {contract.status !== 'signed' && (
-                              <button 
-                                onClick={() => handleCopyLink(contract.id)}
-                                className={clsx("text-sm font-medium flex items-center gap-1.5 transition-colors", copiedId === contract.id ? "text-green-600" : "text-teal-600 hover:text-teal-800")}
-                              >
-                                  {copiedId === contract.id ? <CheckCircle size={16}/> : <Copy size={16}/>}
-                                  {copiedId === contract.id ? 'Link Copiado' : 'Copiar Link'}
-                              </button>
-                          )}
-                      </div>
-                  </div>
-              </div>
-          ))}
-      </div>
+                <div className="space-y-0.5 max-h-[300px] overflow-y-auto">
+                    {folders.map(f => (
+                        <div key={f.id} className="group relative">
+                            <button 
+                                onClick={() => setCurrentFolderId(f.id)}
+                                className={clsx(
+                                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                                    currentFolderId === f.id ? "bg-teal-50 text-teal-700" : "text-slate-600 hover:bg-slate-50"
+                                )}
+                            >
+                                <Folder size={16} className={currentFolderId === f.id ? "fill-teal-200 text-teal-600" : "text-slate-400"} />
+                                <span className="truncate flex-1 text-left">{f.name}</span>
+                            </button>
+                            <button 
+                                onClick={() => handleDeleteFolder(f.id)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                                <X size={12} />
+                            </button>
+                        </div>
+                    ))}
+                    {folders.length === 0 && (
+                        <p className="text-xs text-slate-400 px-3 italic">Nenhuma pasta criada.</p>
+                    )}
+                </div>
+             </div>
+        </aside>
+
+        {/* MAIN CONTENT: LIST */}
+        <div className="flex-1 min-w-0">
+            
+            {/* Top Bar: Search & Filters */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 space-y-4">
+                <div className="flex flex-col md:flex-row gap-4">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input 
+                            type="text" 
+                            placeholder="Buscar contratos..." 
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <select 
+                            value={statusFilter}
+                            onChange={e => setStatusFilter(e.target.value as any)}
+                            className="bg-white border border-slate-200 text-slate-600 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block p-2.5 outline-none"
+                        >
+                            <option value="all">Todos os Status</option>
+                            <option value="pending">Pendentes</option>
+                            <option value="signed">Finalizados</option>
+                        </select>
+                    </div>
+                </div>
+                
+                {/* Advanced Date Filter */}
+                <div className="flex items-center gap-2 text-sm text-slate-600 pt-2 border-t border-slate-100">
+                    <Filter size={14} className="text-slate-400" />
+                    <span className="text-xs font-bold uppercase text-slate-400 mr-2">Filtrar Data:</span>
+                    <input 
+                        type="date" 
+                        value={dateStart}
+                        onChange={e => setDateStart(e.target.value)}
+                        className="border border-slate-200 rounded px-2 py-1 text-xs"
+                    />
+                    <span className="text-slate-300">-</span>
+                    <input 
+                        type="date" 
+                        value={dateEnd}
+                        onChange={e => setDateEnd(e.target.value)}
+                        className="border border-slate-200 rounded px-2 py-1 text-xs"
+                    />
+                    {(dateStart || dateEnd) && (
+                        <button onClick={() => {setDateStart(''); setDateEnd('')}} className="text-xs text-red-500 hover:underline ml-2">Limpar</button>
+                    )}
+                </div>
+            </div>
+
+            {/* Breadcrumbs */}
+            <div className="flex items-center gap-2 mb-4 text-sm text-slate-500">
+                 <span className={clsx("cursor-pointer hover:text-teal-600", !currentFolderId && "font-bold text-slate-800")} onClick={() => setCurrentFolderId(null)}>
+                     Todos
+                 </span>
+                 {currentFolderId && (
+                     <>
+                        <ChevronRight size={14} />
+                        <span className="font-bold text-slate-800">
+                            {folders.find(f => f.id === currentFolderId)?.name || 'Pasta Desconhecida'}
+                        </span>
+                     </>
+                 )}
+            </div>
+
+            {/* Contracts Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredContracts.length === 0 && (
+                    <div className="col-span-full text-center py-12 bg-white rounded-xl border-2 border-dashed border-slate-200">
+                        <FileSignature size={48} className="mx-auto text-slate-300 mb-4" />
+                        <p className="text-slate-500">Nenhum contrato encontrado com estes filtros.</p>
+                        <button onClick={() => setView('create')} className="text-teal-600 font-bold text-sm mt-2 hover:underline">
+                            Criar novo contrato
+                        </button>
+                    </div>
+                )}
+
+                {filteredContracts.map(contract => {
+                    const signedCount = contract.signers.filter(s => s.status === 'signed').length;
+                    const totalSigners = contract.signers.length;
+                    const percent = Math.round((signedCount / totalSigners) * 100);
+
+                    return (
+                        <div key={contract.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col overflow-hidden group">
+                            <div className="relative h-1.5 w-full bg-slate-100">
+                                <div className={clsx("absolute left-0 top-0 h-full transition-all duration-500", contract.status === 'signed' ? "bg-green-500" : "bg-amber-400")} style={{width: `${percent}%`}}></div>
+                            </div>
+                            
+                            <div className="p-5 flex-1">
+                                <div className="flex justify-between items-start mb-3">
+                                    <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide", 
+                                        contract.status === 'signed' ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                                    )}>
+                                        {contract.status === 'signed' ? 'Finalizado' : 'Aguardando'}
+                                    </span>
+                                    
+                                    {/* Action Menu (Visible on Hover) */}
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => setShowMoveModal(contract)} className="text-slate-300 hover:text-teal-600 hover:bg-teal-50 p-1 rounded" title="Mover para pasta">
+                                            <MoveRight size={16} />
+                                        </button>
+                                        <button onClick={() => handleDelete(contract.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded" title="Excluir">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <h3 className="font-bold text-slate-800 mb-1 truncate" title={contract.title}>{contract.title}</h3>
+                                <p className="text-xs text-slate-400 mb-2">{new Date(contract.createdAt).toLocaleDateString()}</p>
+                                
+                                <div className="mt-3 space-y-2">
+                                    {contract.signers.slice(0, 2).map(signer => (
+                                        <div key={signer.id} className="flex items-center justify-between text-xs text-slate-600">
+                                            <span className="flex items-center gap-1.5 truncate">
+                                                {signer.status === 'signed' ? <CheckCircle size={12} className="text-green-500 shrink-0"/> : <div className="w-3 h-3 rounded-full border border-slate-300 shrink-0"></div>}
+                                                {signer.name}
+                                            </span>
+                                        </div>
+                                    ))}
+                                    {contract.signers.length > 2 && (
+                                        <p className="text-xs text-slate-400 italic">+ {contract.signers.length - 2} outros</p>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
+                                    <button 
+                                        onClick={() => openPreview(contract)}
+                                        className="text-sm font-medium text-slate-600 hover:text-teal-600 flex items-center gap-1.5"
+                                    >
+                                        <Eye size={16} /> Visualizar
+                                    </button>
+                                    
+                                    {contract.status !== 'signed' && (
+                                        <button 
+                                            onClick={() => handleCopyLink(contract.id)}
+                                            className={clsx("text-sm font-medium flex items-center gap-1.5 transition-colors", copiedId === contract.id ? "text-green-600" : "text-teal-600 hover:text-teal-800")}
+                                        >
+                                            {copiedId === contract.id ? <CheckCircle size={16}/> : <Copy size={16}/>}
+                                            Link
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+
+        {/* --- MODALS --- */}
+
+        {/* Create Folder Modal */}
+        {showFolderModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
+                    <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                        <h3 className="font-bold text-slate-800">Nova Pasta</h3>
+                        <button onClick={() => setShowFolderModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                    </div>
+                    <div className="p-5">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Pasta</label>
+                        <input 
+                            type="text" 
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="Ex: Contratos 2024"
+                            value={newFolderName}
+                            onChange={e => setNewFolderName(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                    <div className="px-5 py-3 bg-slate-50 flex justify-end gap-2">
+                        <button onClick={() => setShowFolderModal(false)} className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-200 rounded">Cancelar</button>
+                        <button onClick={handleCreateFolder} className="px-3 py-1.5 bg-teal-600 text-white rounded text-sm font-bold hover:bg-teal-700">Criar</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Move Contract Modal */}
+        {showMoveModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
+                    <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                        <h3 className="font-bold text-slate-800">Mover Contrato</h3>
+                        <button onClick={() => setShowMoveModal(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                    </div>
+                    <div className="p-5">
+                        <p className="text-sm text-slate-500 mb-4">Selecione o destino para: <br/><strong className="text-slate-800">{showMoveModal.title}</strong></p>
+                        <div className="space-y-1">
+                            <button 
+                                onClick={() => handleMoveContract(showMoveModal, null)}
+                                className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2", !showMoveModal.folderId ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                            >
+                                <LayoutGrid size={16} /> Sem Pasta (Raiz)
+                            </button>
+                            {folders.map(f => (
+                                <button 
+                                    key={f.id}
+                                    onClick={() => handleMoveContract(showMoveModal, f.id)}
+                                    className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2", showMoveModal.folderId === f.id ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                                >
+                                    <Folder size={16} /> {f.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
     </div>
   );
 };

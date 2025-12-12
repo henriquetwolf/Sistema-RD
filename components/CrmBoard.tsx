@@ -52,7 +52,7 @@ const COLUMNS: Column[] = [
 // Helper to find owner name
 const getOwnerName = (id: string) => {
     const owner = MOCK_COLLABORATORS.find(c => c.id === id);
-    return owner ? owner.name : 'Desconhecido';
+    return owner ? owner.fullName : 'Desconhecido';
 };
 
 // Helper for Error Handling
@@ -649,10 +649,10 @@ export const CrmBoard: React.FC = () => {
                                         {getMemberDetails(team.members).map((member, i) => (
                                             <div 
                                                 key={member.id} 
-                                                title={`${member.name} (${member.department})`}
+                                                title={`${member.fullName} (${member.department})`}
                                                 className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold"
                                             >
-                                                {member.name.charAt(0)}
+                                                {member.fullName.charAt(0)}
                                             </div>
                                         ))}
                                         {(!team.members || team.members.length === 0) && (
@@ -742,10 +742,10 @@ export const CrmBoard: React.FC = () => {
                                         >
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-                                                    {collab.name.charAt(0)}
+                                                    {collab.fullName.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <p className={clsx("text-sm font-medium", isSelected ? "text-indigo-900" : "text-slate-700")}>{collab.name}</p>
+                                                    <p className={clsx("text-sm font-medium", isSelected ? "text-indigo-900" : "text-slate-700")}>{collab.fullName}</p>
                                                     <p className="text-xs text-slate-400">{collab.email}</p>
                                                 </div>
                                             </div>
@@ -895,7 +895,7 @@ export const CrmBoard: React.FC = () => {
                                 >
                                     <option value="">Selecione...</option>
                                     {commercialCollaborators.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                        <option key={c.id} value={c.id}>{c.fullName}</option>
                                     ))}
                                 </select>
                             </div>

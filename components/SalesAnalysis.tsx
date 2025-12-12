@@ -102,7 +102,7 @@ export const SalesAnalysis: React.FC = () => {
     const ownerSales: Record<string, number> = {};
     filtered.forEach(deal => {
         if (deal.stage === 'closed') {
-            const ownerName = MOCK_COLLABORATORS.find(c => c.id === deal.owner_id)?.name || 'Desconhecido';
+            const ownerName = MOCK_COLLABORATORS.find(c => c.id === deal.owner_id)?.fullName || 'Desconhecido';
             ownerSales[ownerName] = (ownerSales[ownerName] || 0) + Number(deal.value);
         }
     });

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   GraduationCap, Plus, Search, Calendar, Clock, MapPin, 
   ArrowLeft, Save, X, MoreHorizontal, BookOpen, CheckSquare, 
-  Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map
+  Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
+  Edit2, Trash2
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -102,7 +103,19 @@ interface ClassesManagerProps {
 export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [classes, setClasses] = useState<ClassItem[]>(INITIAL_CLASSES);
   const [showModal, setShowModal] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   
+  // Click outside to close menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest('.class-menu-btn') === null) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
   // Initial Empty Form State
   const initialFormState: ClassItem = {
       id: '',
@@ -140,16 +153,42 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
   const [formData, setFormData] = useState<ClassItem>(initialFormState);
 
+  const handleOpenNew = () => {
+      setFormData(initialFormState);
+      setShowModal(true);
+  };
+
+  const handleEdit = (item: ClassItem) => {
+      setFormData({ ...item });
+      setActiveMenuId(null);
+      setShowModal(true);
+  };
+
+  const handleDelete = (id: string) => {
+      if (window.confirm("Tem certeza que deseja excluir esta turma?")) {
+          setClasses(prev => prev.filter(c => c.id !== id));
+      }
+      setActiveMenuId(null);
+  };
+
   const handleSave = () => {
     if (!formData.course || !formData.cityState) {
         alert("Preencha ao menos o Curso e a Cidade.");
         return;
     }
-    const newItem: ClassItem = {
-      ...formData,
-      id: Math.random().toString(),
-    };
-    setClasses([...classes, newItem]);
+
+    if (formData.id) {
+        // UPDATE Existing
+        setClasses(prev => prev.map(c => c.id === formData.id ? formData : c));
+    } else {
+        // CREATE New
+        const newItem: ClassItem = {
+            ...formData,
+            id: crypto.randomUUID(),
+        };
+        setClasses([...classes, newItem]);
+    }
+    
     setShowModal(false);
     setFormData(initialFormState);
   };
@@ -173,7 +212,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             </div>
         </div>
         <button 
-            onClick={() => { setFormData(initialFormState); setShowModal(true); }}
+            onClick={handleOpenNew}
             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
         >
             <Plus size={18} /> Nova Turma
@@ -183,15 +222,44 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {classes.map(cls => (
             <div key={cls.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-5 group relative">
-                <div className="absolute top-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="text-slate-400 hover:text-slate-600"><MoreHorizontal size={20} /></button>
+                
+                {/* Menu Dropdown Trigger */}
+                <div className="absolute top-5 right-5">
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenuId(activeMenuId === cls.id ? null : cls.id);
+                        }}
+                        className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded p-1 class-menu-btn"
+                    >
+                        <MoreHorizontal size={20} />
+                    </button>
+                    
+                    {/* Dropdown Menu */}
+                    {activeMenuId === cls.id && (
+                        <div className="absolute right-0 top-8 w-40 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                            <button 
+                                onClick={() => handleEdit(cls)}
+                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            >
+                                <Edit2 size={14} /> Editar
+                            </button>
+                            <div className="h-px bg-slate-100 my-0"></div>
+                            <button 
+                                onClick={() => handleDelete(cls.id)}
+                                className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            >
+                                <Trash2 size={14} /> Excluir
+                            </button>
+                        </div>
+                    )}
                 </div>
                 
                 <div className="flex items-start gap-4 mb-4">
                     <div className="w-12 h-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
                         <BookOpen size={24} />
                     </div>
-                    <div>
+                    <div className="pr-6">
                         <h3 className="font-bold text-slate-800 leading-tight">{cls.course}</h3>
                         <div className="flex flex-wrap gap-2 mt-2">
                              <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase", 
@@ -233,7 +301,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
         
         {/* Empty State / Add New Card */}
         <button 
-            onClick={() => { setFormData(initialFormState); setShowModal(true); }}
+            onClick={handleOpenNew}
             className="border-2 border-dashed border-slate-200 rounded-xl p-5 flex flex-col items-center justify-center text-slate-400 hover:text-purple-600 hover:border-purple-200 hover:bg-purple-50 transition-all min-h-[200px]"
         >
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-2">
@@ -251,7 +319,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                 {/* Header */}
                 <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 rounded-t-xl">
                     <div>
-                        <h3 className="text-xl font-bold text-slate-800">Cadastro de Turma</h3>
+                        <h3 className="text-xl font-bold text-slate-800">{formData.id ? 'Editar Turma' : 'Cadastro de Turma'}</h3>
                         <p className="text-sm text-slate-500">Preencha todos os detalhes logísticos e financeiros.</p>
                     </div>
                     <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={24}/></button>
@@ -559,7 +627,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                 <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100">
                     <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
                     <button onClick={handleSave} className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center gap-2">
-                        <Save size={18} /> Salvar Turma
+                        <Save size={18} /> {formData.id ? 'Salvar Alterações' : 'Criar Turma'}
                     </button>
                 </div>
             </div>

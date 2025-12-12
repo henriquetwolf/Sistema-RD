@@ -1,41 +1,141 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, Plus, Search, MoreVertical, Shield, User, 
-  Mail, CheckCircle, X, ArrowLeft, Save, Briefcase, Edit2, Trash2
+  Mail, CheckCircle, X, ArrowLeft, Save, Briefcase, Edit2, Trash2,
+  Calendar, MapPin, FileText, DollarSign, Heart, Bus, AlertCircle, Phone
 } from 'lucide-react';
 import clsx from 'clsx';
 
+// --- Types ---
 export interface Collaborator {
   id: string;
-  name: string;
+  // Pessoal
+  fullName: string;
+  socialName: string;
+  birthDate: string;
+  maritalStatus: string;
+  spouseName: string;
+  fatherName: string;
+  motherName: string;
+  genderIdentity: string;
+  racialIdentity: string;
+  educationLevel: string;
+  photoUrl: string;
+  
+  // Contato & Endereço
   email: string;
-  department: string; // Novo campo
-  role: 'admin' | 'editor' | 'viewer';
+  phone: string;
+  cellphone: string;
+  corporatePhone: string;
+  operator: string; // Operadora
+  address: string;
+  cep: string;
+  complement: string;
+  birthCity: string; // Cidade Natal
+  currentCity: string; // Cidade Atual
+  state: string;
+  emergencyName: string;
+  emergencyPhone: string;
+
+  // Contratual
+  admissionDate: string;
+  previousAdmissionDate: string; // Contrato anterior
+  role: string; // Cargo
+  headquarters: string; // Sede
+  department: string; // Setor
+  salary: string;
+  hiringMode: string; // Modalidade
+  hiringCompany: string; // Empresa Contratante
+  workHours: string;
+  breakTime: string;
+  workDays: string;
+  presentialDays: string;
+  superiorId: string;
+  experiencePeriod: string;
+  hasOtherJob: string; // Outro vinculo?
   status: 'active' | 'inactive';
-  lastAccess: string;
+  contractType: string; // Contrato/Pagamento
+
+  // Documentação
+  cpf: string;
+  rg: string;
+  rgIssuer: string;
+  rgIssueDate: string;
+  rgState: string;
+  ctpsNumber: string;
+  ctpsSeries: string;
+  ctpsState: string;
+  ctpsIssueDate: string;
+  pisNumber: string;
+  reservistNumber: string;
+  docsFolderLink: string;
+  legalAuth: boolean; // Autorizo arquivamento...
+
+  // Financeiro & Benefícios
+  bankAccountInfo: string;
+  hasInsalubrity: string;
+  insalubrityPercent: string;
+  hasDangerPay: string; // Periculosidade
+  transportVoucherInfo: string; // Vale Deslocamento/Combustível
+  busLineHomeWork: string;
+  busQtyHomeWork: string;
+  busLineWorkHome: string;
+  busQtyWorkHome: string;
+  ticketValue: string;
+  fuelVoucherValue: string;
+  hasMealVoucher: string; // Refeição
+  hasFoodVoucher: string; // Alimentação
+  hasHomeOfficeAid: string;
+  hasHealthPlan: string;
+  hasDentalPlan: string;
+  bonusInfo: string; // Regras, Período
+  bonusValue: string;
+  commissionInfo: string; // Regras
+  commissionPercent: string;
+
+  // Dependentes (Simplificado para 1, expansível em banco relacional)
+  hasDependents: string;
+  dependentName: string;
+  dependentDob: string;
+  dependentKinship: string;
+  dependentCpf: string;
+
+  // Desligamento & Outros
+  resignationDate: string;
+  demissionReason: string; // Motivo 2a data ou demissao
+  demissionDocs: string;
+  vacationPeriods: string;
+  observations: string; // Anexos/Obs
 }
 
-// IDs convertidos para UUIDs válidos para compatibilidade com banco de dados (Postgres uuid)
+// --- Mock Data ---
 export const MOCK_COLLABORATORS: Collaborator[] = [
-  { id: '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d', name: 'Ricardo Oliveira', email: 'ricardo@voll.com.br', department: 'Web / TI', role: 'admin', status: 'active', lastAccess: 'Hoje, 09:30' },
-  { id: '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed', name: 'Amanda Souza', email: 'amanda@voll.com.br', department: 'Marketing', role: 'editor', status: 'active', lastAccess: 'Ontem, 14:15' },
-  { id: '6ec0bd7f-11c0-43da-975e-2a8ad9ebae0b', name: 'Equipe Financeira', email: 'financeiro@voll.com.br', department: 'Financeiro', role: 'viewer', status: 'inactive', lastAccess: 'Há 5 dias' },
-  // Adicionando colaboradores comerciais para teste do CRM
-  { id: 'c56a4180-65aa-42ec-a945-5fd21dec0538', name: 'Carlos Vendas', email: 'carlos@voll.com.br', department: 'Comercial', role: 'editor', status: 'active', lastAccess: 'Hoje, 08:00' },
-  { id: 'a4e3355d-7590-449e-8c82-3d5267425880', name: 'Ana Silva', email: 'ana.silva@voll.com.br', department: 'Comercial', role: 'viewer', status: 'active', lastAccess: 'Hoje, 10:15' },
-  { id: 'd290f1ee-6c54-4b01-90e6-d701748f0851', name: 'Roberto Junior', email: 'beto@voll.com.br', department: 'Comercial', role: 'editor', status: 'active', lastAccess: 'Ontem, 18:00' },
+  { 
+    id: '1', 
+    fullName: 'Ricardo Oliveira', 
+    socialName: '',
+    email: 'ricardo@voll.com.br', 
+    department: 'Web / TI', 
+    role: 'Desenvolvedor Senior', 
+    status: 'active',
+    phone: '(11) 99999-9999',
+    birthDate: '1990-05-15',
+    admissionDate: '2022-01-10',
+    salary: 'R$ 8.500,00',
+    headquarters: 'Matriz SP',
+    // ... preenchendo o resto com strings vazias para o mock não quebrar
+    maritalStatus: '', spouseName: '', fatherName: '', motherName: '', genderIdentity: '', racialIdentity: '', educationLevel: '', photoUrl: '',
+    cellphone: '', corporatePhone: '', operator: '', address: '', cep: '', complement: '', birthCity: '', currentCity: 'São Paulo', state: 'SP', emergencyName: '', emergencyPhone: '',
+    previousAdmissionDate: '', hiringMode: 'CLT', hiringCompany: 'VOLL Group', workHours: '09:00 - 18:00', breakTime: '1h', workDays: 'Seg-Sex', presentialDays: '0', superiorId: '', experiencePeriod: '', hasOtherJob: 'Não', contractType: '',
+    cpf: '', rg: '', rgIssuer: '', rgIssueDate: '', rgState: '', ctpsNumber: '', ctpsSeries: '', ctpsState: '', ctpsIssueDate: '', pisNumber: '', reservistNumber: '', docsFolderLink: '', legalAuth: true,
+    bankAccountInfo: '', hasInsalubrity: '', insalubrityPercent: '', hasDangerPay: '', transportVoucherInfo: '', busLineHomeWork: '', busQtyHomeWork: '', busLineWorkHome: '', busQtyWorkHome: '', ticketValue: '', fuelVoucherValue: '', hasMealVoucher: '', hasFoodVoucher: '', hasHomeOfficeAid: '', hasHealthPlan: '', hasDentalPlan: '', bonusInfo: '', bonusValue: '', commissionInfo: '', commissionPercent: '',
+    hasDependents: 'Não', dependentName: '', dependentDob: '', dependentKinship: '', dependentCpf: '',
+    resignationDate: '', demissionReason: '', demissionDocs: '', vacationPeriods: '', observations: ''
+  }
 ];
 
-const DEPARTMENTS = [
-  'Comercial',
-  'Marketing',
-  'Financeiro',
-  'Web / TI',
-  'Suporte / Relacionamento',
-  'Logística',
-  'Franquias',
-  'RH'
-];
+const DEPARTMENTS = ['Comercial', 'Marketing', 'Financeiro', 'Web / TI', 'Suporte', 'Logística', 'RH', 'Diretoria'];
+const HEADQUARTERS = ['Matriz - SP', 'Filial - RS', 'Filial - MG', 'Home Office Total'];
 
 interface CollaboratorsManagerProps {
   onBack: () => void;
@@ -48,10 +148,19 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
   
   // Actions State
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  
+  // Empty State Generator
+  const getEmptyCollaborator = (): Collaborator => ({
+      id: '', fullName: '', socialName: '', birthDate: '', maritalStatus: '', spouseName: '', fatherName: '', motherName: '', genderIdentity: '', racialIdentity: '', educationLevel: '', photoUrl: '',
+      email: '', phone: '', cellphone: '', corporatePhone: '', operator: '', address: '', cep: '', complement: '', birthCity: '', currentCity: '', state: '', emergencyName: '', emergencyPhone: '',
+      admissionDate: '', previousAdmissionDate: '', role: '', headquarters: '', department: '', salary: '', hiringMode: '', hiringCompany: '', workHours: '', breakTime: '', workDays: '', presentialDays: '', superiorId: '', experiencePeriod: '', hasOtherJob: '', status: 'active', contractType: '',
+      cpf: '', rg: '', rgIssuer: '', rgIssueDate: '', rgState: '', ctpsNumber: '', ctpsSeries: '', ctpsState: '', ctpsIssueDate: '', pisNumber: '', reservistNumber: '', docsFolderLink: '', legalAuth: false,
+      bankAccountInfo: '', hasInsalubrity: '', insalubrityPercent: '', hasDangerPay: '', transportVoucherInfo: '', busLineHomeWork: '', busQtyHomeWork: '', busLineWorkHome: '', busQtyWorkHome: '', ticketValue: '', fuelVoucherValue: '', hasMealVoucher: '', hasFoodVoucher: '', hasHomeOfficeAid: '', hasHealthPlan: '', hasDentalPlan: '', bonusInfo: '', bonusValue: '', commissionInfo: '', commissionPercent: '',
+      hasDependents: '', dependentName: '', dependentDob: '', dependentKinship: '', dependentCpf: '',
+      resignationDate: '', demissionReason: '', demissionDocs: '', vacationPeriods: '', observations: ''
+  });
 
-  // Form State
-  const [formData, setFormData] = useState({ name: '', email: '', department: '', role: 'viewer' as Collaborator['role'] });
+  const [formData, setFormData] = useState<Collaborator>(getEmptyCollaborator());
 
   // Click outside to close menu
   useEffect(() => {
@@ -65,40 +174,23 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
   }, []);
 
   const handleSave = () => {
-    if (!formData.name || !formData.email || !formData.department) return;
-    
-    if (editingId) {
-        setCollaborators(prev => prev.map(c => c.id === editingId ? {
-            ...c,
-            name: formData.name,
-            email: formData.email,
-            department: formData.department,
-            role: formData.role
-        } : c));
-    } else {
-        const newCollaborator: Collaborator = {
-          id: crypto.randomUUID(), // Gera um UUID válido v4
-          name: formData.name,
-          email: formData.email,
-          department: formData.department,
-          role: formData.role,
-          status: 'active',
-          lastAccess: 'Nunca'
-        };
-        setCollaborators([...collaborators, newCollaborator]);
+    if (!formData.fullName) {
+        alert("O Nome Completo é obrigatório.");
+        return;
     }
-
-    closeModal();
+    
+    if (formData.id) {
+        // Edit
+        setCollaborators(prev => prev.map(c => c.id === formData.id ? formData : c));
+    } else {
+        // Create
+        setCollaborators([...collaborators, { ...formData, id: crypto.randomUUID() }]);
+    }
+    setShowModal(false);
   };
 
   const handleEdit = (c: Collaborator) => {
-      setFormData({
-          name: c.name,
-          email: c.email,
-          department: c.department,
-          role: c.role
-      });
-      setEditingId(c.id);
+      setFormData({ ...c });
       setActiveMenuId(null);
       setShowModal(true);
   };
@@ -111,25 +203,22 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
   };
 
   const openNewModal = () => {
-      setFormData({ name: '', email: '', department: '', role: 'viewer' });
-      setEditingId(null);
+      setFormData(getEmptyCollaborator());
       setShowModal(true);
   };
 
-  const closeModal = () => {
-      setShowModal(false);
-      setFormData({ name: '', email: '', department: '', role: 'viewer' });
-      setEditingId(null);
+  const handleInputChange = (field: keyof Collaborator, value: any) => {
+      setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const filtered = collaborators.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
     c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.department.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
       
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -139,9 +228,9 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
             </button>
             <div>
                 <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                    <Users className="text-blue-600" /> Colaboradores
+                    <Users className="text-blue-600" /> Gestão de Colaboradores
                 </h2>
-                <p className="text-slate-500 text-sm">Gerencie o acesso e permissões da equipe.</p>
+                <p className="text-slate-500 text-sm">Cadastro completo de RH e Departamento Pessoal.</p>
             </div>
         </div>
         <button 
@@ -153,8 +242,8 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
       </div>
 
       {/* Toolbar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex gap-4">
-         <div className="relative flex-1">
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+         <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
                 type="text" 
@@ -171,11 +260,11 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
         <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500">
                 <tr>
-                    <th className="px-6 py-4">Usuário</th>
+                    <th className="px-6 py-4">Nome / Cargo</th>
                     <th className="px-6 py-4">Setor</th>
-                    <th className="px-6 py-4">Função</th>
+                    <th className="px-6 py-4">Contato</th>
+                    <th className="px-6 py-4">Admissão</th>
                     <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">Último Acesso</th>
                     <th className="px-6 py-4 text-right">Ações</th>
                 </tr>
             </thead>
@@ -184,12 +273,12 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                     <tr key={c.id} className="hover:bg-slate-50 transition-colors relative">
                         <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
-                                    {c.name.substring(0,2).toUpperCase()}
+                                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold overflow-hidden">
+                                    {c.photoUrl ? <img src={c.photoUrl} className="w-full h-full object-cover" /> : c.fullName.substring(0,2).toUpperCase()}
                                 </div>
                                 <div>
-                                    <p className="font-semibold text-slate-800 whitespace-nowrap">{c.name}</p>
-                                    <p className="text-xs text-slate-400">{c.email}</p>
+                                    <p className="font-semibold text-slate-800 whitespace-nowrap">{c.fullName}</p>
+                                    <p className="text-xs text-slate-400">{c.role || 'Sem cargo'}</p>
                                 </div>
                             </div>
                         </td>
@@ -200,26 +289,21 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                             </div>
                         </td>
                         <td className="px-6 py-4">
-                            <span className={clsx(
-                                "px-2 py-1 rounded text-xs font-medium border flex items-center gap-1 w-fit whitespace-nowrap",
-                                c.role === 'admin' ? "bg-purple-50 text-purple-700 border-purple-100" :
-                                c.role === 'editor' ? "bg-blue-50 text-blue-700 border-blue-100" :
-                                "bg-slate-100 text-slate-600 border-slate-200"
-                            )}>
-                                {c.role === 'admin' && <Shield size={10} />}
-                                {c.role === 'admin' ? 'Administrador' : c.role === 'editor' ? 'Editor' : 'Visualizador'}
-                            </span>
+                            <div className="text-xs">
+                                <p className="flex items-center gap-1"><Mail size={10} /> {c.email}</p>
+                                <p className="flex items-center gap-1 mt-1"><Phone size={10} /> {c.phone}</p>
+                            </div>
+                        </td>
+                        <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
+                            {c.admissionDate ? new Date(c.admissionDate).toLocaleDateString() : '-'}
                         </td>
                         <td className="px-6 py-4">
                             <span className={clsx(
                                 "px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap",
-                                c.status === 'active' ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"
+                                c.status === 'active' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-500"
                             )}>
-                                {c.status === 'active' ? 'Ativo' : 'Inativo'}
+                                {c.status === 'active' ? 'Ativo' : 'Desligado'}
                             </span>
-                        </td>
-                        <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
-                            {c.lastAccess}
                         </td>
                         <td className="px-6 py-4 text-right relative">
                             <button 
@@ -260,76 +344,504 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
         </table>
       </div>
 
-      {/* Modal */}
+      {/* Modal - LARGE FORM */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-slate-800">{editingId ? 'Editar Colaborador' : 'Novo Colaborador'}</h3>
-                    <button onClick={closeModal} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+                
+                {/* Header */}
+                <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 rounded-t-xl">
+                    <div>
+                        <h3 className="text-xl font-bold text-slate-800">{formData.id ? 'Ficha do Colaborador' : 'Admissão de Colaborador'}</h3>
+                        <p className="text-sm text-slate-500">Preencha todos os dados para o e-Social e RH.</p>
+                    </div>
+                    <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={24}/></button>
                 </div>
-                <div className="p-6 space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Nome Completo</label>
-                        <div className="relative">
-                            <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                            <input 
-                                type="text" 
-                                value={formData.name}
-                                onChange={e => setFormData({...formData, name: e.target.value})}
-                                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="Ex: João Silva"
-                            />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Email Corporativo</label>
-                        <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                            <input 
-                                type="email" 
-                                value={formData.email}
-                                onChange={e => setFormData({...formData, email: e.target.value})}
-                                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="joao@empresa.com"
-                            />
-                        </div>
-                    </div>
+                
+                <div className="p-8 overflow-y-auto custom-scrollbar space-y-10">
                     
+                    {/* SECTION 1: IDENTIDADE */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Setor</label>
-                        <div className="relative">
-                            <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                            <select 
-                                value={formData.department}
-                                onChange={e => setFormData({...formData, department: e.target.value})}
-                                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white appearance-none"
-                            >
-                                <option value="" disabled>Selecione um setor...</option>
-                                {DEPARTMENTS.map(dept => (
-                                    <option key={dept} value={dept}>{dept}</option>
-                                ))}
-                            </select>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <User size={16} /> Dados Pessoais e Identidade
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Nome Completo</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.fullName} onChange={e => handleInputChange('fullName', e.target.value)} />
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Nome Social</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.socialName} onChange={e => handleInputChange('socialName', e.target.value)} />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data de Nascimento</label>
+                                <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.birthDate} onChange={e => handleInputChange('birthDate', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Estado Civil</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.maritalStatus} onChange={e => handleInputChange('maritalStatus', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Solteiro">Solteiro(a)</option>
+                                    <option value="Casado">Casado(a)</option>
+                                    <option value="Divorciado">Divorciado(a)</option>
+                                    <option value="Viuvo">Viúvo(a)</option>
+                                    <option value="Uniao">União Estável</option>
+                                </select>
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cônjuge</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.spouseName} onChange={e => handleInputChange('spouseName', e.target.value)} />
+                            </div>
+
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Nome da Mãe</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.motherName} onChange={e => handleInputChange('motherName', e.target.value)} />
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Nome do Pai</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.fatherName} onChange={e => handleInputChange('fatherName', e.target.value)} />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Identidade de Gênero</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.genderIdentity} onChange={e => handleInputChange('genderIdentity', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Feminino">Feminino</option>
+                                    <option value="Masculino">Masculino</option>
+                                    <option value="NaoBinario">Não-Binário</option>
+                                    <option value="Outro">Outro</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Identificação Racial</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.racialIdentity} onChange={e => handleInputChange('racialIdentity', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Branca">Branca</option>
+                                    <option value="Preta">Preta</option>
+                                    <option value="Parda">Parda</option>
+                                    <option value="Amarela">Amarela</option>
+                                    <option value="Indigena">Indígena</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Escolaridade</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.educationLevel} onChange={e => handleInputChange('educationLevel', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Fundamental">Ensino Fundamental</option>
+                                    <option value="Medio">Ensino Médio</option>
+                                    <option value="Superior">Ensino Superior</option>
+                                    <option value="Pos">Pós-Graduação/MBA</option>
+                                </select>
+                            </div>
+                            <div className="lg:col-span-4">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cursos em andamento ou realizados</label>
+                                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-16" value={formData.observations} onChange={e => handleInputChange('observations', e.target.value)}></textarea>
+                            </div>
                         </div>
                     </div>
 
+                    {/* SECTION 2: ENDEREÇO & CONTATO */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Permissão</label>
-                        <select 
-                            value={formData.role}
-                            onChange={e => setFormData({...formData, role: e.target.value as Collaborator['role']})}
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                        >
-                            <option value="viewer">Visualizador (Apenas Leitura)</option>
-                            <option value="editor">Editor (Pode criar/editar)</option>
-                            <option value="admin">Administrador (Acesso Total)</option>
-                        </select>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <MapPin size={16} /> Endereço e Contato
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Endereço Completo</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.address} onChange={e => handleInputChange('address', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">CEP</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cep} onChange={e => handleInputChange('cep', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Complemento</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.complement} onChange={e => handleInputChange('complement', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade Atual</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.currentCity} onChange={e => handleInputChange('currentCity', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade Natal</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.birthCity} onChange={e => handleInputChange('birthCity', e.target.value)} />
+                            </div>
+                            
+                            {/* Contato */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Celular (Pessoal)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cellphone} onChange={e => handleInputChange('cellphone', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Telefone Fixo</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.phone} onChange={e => handleInputChange('phone', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">E-mail</label>
+                                <input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.email} onChange={e => handleInputChange('email', e.target.value)} />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Contato de Emergência (Nome)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.emergencyName} onChange={e => handleInputChange('emergencyName', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Telefone de Emergência</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.emergencyPhone} onChange={e => handleInputChange('emergencyPhone', e.target.value)} />
+                            </div>
+                        </div>
                     </div>
+
+                    {/* SECTION 3: DOCUMENTAÇÃO */}
+                    <div>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <FileText size={16} /> Documentação Civil
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">CPF</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cpf} onChange={e => handleInputChange('cpf', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">RG</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.rg} onChange={e => handleInputChange('rg', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Órgão Emissor</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.rgIssuer} onChange={e => handleInputChange('rgIssuer', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data Emissão RG</label>
+                                <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.rgIssueDate} onChange={e => handleInputChange('rgIssueDate', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">UF Emissão RG</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" maxLength={2} value={formData.rgState} onChange={e => handleInputChange('rgState', e.target.value)} />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">CTPS (Nº Carteira Trabalho)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.ctpsNumber} onChange={e => handleInputChange('ctpsNumber', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Série CTPS</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.ctpsSeries} onChange={e => handleInputChange('ctpsSeries', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">UF CTPS</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" maxLength={2} value={formData.ctpsState} onChange={e => handleInputChange('ctpsState', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data Emissão CTPS</label>
+                                <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.ctpsIssueDate} onChange={e => handleInputChange('ctpsIssueDate', e.target.value)} />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">PIS</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.pisNumber} onChange={e => handleInputChange('pisNumber', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Reservista (Se houver)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.reservistNumber} onChange={e => handleInputChange('reservistNumber', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-4 pt-2">
+                                <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                    <input type="checkbox" className="rounded text-blue-600" checked={formData.legalAuth} onChange={e => handleInputChange('legalAuth', e.target.checked)} />
+                                    <span className="text-xs text-slate-700 leading-tight">Autorizo o arquivamento e uso dos dados junto aos Módulos: Sistema de Folha de Pagamento, Sindicato, Receita Federal, Previdência Social, CEF, E-Social e MTE.</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* SECTION 4: CONTRATUAL */}
+                    <div>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <Briefcase size={16} /> Dados Contratuais
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data de Admissão</label>
+                                <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.admissionDate} onChange={e => handleInputChange('admissionDate', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cargo</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.role} onChange={e => handleInputChange('role', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Sede</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.headquarters} onChange={e => handleInputChange('headquarters', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    {HEADQUARTERS.map(h => <option key={h} value={h}>{h}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Setor</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.department} onChange={e => handleInputChange('department', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Salário</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="R$ 0,00" value={formData.salary} onChange={e => handleInputChange('salary', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Modalidade Contratação</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hiringMode} onChange={e => handleInputChange('hiringMode', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="CLT">CLT</option>
+                                    <option value="PJ">PJ</option>
+                                    <option value="Estagio">Estágio</option>
+                                    <option value="Temporario">Temporário</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Empresa Contratante</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hiringCompany} onChange={e => handleInputChange('hiringCompany', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Contrato/Pagamento</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.contractType} onChange={e => handleInputChange('contractType', e.target.value)} />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Horário Trabalho</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.workHours} onChange={e => handleInputChange('workHours', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Intervalo</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.breakTime} onChange={e => handleInputChange('breakTime', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Dias de Trabalho</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.workDays} onChange={e => handleInputChange('workDays', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Dias Presenciais</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.presentialDays} onChange={e => handleInputChange('presentialDays', e.target.value)} />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Período de Experiência</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.experiencePeriod} onChange={e => handleInputChange('experiencePeriod', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">ID Superior</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.superiorId} onChange={e => handleInputChange('superiorId', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Outro Vínculo?</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hasOtherJob} onChange={e => handleInputChange('hasOtherJob', e.target.value)}>
+                                    <option value="Nao">Não</option>
+                                    <option value="Sim">Sim</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Telefone Corporativo</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.corporatePhone} onChange={e => handleInputChange('corporatePhone', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Operadora</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.operator} onChange={e => handleInputChange('operator', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data Admissão Contrato Ant.</label>
+                                <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.previousAdmissionDate} onChange={e => handleInputChange('previousAdmissionDate', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">STATUS</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.status} onChange={e => handleInputChange('status', e.target.value)}>
+                                    <option value="active">Ativo</option>
+                                    <option value="inactive">Desligado/Inativo</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* SECTION 5: BENEFÍCIOS & TRANSPORTE */}
+                    <div>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <DollarSign size={16} /> Financeiro e Benefícios
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Conta Bancária (Para Salário)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Banco, Agência, Conta..." value={formData.bankAccountInfo} onChange={e => handleInputChange('bankAccountInfo', e.target.value)} />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Insalubridade?</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hasInsalubrity} onChange={e => handleInputChange('hasInsalubrity', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">% Insalubridade</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.insalubrityPercent} onChange={e => handleInputChange('insalubrityPercent', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Periculosidade</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hasDangerPay} onChange={e => handleInputChange('hasDangerPay', e.target.value)} />
+                            </div>
+
+                            {/* Transporte */}
+                            <div className="md:col-span-4 bg-slate-50 p-4 rounded-lg border border-slate-100 mt-2">
+                                <h5 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-1"><Bus size={12}/> Vale Transporte</h5>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div className="md:col-span-2">
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Linha (Residência &gt; Trabalho)</label>
+                                        <input type="text" className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" value={formData.busLineHomeWork} onChange={e => handleInputChange('busLineHomeWork', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Qtd Passagens</label>
+                                        <input type="text" className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" value={formData.busQtyHomeWork} onChange={e => handleInputChange('busQtyHomeWork', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Valor Unitário</label>
+                                        <input type="text" className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" value={formData.ticketValue} onChange={e => handleInputChange('ticketValue', e.target.value)} />
+                                    </div>
+                                    
+                                    <div className="md:col-span-2">
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Linha (Trabalho &gt; Residência)</label>
+                                        <input type="text" className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" value={formData.busLineWorkHome} onChange={e => handleInputChange('busLineWorkHome', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Qtd Passagens</label>
+                                        <input type="text" className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" value={formData.busQtyWorkHome} onChange={e => handleInputChange('busQtyWorkHome', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Info Vale Deslocamento</label>
+                                        <input type="text" className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" value={formData.transportVoucherInfo} onChange={e => handleInputChange('transportVoucherInfo', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">Vale Combustível (Diário)</label>
+                                        <input type="text" className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" value={formData.fuelVoucherValue} onChange={e => handleInputChange('fuelVoucherValue', e.target.value)} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Outros Beneficios */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Vale Refeição?</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hasMealVoucher} onChange={e => handleInputChange('hasMealVoucher', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Vale Alimentação?</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hasFoodVoucher} onChange={e => handleInputChange('hasFoodVoucher', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Auxílio Home Office?</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hasHomeOfficeAid} onChange={e => handleInputChange('hasHomeOfficeAid', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Convênio Médico?</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hasHealthPlan} onChange={e => handleInputChange('hasHealthPlan', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Convênio Odonto?</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hasDentalPlan} onChange={e => handleInputChange('hasDentalPlan', e.target.value)} />
+                            </div>
+
+                            {/* Bonificacao e Comissao */}
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Regras Bonificação / Período</label>
+                                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-20" value={formData.bonusInfo} onChange={e => handleInputChange('bonusInfo', e.target.value)}></textarea>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Valor Bonificação</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.bonusValue} onChange={e => handleInputChange('bonusValue', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Regras Comissionamento</label>
+                                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-20" value={formData.commissionInfo} onChange={e => handleInputChange('commissionInfo', e.target.value)}></textarea>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">% Comissão</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.commissionPercent} onChange={e => handleInputChange('commissionPercent', e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* SECTION 6: DEPENDENTES */}
+                    <div>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <Heart size={16} /> Dependentes
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Possui dependentes?</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hasDependents} onChange={e => handleInputChange('hasDependents', e.target.value)}>
+                                    <option value="Nao">Não</option>
+                                    <option value="Sim">Sim</option>
+                                </select>
+                            </div>
+                            {formData.hasDependents === 'Sim' && (
+                                <>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Nome Dependente</label>
+                                        <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.dependentName} onChange={e => handleInputChange('dependentName', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Data Nascimento</label>
+                                        <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.dependentDob} onChange={e => handleInputChange('dependentDob', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Grau Parentesco</label>
+                                        <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.dependentKinship} onChange={e => handleInputChange('dependentKinship', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">CPF Dependente</label>
+                                        <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.dependentCpf} onChange={e => handleInputChange('dependentCpf', e.target.value)} />
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* SECTION 7: DESLIGAMENTO & OUTROS */}
+                    <div>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <AlertCircle size={16} /> Desligamento & Anexos
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data Demissão</label>
+                                <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.resignationDate} onChange={e => handleInputChange('resignationDate', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Motivo / 2ª Data de Admissão</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.demissionReason} onChange={e => handleInputChange('demissionReason', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-3">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Documentos Demissionais</label>
+                                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-16" value={formData.demissionDocs} onChange={e => handleInputChange('demissionDocs', e.target.value)}></textarea>
+                            </div>
+                            
+                            <div className="md:col-span-3">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Períodos de Férias</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="DD/MM/AAAA a DD/MM/AAAA" value={formData.vacationPeriods} onChange={e => handleInputChange('vacationPeriods', e.target.value)} />
+                            </div>
+
+                            <div className="md:col-span-3">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Link Pasta Documentos</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-blue-50 text-blue-700" value={formData.docsFolderLink} onChange={e => handleInputChange('docsFolderLink', e.target.value)} placeholder="https://drive.google.com/..." />
+                            </div>
+                            
+                            <div className="md:col-span-3">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Link Foto Colaborador</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.photoUrl} onChange={e => handleInputChange('photoUrl', e.target.value)} placeholder="URL da imagem" />
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
-                <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3">
-                    <button onClick={closeModal} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
-                    <button onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm flex items-center gap-2">
-                        <Save size={16} /> Salvar Cadastro
+                
+                {/* Footer */}
+                <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100">
+                    <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                    <button onClick={handleSave} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm flex items-center gap-2">
+                        <Save size={18} /> Salvar Ficha
                     </button>
                 </div>
             </div>

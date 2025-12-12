@@ -1,5 +1,5 @@
 {
-  "name": "Sincronizador VOLL",
+  "name": "Sistema VOLL Pilates Group",
   "description": "A robust utility to parse multiple CSV files and batch upload/upsert records into a Supabase database.",
   "requestFramePermissions": []
 }

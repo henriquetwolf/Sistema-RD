@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogIn, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 
 export const LoginPanel: React.FC = () => {
@@ -21,7 +21,6 @@ export const LoginPanel: React.FC = () => {
 
     try {
       await appBackend.auth.signIn(email, password);
-      // App.tsx auth listener will handle the redirection
     } catch (err: any) {
       console.error(err);
       if (err.message === 'Invalid login credentials') {
@@ -38,21 +37,25 @@ export const LoginPanel: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-        <div className="bg-indigo-600 p-8 text-center">
-          <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mx-auto mb-4 text-white">
-            <LogIn size={32} />
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
+        <div className="bg-white p-8 pb-0 text-center">
+          <div className="w-full flex justify-center mb-6">
+            <img 
+                src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" 
+                alt="VOLL Pilates Group" 
+                className="h-16 w-auto" 
+            />
           </div>
-          <h1 className="text-2xl font-bold text-white">
-            Bem-vindo
+          <h1 className="text-xl font-bold text-slate-800">
+            Acesso ao Sistema
           </h1>
-          <p className="text-indigo-100 mt-2 text-sm">
-            Faça login para acessar o sincronizador
+          <p className="text-slate-500 mt-1 text-sm">
+            Entre com suas credenciais para continuar
           </p>
         </div>
 
         <div className="p-8">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
                 <AlertCircle size={16} className="mt-0.5 shrink-0" />
@@ -61,24 +64,24 @@ export const LoginPanel: React.FC = () => {
             )}
             
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email Corporativo</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                placeholder="seu@email.com"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all"
+                placeholder="seu.nome@voll.com.br"
                 disabled={isLoading}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Senha</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Senha</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all"
                 placeholder="••••••••"
                 disabled={isLoading}
               />
@@ -87,12 +90,12 @@ export const LoginPanel: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 text-white font-semibold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 mt-6"
+              className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-70 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 mt-4 shadow-lg shadow-teal-600/20"
             >
               {isLoading ? (
                 <>
                   <Loader2 size={20} className="animate-spin" />
-                  Entrando...
+                  Verificando...
                 </>
               ) : (
                 'Entrar'
@@ -100,9 +103,9 @@ export const LoginPanel: React.FC = () => {
             </button>
           </form>
           
-          <div className="mt-6 text-center">
+          <div className="mt-8 text-center pt-6 border-t border-slate-100">
              <p className="text-xs text-slate-400">
-                Este app requer VITE_APP_SUPABASE_URL e VITE_APP_SUPABASE_ANON_KEY configurados no ambiente.
+                VOLL Pilates Group &copy; {new Date().getFullYear()} <br/> Todos os direitos reservados.
              </p>
           </div>
         </div>

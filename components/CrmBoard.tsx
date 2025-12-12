@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
-  AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid
+  AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
+  Building, X, Save, Trash2, Briefcase, CreditCard
 } from 'lucide-react';
 import clsx from 'clsx';
 import { MOCK_COLLABORATORS, Collaborator } from './CollaboratorsManager';
@@ -16,8 +17,9 @@ interface Deal {
   contactName: string;
   companyName: string;
   value: number;
+  paymentMethod?: string; // Novo campo
   stage: DealStage;
-  owner: string;
+  owner: string; // ID of the collaborator
   createdAt: Date;
   status: 'hot' | 'warm' | 'cold';
   nextTask?: string;
@@ -45,12 +47,18 @@ const COLUMNS: Column[] = [
   { id: 'closed', title: 'Fechamento', color: 'border-green-500' },
 ];
 
+// Helper to find owner name
+const getOwnerName = (id: string) => {
+    const owner = MOCK_COLLABORATORS.find(c => c.id === id);
+    return owner ? owner.name : 'Desconhecido';
+};
+
 const INITIAL_DEALS: Deal[] = [
-  { id: '1', title: 'Licença Enterprise', contactName: 'Roberto Silva', companyName: 'TechCorp S.A.', value: 12500, stage: 'new', owner: 'Ana', createdAt: new Date(), status: 'warm', nextTask: 'Ligar amanhã' },
-  { id: '2', title: 'Consultoria Mensal', contactName: 'Mariana Costa', companyName: 'Varejo Bom', value: 3200, stage: 'new', owner: 'Carlos', createdAt: new Date(), status: 'cold' },
-  { id: '3', title: 'Implantação CRM', contactName: 'João Souza', companyName: 'Logística Rapida', value: 8900, stage: 'contacted', owner: 'Ana', createdAt: new Date(), status: 'hot', nextTask: 'Enviar Apresentação' },
-  { id: '4', title: 'Plano Anual', contactName: 'Fernanda Lima', companyName: 'StartUp Hub', value: 24000, stage: 'proposal', owner: 'Carlos', createdAt: new Date(), status: 'hot' },
-  { id: '5', title: 'Expansão de Cloud', contactName: 'Pedro Santos', companyName: 'Mega Data', value: 45000, stage: 'negotiation', owner: 'Ana', createdAt: new Date(), status: 'warm' },
+  { id: '1', title: 'Licença Enterprise', contactName: 'Roberto Silva', companyName: 'TechCorp S.A.', value: 12500, paymentMethod: 'Boleto', stage: 'new', owner: '4', createdAt: new Date(), status: 'warm', nextTask: 'Ligar amanhã' },
+  { id: '2', title: 'Consultoria Mensal', contactName: 'Mariana Costa', companyName: 'Varejo Bom', value: 3200, paymentMethod: 'Pix', stage: 'new', owner: '6', createdAt: new Date(), status: 'cold' },
+  { id: '3', title: 'Implantação CRM', contactName: 'João Souza', companyName: 'Logística Rapida', value: 8900, stage: 'contacted', owner: '4', createdAt: new Date(), status: 'hot', nextTask: 'Enviar Apresentação' },
+  { id: '4', title: 'Plano Anual', contactName: 'Fernanda Lima', companyName: 'StartUp Hub', value: 24000, paymentMethod: 'Cartão de Crédito', stage: 'proposal', owner: '6', createdAt: new Date(), status: 'hot' },
+  { id: '5', title: 'Expansão de Cloud', contactName: 'Pedro Santos', companyName: 'Mega Data', value: 45000, stage: 'negotiation', owner: '4', createdAt: new Date(), status: 'warm' },
 ];
 
 const INITIAL_TEAMS: Team[] = [
@@ -72,6 +80,14 @@ export const CrmBoard: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [newTeamData, setNewTeamData] = useState({ name: '', description: '', members: [] as string[] });
+
+  // Deal Modal State
+  const [showDealModal, setShowDealModal] = useState(false);
+  const [editingDealId, setEditingDealId] = useState<string | null>(null);
+  const [dealFormData, setDealFormData] = useState<Partial<Deal>>({
+      title: '', companyName: '', contactName: '', value: 0, 
+      paymentMethod: '', status: 'warm', stage: 'new', nextTask: '', owner: ''
+  });
 
   // --- Helpers & Logic ---
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -102,32 +118,76 @@ export const CrmBoard: React.FC = () => {
   // --- Drag and Drop Handlers ---
   const handleDragStart = (e: React.DragEvent, dealId: string) => {
     setDraggedDealId(dealId);
-    // Permite o movimento visual
     e.dataTransfer.effectAllowed = "move";
-    // Opcional: Definir dados se precisarmos de interoperabilidade com outros apps, mas para interno o state basta
     e.dataTransfer.setData("text/plain", dealId);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-    // Isso é crucial: prevenir o padrão permite que o elemento seja soltável (drop target)
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
 
   const handleDrop = (e: React.DragEvent, targetStage: DealStage) => {
     e.preventDefault();
-    
     if (!draggedDealId) return;
-
     setDeals(prev => prev.map(d => 
       d.id === draggedDealId ? { ...d, stage: targetStage } : d
     ));
-    
     setDraggedDealId(null);
   };
 
+  // --- Deal Modal Handlers ---
+  const openNewDealModal = () => {
+      setEditingDealId(null);
+      setDealFormData({
+          title: '', companyName: '', contactName: '', value: 0, paymentMethod: '',
+          status: 'warm', stage: 'new', nextTask: '', owner: commercialCollaborators[0]?.id || ''
+      });
+      setShowDealModal(true);
+  };
+
+  const openEditDealModal = (deal: Deal) => {
+      setEditingDealId(deal.id);
+      setDealFormData({ ...deal });
+      setShowDealModal(true);
+  };
+
+  const handleSaveDeal = () => {
+      if (!dealFormData.title || !dealFormData.companyName) return;
+
+      if (editingDealId) {
+          // Edit
+          setDeals(prev => prev.map(d => d.id === editingDealId ? { ...d, ...dealFormData } as Deal : d));
+      } else {
+          // Create
+          const newDeal: Deal = {
+              id: Math.random().toString(36).substr(2, 9),
+              title: dealFormData.title!,
+              companyName: dealFormData.companyName!,
+              contactName: dealFormData.contactName || '',
+              value: Number(dealFormData.value) || 0,
+              paymentMethod: dealFormData.paymentMethod || '',
+              stage: (dealFormData.stage as DealStage) || 'new',
+              owner: dealFormData.owner || '1',
+              status: (dealFormData.status as any) || 'warm',
+              nextTask: dealFormData.nextTask,
+              createdAt: new Date()
+          };
+          setDeals(prev => [...prev, newDeal]);
+      }
+      setShowDealModal(false);
+  };
+
+  const handleDeleteDeal = () => {
+      if (editingDealId && window.confirm("Tem certeza que deseja excluir esta negociação?")) {
+          setDeals(prev => prev.filter(d => d.id !== editingDealId));
+          setShowDealModal(false);
+      }
+  };
+
+
   // --- Team Logic ---
-  const commercialCollaborators = MOCK_COLLABORATORS.filter(c => c.department === 'Comercial');
+  const commercialCollaborators = MOCK_COLLABORATORS.filter(c => c.department === 'Comercial' || c.role === 'admin');
 
   const handleCreateTeam = () => {
       if (!newTeamData.name) return;
@@ -197,8 +257,8 @@ export const CrmBoard: React.FC = () => {
                 </div>
                 <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
                 <button 
+                    onClick={openNewDealModal}
                     className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-all"
-                    onClick={() => alert("Funcionalidade de Novo Negócio será implementada na próxima versão.")}
                 >
                     <Plus size={18} /> Novo Negócio
                 </button>
@@ -257,6 +317,7 @@ export const CrmBoard: React.FC = () => {
                             key={deal.id} 
                             draggable
                             onDragStart={(e) => handleDragStart(e, deal.id)}
+                            onClick={() => openEditDealModal(deal)}
                             className={clsx(
                               "group bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all relative cursor-grab active:cursor-grabbing",
                               draggedDealId === deal.id ? "opacity-40 ring-2 ring-indigo-400 border-indigo-400" : ""
@@ -283,6 +344,14 @@ export const CrmBoard: React.FC = () => {
                                 </div>
                                 
                                 <p className="text-xs text-slate-500 mb-2 truncate">{deal.companyName}</p>
+
+                                {/* Forma de Pagamento no Card */}
+                                {deal.paymentMethod && (
+                                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-2" title="Forma de Pagamento">
+                                        <CreditCard size={12} />
+                                        <span className="truncate">{deal.paymentMethod}</span>
+                                    </div>
+                                )}
                                 
                                 {/* Next Task Alert */}
                                 {deal.nextTask && deal.stage !== 'closed' && (
@@ -297,9 +366,9 @@ export const CrmBoard: React.FC = () => {
                                     <div className="flex items-center gap-2">
                                         <div 
                                             className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm"
-                                            title={`Responsável: ${deal.owner}`}
+                                            title={`Responsável: ${getOwnerName(deal.owner)}`}
                                         >
-                                            {deal.owner.substring(0,2).toUpperCase()}
+                                            {getOwnerName(deal.owner).charAt(0)}
                                         </div>
                                     </div>
                                 </div>
@@ -447,9 +516,6 @@ export const CrmBoard: React.FC = () => {
                                 })
                             )}
                         </div>
-                        <p className="text-xs text-slate-400 mt-2">
-                            Apenas colaboradores do departamento <b>Comercial</b> são listados aqui.
-                        </p>
                     </div>
                 </div>
 
@@ -461,6 +527,169 @@ export const CrmBoard: React.FC = () => {
                 </div>
             </div>
         </div>
+      )}
+
+      {/* --- DEAL EDIT/CREATE MODAL --- */}
+      {showDealModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                          <Briefcase size={20} className="text-indigo-600" />
+                          {editingDealId ? 'Editar Negociação' : 'Nova Oportunidade'}
+                      </h3>
+                      <button onClick={() => setShowDealModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={20}/></button>
+                  </div>
+
+                  <div className="p-6 overflow-y-auto space-y-6">
+                      
+                      {/* Section 1: Core Info */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="col-span-1 md:col-span-2">
+                              <label className="block text-sm font-bold text-slate-700 mb-1">Título da Oportunidade</label>
+                              <input 
+                                  type="text" 
+                                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  placeholder="Ex: Licença Anual Enterprise"
+                                  value={dealFormData.title}
+                                  onChange={e => setDealFormData({...dealFormData, title: e.target.value})}
+                              />
+                          </div>
+
+                          <div>
+                              <label className="block text-sm font-medium text-slate-600 mb-1 flex items-center gap-1"><Building size={14}/> Empresa / Cliente</label>
+                              <input 
+                                  type="text" 
+                                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  placeholder="Nome da empresa"
+                                  value={dealFormData.companyName}
+                                  onChange={e => setDealFormData({...dealFormData, companyName: e.target.value})}
+                              />
+                          </div>
+
+                          <div>
+                              <label className="block text-sm font-medium text-slate-600 mb-1 flex items-center gap-1"><User size={14}/> Contato Principal</label>
+                              <input 
+                                  type="text" 
+                                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  placeholder="Nome do contato"
+                                  value={dealFormData.contactName}
+                                  onChange={e => setDealFormData({...dealFormData, contactName: e.target.value})}
+                              />
+                          </div>
+                      </div>
+
+                       {/* Section 2: Details */}
+                       <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Valor Estimado (R$)</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R$</span>
+                                    <input 
+                                        type="number" 
+                                        step="0.01"
+                                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        placeholder="0.00"
+                                        value={dealFormData.value}
+                                        onChange={e => setDealFormData({...dealFormData, value: parseFloat(e.target.value) || 0})}
+                                    />
+                                </div>
+                            </div>
+
+                             {/* Novo Campo: Forma de Pagamento */}
+                             <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Forma de Pagamento</label>
+                                <div className="relative">
+                                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <select 
+                                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                                        value={dealFormData.paymentMethod}
+                                        onChange={e => setDealFormData({...dealFormData, paymentMethod: e.target.value})}
+                                    >
+                                        <option value="">Selecione...</option>
+                                        <option value="Boleto">Boleto Bancário</option>
+                                        <option value="Pix">Pix</option>
+                                        <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                        <option value="Cartão de Débito">Cartão de Débito</option>
+                                        <option value="Transferência">Transferência Bancária</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Status (Temperatura)</label>
+                                <select 
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                                    value={dealFormData.status}
+                                    onChange={e => setDealFormData({...dealFormData, status: e.target.value as any})}
+                                >
+                                    <option value="cold">Frio (Cold)</option>
+                                    <option value="warm">Morno (Warm)</option>
+                                    <option value="hot">Quente (Hot)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Estágio do Funil</label>
+                                <select 
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                                    value={dealFormData.stage}
+                                    onChange={e => setDealFormData({...dealFormData, stage: e.target.value as any})}
+                                >
+                                    {COLUMNS.map(col => (
+                                        <option key={col.id} value={col.id}>{col.title}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Responsável (Owner)</label>
+                                <select 
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                                    value={dealFormData.owner}
+                                    onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {commercialCollaborators.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                       </div>
+
+                       <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Próxima Tarefa / Passo</label>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <input 
+                                        type="text" 
+                                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        placeholder="Ex: Ligar para agendar reunião..."
+                                        value={dealFormData.nextTask || ''}
+                                        onChange={e => setDealFormData({...dealFormData, nextTask: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+                       </div>
+                  </div>
+
+                  <div className="px-6 py-4 bg-slate-50 flex justify-between gap-3 border-t border-slate-200">
+                        {editingDealId ? (
+                             <button onClick={handleDeleteDeal} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm flex items-center gap-2">
+                                <Trash2 size={16} /> Excluir
+                             </button>
+                        ) : <div></div>}
+                        
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowDealModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                            <button onClick={handleSaveDeal} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center gap-2">
+                                <Save size={16} /> Salvar Negócio
+                            </button>
+                        </div>
+                  </div>
+              </div>
+          </div>
       )}
 
     </div>

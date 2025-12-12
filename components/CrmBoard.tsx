@@ -90,7 +90,8 @@ export const CrmBoard: React.FC = () => {
           // 1. Fetch Deals
           const { data: dealsData, error: dealsError } = await appBackend.client
               .from('crm_deals')
-              .select('*');
+              .select('*')
+              .order('created_at', { ascending: false }); // Ordenar pelos mais recentes
           
           if (dealsError) throw dealsError;
 
@@ -119,8 +120,12 @@ export const CrmBoard: React.FC = () => {
           
           setTeams(teamsData || []);
 
-      } catch (e) {
+      } catch (e: any) {
           console.error("Erro ao carregar dados do CRM:", e);
+          if (e.message?.includes('does not exist')) {
+             // Silent error or show toast if needed, but allow UI to render empty
+             console.warn("Tabelas crm_deals ou crm_teams não encontradas. Execute o SQL.");
+          }
       } finally {
           setIsLoading(false);
       }
@@ -142,10 +147,19 @@ export const CrmBoard: React.FC = () => {
     setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage } : d));
 
     // DB Update
-    await appBackend.client
-        .from('crm_deals')
-        .update({ stage: newStage })
-        .eq('id', dealId);
+    try {
+        const { error } = await appBackend.client
+            .from('crm_deals')
+            .update({ stage: newStage })
+            .eq('id', dealId);
+        
+        if (error) throw error;
+    } catch (e: any) {
+        console.error("Erro ao mover card:", e);
+        alert("Erro ao salvar o novo estágio. Verifique sua conexão.");
+        // Revert optimistic update
+        setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: currentStage } : d));
+    }
   };
 
   const getStageSummary = (stage: DealStage) => {
@@ -175,16 +189,24 @@ export const CrmBoard: React.FC = () => {
     e.preventDefault();
     if (!draggedDealId) return;
 
-    // Optimistic Update
+    // Local update first
+    const originalDeals = [...deals];
     setDeals(prev => prev.map(d => 
       d.id === draggedDealId ? { ...d, stage: targetStage } : d
     ));
 
-    // DB Update
-    await appBackend.client
-        .from('crm_deals')
-        .update({ stage: targetStage })
-        .eq('id', draggedDealId);
+    try {
+        const { error } = await appBackend.client
+            .from('crm_deals')
+            .update({ stage: targetStage })
+            .eq('id', draggedDealId);
+        
+        if (error) throw error;
+    } catch (e) {
+        console.error(e);
+        alert("Erro ao salvar alteração.");
+        setDeals(originalDeals); // Revert
+    }
 
     setDraggedDealId(null);
   };
@@ -208,7 +230,10 @@ export const CrmBoard: React.FC = () => {
   };
 
   const handleSaveDeal = async () => {
-      if (!dealFormData.title || !dealFormData.companyName) return;
+      if (!dealFormData.title || !dealFormData.companyName) {
+          alert("Por favor, preencha o Título e a Empresa.");
+          return;
+      }
 
       const payload = {
           title: dealFormData.title,
@@ -229,6 +254,7 @@ export const CrmBoard: React.FC = () => {
                   .from('crm_deals')
                   .update(payload)
                   .eq('id', editingDealId);
+              
               if (error) throw error;
               
               // Local Update
@@ -257,23 +283,33 @@ export const CrmBoard: React.FC = () => {
                   nextTask: data.next_task,
                   createdAt: new Date(data.created_at)
               };
-              setDeals(prev => [...prev, newDeal]);
+              setDeals(prev => [newDeal, ...prev]); // Add to top
           }
           setShowDealModal(false);
-      } catch (e) {
-          alert('Erro ao salvar negociação.');
-          console.error(e);
+      } catch (e: any) {
+          console.error("Erro detalhado ao salvar:", e);
+          const msg = e.message || "Erro desconhecido";
+          
+          if (msg.includes('relation "crm_deals" does not exist')) {
+             alert("Erro Crítico: A tabela 'crm_deals' não existe no banco de dados. Por favor, execute o script SQL no Supabase.");
+          } else if (msg.includes('violates row-level security')) {
+             alert("Erro de Permissão: A política de segurança (RLS) impediu a gravação. Execute o script SQL para liberar acesso.");
+          } else {
+             alert(`Não foi possível salvar: ${msg}`);
+          }
       }
   };
 
   const handleDeleteDeal = async () => {
       if (editingDealId && window.confirm("Tem certeza que deseja excluir esta negociação?")) {
           try {
-            await appBackend.client.from('crm_deals').delete().eq('id', editingDealId);
+            const { error } = await appBackend.client.from('crm_deals').delete().eq('id', editingDealId);
+            if (error) throw error;
+            
             setDeals(prev => prev.filter(d => d.id !== editingDealId));
             setShowDealModal(false);
-          } catch(e) {
-            alert('Erro ao excluir.');
+          } catch(e: any) {
+            alert(`Erro ao excluir: ${e.message}`);
           }
       }
   };
@@ -301,8 +337,8 @@ export const CrmBoard: React.FC = () => {
           setTeams([...teams, data]);
           setShowTeamModal(false);
           setNewTeamData({ name: '', description: '', members: [] });
-      } catch(e) {
-          alert("Erro ao criar equipe.");
+      } catch(e: any) {
+          alert(`Erro ao criar equipe: ${e.message}`);
       }
   };
 

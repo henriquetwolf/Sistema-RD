@@ -1,5 +1,5 @@
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormSubmission, FormAnswer } from '../types';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -287,6 +287,45 @@ export const appBackend = {
                   // We don't throw here to avoid blocking the user form success message
               }
           }
+      }
+  },
+
+  // --- CONTRACTS (MOCKED IN LOCALSTORAGE) ---
+  
+  getContracts: async (): Promise<Contract[]> => {
+      return JSON.parse(localStorage.getItem('app_contracts') || '[]');
+  },
+
+  getContractById: async (id: string): Promise<Contract | null> => {
+      const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
+      return contracts.find((c: Contract) => c.id === id) || null;
+  },
+
+  saveContract: async (contract: Contract): Promise<void> => {
+      const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
+      const idx = contracts.findIndex((c: Contract) => c.id === contract.id);
+      if (idx >= 0) {
+          contracts[idx] = contract;
+      } else {
+          contracts.push(contract);
+      }
+      localStorage.setItem('app_contracts', JSON.stringify(contracts));
+  },
+
+  deleteContract: async (id: string): Promise<void> => {
+      const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
+      const filtered = contracts.filter((c: Contract) => c.id !== id);
+      localStorage.setItem('app_contracts', JSON.stringify(filtered));
+  },
+
+  signContract: async (id: string, signatureBase64: string): Promise<void> => {
+      const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
+      const idx = contracts.findIndex((c: Contract) => c.id === id);
+      if (idx >= 0) {
+          contracts[idx].status = 'signed';
+          contracts[idx].signatureData = signatureBase64;
+          contracts[idx].signedAt = new Date().toISOString();
+          localStorage.setItem('app_contracts', JSON.stringify(contracts));
       }
   }
 };

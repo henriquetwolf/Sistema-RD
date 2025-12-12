@@ -13,7 +13,10 @@ import { TeachersManager } from './components/TeachersManager';
 import { FormsManager } from './components/FormsManager';
 import { FormViewer } from './components/FormViewer';
 import { SettingsManager } from './components/SettingsManager';
-import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel } from './types';
+import { SalesAnalysis } from './components/SalesAnalysis';
+import { ContractsManager } from './components/ContractsManager';
+import { ContractSigning } from './components/ContractSigning';
+import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
@@ -22,13 +25,15 @@ import {
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
-  Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog
+  Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
+  FileSignature
 } from 'lucide-react';
 import clsx from 'clsx';
 
 function App() {
-  // Public Form State (Before Auth Check)
+  // Public Form/Contract State (Before Auth Check)
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
+  const [publicContract, setPublicContract] = useState<Contract | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
 
   // App Settings State
@@ -50,7 +55,7 @@ function App() {
   
   // Dashboard UI State
   // Extended types to include management tabs
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'global_settings'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'global_settings'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -85,26 +90,26 @@ function App() {
             setAppLogo(savedLogo);
         }
 
-        // 1. Check for Public URL Params (e.g. ?publicFormId=123)
+        // 1. Check for Public URL Params (Forms & Contracts)
         const params = new URLSearchParams(window.location.search);
         const publicFormId = params.get('publicFormId');
+        const contractId = params.get('contractId');
 
-        if (publicFormId) {
+        if (publicFormId || contractId) {
             setIsPublicLoading(true);
             try {
-                const form = await appBackend.getFormById(publicFormId);
-                if (form) {
-                    setPublicForm(form);
-                    setIsPublicLoading(false);
-                    // If public form found, stop here. No need for session or jobs.
-                    return;
-                } else {
-                    console.error("Form not found");
+                if (publicFormId) {
+                    const form = await appBackend.getFormById(publicFormId);
+                    if (form) setPublicForm(form);
+                } else if (contractId) {
+                    const contract = await appBackend.getContractById(contractId);
+                    if (contract) setPublicContract(contract);
                 }
             } catch (e) {
-                console.error("Error loading public form", e);
+                console.error("Error loading public asset", e);
             }
             setIsPublicLoading(false);
+            return; // Stop if public mode
         }
 
         // 2. Load Jobs from LocalStorage
@@ -169,10 +174,10 @@ function App() {
 
   // --- FETCH SALES DATA (WIDGET) ---
   useEffect(() => {
-      if (dashboardTab === 'overview' && !publicForm) {
+      if (dashboardTab === 'overview' && !publicForm && !publicContract) {
           fetchSalesData();
       }
-  }, [dashboardTab, salesDateRange, publicForm]);
+  }, [dashboardTab, salesDateRange, publicForm, publicContract]);
 
   const fetchSalesData = async () => {
       setIsLoadingSales(true);
@@ -450,6 +455,8 @@ function App() {
   
   // 1. Check for Public Mode FIRST
   if (isPublicLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
+  
+  if (publicContract) return <ContractSigning contract={publicContract} />;
   if (publicForm) return <div className="min-h-screen bg-slate-50"><FormViewer form={publicForm} isPublic={true} /></div>;
 
   // 2. Check for Auth Loading
@@ -616,6 +623,18 @@ function App() {
                                     CRM Comercial
                                 </button>
                                 <button
+                                    onClick={() => setDashboardTab('analysis')}
+                                    className={clsx(
+                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                        dashboardTab === 'analysis' 
+                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
+                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    )}
+                                >
+                                    <PieChart size={18} />
+                                    Análise de Vendas
+                                </button>
+                                <button
                                     onClick={() => setDashboardTab('forms')}
                                     className={clsx(
                                         "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
@@ -626,6 +645,18 @@ function App() {
                                 >
                                     <FileText size={18} />
                                     Formulários
+                                </button>
+                                <button
+                                    onClick={() => setDashboardTab('contracts')}
+                                    className={clsx(
+                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                        dashboardTab === 'contracts' 
+                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
+                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    )}
+                                >
+                                    <FileSignature size={18} />
+                                    Contratos
                                 </button>
                                 <button
                                     onClick={() => setDashboardTab('tables')}
@@ -900,7 +931,9 @@ function App() {
                         {dashboardTab === 'classes' && <ClassesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'contracts' && <ContractsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} />}
+                        {dashboardTab === 'analysis' && <SalesAnalysis />}
 
                         {/* TAB: CRM */}
                         {dashboardTab === 'crm' && (

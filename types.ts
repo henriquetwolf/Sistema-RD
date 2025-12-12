@@ -95,3 +95,17 @@ export interface FormSubmission {
   answers: FormAnswer[];
   submittedAt: string;
 }
+
+// --- CONTRACTS ---
+
+export interface Contract {
+  id: string;
+  title: string;
+  content: string; // HTML or Markdown content of the contract
+  signerName: string;
+  signerEmail: string;
+  status: 'draft' | 'sent' | 'signed';
+  signatureData?: string; // Base64 image of signature
+  createdAt: string;
+  signedAt?: string;
+}

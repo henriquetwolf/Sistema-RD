@@ -6,10 +6,11 @@ import clsx from 'clsx';
 
 interface FormViewerProps {
   form: FormModel;
-  onBack: () => void;
+  onBack?: () => void;
+  isPublic?: boolean;
 }
 
-export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack }) => {
+export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic = false }) => {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -40,27 +41,40 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack }) => {
 
   if (isSuccess) {
     return (
-      <div className="max-w-xl mx-auto py-12 px-4 text-center animate-in fade-in slide-in-from-bottom-4">
+      <div className={clsx("max-w-xl mx-auto px-4 text-center animate-in fade-in slide-in-from-bottom-4", isPublic ? "min-h-screen flex flex-col justify-center" : "py-12")}>
         <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
           <CheckCircle size={40} />
         </div>
         <h2 className="text-2xl font-bold text-slate-800 mb-2">Resposta enviada!</h2>
         <p className="text-slate-500 mb-8">Obrigado por preencher este formulário.</p>
-        <button 
-          onClick={onBack}
-          className="text-indigo-600 hover:underline font-medium"
-        >
-          Voltar para o sistema
-        </button>
+        
+        {!isPublic && onBack && (
+            <button 
+            onClick={onBack}
+            className="text-indigo-600 hover:underline font-medium"
+            >
+            Voltar para o sistema
+            </button>
+        )}
+        {isPublic && (
+             <button 
+                onClick={() => window.location.reload()}
+                className="text-indigo-600 hover:underline font-medium"
+             >
+                 Enviar outra resposta
+             </button>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4 animate-in fade-in slide-in-from-bottom-2">
-      <button onClick={onBack} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors">
-        <ArrowLeft size={16} /> Voltar
-      </button>
+    <div className={clsx("max-w-2xl mx-auto px-4 animate-in fade-in slide-in-from-bottom-2", isPublic ? "min-h-screen py-12" : "py-8")}>
+      {!isPublic && onBack && (
+          <button onClick={onBack} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors">
+            <ArrowLeft size={16} /> Voltar
+          </button>
+      )}
 
       <div className="bg-white border-t-8 border-t-indigo-600 rounded-xl shadow-sm border-x border-b border-slate-200 overflow-hidden mb-6">
         <div className="p-8">
@@ -68,7 +82,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack }) => {
           {form.description && (
             <p className="text-slate-600 whitespace-pre-wrap">{form.description}</p>
           )}
-          {form.isLeadCapture && (
+          {form.isLeadCapture && !isPublic && (
             <span className="inline-block mt-4 bg-indigo-50 text-indigo-700 text-xs px-2 py-1 rounded font-medium border border-indigo-100">
                 Interesse Comercial
             </span>
@@ -123,6 +137,12 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack }) => {
              </button>
         </div>
       </form>
+
+      {isPublic && (
+          <div className="text-center mt-8 text-xs text-slate-400">
+              Desenvolvido com Sincronizador VOLL
+          </div>
+      )}
     </div>
   );
 };

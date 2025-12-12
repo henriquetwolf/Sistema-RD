@@ -11,7 +11,8 @@ import { CollaboratorsManager } from './components/CollaboratorsManager';
 import { ClassesManager } from './components/ClassesManager';
 import { TeachersManager } from './components/TeachersManager';
 import { FormsManager } from './components/FormsManager';
-import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob } from './types';
+import { FormViewer } from './components/FormViewer';
+import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
@@ -25,6 +26,10 @@ import {
 import clsx from 'clsx';
 
 function App() {
+  // Public Form State (Before Auth Check)
+  const [publicForm, setPublicForm] = useState<FormModel | null>(null);
+  const [isPublicLoading, setIsPublicLoading] = useState(false);
+
   // Auth State
   const [session, setSession] = useState<any>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
@@ -63,31 +68,55 @@ function App() {
 
   // --- INIT & AUTH ---
   useEffect(() => {
-    // Load Jobs from LocalStorage
-    const savedJobs = localStorage.getItem('csv_syncer_jobs');
-    if (savedJobs) {
-      try {
-        const parsed = JSON.parse(savedJobs);
-        // Fix Date objects lost in JSON and reset stuck 'syncing' states
-        const fixed = parsed.map((j: any) => ({
-          ...j,
-          lastSync: j.lastSync ? new Date(j.lastSync) : null,
-          status: j.status === 'syncing' ? 'idle' : j.status, // Reset stuck jobs
-          lastMessage: j.status === 'syncing' ? 'Sincronização interrompida' : j.lastMessage,
-          // BACKWARD COMPATIBILITY: If intervalMinutes is missing, default to 5
-          intervalMinutes: j.intervalMinutes || 5 
-        }));
-        setJobs(fixed);
-      } catch (e) {
-        console.error("Failed to load saved jobs", e);
-      }
-    }
+    const initApp = async () => {
+        // 1. Check for Public URL Params (e.g. ?publicFormId=123)
+        const params = new URLSearchParams(window.location.search);
+        const publicFormId = params.get('publicFormId');
 
-    // Check Auth
-    appBackend.auth.getSession().then((s) => {
-      setSession(s);
-      setIsLoadingSession(false);
-    });
+        if (publicFormId) {
+            setIsPublicLoading(true);
+            try {
+                const form = await appBackend.getFormById(publicFormId);
+                if (form) {
+                    setPublicForm(form);
+                    setIsPublicLoading(false);
+                    // If public form found, stop here. No need for session or jobs.
+                    return;
+                } else {
+                    console.error("Form not found");
+                }
+            } catch (e) {
+                console.error("Error loading public form", e);
+            }
+            setIsPublicLoading(false);
+        }
+
+        // 2. Load Jobs from LocalStorage
+        const savedJobs = localStorage.getItem('csv_syncer_jobs');
+        if (savedJobs) {
+            try {
+                const parsed = JSON.parse(savedJobs);
+                const fixed = parsed.map((j: any) => ({
+                    ...j,
+                    lastSync: j.lastSync ? new Date(j.lastSync) : null,
+                    status: j.status === 'syncing' ? 'idle' : j.status,
+                    lastMessage: j.status === 'syncing' ? 'Sincronização interrompida' : j.lastMessage,
+                    intervalMinutes: j.intervalMinutes || 5 
+                }));
+                setJobs(fixed);
+            } catch (e) {
+                console.error("Failed to load saved jobs", e);
+            }
+        }
+
+        // 3. Check Auth
+        appBackend.auth.getSession().then((s) => {
+            setSession(s);
+            setIsLoadingSession(false);
+        });
+    };
+
+    initApp();
 
     const { data: { subscription } } = appBackend.auth.onAuthStateChange((s) => {
       setSession(s);
@@ -124,10 +153,10 @@ function App() {
 
   // --- FETCH SALES DATA (WIDGET) ---
   useEffect(() => {
-      if (dashboardTab === 'overview') {
+      if (dashboardTab === 'overview' && !publicForm) {
           fetchSalesData();
       }
-  }, [dashboardTab, salesDateRange]);
+  }, [dashboardTab, salesDateRange, publicForm]);
 
   const fetchSalesData = async () => {
       setIsLoadingSales(true);
@@ -425,7 +454,15 @@ function App() {
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   // --- RENDER ---
+  
+  // 1. Check for Public Mode FIRST
+  if (isPublicLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>;
+  if (publicForm) return <div className="min-h-screen bg-slate-50"><FormViewer form={publicForm} isPublic={true} /></div>;
+
+  // 2. Check for Auth Loading
   if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>;
+  
+  // 3. Check for Session
   if (!session) return <LoginPanel />;
 
   const isLocalMode = session?.user?.id === 'local-user';

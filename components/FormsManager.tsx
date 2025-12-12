@@ -4,7 +4,7 @@ import { FormViewer } from './FormViewer';
 import { 
   FileText, Plus, MoreVertical, Trash2, Eye, Edit2, 
   ArrowLeft, Save, GripVertical, Copy, Settings,
-  Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target
+  Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target, Share2, CheckCircle
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -30,6 +30,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [forms, setForms] = useState<FormModel[]>([]);
   const [currentForm, setCurrentForm] = useState<FormModel>(INITIAL_FORM);
   const [loading, setLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     loadForms();
@@ -73,6 +74,14 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       await appBackend.saveForm(currentForm);
       loadForms();
       setView('list');
+  };
+
+  const handleShare = (form: FormModel) => {
+      // Create the public link based on current origin
+      const publicLink = `${window.location.origin}${window.location.pathname}?publicFormId=${form.id}`;
+      navigator.clipboard.writeText(publicLink);
+      setCopiedId(form.id);
+      setTimeout(() => setCopiedId(null), 3000);
   };
 
   // --- BUILDER ACTIONS ---
@@ -304,15 +313,21 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                   </div>
                   
                   <div className="border-t border-slate-100 p-2 flex justify-between bg-slate-50">
-                      <button onClick={() => handleEdit(form)} className="p-2 text-slate-500 hover:bg-white hover:text-indigo-600 rounded transition-colors" title="Editar">
-                          <Edit2 size={16} />
+                      <button onClick={() => handleShare(form)} className={clsx("p-2 rounded transition-colors flex items-center gap-1", copiedId === form.id ? "text-green-600 bg-green-50" : "text-slate-500 hover:bg-white hover:text-indigo-600")} title="Copiar Link Público">
+                          {copiedId === form.id ? <CheckCircle size={16} /> : <Share2 size={16} />}
+                          {copiedId === form.id && <span className="text-[10px] font-bold">Copiado</span>}
                       </button>
-                      <button onClick={() => handlePreview(form)} className="p-2 text-slate-500 hover:bg-white hover:text-indigo-600 rounded transition-colors" title="Visualizar / Preencher">
-                          <Eye size={16} />
-                      </button>
-                      <button onClick={() => handleDelete(form.id)} className="p-2 text-slate-500 hover:bg-white hover:text-red-600 rounded transition-colors" title="Excluir">
-                          <Trash2 size={16} />
-                      </button>
+                      <div className="flex gap-1">
+                          <button onClick={() => handleEdit(form)} className="p-2 text-slate-500 hover:bg-white hover:text-indigo-600 rounded transition-colors" title="Editar">
+                              <Edit2 size={16} />
+                          </button>
+                          <button onClick={() => handlePreview(form)} className="p-2 text-slate-500 hover:bg-white hover:text-indigo-600 rounded transition-colors" title="Visualizar / Preencher">
+                              <Eye size={16} />
+                          </button>
+                          <button onClick={() => handleDelete(form.id)} className="p-2 text-slate-500 hover:bg-white hover:text-red-600 rounded transition-colors" title="Excluir">
+                              <Trash2 size={16} />
+                          </button>
+                      </div>
                   </div>
               </div>
           ))}

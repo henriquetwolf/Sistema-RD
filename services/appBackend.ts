@@ -210,6 +210,12 @@ export const appBackend = {
       return JSON.parse(localStorage.getItem('app_forms') || '[]');
   },
 
+  // New method to fetch a single form
+  getFormById: async (id: string): Promise<FormModel | null> => {
+      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+      return forms.find((f: FormModel) => f.id === id) || null;
+  },
+
   deleteForm: async (id: string): Promise<void> => {
       const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
       const filtered = forms.filter((f: FormModel) => f.id !== id);

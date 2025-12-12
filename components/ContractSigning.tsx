@@ -17,6 +17,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
   
   // Signing State
   const [signatureMode, setSignatureMode] = useState<'type' | 'draw'>('type'); // Default to auto-type
+  const [signatureFont, setSignatureFont] = useState<'dancing' | 'vibes'>('vibes'); // Font style
   const [isDrawing, setIsDrawing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -36,8 +37,14 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
       // Clear
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Settings
-      ctx.font = "50px 'Dancing Script', cursive"; // Using the font added to index.html
+      // Settings based on selected font
+      if (signatureFont === 'dancing') {
+          ctx.font = "50px 'Dancing Script', cursive";
+      } else {
+          // Great Vibes usually renders slightly smaller/lighter, bump size slightly
+          ctx.font = "65px 'Great Vibes', cursive"; 
+      }
+      
       ctx.fillStyle = "#0f172a"; // Slate-900
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -73,7 +80,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
           setTimeout(generateAutoSignature, 100);
       }
     }
-  }, [currentSignerId, allSigned, signatureMode]); // Re-run when mode changes
+  }, [currentSignerId, allSigned, signatureMode, signatureFont]); // Re-run when font changes
 
   // --- DRAWING HANDLERS ---
   const getPos = (e: MouseEvent | TouchEvent) => {
@@ -130,15 +137,15 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
     if (canvas && ctx) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       setHasSignature(false);
-      
-      // If clearing in type mode, maybe user wants to redraw or retype?
-      // Let's just clear. If they want auto again, they can toggle button.
     }
   };
 
   const handleModeSwitch = (mode: 'type' | 'draw') => {
       setSignatureMode(mode);
-      // Logic handled in useEffect
+      if (mode === 'draw') {
+          // Clear auto signature when switching to draw so user has a blank slate
+          setTimeout(clearSignature, 10);
+      }
   };
 
   const handleSubmit = async () => {
@@ -256,15 +263,32 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
                 {/* Signature Area (Only if a signer is selected) */}
                 {currentSignerId && activeSigner && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 mt-12 bg-slate-50 p-6 rounded-xl border border-slate-200">
-                         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+                         <div className="flex flex-col md:flex-row justify-between items-start mb-4 gap-4">
                             <div>
                                 <h4 className="font-bold text-slate-800">Assinar como: <span className="text-teal-600">{activeSigner.name}</span></h4>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-xs text-slate-500 mb-3">
                                     {signatureMode === 'type' ? 'Assinatura gerada automaticamente.' : 'Desenhe sua assinatura no quadro.'}
                                 </p>
+                                
+                                {signatureMode === 'type' && (
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => setSignatureFont('vibes')}
+                                            className={clsx("text-xs px-3 py-1 border rounded-md font-medium transition-all", signatureFont === 'vibes' ? "bg-teal-50 border-teal-500 text-teal-700" : "bg-white border-slate-200 text-slate-600")}
+                                        >
+                                            Estilo 1 (Elegante)
+                                        </button>
+                                        <button 
+                                            onClick={() => setSignatureFont('dancing')}
+                                            className={clsx("text-xs px-3 py-1 border rounded-md font-medium transition-all", signatureFont === 'dancing' ? "bg-teal-50 border-teal-500 text-teal-700" : "bg-white border-slate-200 text-slate-600")}
+                                        >
+                                            Estilo 2 (Moderno)
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                             
-                            <div className="flex items-center gap-2 bg-slate-200/50 p-1 rounded-lg">
+                            <div className="flex items-center gap-2 bg-slate-200/50 p-1 rounded-lg shrink-0">
                                 <button 
                                     onClick={() => handleModeSwitch('type')}
                                     className={clsx(

@@ -15,14 +15,15 @@ export interface Collaborator {
   lastAccess: string;
 }
 
+// IDs convertidos para UUIDs válidos para compatibilidade com banco de dados (Postgres uuid)
 export const MOCK_COLLABORATORS: Collaborator[] = [
-  { id: '1', name: 'Ricardo Oliveira', email: 'ricardo@voll.com.br', department: 'Web / TI', role: 'admin', status: 'active', lastAccess: 'Hoje, 09:30' },
-  { id: '2', name: 'Amanda Souza', email: 'amanda@voll.com.br', department: 'Marketing', role: 'editor', status: 'active', lastAccess: 'Ontem, 14:15' },
-  { id: '3', name: 'Equipe Financeira', email: 'financeiro@voll.com.br', department: 'Financeiro', role: 'viewer', status: 'inactive', lastAccess: 'Há 5 dias' },
+  { id: '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d', name: 'Ricardo Oliveira', email: 'ricardo@voll.com.br', department: 'Web / TI', role: 'admin', status: 'active', lastAccess: 'Hoje, 09:30' },
+  { id: '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed', name: 'Amanda Souza', email: 'amanda@voll.com.br', department: 'Marketing', role: 'editor', status: 'active', lastAccess: 'Ontem, 14:15' },
+  { id: '6ec0bd7f-11c0-43da-975e-2a8ad9ebae0b', name: 'Equipe Financeira', email: 'financeiro@voll.com.br', department: 'Financeiro', role: 'viewer', status: 'inactive', lastAccess: 'Há 5 dias' },
   // Adicionando colaboradores comerciais para teste do CRM
-  { id: '4', name: 'Carlos Vendas', email: 'carlos@voll.com.br', department: 'Comercial', role: 'editor', status: 'active', lastAccess: 'Hoje, 08:00' },
-  { id: '5', name: 'Ana Silva', email: 'ana.silva@voll.com.br', department: 'Comercial', role: 'viewer', status: 'active', lastAccess: 'Hoje, 10:15' },
-  { id: '6', name: 'Roberto Junior', email: 'beto@voll.com.br', department: 'Comercial', role: 'editor', status: 'active', lastAccess: 'Ontem, 18:00' },
+  { id: 'c56a4180-65aa-42ec-a945-5fd21dec0538', name: 'Carlos Vendas', email: 'carlos@voll.com.br', department: 'Comercial', role: 'editor', status: 'active', lastAccess: 'Hoje, 08:00' },
+  { id: 'a4e3355d-7590-449e-8c82-3d5267425880', name: 'Ana Silva', email: 'ana.silva@voll.com.br', department: 'Comercial', role: 'viewer', status: 'active', lastAccess: 'Hoje, 10:15' },
+  { id: 'd290f1ee-6c54-4b01-90e6-d701748f0851', name: 'Roberto Junior', email: 'beto@voll.com.br', department: 'Comercial', role: 'editor', status: 'active', lastAccess: 'Ontem, 18:00' },
 ];
 
 const DEPARTMENTS = [
@@ -76,7 +77,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
         } : c));
     } else {
         const newCollaborator: Collaborator = {
-          id: Math.random().toString(36).substr(2, 9),
+          id: crypto.randomUUID(), // Gera um UUID válido v4
           name: formData.name,
           email: formData.email,
           department: formData.department,

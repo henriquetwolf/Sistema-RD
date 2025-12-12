@@ -290,84 +290,171 @@ export const appBackend = {
       }
   },
 
-  // --- CONTRACTS & FOLDERS (MOCKED IN LOCALSTORAGE) ---
+  // --- CONTRACTS & FOLDERS (SUPABASE INTEGRATION) ---
   
   getFolders: async (): Promise<ContractFolder[]> => {
-      return JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
+      if (!isConfigured) return JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
+
+      const { data, error } = await supabase
+          .from('app_contract_folders')
+          .select('*')
+          .order('created_at', { ascending: false });
+      
+      if (error) {
+          console.error("Error fetching folders:", error);
+          return [];
+      }
+
+      return data.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          createdAt: d.created_at
+      }));
   },
 
   saveFolder: async (folder: ContractFolder): Promise<void> => {
-      const folders = JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
-      folders.push(folder);
-      localStorage.setItem('app_contract_folders', JSON.stringify(folders));
+      if (!isConfigured) {
+          const folders = JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
+          folders.push(folder);
+          localStorage.setItem('app_contract_folders', JSON.stringify(folders));
+          return;
+      }
+
+      const payload = {
+          id: folder.id, // Ensure ID is passed if it's an update, or random UUID from frontend
+          name: folder.name
+      };
+
+      const { error } = await supabase.from('app_contract_folders').upsert(payload);
+      if (error) throw error;
   },
 
   deleteFolder: async (id: string): Promise<void> => {
-      // 1. Delete Folder
-      const folders = JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
-      const filtered = folders.filter((f: ContractFolder) => f.id !== id);
-      localStorage.setItem('app_contract_folders', JSON.stringify(filtered));
+      if (!isConfigured) {
+          const folders = JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
+          const filtered = folders.filter((f: ContractFolder) => f.id !== id);
+          localStorage.setItem('app_contract_folders', JSON.stringify(filtered));
+          // Move contracts
+          const contracts = await appBackend.getContracts();
+          const updatedContracts = contracts.map(c => c.folderId === id ? { ...c, folderId: null } : c);
+          localStorage.setItem('app_contracts', JSON.stringify(updatedContracts));
+          return;
+      }
 
-      // 2. Move contents to root (remove folderId from contracts)
-      const contracts = await appBackend.getContracts();
-      const updatedContracts = contracts.map(c => c.folderId === id ? { ...c, folderId: null } : c);
-      localStorage.setItem('app_contracts', JSON.stringify(updatedContracts));
+      const { error } = await supabase.from('app_contract_folders').delete().eq('id', id);
+      if (error) throw error;
   },
 
   getContracts: async (): Promise<Contract[]> => {
-      return JSON.parse(localStorage.getItem('app_contracts') || '[]');
+      if (!isConfigured) return JSON.parse(localStorage.getItem('app_contracts') || '[]');
+
+      const { data, error } = await supabase
+          .from('app_contracts')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+      if (error) {
+          console.error("Error fetching contracts:", error);
+          return [];
+      }
+
+      return data.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          content: d.content,
+          city: d.city,
+          contractDate: d.contract_date,
+          status: d.status,
+          folderId: d.folder_id,
+          signers: d.signers || [], // JSONB array
+          createdAt: d.created_at
+      }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
-      const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
-      return contracts.find((c: Contract) => c.id === id) || null;
+      if (!isConfigured) {
+          const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
+          return contracts.find((c: Contract) => c.id === id) || null;
+      }
+
+      const { data, error } = await supabase
+          .from('app_contracts')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+      if (error || !data) return null;
+
+      return {
+          id: data.id,
+          title: data.title,
+          content: data.content,
+          city: data.city,
+          contractDate: data.contract_date,
+          status: data.status,
+          folderId: data.folder_id,
+          signers: data.signers || [],
+          createdAt: data.created_at
+      };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
-      const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
-      const idx = contracts.findIndex((c: Contract) => c.id === contract.id);
-      if (idx >= 0) {
-          contracts[idx] = contract;
-      } else {
-          contracts.push(contract);
+      if (!isConfigured) {
+          const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
+          const idx = contracts.findIndex((c: Contract) => c.id === contract.id);
+          if (idx >= 0) contracts[idx] = contract;
+          else contracts.push(contract);
+          localStorage.setItem('app_contracts', JSON.stringify(contracts));
+          return;
       }
-      localStorage.setItem('app_contracts', JSON.stringify(contracts));
+
+      const payload = {
+          id: contract.id,
+          title: contract.title,
+          content: contract.content,
+          city: contract.city,
+          contract_date: contract.contractDate,
+          status: contract.status,
+          folder_id: contract.folderId || null,
+          signers: contract.signers // Will be converted to JSONB automatically
+      };
+
+      const { error } = await supabase.from('app_contracts').upsert(payload);
+      if (error) throw error;
   },
 
   deleteContract: async (id: string): Promise<void> => {
-      const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
-      const filtered = contracts.filter((c: Contract) => c.id !== id);
-      localStorage.setItem('app_contracts', JSON.stringify(filtered));
+      if (!isConfigured) {
+          const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
+          const filtered = contracts.filter((c: Contract) => c.id !== id);
+          localStorage.setItem('app_contracts', JSON.stringify(filtered));
+          return;
+      }
+
+      const { error } = await supabase.from('app_contracts').delete().eq('id', id);
+      if (error) throw error;
   },
 
   signContract: async (contractId: string, signerId: string, signatureBase64: string): Promise<void> => {
-      const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
-      const idx = contracts.findIndex((c: Contract) => c.id === contractId);
-      
-      if (idx >= 0) {
-          const contract = contracts[idx];
-          // Find the signer in the contract
-          const signerIdx = contract.signers.findIndex(s => s.id === signerId);
-          
-          if (signerIdx >= 0) {
-              // Update Signer Status
-              contract.signers[signerIdx].status = 'signed';
-              contract.signers[signerIdx].signatureData = signatureBase64;
-              contract.signers[signerIdx].signedAt = new Date().toISOString();
+      // 1. Get Current Contract State
+      const contract = await appBackend.getContractById(contractId);
+      if (!contract) throw new Error("Contrato não encontrado.");
 
-              // Check if ALL signers have signed
-              const allSigned = contract.signers.every(s => s.status === 'signed');
-              if (allSigned) {
-                  contract.status = 'signed';
-              }
+      // 2. Find and Update Signer
+      const signerIdx = contract.signers.findIndex(s => s.id === signerId);
+      if (signerIdx === -1) throw new Error("Signatário não encontrado.");
 
-              contracts[idx] = contract;
-              localStorage.setItem('app_contracts', JSON.stringify(contracts));
-          } else {
-              throw new Error("Signatário não encontrado.");
-          }
-      } else {
-          throw new Error("Contrato não encontrado.");
+      contract.signers[signerIdx].status = 'signed';
+      contract.signers[signerIdx].signatureData = signatureBase64;
+      contract.signers[signerIdx].signedAt = new Date().toISOString();
+
+      // 3. Check Overall Status
+      const allSigned = contract.signers.every(s => s.status === 'signed');
+      if (allSigned) {
+          contract.status = 'signed';
       }
+
+      // 4. Save Updates
+      await appBackend.saveContract(contract);
   }
 };

@@ -135,28 +135,51 @@ function App() {
           const endDateTime = new Date(salesDateRange.end);
           endDateTime.setHours(23, 59, 59, 999);
 
+          // TENTATIVA 1: Tentar filtrar por 'closed_at' (preferencial)
           const { data, error } = await appBackend.client
               .from('crm_deals')
               .select('*')
               .eq('stage', 'closed')
-              // Use closed_at for filtering realized sales
               .gte('closed_at', salesDateRange.start)
               .lte('closed_at', endDateTime.toISOString())
               .order('closed_at', { ascending: false });
 
           if (error) {
-              // Ignore error if table doesn't exist yet
-              if (!error.message.includes('does not exist')) {
-                  console.error('Error fetching sales:', error);
+              // ERRO 42703: Coluna não existe. Fallback para 'created_at'.
+              if (error.code === '42703') {
+                  console.warn("Coluna 'closed_at' não encontrada no banco. Usando 'created_at' como fallback.");
+                  
+                  const { data: fallbackData, error: fallbackError } = await appBackend.client
+                      .from('crm_deals')
+                      .select('*')
+                      .eq('stage', 'closed')
+                      .gte('created_at', salesDateRange.start)
+                      .lte('created_at', endDateTime.toISOString())
+                      .order('created_at', { ascending: false });
+
+                  if (fallbackError) {
+                      console.error('Erro ao buscar vendas (fallback):', fallbackError.message);
+                      setSalesStats({ totalValue: 0, count: 0, deals: [] });
+                  } else {
+                      const deals = fallbackData || [];
+                      const total = deals.reduce((acc: number, curr: any) => acc + (Number(curr.value) || 0), 0);
+                      setSalesStats({ totalValue: total, count: deals.length, deals });
+                  }
+              } else {
+                  // Outros erros (ex: tabela não existe)
+                  if (!error.message.includes('does not exist')) {
+                      console.error('Erro ao buscar vendas:', error.message);
+                  }
+                  setSalesStats({ totalValue: 0, count: 0, deals: [] });
               }
-              setSalesStats({ totalValue: 0, count: 0, deals: [] });
           } else {
+              // Sucesso com closed_at
               const deals = data || [];
               const total = deals.reduce((acc: number, curr: any) => acc + (Number(curr.value) || 0), 0);
               setSalesStats({ totalValue: total, count: deals.length, deals });
           }
-      } catch (e) {
-          console.error(e);
+      } catch (e: any) {
+          console.error("Exceção ao buscar dados:", e.message);
       } finally {
           setIsLoadingSales(false);
       }

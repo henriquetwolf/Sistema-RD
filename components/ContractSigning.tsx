@@ -34,23 +34,38 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // Clear
+      // 1. Setup Base Config
+      // Clear previous drawings
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Settings based on selected font
-      if (signatureFont === 'dancing') {
-          ctx.font = "50px 'Dancing Script', cursive";
-      } else {
-          // Great Vibes usually renders slightly smaller/lighter, bump size slightly
-          ctx.font = "65px 'Great Vibes', cursive"; 
-      }
       
+      const fontName = signatureFont === 'dancing' ? 'Dancing Script' : 'Great Vibes';
+      // Start with a large readable size
+      let fontSize = signatureFont === 'dancing' ? 60 : 75; 
+      
+      // 2. Measure and Resize Logic
+      const padding = 40; // Total horizontal padding
+      const maxWidth = canvas.width - padding;
+      
+      // Set initial font to measure
+      ctx.font = `${fontSize}px '${fontName}', cursive`;
+      const text = activeSigner.name;
+      const metrics = ctx.measureText(text);
+      const textWidth = metrics.width;
+
+      // If text is wider than canvas, calculate scale ratio
+      if (textWidth > maxWidth) {
+          const ratio = maxWidth / textWidth;
+          fontSize = Math.floor(fontSize * ratio);
+      }
+
+      // 3. Draw with calculated size
+      ctx.font = `${fontSize}px '${fontName}', cursive`;
       ctx.fillStyle = "#0f172a"; // Slate-900
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
-      // Draw Name
-      ctx.fillText(activeSigner.name, canvas.width / 2, canvas.height / 2);
+      // Draw Name Centered
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
       
       setHasSignature(true);
   };

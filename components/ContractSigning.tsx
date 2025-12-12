@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Contract, ContractSigner } from '../types';
 import { appBackend } from '../services/appBackend';
-import { PenTool, CheckCircle, Loader2, Eraser, Calendar, User, MapPin } from 'lucide-react';
+import { PenTool, CheckCircle, Loader2, Eraser, Calendar, User, MapPin, Type, MousePointer2 } from 'lucide-react';
 import clsx from 'clsx';
 
 interface ContractSigningProps {
@@ -16,6 +16,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
   const [currentSignerId, setCurrentSignerId] = useState<string | null>(null);
   
   // Signing State
+  const [signatureMode, setSignatureMode] = useState<'type' | 'draw'>('type'); // Default to auto-type
   const [isDrawing, setIsDrawing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -24,15 +25,39 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
   const pendingSigners = contract.signers.filter(s => s.status === 'pending');
   const allSigned = contract.status === 'signed';
 
-  // Canvas Logic
+  // --- AUTOMATIC SIGNATURE LOGIC ---
+  const generateAutoSignature = () => {
+      const canvas = canvasRef.current;
+      if (!canvas || !activeSigner) return;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Clear
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Settings
+      ctx.font = "50px 'Dancing Script', cursive"; // Using the font added to index.html
+      ctx.fillStyle = "#0f172a"; // Slate-900
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      // Draw Name
+      ctx.fillText(activeSigner.name, canvas.width / 2, canvas.height / 2);
+      
+      setHasSignature(true);
+  };
+
+  // --- EFFECT: Setup Canvas & Auto Sign ---
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas && currentSignerId && !allSigned) {
-      // Set canvas size to match parent
+      // Set canvas size to match parent container width
       const parent = canvas.parentElement;
       if (parent) {
+        // Need to set actual width/height attributes, not just CSS
         canvas.width = parent.clientWidth;
-        canvas.height = 200; // Fixed height
+        canvas.height = 200; 
       }
       
       const ctx = canvas.getContext('2d');
@@ -41,9 +66,16 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
         ctx.lineCap = 'round';
         ctx.strokeStyle = '#000000';
       }
-    }
-  }, [currentSignerId, allSigned]);
 
+      // If mode is 'type', generate immediately
+      if (signatureMode === 'type') {
+          // Small timeout to ensure font load/layout
+          setTimeout(generateAutoSignature, 100);
+      }
+    }
+  }, [currentSignerId, allSigned, signatureMode]); // Re-run when mode changes
+
+  // --- DRAWING HANDLERS ---
   const getPos = (e: MouseEvent | TouchEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -66,6 +98,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
   };
 
   const startDrawing = (e: any) => {
+    if (signatureMode !== 'draw') return;
     setIsDrawing(true);
     const { x, y } = getPos(e.nativeEvent);
     const ctx = canvasRef.current?.getContext('2d');
@@ -76,7 +109,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
   };
 
   const draw = (e: any) => {
-    if (!isDrawing) return;
+    if (!isDrawing || signatureMode !== 'draw') return;
     e.preventDefault(); // Prevent scrolling on touch
     const { x, y } = getPos(e.nativeEvent);
     const ctx = canvasRef.current?.getContext('2d');
@@ -97,7 +130,15 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
     if (canvas && ctx) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       setHasSignature(false);
+      
+      // If clearing in type mode, maybe user wants to redraw or retype?
+      // Let's just clear. If they want auto again, they can toggle button.
     }
+  };
+
+  const handleModeSwitch = (mode: 'type' | 'draw') => {
+      setSignatureMode(mode);
+      // Logic handled in useEffect
   };
 
   const handleSubmit = async () => {
@@ -215,12 +256,34 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
                 {/* Signature Area (Only if a signer is selected) */}
                 {currentSignerId && activeSigner && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 mt-12 bg-slate-50 p-6 rounded-xl border border-slate-200">
-                         <div className="flex justify-between items-center mb-4">
+                         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                             <div>
                                 <h4 className="font-bold text-slate-800">Assinar como: <span className="text-teal-600">{activeSigner.name}</span></h4>
-                                <p className="text-xs text-slate-500">Desenhe sua assinatura no quadro abaixo.</p>
+                                <p className="text-xs text-slate-500">
+                                    {signatureMode === 'type' ? 'Assinatura gerada automaticamente.' : 'Desenhe sua assinatura no quadro.'}
+                                </p>
                             </div>
-                            <button onClick={() => { setCurrentSignerId(null); setHasSignature(false); }} className="text-xs text-red-500 hover:underline">Cancelar / Trocar Pessoa</button>
+                            
+                            <div className="flex items-center gap-2 bg-slate-200/50 p-1 rounded-lg">
+                                <button 
+                                    onClick={() => handleModeSwitch('type')}
+                                    className={clsx(
+                                        "px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all",
+                                        signatureMode === 'type' ? "bg-white shadow text-teal-700" : "text-slate-500 hover:text-slate-700"
+                                    )}
+                                >
+                                    <Type size={14} /> Automático
+                                </button>
+                                <button 
+                                    onClick={() => handleModeSwitch('draw')}
+                                    className={clsx(
+                                        "px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all",
+                                        signatureMode === 'draw' ? "bg-white shadow text-teal-700" : "text-slate-500 hover:text-slate-700"
+                                    )}
+                                >
+                                    <MousePointer2 size={14} /> Desenhar
+                                </button>
+                            </div>
                          </div>
 
                         <div className="relative border-2 border-dashed border-slate-300 rounded-xl overflow-hidden bg-white hover:border-teal-400 transition-colors">
@@ -233,15 +296,24 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
                                 onTouchStart={startDrawing}
                                 onTouchMove={draw}
                                 onTouchEnd={stopDrawing}
-                                className="touch-none cursor-crosshair w-full block h-[200px]"
+                                className={clsx("w-full block h-[200px]", signatureMode === 'draw' ? "cursor-crosshair touch-none" : "cursor-default")}
                             />
-                            <div className="absolute bottom-2 right-2">
+                            
+                            <div className="absolute bottom-2 right-2 flex gap-2">
                                 <button 
-                                    onClick={clearSignature}
+                                    onClick={() => setCurrentSignerId(null)} 
                                     className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 bg-white/80 px-2 py-1 rounded shadow-sm border border-slate-200"
                                 >
-                                    <Eraser size={12} /> Limpar
+                                    Cancelar
                                 </button>
+                                {signatureMode === 'draw' && (
+                                    <button 
+                                        onClick={clearSignature}
+                                        className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 bg-white/80 px-2 py-1 rounded shadow-sm border border-slate-200"
+                                    >
+                                        <Eraser size={12} /> Limpar
+                                    </button>
+                                )}
                             </div>
                             <div className="absolute top-1/2 left-4 right-4 h-px bg-slate-200 pointer-events-none -z-0"></div>
                         </div>
@@ -253,7 +325,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
                                 className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all w-full md:w-auto justify-center"
                             >
                                 {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : <PenTool size={20} />}
-                                Confirmar Minha Assinatura
+                                Confirmar Assinatura Digital
                             </button>
                         </div>
                     </div>

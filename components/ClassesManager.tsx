@@ -164,6 +164,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       const generateCode = (dateStr: string) => {
           if (!dateStr) return '';
           // Format: cidade-Estado-número da turma-turma extra-Curso-data
+          // Ex: São Paulo - SP-105-Não-Formação Completa-2023-10-10
           const parts = [
               formData.cityState,
               formData.classCode,

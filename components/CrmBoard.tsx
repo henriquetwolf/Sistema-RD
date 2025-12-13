@@ -7,7 +7,6 @@ import {
   MapPin, Hash, Link as LinkIcon, FileText, GraduationCap
 } from 'lucide-react';
 import clsx from 'clsx';
-import { MOCK_COLLABORATORS } from './CollaboratorsManager';
 import { appBackend } from '../services/appBackend';
 // Removed ibgeService import as we rely on registered classes now
 
@@ -78,6 +77,12 @@ interface RegisteredClass {
     mod2Code: string;
 }
 
+interface CollaboratorSimple {
+    id: string;
+    fullName: string;
+    department: string;
+}
+
 // --- Mock Columns ---
 const COLUMNS: Column[] = [
   { id: 'new', title: 'Sem Contato', color: 'border-slate-300' },
@@ -86,12 +91,6 @@ const COLUMNS: Column[] = [
   { id: 'negotiation', title: 'Em Negociação', color: 'border-orange-500' },
   { id: 'closed', title: 'Fechamento', color: 'border-green-500' },
 ];
-
-// Helper to find owner name
-const getOwnerName = (id: string) => {
-    const owner = MOCK_COLLABORATORS.find(c => c.id === id);
-    return owner ? owner.fullName : 'Desconhecido';
-};
 
 // Masks
 const formatCPF = (value: string) => {
@@ -141,6 +140,7 @@ export const CrmBoard: React.FC = () => {
   // State
   const [deals, setDeals] = useState<Deal[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [collaborators, setCollaborators] = useState<CollaboratorSimple[]>([]); // New state for fetched collaborators
   
   // Real Classes Data for Dropdowns
   const [registeredClasses, setRegisteredClasses] = useState<RegisteredClass[]>([]);
@@ -237,6 +237,21 @@ export const CrmBoard: React.FC = () => {
               setRegisteredClasses(mappedClasses);
           }
 
+          // 4. Fetch Collaborators (Real Data)
+          const { data: collabData, error: collabError } = await appBackend.client
+              .from('crm_collaborators')
+              .select('id, full_name, department')
+              .order('full_name', { ascending: true });
+
+          if (!collabError && collabData) {
+              const mappedCollabs = collabData.map((c: any) => ({
+                  id: c.id,
+                  fullName: c.full_name,
+                  department: c.department
+              }));
+              setCollaborators(mappedCollabs);
+          }
+
       } catch (e: any) {
           console.error("Erro ao carregar dados do CRM:", e);
       } finally {
@@ -281,6 +296,12 @@ export const CrmBoard: React.FC = () => {
 
   // --- Helpers & Logic ---
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+  // Helper to find owner name from the loaded list
+  const getOwnerName = (id: string) => {
+    const owner = collaborators.find(c => c.id === id);
+    return owner ? owner.fullName : 'Desconhecido';
+  };
 
   const moveDeal = async (dealId: string, currentStage: DealStage, direction: 'next' | 'prev') => {
     const stageOrder: DealStage[] = ['new', 'contacted', 'proposal', 'negotiation', 'closed'];
@@ -404,7 +425,7 @@ export const CrmBoard: React.FC = () => {
 
   // --- Deal Modal Handlers ---
   // Filter collaborators to ONLY show 'Comercial' department as requested
-  const commercialCollaborators = MOCK_COLLABORATORS.filter(c => c.department === 'Comercial');
+  const commercialCollaborators = collaborators.filter(c => c.department === 'Comercial');
 
   const openNewDealModal = () => {
       setEditingDealId(null);

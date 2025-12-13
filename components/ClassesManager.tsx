@@ -6,13 +6,15 @@ import {
   Edit2, Trash2, Hash
 } from 'lucide-react';
 import clsx from 'clsx';
+import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 
 // --- Types ---
 interface ClassItem {
   id: string;
   // General
   status: string;
-  cityState: string;
+  state: string; // Changed from cityState
+  city: string;  // Changed from cityState
   classCode: string; // Agora representa "Número da Turma"
   extraClass: string;
   course: string;
@@ -60,13 +62,14 @@ const INITIAL_CLASSES: ClassItem[] = [
   { 
     id: '1', 
     status: 'Confirmado', 
-    cityState: 'São Paulo - SP', 
+    state: 'SP',
+    city: 'São Paulo',
     classCode: '105', 
     extraClass: 'Não', 
     course: 'Formação Completa em Pilates', 
     createdAt: '2024-01-15',
     dateMod1: '2025-03-10',
-    mod1Code: 'São Paulo - SP-105-Não-Formação Completa em Pilates-2025-03-10',
+    mod1Code: 'São Paulo - SP - 105 - Não - Formação Completa em Pilates - 10/03/2025',
     material: 'Apostilas V1',
     studioMod1: 'Studio Central',
     instructorMod1: 'Dra. Ana',
@@ -77,7 +80,7 @@ const INITIAL_CLASSES: ClassItem[] = [
     hotelLocMod1: 'Av Paulista',
     costHelp1: 'R$ 500,00',
     dateMod2: '2025-04-10',
-    mod2Code: 'São Paulo - SP-105-Não-Formação Completa em Pilates-2025-04-10',
+    mod2Code: 'São Paulo - SP - 105 - Não - Formação Completa em Pilates - 10/04/2025',
     instructorMod2: 'Dr. Carlos',
     ticketMod2: 'Pendente',
     coffeeMod2: 'Buffet A',
@@ -95,7 +98,6 @@ const INITIAL_CLASSES: ClassItem[] = [
 ];
 
 // --- Dropdown Options Mock ---
-const CITIES = ['São Paulo - SP', 'Rio de Janeiro - RJ', 'Belo Horizonte - MG', 'Porto Alegre - RS', 'Campinas - SP', 'Curitiba - PR'];
 const COURSES = ['Formação Completa em Pilates', 'Pilates Clínico', 'Pilates Suspenso', 'Gestão de Studios', 'MIT Movimento Inteligente'];
 const INSTRUCTORS = ['Dra. Ana Silva', 'Dr. Carlos Souza', 'Ft. Mariana Lima', 'Ft. Roberto Junior', 'Equipe VOLL'];
 const STUDIOS = ['Studio Central', 'Espaço Vida', 'Pilates Zone', 'Clinica Integrada', 'Box Cross Pilates'];
@@ -109,6 +111,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [showModal, setShowModal] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   
+  // IBGE State
+  const [states, setStates] = useState<IBGEUF[]>([]);
+  const [cities, setCities] = useState<IBGECity[]>([]);
+  const [isLoadingCities, setIsLoadingCities] = useState(false);
+
   // Click outside to close menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -124,7 +131,8 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const initialFormState: ClassItem = {
       id: '',
       status: 'Planejamento',
-      cityState: '',
+      state: '',
+      city: '',
       classCode: '', // Número da Turma
       extraClass: '',
       course: '',
@@ -159,21 +167,46 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
   const [formData, setFormData] = useState<ClassItem>(initialFormState);
 
+  // Fetch States on Mount
+  useEffect(() => {
+      ibgeService.getStates().then(setStates);
+  }, []);
+
+  // Fetch Cities when State changes
+  useEffect(() => {
+      if (formData.state) {
+          setIsLoadingCities(true);
+          ibgeService.getCities(formData.state).then(data => {
+              setCities(data);
+              setIsLoadingCities(false);
+          });
+      } else {
+          setCities([]);
+      }
+  }, [formData.state]);
+
   // Auto-generate Module Codes
   useEffect(() => {
       const generateCode = (dateStr: string) => {
           if (!dateStr) return '';
-          // Format: cidade-Estado-número da turma-turma extra-Curso-data
-          // Ex: São Paulo - SP-105-Não-Formação Completa-2023-10-10
+          
+          // Format date from YYYY-MM-DD to DD/MM/YYYY
+          const [year, month, day] = dateStr.split('-');
+          const formattedDate = `${day}/${month}/${year}`;
+
+          // Format: cidade - Estado - número da turma - turma extra - Curso - data
+          const location = formData.city && formData.state ? `${formData.city} - ${formData.state}` : '';
+          
           const parts = [
-              formData.cityState,
+              location,
               formData.classCode,
               formData.extraClass,
               formData.course,
-              dateStr
+              formattedDate
           ];
-          // Filter empty parts and join with hyphen
-          return parts.filter(Boolean).join('-');
+          
+          // Filter empty parts and join with " - "
+          return parts.filter(p => p && p.trim() !== '').join(' - ');
       };
 
       const newMod1Code = generateCode(formData.dateMod1);
@@ -186,7 +219,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
               mod2Code: newMod2Code
           }));
       }
-  }, [formData.cityState, formData.classCode, formData.extraClass, formData.course, formData.dateMod1, formData.dateMod2]);
+  }, [formData.city, formData.state, formData.classCode, formData.extraClass, formData.course, formData.dateMod1, formData.dateMod2]);
 
 
   const handleOpenNew = () => {
@@ -208,7 +241,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   };
 
   const handleSave = () => {
-    if (!formData.course || !formData.cityState) {
+    if (!formData.course || !formData.city) {
         alert("Preencha ao menos o Curso e a Cidade.");
         return;
     }
@@ -313,7 +346,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
                 <div className="space-y-2 text-sm text-slate-600 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex items-center gap-2">
-                        <MapPin size={16} className="text-slate-400" /> <span className="font-medium">{cls.cityState}</span>
+                        <MapPin size={16} className="text-slate-400" /> <span className="font-medium">{cls.city} - {cls.state}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <Calendar size={16} className="text-slate-400" /> Mod 1: {cls.dateMod1 ? new Date(cls.dateMod1).toLocaleDateString('pt-BR') : '--/--'}
@@ -383,17 +416,35 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                     <option value="Cancelado">Cancelado</option>
                                 </select>
                             </div>
+                            
+                            {/* SELETORES DE ESTADO E CIDADE */}
                             <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">CIDADE / ESTADO</label>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Estado (UF)</label>
                                 <select 
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-                                    value={formData.cityState}
-                                    onChange={e => handleInputChange('cityState', e.target.value)}
+                                    value={formData.state}
+                                    onChange={e => {
+                                        handleInputChange('state', e.target.value);
+                                        handleInputChange('city', ''); // Reset city on state change
+                                    }}
                                 >
                                     <option value="">Selecione...</option>
-                                    {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    {states.map(uf => <option key={uf.id} value={uf.sigla}>{uf.sigla} - {uf.nome}</option>)}
                                 </select>
                             </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100"
+                                    value={formData.city}
+                                    onChange={e => handleInputChange('city', e.target.value)}
+                                    disabled={!formData.state || isLoadingCities}
+                                >
+                                    <option value="">{isLoadingCities ? 'Carregando...' : 'Selecione...'}</option>
+                                    {cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                                </select>
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Número da Turma</label>
                                 <input 

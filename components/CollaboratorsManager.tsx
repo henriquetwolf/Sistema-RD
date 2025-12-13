@@ -5,6 +5,7 @@ import {
   Calendar, MapPin, FileText, DollarSign, Heart, Bus, AlertCircle, Phone
 } from 'lucide-react';
 import clsx from 'clsx';
+import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 
 // --- Types ---
 export interface Collaborator {
@@ -31,9 +32,13 @@ export interface Collaborator {
   address: string;
   cep: string;
   complement: string;
+  
+  birthState: string; // Novo
   birthCity: string; // Cidade Natal
+  
+  state: string; // Novo UF Atual
   currentCity: string; // Cidade Atual
-  state: string;
+  
   emergencyName: string;
   emergencyPhone: string;
 
@@ -125,7 +130,7 @@ export const MOCK_COLLABORATORS: Collaborator[] = [
     headquarters: 'Matriz SP',
     // ... preenchendo o resto com strings vazias para o mock não quebrar
     maritalStatus: '', spouseName: '', fatherName: '', motherName: '', genderIdentity: '', racialIdentity: '', educationLevel: '', photoUrl: '',
-    cellphone: '', corporatePhone: '', operator: '', address: '', cep: '', complement: '', birthCity: '', currentCity: 'São Paulo', state: 'SP', emergencyName: '', emergencyPhone: '',
+    cellphone: '', corporatePhone: '', operator: '', address: '', cep: '', complement: '', birthState: '', birthCity: '', currentCity: 'São Paulo', state: 'SP', emergencyName: '', emergencyPhone: '',
     previousAdmissionDate: '', hiringMode: 'CLT', hiringCompany: 'VOLL Group', workHours: '09:00 - 18:00', breakTime: '1h', workDays: 'Seg-Sex', presentialDays: '0', superiorId: '', experiencePeriod: '', hasOtherJob: 'Não', contractType: '',
     cpf: '', rg: '', rgIssuer: '', rgIssueDate: '', rgState: '', ctpsNumber: '', ctpsSeries: '', ctpsState: '', ctpsIssueDate: '', pisNumber: '', reservistNumber: '', docsFolderLink: '', legalAuth: true,
     bankAccountInfo: '', hasInsalubrity: '', insalubrityPercent: '', hasDangerPay: '', transportVoucherInfo: '', busLineHomeWork: '', busQtyHomeWork: '', busLineWorkHome: '', busQtyWorkHome: '', ticketValue: '', fuelVoucherValue: '', hasMealVoucher: '', hasFoodVoucher: '', hasHomeOfficeAid: '', hasHealthPlan: '', hasDentalPlan: '', bonusInfo: '', bonusValue: '', commissionInfo: '', commissionPercent: '',
@@ -146,13 +151,18 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // IBGE State
+  const [states, setStates] = useState<IBGEUF[]>([]);
+  const [currentCities, setCurrentCities] = useState<IBGECity[]>([]);
+  const [birthCities, setBirthCities] = useState<IBGECity[]>([]);
+  
   // Actions State
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   
   // Empty State Generator
   const getEmptyCollaborator = (): Collaborator => ({
       id: '', fullName: '', socialName: '', birthDate: '', maritalStatus: '', spouseName: '', fatherName: '', motherName: '', genderIdentity: '', racialIdentity: '', educationLevel: '', photoUrl: '',
-      email: '', phone: '', cellphone: '', corporatePhone: '', operator: '', address: '', cep: '', complement: '', birthCity: '', currentCity: '', state: '', emergencyName: '', emergencyPhone: '',
+      email: '', phone: '', cellphone: '', corporatePhone: '', operator: '', address: '', cep: '', complement: '', birthState: '', birthCity: '', currentCity: '', state: '', emergencyName: '', emergencyPhone: '',
       admissionDate: '', previousAdmissionDate: '', role: '', headquarters: '', department: '', salary: '', hiringMode: '', hiringCompany: '', workHours: '', breakTime: '', workDays: '', presentialDays: '', superiorId: '', experiencePeriod: '', hasOtherJob: '', status: 'active', contractType: '',
       cpf: '', rg: '', rgIssuer: '', rgIssueDate: '', rgState: '', ctpsNumber: '', ctpsSeries: '', ctpsState: '', ctpsIssueDate: '', pisNumber: '', reservistNumber: '', docsFolderLink: '', legalAuth: false,
       bankAccountInfo: '', hasInsalubrity: '', insalubrityPercent: '', hasDangerPay: '', transportVoucherInfo: '', busLineHomeWork: '', busQtyHomeWork: '', busLineWorkHome: '', busQtyWorkHome: '', ticketValue: '', fuelVoucherValue: '', hasMealVoucher: '', hasFoodVoucher: '', hasHomeOfficeAid: '', hasHealthPlan: '', hasDentalPlan: '', bonusInfo: '', bonusValue: '', commissionInfo: '', commissionPercent: '',
@@ -161,6 +171,28 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
   });
 
   const [formData, setFormData] = useState<Collaborator>(getEmptyCollaborator());
+
+  useEffect(() => {
+      ibgeService.getStates().then(setStates);
+  }, []);
+
+  // Fetch cities when state changes (Current Address)
+  useEffect(() => {
+      if (formData.state) {
+          ibgeService.getCities(formData.state).then(setCurrentCities);
+      } else {
+          setCurrentCities([]);
+      }
+  }, [formData.state]);
+
+  // Fetch cities when state changes (Birth City)
+  useEffect(() => {
+      if (formData.birthState) {
+          ibgeService.getCities(formData.birthState).then(setBirthCities);
+      } else {
+          setBirthCities([]);
+      }
+  }, [formData.birthState]);
 
   // Click outside to close menu
   useEffect(() => {
@@ -460,13 +492,47 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Complemento</label>
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.complement} onChange={e => handleInputChange('complement', e.target.value)} />
                             </div>
+                            
+                            {/* Cidade Atual (Seletor) */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Estado (Atual)</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.state} onChange={e => handleInputChange('state', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    {states.map(s => <option key={s.id} value={s.sigla}>{s.sigla} - {s.nome}</option>)}
+                                </select>
+                            </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade Atual</label>
-                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.currentCity} onChange={e => handleInputChange('currentCity', e.target.value)} />
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" 
+                                    value={formData.currentCity} 
+                                    onChange={e => handleInputChange('currentCity', e.target.value)}
+                                    disabled={!formData.state}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {currentCities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                                </select>
+                            </div>
+
+                            {/* Cidade Natal (Seletor) */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Estado (Natal)</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.birthState} onChange={e => handleInputChange('birthState', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    {states.map(s => <option key={s.id} value={s.sigla}>{s.sigla} - {s.nome}</option>)}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade Natal</label>
-                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.birthCity} onChange={e => handleInputChange('birthCity', e.target.value)} />
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" 
+                                    value={formData.birthCity} 
+                                    onChange={e => handleInputChange('birthCity', e.target.value)}
+                                    disabled={!formData.birthState}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {birthCities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                                </select>
                             </div>
                             
                             {/* Contato */}

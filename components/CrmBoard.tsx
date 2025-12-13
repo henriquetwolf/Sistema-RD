@@ -9,6 +9,7 @@ import {
 import clsx from 'clsx';
 import { MOCK_COLLABORATORS } from './CollaboratorsManager';
 import { appBackend } from '../services/appBackend';
+import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 
 // --- Types ---
 type DealStage = 'new' | 'contacted' | 'proposal' | 'negotiation' | 'closed';
@@ -41,7 +42,9 @@ interface Deal {
   registrationData?: string; // Dados da Inscrição
   observation?: string; // Observação
   
+  courseState?: string; // UF do Curso
   courseCity?: string; // Cidade do Curso
+  
   classMod1?: string; // Turma Módulo 1
   classMod2?: string; // Turma Módulo 2
 
@@ -124,7 +127,7 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
     source: '', campaign: '', entryValue: 0, installments: 1, installmentValue: 0,
     cpf: '', firstDueDate: '', receiptLink: '', transactionCode: '',
     zipCode: '', address: '', addressNumber: '',
-    registrationData: '', observation: '', courseCity: '', classMod1: '', classMod2: '',
+    registrationData: '', observation: '', courseState: '', courseCity: '', classMod1: '', classMod2: '',
     pipeline: 'Padrão'
 };
 
@@ -137,6 +140,11 @@ export const CrmBoard: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [availableClasses, setAvailableClasses] = useState<ClassOption[]>([]); // Mock or fetched
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Locations State
+  const [states, setStates] = useState<IBGEUF[]>([]);
+  const [cities, setCities] = useState<IBGECity[]>([]);
+  const [isLoadingCities, setIsLoadingCities] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -154,15 +162,30 @@ export const CrmBoard: React.FC = () => {
   // --- INITIAL LOAD (FROM DB) ---
   useEffect(() => {
     fetchData();
-    // Fetch classes for dropdown (MOCK logic for now, ideally fetches from DB)
-    // Simulating fetching classes from the ClassesManager module
+    // Fetch classes for dropdown
     const mockClasses = [
         { id: 'c1', code: 'TURMA-2025-A', city: 'São Paulo - SP' },
         { id: 'c2', code: 'TURMA-2025-B', city: 'Rio de Janeiro - RJ' },
         { id: 'c3', code: 'TURMA-2025-C', city: 'Belo Horizonte - MG' },
     ];
     setAvailableClasses(mockClasses);
+
+    // Fetch States
+    ibgeService.getStates().then(setStates);
   }, []);
+
+  // Fetch cities when state changes in form
+  useEffect(() => {
+      if (dealFormData.courseState) {
+          setIsLoadingCities(true);
+          ibgeService.getCities(dealFormData.courseState).then(data => {
+              setCities(data);
+              setIsLoadingCities(false);
+          });
+      } else {
+          setCities([]);
+      }
+  }, [dealFormData.courseState]);
 
   const fetchData = async () => {
       setIsLoading(true);
@@ -171,7 +194,7 @@ export const CrmBoard: React.FC = () => {
           const { data: dealsData, error: dealsError } = await appBackend.client
               .from('crm_deals')
               .select('*')
-              .order('created_at', { ascending: false }); // Ordenar pelos mais recentes
+              .order('created_at', { ascending: false }); 
           
           if (dealsError) throw dealsError;
 
@@ -190,7 +213,7 @@ export const CrmBoard: React.FC = () => {
               createdAt: new Date(d.created_at),
               closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
               
-              // Mapeamento dos novos campos (assumindo que colunas existam ou venham de jsonb)
+              // Mapeamento
               source: d.source,
               campaign: d.campaign,
               entryValue: Number(d.entry_value || 0),
@@ -205,6 +228,7 @@ export const CrmBoard: React.FC = () => {
               addressNumber: d.address_number,
               registrationData: d.registration_data,
               observation: d.observation,
+              courseState: d.course_state, // NEW
               courseCity: d.course_city,
               classMod1: d.class_mod_1,
               classMod2: d.class_mod_2,
@@ -388,18 +412,17 @@ export const CrmBoard: React.FC = () => {
       }
 
       const payload = {
-          title: dealFormData.title, // Nome da negociação
-          company_name: dealFormData.companyName, // Cliente
-          contact_name: dealFormData.contactName, // (Opcional interno)
-          value: Number(dealFormData.value) || 0, // Valor Total
-          payment_method: dealFormData.paymentMethod, // Forma Pgto
-          stage: dealFormData.stage || 'new', // Etapa
+          title: dealFormData.title,
+          company_name: dealFormData.companyName,
+          contact_name: dealFormData.contactName,
+          value: Number(dealFormData.value) || 0,
+          payment_method: dealFormData.paymentMethod,
+          stage: dealFormData.stage || 'new',
           owner_id: dealFormData.owner,
           status: dealFormData.status || 'warm',
           next_task: dealFormData.nextTask,
           closed_at: closedAtValue ? closedAtValue.toISOString() : null,
           
-          // Novos Campos
           source: dealFormData.source,
           campaign: dealFormData.campaign,
           entry_value: Number(dealFormData.entryValue) || 0,
@@ -414,6 +437,7 @@ export const CrmBoard: React.FC = () => {
           address_number: dealFormData.addressNumber,
           registration_data: dealFormData.registrationData,
           observation: dealFormData.observation,
+          course_state: dealFormData.courseState, // NEW
           course_city: dealFormData.courseCity,
           class_mod_1: dealFormData.classMod1,
           class_mod_2: dealFormData.classMod2,
@@ -422,31 +446,25 @@ export const CrmBoard: React.FC = () => {
 
       try {
           if (editingDealId) {
-              // Edit DB
               const { error } = await appBackend.client
                   .from('crm_deals')
                   .update(payload)
                   .eq('id', editingDealId);
-              
               if (error) throw error;
               
-              // Local Update
               setDeals(prev => prev.map(d => d.id === editingDealId ? { 
                   ...d, 
                   ...dealFormData, 
                   closedAt: closedAtValue 
               } as Deal : d));
           } else {
-              // Create DB
               const { data, error } = await appBackend.client
                   .from('crm_deals')
                   .insert([payload])
                   .select()
                   .single();
-              
               if (error) throw error;
 
-              // Local Update
               const newDeal: Deal = {
                   id: data.id,
                   title: data.title,
@@ -460,10 +478,8 @@ export const CrmBoard: React.FC = () => {
                   nextTask: data.next_task,
                   createdAt: new Date(data.created_at),
                   closedAt: data.closed_at ? new Date(data.closed_at) : undefined,
-                  // Mapear novos campos localmente também se necessário para UI imediata
                   source: data.source,
                   campaign: data.campaign,
-                  // ...etc
               };
               setDeals(prev => [newDeal, ...prev]);
           }
@@ -486,29 +502,6 @@ export const CrmBoard: React.FC = () => {
           }
       }
   };
-
-  // --- Team Logic ---
-  const handleCreateTeam = async () => {
-      if (!newTeamData.name) return;
-      // ... same logic as before
-      alert("Criação de equipe simplificada para demo.");
-      setShowTeamModal(false);
-  };
-
-  const toggleTeamMember = (collabId: string) => {
-      setNewTeamData(prev => {
-          const exists = prev.members.includes(collabId);
-          if (exists) return { ...prev, members: prev.members.filter(id => id !== collabId) };
-          return { ...prev, members: [...prev.members, collabId] };
-      });
-  };
-
-  const getMemberDetails = (ids: string[]) => {
-      return MOCK_COLLABORATORS.filter(c => ids && ids.includes(c.id));
-  };
-
-  // Unique Cities for Dropdown
-  const uniqueCities = Array.from(new Set(availableClasses.map(c => c.city)));
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)]">
@@ -544,7 +537,7 @@ export const CrmBoard: React.FC = () => {
         )}
       </div>
 
-      {/* --- CONTENT AREA --- */}
+      {/* --- CONTENT AREA (PIPELINE) --- */}
       <div className="flex-1 overflow-x-auto bg-slate-100/50 p-6 relative">
         {isLoading && deals.length === 0 ? (
             <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>
@@ -602,9 +595,7 @@ export const CrmBoard: React.FC = () => {
                 </div>
             )}
             {activeView === 'teams' && (
-                <div className="max-w-6xl mx-auto p-4 text-center text-slate-500">
-                    Módulo de Equipes (Visualização)
-                </div>
+                <div className="max-w-6xl mx-auto p-4 text-center text-slate-500">Módulo de Equipes (Visualização)</div>
             )}
         </>
         )}
@@ -751,14 +742,33 @@ export const CrmBoard: React.FC = () => {
                           <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                               <GraduationCap size={16} /> Dados do Curso / Turma
                           </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                              
+                              {/* SELETORES DE ESTADO/CIDADE */}
                               <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Cidade do Curso</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.courseCity} onChange={e => setDealFormData({...dealFormData, courseCity: e.target.value})}>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Estado (UF)</label>
+                                  <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={dealFormData.courseState}
+                                    onChange={e => setDealFormData({...dealFormData, courseState: e.target.value, courseCity: ''})}
+                                  >
                                       <option value="">Selecione...</option>
-                                      {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
+                                      {states.map(uf => <option key={uf.id} value={uf.sigla}>{uf.sigla} - {uf.nome}</option>)}
                                   </select>
                               </div>
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Cidade do Curso</label>
+                                  <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100"
+                                    value={dealFormData.courseCity}
+                                    onChange={e => setDealFormData({...dealFormData, courseCity: e.target.value})}
+                                    disabled={!dealFormData.courseState || isLoadingCities}
+                                  >
+                                      <option value="">{isLoadingCities ? 'Carregando...' : 'Selecione...'}</option>
+                                      {cities.map(city => <option key={city.id} value={city.nome}>{city.nome}</option>)}
+                                  </select>
+                              </div>
+
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 1</label>
                                   <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})}>

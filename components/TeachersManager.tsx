@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   School, Plus, Search, MoreVertical, Phone, Mail, 
   ArrowLeft, Save, X, Book, User, MapPin, DollarSign, 
   Briefcase, Truck, Calendar, FileText, CheckSquare, Image as ImageIcon
 } from 'lucide-react';
 import clsx from 'clsx';
+import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 
 // --- Types ---
 interface Teacher {
@@ -108,6 +109,11 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // IBGE State
+  const [states, setStates] = useState<IBGEUF[]>([]);
+  const [cities, setCities] = useState<IBGECity[]>([]);
+  const [isLoadingCities, setIsLoadingCities] = useState(false);
+
   // Initial Form State
   const initialFormState: Teacher = {
       id: '',
@@ -124,6 +130,24 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
   };
 
   const [formData, setFormData] = useState<Teacher>(initialFormState);
+
+  // Fetch States on Mount
+  useEffect(() => {
+      ibgeService.getStates().then(setStates);
+  }, []);
+
+  // Fetch Cities when State changes
+  useEffect(() => {
+      if (formData.state) {
+          setIsLoadingCities(true);
+          ibgeService.getCities(formData.state).then(data => {
+              setCities(data);
+              setIsLoadingCities(false);
+          });
+      } else {
+          setCities([]);
+      }
+  }, [formData.state]);
 
   const handleInputChange = (field: keyof Teacher, value: any) => {
       setFormData(prev => ({ ...prev, [field]: value }));
@@ -311,14 +335,35 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">CEP</label>
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cep} onChange={e => handleInputChange('cep', e.target.value)} />
                             </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade</label>
-                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.city} onChange={e => handleInputChange('city', e.target.value)} />
-                            </div>
+                            
+                            {/* SELETORES DE ESTADO E CIDADE */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Estado</label>
-                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.state} onChange={e => handleInputChange('state', e.target.value)} />
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.state}
+                                    onChange={e => {
+                                        handleInputChange('state', e.target.value);
+                                        handleInputChange('city', '');
+                                    }}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {states.map(s => <option key={s.id} value={s.sigla}>{s.sigla} - {s.nome}</option>)}
+                                </select>
                             </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" 
+                                    value={formData.city} 
+                                    onChange={e => handleInputChange('city', e.target.value)}
+                                    disabled={!formData.state || isLoadingCities}
+                                >
+                                    <option value="">{isLoadingCities ? 'Carregando...' : 'Selecione...'}</option>
+                                    {cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                                </select>
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Contato de Emergência</label>
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.emergencyContactName} onChange={e => handleInputChange('emergencyContactName', e.target.value)} />

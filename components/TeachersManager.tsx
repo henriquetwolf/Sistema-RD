@@ -50,8 +50,8 @@ interface Teacher {
   // Bancário
   bank: string;
   agency: string;
-  account: string;
-  digit: string;
+  accountNumber: string; // Renomeado para evitar conflito
+  accountDigit: string;  // Renomeado para evitar conflito
   hasPjAccount: boolean;
   pixKeyPj: string;
   pixKeyPf: string;
@@ -106,7 +106,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
       emergencyContactName: '', emergencyContactPhone: '',
       profession: '', councilNumber: '', isCouncilActive: true, cnpj: '', companyName: '', hasCnpjActive: true,
       academicFormation: '', otherFormation: '', courseType: '', teacherLevel: '', isActive: true,
-      bank: '', agency: '', account: '', digit: '', hasPjAccount: true, pixKeyPj: '', pixKeyPf: '',
+      bank: '', agency: '', accountNumber: '', accountDigit: '', hasPjAccount: true, pixKeyPj: '', pixKeyPf: '',
       regionAvailability: '', weekAvailability: '', shirtSize: '', hasNotebook: true, hasVehicle: true, hasStudio: false, studioAddress: '',
       additional1: '', valueAdditional1: '', dateAdditional1: '',
       additional2: '', valueAdditional2: '', dateAdditional2: '',
@@ -190,8 +190,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
               isActive: t.is_active,
               bank: t.bank,
               agency: t.agency,
-              account: t.account,
-              digit: t.digit,
+              accountNumber: t.account_number || t.account, // Fallback for old column name
+              accountDigit: t.account_digit || t.digit,     // Fallback for old column name
               hasPjAccount: t.has_pj_account,
               pixKeyPj: t.pix_key_pj,
               pixKeyPf: t.pix_key_pf,
@@ -263,8 +263,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
         is_active: formData.isActive,
         bank: formData.bank,
         agency: formData.agency,
-        account: formData.account,
-        digit: formData.digit,
+        account_number: formData.accountNumber, // Updated column name
+        account_digit: formData.accountDigit,   // Updated column name
         has_pj_account: formData.hasPjAccount,
         pix_key_pj: formData.pixKeyPj,
         pix_key_pf: formData.pixKeyPf,
@@ -306,7 +306,11 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
         setFormData(initialFormState);
     } catch (e: any) {
         console.error(e);
-        alert(`Erro ao salvar: ${e.message}`);
+        if (e.message.includes('account_number') || e.message.includes('account')) {
+            alert("Erro de Banco de Dados: As colunas de conta bancária (account_number) não existem no banco. Execute o SQL de atualização no Supabase.");
+        } else {
+            alert(`Erro ao salvar: ${e.message}`);
+        }
     } finally {
         setIsSaving(false);
     }
@@ -463,7 +467,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                 {/* Modal Body - Scrollable */}
                 <div className="p-8 overflow-y-auto custom-scrollbar space-y-8">
                     
-                    {/* SEÇÃO 1: DADOS PESSOAIS */}
+                    {/* ... (Previous Sections 1, 2, 3 remain identical) ... */}
+                    {/* Re-rendering Section 1: Dados Pessoais */}
                     <div>
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                             <User size={16} /> Dados Pessoais
@@ -508,7 +513,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* SEÇÃO 2: CONTATO & ENDEREÇO */}
+                    {/* Section 2: Contato (Abbreviated to save tokens, logical structure maintained) */}
                     <div>
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                             <MapPin size={16} /> Contato e Endereço
@@ -574,7 +579,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* SEÇÃO 3: PROFISSIONAL */}
+                    {/* Section 3: Profissional (Abbreviated) */}
                     <div>
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                             <Briefcase size={16} /> Dados Profissionais
@@ -619,7 +624,6 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.courseType} onChange={e => handleInputChange('courseType', e.target.value)} />
                             </div>
                             
-                            {/* Checkboxes Group */}
                             <div className="lg:col-span-3 flex gap-6 pt-3">
                                 <label className="flex items-center gap-2 cursor-pointer">
                                     <input type="checkbox" className="rounded text-orange-600" checked={formData.isCouncilActive} onChange={e => handleInputChange('isCouncilActive', e.target.checked)} />
@@ -637,7 +641,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* SEÇÃO 4: DADOS BANCÁRIOS */}
+                    {/* SEÇÃO 4: DADOS BANCÁRIOS (UPDATED FIELDS) */}
                     <div>
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                             <DollarSign size={16} /> Dados Bancários
@@ -660,12 +664,12 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.agency} onChange={e => handleInputChange('agency', e.target.value)} />
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">Conta</label>
-                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.account} onChange={e => handleInputChange('account', e.target.value)} />
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Conta (Account Number)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.accountNumber} onChange={e => handleInputChange('accountNumber', e.target.value)} />
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Dígito</label>
-                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.digit} onChange={e => handleInputChange('digit', e.target.value)} />
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.accountDigit} onChange={e => handleInputChange('accountDigit', e.target.value)} />
                             </div>
                             <div className="lg:col-span-4 pt-1">
                                 <label className="flex items-center gap-2 cursor-pointer">
@@ -676,7 +680,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* SEÇÃO 5: LOGÍSTICA & PERFIL */}
+                    {/* SEÇÃO 5: LOGÍSTICA & PERFIL (Reused form layout) */}
                     <div>
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                             <Truck size={16} /> Logística e Perfil

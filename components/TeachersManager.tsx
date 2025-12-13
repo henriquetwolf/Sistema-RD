@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   School, Plus, Search, MoreVertical, Phone, Mail, 
   ArrowLeft, Save, X, Book, User, MapPin, DollarSign, 
-  Briefcase, Truck, Calendar, FileText, CheckSquare, Image as ImageIcon
+  Briefcase, Truck, Calendar, FileText, CheckSquare, Image as ImageIcon,
+  Loader2, Trash2, Edit2
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
+import { appBackend } from '../services/appBackend';
 
 // --- Types ---
 interface Teacher {
@@ -75,44 +77,26 @@ interface Teacher {
   dateAdditional3: string;
 }
 
-// --- Mock Initial Data ---
-const INITIAL_TEACHERS: Teacher[] = [
-  { 
-    id: '1', 
-    fullName: 'Dr. Alberto Einstein', 
-    email: 'alberto@science.com', 
-    phone: '(11) 99999-0001',
-    isActive: true,
-    city: 'São Paulo',
-    state: 'SP',
-    teacherLevel: 'Master',
-    // Preenchendo campos obrigatórios com mock para não quebrar a UI
-    rg: '123456', cpf: '123.456.789-00', birthDate: '1980-01-01', maritalStatus: 'Casado', motherName: 'Maria', photoUrl: '',
-    address: 'Rua da Ciência, 10', district: 'Centro', cep: '01000-000',
-    emergencyContactName: 'Elsa', emergencyContactPhone: '(11) 8888-8888',
-    profession: 'Físico', councilNumber: '1234', isCouncilActive: true, cnpj: '', companyName: '', hasCnpjActive: false,
-    academicFormation: 'Doutorado', otherFormation: '', courseType: 'Física',
-    bank: '', agency: '', account: '', digit: '', hasPjAccount: false, pixKeyPj: '', pixKeyPf: '',
-    regionAvailability: 'Brasil', weekAvailability: 'Sim', shirtSize: 'G', hasNotebook: true, hasVehicle: false, hasStudio: false, studioAddress: '',
-    additional1: '', valueAdditional1: '', dateAdditional1: '',
-    additional2: '', valueAdditional2: '', dateAdditional2: '',
-    additional3: '', valueAdditional3: '', dateAdditional3: ''
-  }
-];
-
 interface TeachersManagerProps {
   onBack: () => void;
 }
 
 export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
-  const [teachers, setTeachers] = useState<Teacher[]>(INITIAL_TEACHERS);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Loading States
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // IBGE State
   const [states, setStates] = useState<IBGEUF[]>([]);
   const [cities, setCities] = useState<IBGECity[]>([]);
   const [isLoadingCities, setIsLoadingCities] = useState(false);
+  
+  // Menu
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   // Initial Form State
   const initialFormState: Teacher = {
@@ -131,8 +115,9 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
 
   const [formData, setFormData] = useState<Teacher>(initialFormState);
 
-  // Fetch States on Mount
+  // Fetch Data on Mount
   useEffect(() => {
+      fetchTeachers();
       ibgeService.getStates().then(setStates);
   }, []);
 
@@ -149,22 +134,204 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
       }
   }, [formData.state]);
 
+  // Click outside to close menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest('.teacher-menu-btn') === null) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  const fetchTeachers = async () => {
+      setIsLoading(true);
+      try {
+          const { data, error } = await appBackend.client
+              .from('crm_teachers') // Ensure this table exists
+              .select('*')
+              .order('full_name', { ascending: true });
+
+          if (error) {
+              console.warn("Tabela 'crm_teachers' pode não existir:", error);
+              return;
+          }
+
+          // Map DB to UI
+          const mapped: Teacher[] = (data || []).map((t: any) => ({
+              id: t.id,
+              fullName: t.full_name,
+              email: t.email,
+              phone: t.phone,
+              rg: t.rg,
+              cpf: t.cpf,
+              birthDate: t.birth_date,
+              maritalStatus: t.marital_status,
+              motherName: t.mother_name,
+              photoUrl: t.photo_url,
+              address: t.address,
+              district: t.district,
+              city: t.city,
+              state: t.state,
+              cep: t.cep,
+              emergencyContactName: t.emergency_contact_name,
+              emergencyContactPhone: t.emergency_contact_phone,
+              profession: t.profession,
+              councilNumber: t.council_number,
+              isCouncilActive: t.is_council_active,
+              cnpj: t.cnpj,
+              companyName: t.company_name,
+              hasCnpjActive: t.has_cnpj_active,
+              academicFormation: t.academic_formation,
+              otherFormation: t.other_formation,
+              courseType: t.course_type,
+              teacherLevel: t.teacher_level,
+              isActive: t.is_active,
+              bank: t.bank,
+              agency: t.agency,
+              account: t.account,
+              digit: t.digit,
+              hasPjAccount: t.has_pj_account,
+              pixKeyPj: t.pix_key_pj,
+              pixKeyPf: t.pix_key_pf,
+              regionAvailability: t.region_availability,
+              weekAvailability: t.week_availability,
+              shirtSize: t.shirt_size,
+              hasNotebook: t.has_notebook,
+              hasVehicle: t.has_vehicle,
+              hasStudio: t.has_studio,
+              studioAddress: t.studio_address,
+              additional1: t.additional_1,
+              valueAdditional1: t.value_additional_1,
+              dateAdditional1: t.date_additional_1,
+              additional2: t.additional_2,
+              valueAdditional2: t.value_additional_2,
+              dateAdditional2: t.date_additional_2,
+              additional3: t.additional_3,
+              valueAdditional3: t.value_additional_3,
+              dateAdditional3: t.date_additional_3
+          }));
+
+          setTeachers(mapped);
+      } catch (e: any) {
+          console.error("Erro ao buscar instrutores:", e);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
   const handleInputChange = (field: keyof Teacher, value: any) => {
       setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.fullName) {
         alert("Nome completo é obrigatório");
         return;
     }
-    const newTeacher: Teacher = {
-      ...formData,
-      id: Math.random().toString(),
+
+    setIsSaving(true);
+
+    const payload = {
+        full_name: formData.fullName,
+        email: formData.email,
+        phone: formData.phone,
+        rg: formData.rg,
+        cpf: formData.cpf,
+        birth_date: formData.birthDate || null,
+        marital_status: formData.maritalStatus,
+        mother_name: formData.motherName,
+        photo_url: formData.photoUrl,
+        address: formData.address,
+        district: formData.district,
+        city: formData.city,
+        state: formData.state,
+        cep: formData.cep,
+        emergency_contact_name: formData.emergencyContactName,
+        emergency_contact_phone: formData.emergencyContactPhone,
+        profession: formData.profession,
+        council_number: formData.councilNumber,
+        is_council_active: formData.isCouncilActive,
+        cnpj: formData.cnpj,
+        company_name: formData.companyName,
+        has_cnpj_active: formData.hasCnpjActive,
+        academic_formation: formData.academicFormation,
+        other_formation: formData.otherFormation,
+        course_type: formData.courseType,
+        teacher_level: formData.teacherLevel,
+        is_active: formData.isActive,
+        bank: formData.bank,
+        agency: formData.agency,
+        account: formData.account,
+        digit: formData.digit,
+        has_pj_account: formData.hasPjAccount,
+        pix_key_pj: formData.pixKeyPj,
+        pix_key_pf: formData.pixKeyPf,
+        region_availability: formData.regionAvailability,
+        week_availability: formData.weekAvailability,
+        shirt_size: formData.shirtSize,
+        has_notebook: formData.hasNotebook,
+        has_vehicle: formData.hasVehicle,
+        has_studio: formData.hasStudio,
+        studio_address: formData.studioAddress,
+        additional_1: formData.additional1,
+        value_additional_1: formData.valueAdditional1,
+        date_additional_1: formData.dateAdditional1 || null,
+        additional_2: formData.additional2,
+        value_additional_2: formData.valueAdditional2,
+        date_additional_2: formData.dateAdditional2 || null,
+        additional_3: formData.additional3,
+        value_additional_3: formData.valueAdditional3,
+        date_additional_3: formData.dateAdditional3 || null
     };
-    setTeachers([...teachers, newTeacher]);
-    setShowModal(false);
-    setFormData(initialFormState);
+
+    try {
+        if (formData.id) {
+            // Update
+            const { error } = await appBackend.client
+                .from('crm_teachers')
+                .update(payload)
+                .eq('id', formData.id);
+            if (error) throw error;
+        } else {
+            // Insert
+            const { error } = await appBackend.client
+                .from('crm_teachers')
+                .insert([payload]);
+            if (error) throw error;
+        }
+        await fetchTeachers();
+        setShowModal(false);
+        setFormData(initialFormState);
+    } catch (e: any) {
+        console.error(e);
+        alert(`Erro ao salvar: ${e.message}`);
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+      if (window.confirm("Tem certeza que deseja excluir este instrutor?")) {
+          try {
+              const { error } = await appBackend.client
+                  .from('crm_teachers')
+                  .delete()
+                  .eq('id', id);
+              if (error) throw error;
+              setTeachers(prev => prev.filter(t => t.id !== id));
+          } catch(e: any) {
+              alert(`Erro ao excluir: ${e.message}`);
+          }
+      }
+      setActiveMenuId(null);
+  };
+
+  const handleEdit = (t: Teacher) => {
+      setFormData({ ...t });
+      setActiveMenuId(null);
+      setShowModal(true);
   };
 
   const filtered = teachers.filter(t => t.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -209,42 +376,74 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
 
       {/* List */}
       <div className="grid grid-cols-1 gap-4">
-        {filtered.map(t => (
-            <div key={t.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-orange-200 transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-lg overflow-hidden">
-                        {t.photoUrl ? <img src={t.photoUrl} alt="" className="w-full h-full object-cover" /> : t.fullName.substring(0,1)}
-                    </div>
-                    <div>
-                        <h3 className="font-bold text-slate-800">{t.fullName}</h3>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
-                            <Book size={14} /> {t.teacherLevel || 'Nível não inf.'} • {t.academicFormation}
+        {isLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-orange-600" size={32} /></div>
+        ) : filtered.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">Nenhum instrutor encontrado.</div>
+        ) : (
+            filtered.map(t => (
+                <div key={t.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-orange-200 transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-lg overflow-hidden">
+                            {t.photoUrl ? <img src={t.photoUrl} alt="" className="w-full h-full object-cover" /> : t.fullName.substring(0,1)}
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-800">{t.fullName}</h3>
+                            <div className="flex items-center gap-2 text-sm text-slate-500">
+                                <Book size={14} /> {t.teacherLevel || 'Nível não inf.'} • {t.academicFormation}
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div className="flex flex-col md:flex-row gap-4 md:gap-8 text-sm text-slate-600">
-                    <div className="flex items-center gap-2">
-                        <Mail size={16} className="text-slate-400" /> {t.email}
+                    <div className="flex flex-col md:flex-row gap-4 md:gap-8 text-sm text-slate-600">
+                        <div className="flex items-center gap-2">
+                            <Mail size={16} className="text-slate-400" /> {t.email}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Phone size={16} className="text-slate-400" /> {t.phone}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <MapPin size={16} className="text-slate-400" /> {t.city}/{t.state}
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Phone size={16} className="text-slate-400" /> {t.phone}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <MapPin size={16} className="text-slate-400" /> {t.city}/{t.state}
-                    </div>
-                </div>
 
-                <div className="flex items-center gap-3">
-                    <span className={clsx("px-2 py-1 rounded-full text-xs font-bold", t.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
-                        {t.isActive ? 'Ativo' : 'Inativo'}
-                    </span>
-                    <button className="p-2 hover:bg-slate-100 rounded text-slate-400">
-                        <MoreVertical size={18} />
-                    </button>
+                    <div className="flex items-center gap-3 relative">
+                        <span className={clsx("px-2 py-1 rounded-full text-xs font-bold", t.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
+                            {t.isActive ? 'Ativo' : 'Inativo'}
+                        </span>
+                        
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuId(activeMenuId === t.id ? null : t.id);
+                            }}
+                            className="p-2 hover:bg-slate-100 rounded text-slate-400 teacher-menu-btn"
+                        >
+                            <MoreVertical size={18} />
+                        </button>
+
+                        {/* Dropdown */}
+                        {activeMenuId === t.id && (
+                            <div className="absolute right-0 top-10 w-40 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                                <button 
+                                    onClick={() => handleEdit(t)}
+                                    className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                >
+                                    <Edit2 size={14} /> Editar
+                                </button>
+                                <div className="h-px bg-slate-100 my-0"></div>
+                                <button 
+                                    onClick={() => handleDelete(t.id)}
+                                    className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                >
+                                    <Trash2 size={14} /> Excluir
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
-        ))}
+            ))
+        )}
       </div>
 
       {/* Modal Full Screen */}
@@ -300,10 +499,10 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.motherName} onChange={e => handleInputChange('motherName', e.target.value)} />
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">Foto (Divulgação)</label>
-                                <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-1.5 bg-slate-50 cursor-pointer hover:bg-slate-100">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Foto (URL)</label>
+                                <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-1.5 bg-slate-50 hover:bg-slate-100">
                                     <ImageIcon size={16} className="text-slate-400"/>
-                                    <span className="text-xs text-slate-500">Adicionar imagem...</span>
+                                    <input type="text" className="bg-transparent w-full text-sm outline-none" placeholder="http://..." value={formData.photoUrl} onChange={e => handleInputChange('photoUrl', e.target.value)} />
                                 </div>
                             </div>
                         </div>
@@ -600,8 +799,9 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                 {/* Modal Footer */}
                 <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100">
                     <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
-                    <button onClick={handleSave} className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-bold text-sm flex items-center gap-2">
-                        <Save size={18} /> Salvar Cadastro
+                    <button onClick={handleSave} disabled={isSaving} className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-bold text-sm flex items-center gap-2">
+                        {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                        Salvar Cadastro
                     </button>
                 </div>
             </div>

@@ -3,7 +3,7 @@ import {
   GraduationCap, Plus, Search, Calendar, Clock, MapPin, 
   ArrowLeft, Save, X, MoreHorizontal, BookOpen, CheckSquare, 
   Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
-  Edit2, Trash2
+  Edit2, Trash2, Hash
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -13,13 +13,14 @@ interface ClassItem {
   // General
   status: string;
   cityState: string;
-  classCode: string;
+  classCode: string; // Agora representa "Número da Turma"
   extraClass: string;
   course: string;
   createdAt: string;
 
   // Module 1
   dateMod1: string;
+  mod1Code?: string; // Novo Campo Automático
   material: string;
   studioMod1: string;
   instructorMod1: string;
@@ -32,6 +33,7 @@ interface ClassItem {
 
   // Module 2
   dateMod2: string;
+  mod2Code?: string; // Novo Campo Automático
   instructorMod2: string;
   ticketMod2: string;
   coffeeMod2: string;
@@ -59,11 +61,12 @@ const INITIAL_CLASSES: ClassItem[] = [
     id: '1', 
     status: 'Confirmado', 
     cityState: 'São Paulo - SP', 
-    classCode: 'TURMA-2025-A', 
+    classCode: '105', 
     extraClass: 'Não', 
     course: 'Formação Completa em Pilates', 
     createdAt: '2024-01-15',
     dateMod1: '2025-03-10',
+    mod1Code: 'São Paulo - SP-105-Não-Formação Completa em Pilates-2025-03-10',
     material: 'Apostilas V1',
     studioMod1: 'Studio Central',
     instructorMod1: 'Dra. Ana',
@@ -74,6 +77,7 @@ const INITIAL_CLASSES: ClassItem[] = [
     hotelLocMod1: 'Av Paulista',
     costHelp1: 'R$ 500,00',
     dateMod2: '2025-04-10',
+    mod2Code: 'São Paulo - SP-105-Não-Formação Completa em Pilates-2025-04-10',
     instructorMod2: 'Dr. Carlos',
     ticketMod2: 'Pendente',
     coffeeMod2: 'Buffet A',
@@ -121,11 +125,12 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       id: '',
       status: 'Planejamento',
       cityState: '',
-      classCode: '',
+      classCode: '', // Número da Turma
       extraClass: '',
       course: '',
       createdAt: new Date().toISOString().split('T')[0], // Today formatted YYYY-MM-DD
       dateMod1: '',
+      mod1Code: '',
       material: '',
       studioMod1: '',
       instructorMod1: '',
@@ -136,6 +141,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       hotelLocMod1: '',
       costHelp1: '',
       dateMod2: '',
+      mod2Code: '',
       instructorMod2: '',
       ticketMod2: '',
       coffeeMod2: '',
@@ -152,6 +158,35 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   };
 
   const [formData, setFormData] = useState<ClassItem>(initialFormState);
+
+  // Auto-generate Module Codes
+  useEffect(() => {
+      const generateCode = (dateStr: string) => {
+          if (!dateStr) return '';
+          // Format: cidade-Estado-número da turma-turma extra-Curso-data
+          const parts = [
+              formData.cityState,
+              formData.classCode,
+              formData.extraClass,
+              formData.course,
+              dateStr
+          ];
+          // Filter empty parts and join with hyphen
+          return parts.filter(Boolean).join('-');
+      };
+
+      const newMod1Code = generateCode(formData.dateMod1);
+      const newMod2Code = generateCode(formData.dateMod2);
+
+      if (newMod1Code !== formData.mod1Code || newMod2Code !== formData.mod2Code) {
+          setFormData(prev => ({
+              ...prev,
+              mod1Code: newMod1Code,
+              mod2Code: newMod2Code
+          }));
+      }
+  }, [formData.cityState, formData.classCode, formData.extraClass, formData.course, formData.dateMod1, formData.dateMod2]);
+
 
   const handleOpenNew = () => {
       setFormData(initialFormState);
@@ -269,7 +304,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                 {cls.status}
                              </span>
                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">
-                                {cls.classCode}
+                                T: {cls.classCode}
                              </span>
                         </div>
                     </div>
@@ -359,10 +394,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">Código da turma</label>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Número da Turma</label>
                                 <input 
                                     type="text" 
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                    placeholder="Ex: 105"
                                     value={formData.classCode}
                                     onChange={e => handleInputChange('classCode', e.target.value)}
                                 />
@@ -406,6 +442,17 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                             <Calendar size={16} /> Módulo 1 (Logística)
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div className="lg:col-span-4">
+                                <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1"><Hash size={12}/> CÓDIGO DO MÓDULO 1 (Automático)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-100 text-slate-600 font-mono"
+                                    value={formData.mod1Code}
+                                    readOnly
+                                    placeholder="Gerado automaticamente após preencher data, cidade, curso..."
+                                />
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Data do Módulo 1</label>
                                 <input 
@@ -495,6 +542,17 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                             <Calendar size={16} /> Módulo 2 (Logística)
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div className="lg:col-span-4">
+                                <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1"><Hash size={12}/> CÓDIGO DO MÓDULO 2 (Automático)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-100 text-slate-600 font-mono"
+                                    value={formData.mod2Code}
+                                    readOnly
+                                    placeholder="Gerado automaticamente após preencher data..."
+                                />
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Data do Módulo 2</label>
                                 <input 

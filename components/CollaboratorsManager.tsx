@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Users, Plus, Search, MoreVertical, Shield, User, 
-  Mail, CheckCircle, X, ArrowLeft, Save, Briefcase, Edit2, Trash2,
-  Calendar, MapPin, FileText, DollarSign, Heart, Bus, AlertCircle, Phone
+  Users, Plus, Search, MoreVertical, User, 
+  Mail, ArrowLeft, Save, Briefcase, Edit2, Trash2,
+  MapPin, FileText, DollarSign, Heart, Bus, AlertCircle, Phone, Loader2
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
+import { appBackend } from '../services/appBackend';
 
 // --- Types ---
 export interface Collaborator {
@@ -113,31 +114,8 @@ export interface Collaborator {
   observations: string; // Anexos/Obs
 }
 
-// --- Mock Data ---
-export const MOCK_COLLABORATORS: Collaborator[] = [
-  { 
-    id: '1', 
-    fullName: 'Ricardo Oliveira', 
-    socialName: '',
-    email: 'ricardo@voll.com.br', 
-    department: 'Web / TI', 
-    role: 'Desenvolvedor Senior', 
-    status: 'active',
-    phone: '(11) 99999-9999',
-    birthDate: '1990-05-15',
-    admissionDate: '2022-01-10',
-    salary: 'R$ 8.500,00',
-    headquarters: 'Matriz SP',
-    // ... preenchendo o resto com strings vazias para o mock não quebrar
-    maritalStatus: '', spouseName: '', fatherName: '', motherName: '', genderIdentity: '', racialIdentity: '', educationLevel: '', photoUrl: '',
-    cellphone: '', corporatePhone: '', operator: '', address: '', cep: '', complement: '', birthState: '', birthCity: '', currentCity: 'São Paulo', state: 'SP', emergencyName: '', emergencyPhone: '',
-    previousAdmissionDate: '', hiringMode: 'CLT', hiringCompany: 'VOLL Group', workHours: '09:00 - 18:00', breakTime: '1h', workDays: 'Seg-Sex', presentialDays: '0', superiorId: '', experiencePeriod: '', hasOtherJob: 'Não', contractType: '',
-    cpf: '', rg: '', rgIssuer: '', rgIssueDate: '', rgState: '', ctpsNumber: '', ctpsSeries: '', ctpsState: '', ctpsIssueDate: '', pisNumber: '', reservistNumber: '', docsFolderLink: '', legalAuth: true,
-    bankAccountInfo: '', hasInsalubrity: '', insalubrityPercent: '', hasDangerPay: '', transportVoucherInfo: '', busLineHomeWork: '', busQtyHomeWork: '', busLineWorkHome: '', busQtyWorkHome: '', ticketValue: '', fuelVoucherValue: '', hasMealVoucher: '', hasFoodVoucher: '', hasHomeOfficeAid: '', hasHealthPlan: '', hasDentalPlan: '', bonusInfo: '', bonusValue: '', commissionInfo: '', commissionPercent: '',
-    hasDependents: 'Não', dependentName: '', dependentDob: '', dependentKinship: '', dependentCpf: '',
-    resignationDate: '', demissionReason: '', demissionDocs: '', vacationPeriods: '', observations: ''
-  }
-];
+// --- Mock Data (Initial structure only) ---
+export const MOCK_COLLABORATORS: Collaborator[] = [];
 
 const DEPARTMENTS = ['Comercial', 'Marketing', 'Financeiro', 'Web / TI', 'Suporte', 'Logística', 'RH', 'Diretoria'];
 const HEADQUARTERS = ['Matriz - SP', 'Filial - RS', 'Filial - MG', 'Home Office Total'];
@@ -147,9 +125,11 @@ interface CollaboratorsManagerProps {
 }
 
 export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBack }) => {
-  const [collaborators, setCollaborators] = useState<Collaborator[]>(MOCK_COLLABORATORS);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   // IBGE State
   const [states, setStates] = useState<IBGEUF[]>([]);
@@ -173,8 +153,116 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
   const [formData, setFormData] = useState<Collaborator>(getEmptyCollaborator());
 
   useEffect(() => {
+      fetchCollaborators();
       ibgeService.getStates().then(setStates);
   }, []);
+
+  const fetchCollaborators = async () => {
+      setIsLoading(true);
+      try {
+          const { data, error } = await appBackend.client
+              .from('crm_collaborators')
+              .select('*')
+              .order('full_name', { ascending: true });
+
+          if (error) throw error;
+
+          const mapped: Collaborator[] = (data || []).map((d: any) => ({
+              id: d.id,
+              fullName: d.full_name,
+              socialName: d.social_name || '',
+              birthDate: d.birth_date,
+              maritalStatus: d.marital_status,
+              spouseName: d.spouse_name,
+              fatherName: d.father_name,
+              motherName: d.mother_name,
+              genderIdentity: d.gender_identity,
+              racialIdentity: d.racial_identity,
+              educationLevel: d.education_level,
+              photoUrl: d.photo_url,
+              email: d.email,
+              phone: d.phone,
+              cellphone: d.cellphone,
+              corporatePhone: d.corporate_phone,
+              operator: d.operator,
+              address: d.address,
+              cep: d.cep,
+              complement: d.complement,
+              birthState: d.birth_state,
+              birthCity: d.birth_city,
+              state: d.state,
+              currentCity: d.current_city,
+              emergencyName: d.emergency_name,
+              emergencyPhone: d.emergency_phone,
+              admissionDate: d.admission_date,
+              previousAdmissionDate: d.previous_admission_date,
+              role: d.role,
+              headquarters: d.headquarters,
+              department: d.department,
+              salary: d.salary,
+              hiringMode: d.hiring_mode,
+              hiringCompany: d.hiring_company,
+              workHours: d.work_hours,
+              breakTime: d.break_time,
+              workDays: d.work_days,
+              presentialDays: d.presential_days,
+              superiorId: d.superior_id,
+              experiencePeriod: d.experience_period,
+              hasOtherJob: d.has_other_job,
+              status: d.status,
+              contractType: d.contract_type,
+              cpf: d.cpf,
+              rg: d.rg,
+              rgIssuer: d.rg_issuer,
+              rgIssueDate: d.rg_issue_date,
+              rgState: d.rg_state,
+              ctpsNumber: d.ctps_number,
+              ctpsSeries: d.ctps_series,
+              ctpsState: d.ctps_state,
+              ctpsIssueDate: d.ctps_issue_date,
+              pisNumber: d.pis_number,
+              reservistNumber: d.reservist_number,
+              docsFolderLink: d.docs_folder_link,
+              legalAuth: d.legal_auth,
+              bankAccountInfo: d.bank_account_info,
+              hasInsalubrity: d.has_insalubrity,
+              insalubrityPercent: d.insalubrity_percent,
+              hasDangerPay: d.has_danger_pay,
+              transportVoucherInfo: d.transport_voucher_info,
+              busLineHomeWork: d.bus_line_home_work,
+              busQtyHomeWork: d.bus_qty_home_work,
+              busLineWorkHome: d.bus_line_work_home,
+              busQtyWorkHome: d.bus_qty_work_home,
+              ticketValue: d.ticket_value,
+              fuelVoucherValue: d.fuel_voucher_value,
+              hasMealVoucher: d.has_meal_voucher,
+              hasFoodVoucher: d.has_food_voucher,
+              hasHomeOfficeAid: d.has_home_office_aid,
+              hasHealthPlan: d.has_health_plan,
+              hasDentalPlan: d.has_dental_plan,
+              bonusInfo: d.bonus_info,
+              bonusValue: d.bonus_value,
+              commissionInfo: d.commission_info,
+              commissionPercent: d.commission_percent,
+              hasDependents: d.has_dependents,
+              dependentName: d.dependent_name,
+              dependentDob: d.dependent_dob,
+              dependentKinship: d.dependent_kinship,
+              dependentCpf: d.dependent_cpf,
+              resignationDate: d.resignation_date,
+              demissionReason: d.demission_reason,
+              demissionDocs: d.demission_docs,
+              vacationPeriods: d.vacation_periods,
+              observations: d.observations
+          }));
+
+          setCollaborators(mapped);
+      } catch (e: any) {
+          console.error("Erro ao carregar colaboradores:", e);
+      } finally {
+          setIsLoading(false);
+      }
+  };
 
   // Fetch cities when state changes (Current Address)
   useEffect(() => {
@@ -205,20 +293,125 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.fullName) {
         alert("O Nome Completo é obrigatório.");
         return;
     }
-    
-    if (formData.id) {
-        // Edit
-        setCollaborators(prev => prev.map(c => c.id === formData.id ? formData : c));
-    } else {
-        // Create
-        setCollaborators([...collaborators, { ...formData, id: crypto.randomUUID() }]);
+
+    setIsSaving(true);
+
+    const payload = {
+        full_name: formData.fullName,
+        social_name: formData.socialName,
+        birth_date: formData.birthDate || null,
+        marital_status: formData.maritalStatus,
+        spouse_name: formData.spouseName,
+        father_name: formData.fatherName,
+        mother_name: formData.motherName,
+        gender_identity: formData.genderIdentity,
+        racial_identity: formData.racialIdentity,
+        education_level: formData.educationLevel,
+        photo_url: formData.photoUrl,
+        email: formData.email,
+        phone: formData.phone,
+        cellphone: formData.cellphone,
+        corporate_phone: formData.corporatePhone,
+        operator: formData.operator,
+        address: formData.address,
+        cep: formData.cep,
+        complement: formData.complement,
+        birth_state: formData.birthState,
+        birth_city: formData.birthCity,
+        state: formData.state,
+        current_city: formData.currentCity,
+        emergency_name: formData.emergencyName,
+        emergency_phone: formData.emergencyPhone,
+        admission_date: formData.admissionDate || null,
+        previous_admission_date: formData.previousAdmissionDate || null,
+        role: formData.role,
+        headquarters: formData.headquarters,
+        department: formData.department,
+        salary: formData.salary,
+        hiring_mode: formData.hiringMode,
+        hiring_company: formData.hiringCompany,
+        work_hours: formData.workHours,
+        break_time: formData.breakTime,
+        work_days: formData.workDays,
+        presential_days: formData.presentialDays,
+        superior_id: formData.superiorId,
+        experience_period: formData.experiencePeriod,
+        has_other_job: formData.hasOtherJob,
+        status: formData.status,
+        contract_type: formData.contractType,
+        cpf: formData.cpf,
+        rg: formData.rg,
+        rg_issuer: formData.rgIssuer,
+        rg_issue_date: formData.rgIssueDate || null,
+        rg_state: formData.rgState,
+        ctps_number: formData.ctpsNumber,
+        ctps_series: formData.ctpsSeries,
+        ctps_state: formData.ctpsState,
+        ctps_issue_date: formData.ctpsIssueDate || null,
+        pis_number: formData.pisNumber,
+        reservist_number: formData.reservistNumber,
+        docs_folder_link: formData.docsFolderLink,
+        legal_auth: formData.legalAuth,
+        bank_account_info: formData.bankAccountInfo,
+        has_insalubrity: formData.hasInsalubrity,
+        insalubrity_percent: formData.insalubrityPercent,
+        has_danger_pay: formData.hasDangerPay,
+        transport_voucher_info: formData.transportVoucherInfo,
+        bus_line_home_work: formData.busLineHomeWork,
+        bus_qty_home_work: formData.busQtyHomeWork,
+        bus_line_work_home: formData.busLineWorkHome,
+        bus_qty_work_home: formData.busQtyWorkHome,
+        ticket_value: formData.ticketValue,
+        fuel_voucher_value: formData.fuelVoucherValue,
+        has_meal_voucher: formData.hasMealVoucher,
+        has_food_voucher: formData.hasFoodVoucher,
+        has_home_office_aid: formData.hasHomeOfficeAid,
+        has_health_plan: formData.hasHealthPlan,
+        has_dental_plan: formData.hasDentalPlan,
+        bonus_info: formData.bonusInfo,
+        bonus_value: formData.bonusValue,
+        commission_info: formData.commissionInfo,
+        commission_percent: formData.commissionPercent,
+        has_dependents: formData.hasDependents,
+        dependent_name: formData.dependentName,
+        dependent_dob: formData.dependentDob || null,
+        dependent_kinship: formData.dependentKinship,
+        dependent_cpf: formData.dependentCpf,
+        resignation_date: formData.resignationDate || null,
+        demission_reason: formData.demissionReason,
+        demission_docs: formData.demissionDocs,
+        vacation_periods: formData.vacationPeriods,
+        observations: formData.observations
+    };
+
+    try {
+        if (formData.id) {
+            // Edit
+            const { error } = await appBackend.client
+                .from('crm_collaborators')
+                .update(payload)
+                .eq('id', formData.id);
+            if (error) throw error;
+        } else {
+            // Create
+            const { error } = await appBackend.client
+                .from('crm_collaborators')
+                .insert([payload]);
+            if (error) throw error;
+        }
+        await fetchCollaborators();
+        setShowModal(false);
+    } catch (e: any) {
+        console.error(e);
+        alert(`Erro ao salvar: ${e.message}`);
+    } finally {
+        setIsSaving(false);
     }
-    setShowModal(false);
   };
 
   const handleEdit = (c: Collaborator) => {
@@ -227,9 +420,15 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
       setShowModal(true);
   };
 
-  const handleDelete = (id: string) => {
-      if (window.confirm('Tem certeza que deseja remover este colaborador?')) {
-          setCollaborators(prev => prev.filter(c => c.id !== id));
+  const handleDelete = async (id: string) => {
+      if (window.confirm('Tem certeza que deseja remover este colaborador do banco de dados?')) {
+          try {
+              const { error } = await appBackend.client.from('crm_collaborators').delete().eq('id', id);
+              if (error) throw error;
+              fetchCollaborators();
+          } catch (e: any) {
+              alert(`Erro ao excluir: ${e.message}`);
+          }
       }
       setActiveMenuId(null);
   };
@@ -289,6 +488,11 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
 
       {/* List */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto min-h-[400px]">
+        {isLoading ? (
+            <div className="flex justify-center items-center h-64">
+                <Loader2 size={32} className="animate-spin text-blue-600" />
+            </div>
+        ) : (
         <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500">
                 <tr>
@@ -301,6 +505,11 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+                {filtered.length === 0 && (
+                    <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-slate-400">Nenhum colaborador encontrado.</td>
+                    </tr>
+                )}
                 {filtered.map(c => (
                     <tr key={c.id} className="hover:bg-slate-50 transition-colors relative">
                         <td className="px-6 py-4">
@@ -374,6 +583,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                 ))}
             </tbody>
         </table>
+        )}
       </div>
 
       {/* Modal - LARGE FORM */}
@@ -502,7 +712,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade Atual</label>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1"> Cidade Atual</label>
                                 <select 
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" 
                                     value={formData.currentCity} 
@@ -906,8 +1116,9 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                 {/* Footer */}
                 <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100">
                     <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
-                    <button onClick={handleSave} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm flex items-center gap-2">
-                        <Save size={18} /> Salvar Ficha
+                    <button onClick={handleSave} disabled={isSaving} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-bold text-sm flex items-center gap-2">
+                        {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                        Salvar Ficha
                     </button>
                 </div>
             </div>

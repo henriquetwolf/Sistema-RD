@@ -3,31 +3,32 @@ import {
   GraduationCap, Plus, Search, Calendar, Clock, MapPin, 
   ArrowLeft, Save, X, MoreHorizontal, BookOpen, CheckSquare, 
   Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
-  Edit2, Trash2, Hash
+  Edit2, Trash2, Hash, Loader2
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
+import { appBackend } from '../services/appBackend';
 
 // --- Types ---
 interface ClassItem {
   id: string;
   // General
   status: string;
-  state: string; // Changed from cityState
-  city: string;  // Changed from cityState
-  classCode: string; // Agora representa "Número da Turma"
+  state: string; 
+  city: string;  
+  classCode: string; 
   extraClass: string;
   course: string;
   createdAt: string;
 
   // Module 1
   dateMod1: string;
-  mod1Code?: string; // Novo Campo Automático
+  mod1Code?: string; 
   material: string;
   studioMod1: string;
   instructorMod1: string;
   ticketMod1: string;
-  infrastructure: string; // Projector, TV, Chairs
+  infrastructure: string; 
   coffeeMod1: string;
   hotelMod1: string;
   hotelLocMod1: string;
@@ -35,7 +36,7 @@ interface ClassItem {
 
   // Module 2
   dateMod2: string;
-  mod2Code?: string; // Novo Campo Automático
+  mod2Code?: string; 
   instructorMod2: string;
   ticketMod2: string;
   coffeeMod2: string;
@@ -54,48 +55,8 @@ interface ClassItem {
 
   // Misc
   observations: string;
-  attachments: string[]; // Mocked list of filenames
+  attachments: string[]; 
 }
-
-// --- Mock Data ---
-const INITIAL_CLASSES: ClassItem[] = [
-  { 
-    id: '1', 
-    status: 'Confirmado', 
-    state: 'SP',
-    city: 'São Paulo',
-    classCode: '105', 
-    extraClass: 'Não', 
-    course: 'Formação Completa em Pilates', 
-    createdAt: '2024-01-15',
-    dateMod1: '2025-03-10',
-    mod1Code: 'São Paulo - SP - 105 - Não - Formação Completa em Pilates - 10/03/2025',
-    material: 'Apostilas V1',
-    studioMod1: 'Studio Central',
-    instructorMod1: 'Dra. Ana',
-    ticketMod1: 'Ok',
-    infrastructure: 'Ok',
-    coffeeMod1: 'Buffet A',
-    hotelMod1: 'Ibis Paulista',
-    hotelLocMod1: 'Av Paulista',
-    costHelp1: 'R$ 500,00',
-    dateMod2: '2025-04-10',
-    mod2Code: 'São Paulo - SP - 105 - Não - Formação Completa em Pilates - 10/04/2025',
-    instructorMod2: 'Dr. Carlos',
-    ticketMod2: 'Pendente',
-    coffeeMod2: 'Buffet A',
-    hotelMod2: 'Ibis Paulista',
-    hotelLocMod2: 'Av Paulista',
-    costHelp2: 'R$ 500,00',
-    studioRent: 1500.00,
-    contaAzulRD: 'Faturado',
-    isReady: true,
-    onSite: true,
-    onCRM: true,
-    observations: 'Turma lotada.',
-    attachments: ['contrato_locacao.pdf']
-  }
-];
 
 // --- Dropdown Options Mock ---
 const COURSES = ['Formação Completa em Pilates', 'Pilates Clínico', 'Pilates Suspenso', 'Gestão de Studios', 'MIT Movimento Inteligente'];
@@ -107,7 +68,9 @@ interface ClassesManagerProps {
 }
 
 export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
-  const [classes, setClasses] = useState<ClassItem[]>(INITIAL_CLASSES);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   
@@ -133,10 +96,10 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       status: 'Planejamento',
       state: '',
       city: '',
-      classCode: '', // Número da Turma
+      classCode: '', 
       extraClass: '',
       course: '',
-      createdAt: new Date().toISOString().split('T')[0], // Today formatted YYYY-MM-DD
+      createdAt: new Date().toISOString().split('T')[0], 
       dateMod1: '',
       mod1Code: '',
       material: '',
@@ -167,10 +130,61 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
   const [formData, setFormData] = useState<ClassItem>(initialFormState);
 
-  // Fetch States on Mount
+  // Fetch Data on Mount
   useEffect(() => {
+      fetchClasses();
       ibgeService.getStates().then(setStates);
   }, []);
+
+  const fetchClasses = async () => {
+      setIsLoadingData(true);
+      try {
+          const { data, error } = await appBackend.client.from('crm_classes').select('*').order('created_at', { ascending: false });
+          if (error) throw error;
+          
+          const mapped = (data || []).map((d: any) => ({
+            id: d.id,
+            status: d.status,
+            state: d.state,
+            city: d.city,
+            classCode: d.class_code,
+            extraClass: d.extra_class,
+            course: d.course,
+            createdAt: d.created_at,
+            dateMod1: d.date_mod_1,
+            mod1Code: d.mod_1_code,
+            material: d.material,
+            studioMod1: d.studio_mod_1,
+            instructorMod1: d.instructor_mod_1,
+            ticketMod1: d.ticket_mod_1,
+            infrastructure: d.infrastructure,
+            coffeeMod1: d.coffee_mod_1,
+            hotelMod1: d.hotel_mod_1,
+            hotelLocMod1: d.hotel_loc_mod_1,
+            costHelp1: d.cost_help_1,
+            dateMod2: d.date_mod_2,
+            mod2Code: d.mod_2_code,
+            instructorMod2: d.instructor_mod_2,
+            ticketMod2: d.ticket_mod_2,
+            coffeeMod2: d.coffee_mod_2,
+            hotelMod2: d.hotel_mod_2,
+            hotelLocMod2: d.hotel_loc_mod_2,
+            costHelp2: d.cost_help_2,
+            studioRent: Number(d.studio_rent),
+            contaAzulRD: d.conta_azul_rd,
+            isReady: d.is_ready,
+            onSite: d.on_site,
+            onCRM: d.on_crm,
+            observations: d.observations,
+            attachments: [] 
+          }));
+          setClasses(mapped);
+      } catch (e) {
+          console.error("Erro ao buscar turmas:", e);
+      } finally {
+          setIsLoadingData(false);
+      }
+  };
 
   // Fetch Cities when State changes
   useEffect(() => {
@@ -189,14 +203,9 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   useEffect(() => {
       const generateCode = (dateStr: string) => {
           if (!dateStr) return '';
-          
-          // Format date from YYYY-MM-DD to DD/MM/YYYY
           const [year, month, day] = dateStr.split('-');
           const formattedDate = `${day}/${month}/${year}`;
-
-          // Format: cidade - Estado - número da turma - turma extra - Curso - data
           const location = formData.city && formData.state ? `${formData.city} - ${formData.state}` : '';
-          
           const parts = [
               location,
               formData.classCode,
@@ -204,8 +213,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
               formData.course,
               formattedDate
           ];
-          
-          // Filter empty parts and join with " - "
           return parts.filter(p => p && p.trim() !== '').join(' - ');
       };
 
@@ -233,33 +240,78 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       setShowModal(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
       if (window.confirm("Tem certeza que deseja excluir esta turma?")) {
-          setClasses(prev => prev.filter(c => c.id !== id));
+          try {
+              const { error } = await appBackend.client.from('crm_classes').delete().eq('id', id);
+              if (error) throw error;
+              setClasses(prev => prev.filter(c => c.id !== id));
+          } catch(e) {
+              alert("Erro ao excluir turma.");
+          }
       }
       setActiveMenuId(null);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.course || !formData.city) {
         alert("Preencha ao menos o Curso e a Cidade.");
         return;
     }
 
-    if (formData.id) {
-        // UPDATE Existing
-        setClasses(prev => prev.map(c => c.id === formData.id ? formData : c));
-    } else {
-        // CREATE New
-        const newItem: ClassItem = {
-            ...formData,
-            id: crypto.randomUUID(),
-        };
-        setClasses([...classes, newItem]);
-    }
+    setIsSaving(true);
     
-    setShowModal(false);
-    setFormData(initialFormState);
+    const payload = {
+        status: formData.status,
+        state: formData.state,
+        city: formData.city,
+        class_code: formData.classCode,
+        extra_class: formData.extraClass,
+        course: formData.course,
+        date_mod_1: formData.dateMod1 || null,
+        mod_1_code: formData.mod1Code,
+        material: formData.material,
+        studio_mod_1: formData.studioMod1,
+        instructor_mod_1: formData.instructorMod1,
+        ticket_mod_1: formData.ticketMod1,
+        infrastructure: formData.infrastructure,
+        coffee_mod_1: formData.coffeeMod1,
+        hotel_mod_1: formData.hotelMod1,
+        hotel_loc_mod_1: formData.hotelLocMod1,
+        cost_help_1: formData.costHelp1,
+        date_mod_2: formData.dateMod2 || null,
+        mod_2_code: formData.mod2Code,
+        instructor_mod_2: formData.instructorMod2,
+        ticket_mod_2: formData.ticketMod2,
+        coffee_mod_2: formData.coffeeMod2,
+        hotel_mod_2: formData.hotelMod2,
+        hotel_loc_mod_2: formData.hotelLocMod2,
+        cost_help_2: formData.costHelp2,
+        studio_rent: formData.studioRent,
+        conta_azul_rd: formData.contaAzulRD,
+        is_ready: formData.isReady,
+        on_site: formData.onSite,
+        on_crm: formData.onCRM,
+        observations: formData.observations
+    };
+
+    try {
+        if (formData.id) {
+            const { error } = await appBackend.client.from('crm_classes').update(payload).eq('id', formData.id);
+            if (error) throw error;
+        } else {
+            const { error } = await appBackend.client.from('crm_classes').insert([payload]);
+            if (error) throw error;
+        }
+        await fetchClasses();
+        setShowModal(false);
+        setFormData(initialFormState);
+    } catch(e: any) {
+        console.error(e);
+        alert(`Erro ao salvar: ${e.message}`);
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   const handleInputChange = (field: keyof ClassItem, value: any) => {
@@ -288,6 +340,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
         </button>
       </div>
 
+      {isLoadingData ? (
+          <div className="flex justify-center py-20">
+              <Loader2 size={40} className="animate-spin text-purple-600" />
+          </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {classes.map(cls => (
             <div key={cls.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-5 group relative">
@@ -379,6 +436,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             <span className="font-medium">Cadastrar nova turma</span>
         </button>
       </div>
+      )}
 
       {/* Modal Full Screen / Large */}
       {showModal && (
@@ -736,8 +794,13 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                 {/* Footer */}
                 <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100">
                     <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
-                    <button onClick={handleSave} className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center gap-2">
-                        <Save size={18} /> {formData.id ? 'Salvar Alterações' : 'Criar Turma'}
+                    <button 
+                        onClick={handleSave} 
+                        disabled={isSaving}
+                        className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50"
+                    >
+                        {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} 
+                        {formData.id ? 'Salvar Alterações' : 'Criar Turma'}
                     </button>
                 </div>
             </div>

@@ -412,8 +412,11 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
     } catch (e: any) {
         console.error(e);
         const msg = e.message || '';
-        if (msg.includes('column') && msg.includes('does not exist')) {
-            alert("Erro no Banco de Dados: Algumas colunas novas (como dados bancários ou benefícios) ainda não existem na tabela 'crm_collaborators'.\n\nPor favor, execute o script SQL de atualização no Supabase.");
+        // Detect "column does not exist" OR "Could not find the 'x' column... in the schema cache"
+        if (
+            msg.includes('column') && (msg.includes('does not exist') || msg.includes('Could not find'))
+        ) {
+            alert("Erro de Banco de Dados: Colunas faltantes (ex: birth_date) ou Cache desatualizado.\n\nExecute o SQL de atualização no Supabase e aguarde alguns segundos.");
         } else {
             alert(`Erro ao salvar: ${msg}`);
         }

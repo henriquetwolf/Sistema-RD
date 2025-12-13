@@ -307,8 +307,11 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
     } catch (e: any) {
         console.error(e);
         const msg = e.message || '';
-        if (msg.includes('column') && msg.includes('does not exist')) {
-            alert("Erro de Banco de Dados: Colunas faltantes na tabela 'crm_teachers' (ex: additional_1).\n\nPor favor, execute o script SQL fornecido no chat para atualizar o banco.");
+        // Detect "column does not exist" OR "Could not find the 'x' column... in the schema cache"
+        if (
+            msg.includes('column') && (msg.includes('does not exist') || msg.includes('Could not find'))
+        ) {
+            alert("Erro de Banco de Dados: Colunas faltantes na tabela 'crm_teachers' (ex: agency, bank).\n\nPor favor, execute o script SQL fornecido no chat para atualizar o banco e limpar o cache.");
         } else {
             alert(`Erro ao salvar: ${msg}`);
         }

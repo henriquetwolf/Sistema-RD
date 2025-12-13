@@ -353,8 +353,8 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
         rg_issue_date: formData.rgIssueDate || null,
         rg_state: formData.rgState,
         ctps_number: formData.ctpsNumber,
-        ctps_series: formData.ctpsSeries,
-        ctps_state: formData.ctpsState,
+        ctps_series: formData.ctps_series,
+        ctps_state: formData.ctps_state,
         ctps_issue_date: formData.ctpsIssueDate || null,
         pis_number: formData.pisNumber,
         reservist_number: formData.reservistNumber,
@@ -411,7 +411,12 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
         setShowModal(false);
     } catch (e: any) {
         console.error(e);
-        alert(`Erro ao salvar: ${e.message}`);
+        const msg = e.message || '';
+        if (msg.includes('column') && msg.includes('does not exist')) {
+            alert("Erro no Banco de Dados: Algumas colunas novas (como dados bancários ou benefícios) ainda não existem na tabela 'crm_collaborators'.\n\nPor favor, execute o script SQL de atualização no Supabase.");
+        } else {
+            alert(`Erro ao salvar: ${msg}`);
+        }
     } finally {
         setIsSaving(false);
     }

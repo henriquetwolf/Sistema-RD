@@ -306,10 +306,11 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
         setFormData(initialFormState);
     } catch (e: any) {
         console.error(e);
-        if (e.message.includes('account_number') || e.message.includes('account')) {
-            alert("Erro de Banco de Dados: As colunas de conta bancária (account_number) não existem no banco. Execute o SQL de atualização no Supabase.");
+        const msg = e.message || '';
+        if (msg.includes('column') && msg.includes('does not exist')) {
+            alert("Erro de Banco de Dados: Colunas faltantes na tabela 'crm_teachers' (ex: additional_1).\n\nPor favor, execute o script SQL fornecido no chat para atualizar o banco.");
         } else {
-            alert(`Erro ao salvar: ${e.message}`);
+            alert(`Erro ao salvar: ${msg}`);
         }
     } finally {
         setIsSaving(false);

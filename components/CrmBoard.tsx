@@ -403,7 +403,8 @@ export const CrmBoard: React.FC = () => {
   };
 
   // --- Deal Modal Handlers ---
-  const commercialCollaborators = MOCK_COLLABORATORS.filter(c => c.department === 'Comercial' || c.role === 'admin');
+  // Filter collaborators to ONLY show 'Comercial' department as requested
+  const commercialCollaborators = MOCK_COLLABORATORS.filter(c => c.department === 'Comercial');
 
   const openNewDealModal = () => {
       setEditingDealId(null);
@@ -421,8 +422,9 @@ export const CrmBoard: React.FC = () => {
   };
 
   const handleSaveDeal = async () => {
-      if (!dealFormData.title || !dealFormData.companyName) {
-          alert("Por favor, preencha o Nome da Negociação e o Cliente.");
+      // Validate Client Name (companyName) since title is auto-generated from it now
+      if (!dealFormData.companyName) {
+          alert("Por favor, preencha o Nome Completo do Cliente.");
           return;
       }
 
@@ -438,8 +440,11 @@ export const CrmBoard: React.FC = () => {
           closedAtValue = undefined;
       }
 
+      // Force title to be same as client name since field is hidden
+      const dealTitle = dealFormData.companyName;
+
       const payload = {
-          title: dealFormData.title,
+          title: dealTitle,
           company_name: dealFormData.companyName,
           contact_name: dealFormData.contactName,
           value: Number(dealFormData.value) || 0,
@@ -481,7 +486,8 @@ export const CrmBoard: React.FC = () => {
               
               setDeals(prev => prev.map(d => d.id === editingDealId ? { 
                   ...d, 
-                  ...dealFormData, 
+                  ...dealFormData,
+                  title: dealTitle,
                   closedAt: closedAtValue 
               } as Deal : d));
           } else {
@@ -648,25 +654,22 @@ export const CrmBoard: React.FC = () => {
                               <Target size={16} /> Dados da Negociação
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                              {/* Campo Título Ocultado Visualmente mas Mantido no Estado */}
                               <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Nome da negociação *</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Ex: Curso Completo" value={dealFormData.title} onChange={e => setDealFormData({...dealFormData, title: e.target.value})} />
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Cliente *</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Nome do Cliente/Empresa" value={dealFormData.companyName} onChange={e => setDealFormData({...dealFormData, companyName: e.target.value})} />
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Nome Completo do Cliente *</label>
+                                  <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" 
+                                    placeholder="Nome do Cliente/Empresa" 
+                                    value={dealFormData.companyName} 
+                                    onChange={e => setDealFormData({
+                                        ...dealFormData, 
+                                        companyName: e.target.value,
+                                        title: e.target.value // Sync title automatically
+                                    })} 
+                                  />
                               </div>
                               
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Funil de Vendas</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" value={dealFormData.pipeline} disabled />
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Etapa do Funil</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.stage} onChange={e => setDealFormData({...dealFormData, stage: e.target.value as any})}>
-                                      {COLUMNS.map(col => <option key={col.id} value={col.id}>{col.title}</option>)}
-                                  </select>
-                              </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Responsável</label>
                                   <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.owner} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}>
@@ -682,6 +685,17 @@ export const CrmBoard: React.FC = () => {
                               <div className="md:col-span-2">
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Campanha</label>
                                   <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Ex: Black Friday 2024" value={dealFormData.campaign} onChange={e => setDealFormData({...dealFormData, campaign: e.target.value})} />
+                              </div>
+                              
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Funil de Vendas</label>
+                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" value={dealFormData.pipeline} disabled />
+                              </div>
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Etapa do Funil</label>
+                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.stage} onChange={e => setDealFormData({...dealFormData, stage: e.target.value as any})}>
+                                      {COLUMNS.map(col => <option key={col.id} value={col.id}>{col.title}</option>)}
+                                  </select>
                               </div>
                           </div>
                       </div>

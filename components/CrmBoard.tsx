@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
@@ -9,7 +9,7 @@ import {
 import clsx from 'clsx';
 import { MOCK_COLLABORATORS } from './CollaboratorsManager';
 import { appBackend } from '../services/appBackend';
-import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
+// Removed ibgeService import as we rely on registered classes now
 
 // --- Types ---
 type DealStage = 'new' | 'contacted' | 'proposal' | 'negotiation' | 'closed';
@@ -69,10 +69,13 @@ interface Team {
   members: string[]; // IDs of collaborators
 }
 
-interface ClassOption {
+// Interface for fetched classes used for dropdown filtering
+interface RegisteredClass {
     id: string;
-    code: string;
+    state: string;
     city: string;
+    mod1Code: string;
+    mod2Code: string;
 }
 
 // --- Mock Columns ---
@@ -138,14 +141,11 @@ export const CrmBoard: React.FC = () => {
   // State
   const [deals, setDeals] = useState<Deal[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [availableClasses, setAvailableClasses] = useState<ClassOption[]>([]); // Mock or fetched
+  
+  // Real Classes Data for Dropdowns
+  const [registeredClasses, setRegisteredClasses] = useState<RegisteredClass[]>([]);
+  
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Locations State
-  const [states, setStates] = useState<IBGEUF[]>([]);
-  const [cities, setCities] = useState<IBGECity[]>([]);
-  const [isLoadingCities, setIsLoadingCities] = useState(false);
-  
   const [searchTerm, setSearchTerm] = useState('');
   
   // Drag and Drop State
@@ -162,30 +162,7 @@ export const CrmBoard: React.FC = () => {
   // --- INITIAL LOAD (FROM DB) ---
   useEffect(() => {
     fetchData();
-    // Fetch classes for dropdown
-    const mockClasses = [
-        { id: 'c1', code: 'TURMA-2025-A', city: 'São Paulo - SP' },
-        { id: 'c2', code: 'TURMA-2025-B', city: 'Rio de Janeiro - RJ' },
-        { id: 'c3', code: 'TURMA-2025-C', city: 'Belo Horizonte - MG' },
-    ];
-    setAvailableClasses(mockClasses);
-
-    // Fetch States
-    ibgeService.getStates().then(setStates);
   }, []);
-
-  // Fetch cities when state changes in form
-  useEffect(() => {
-      if (dealFormData.courseState) {
-          setIsLoadingCities(true);
-          ibgeService.getCities(dealFormData.courseState).then(data => {
-              setCities(data);
-              setIsLoadingCities(false);
-          });
-      } else {
-          setCities([]);
-      }
-  }, [dealFormData.courseState]);
 
   const fetchData = async () => {
       setIsLoading(true);
@@ -242,8 +219,23 @@ export const CrmBoard: React.FC = () => {
               .select('*');
           
           if (teamsError) throw teamsError;
-          
           setTeams(teamsData || []);
+
+          // 3. Fetch Classes (for Dropdowns)
+          const { data: classesData, error: classesError } = await appBackend.client
+              .from('crm_classes')
+              .select('id, state, city, mod_1_code, mod_2_code');
+          
+          if (!classesError && classesData) {
+              const mappedClasses = classesData.map((c: any) => ({
+                  id: c.id,
+                  state: c.state,
+                  city: c.city,
+                  mod1Code: c.mod_1_code,
+                  mod2Code: c.mod_2_code
+              }));
+              setRegisteredClasses(mappedClasses);
+          }
 
       } catch (e: any) {
           console.error("Erro ao carregar dados do CRM:", e);
@@ -251,6 +243,41 @@ export const CrmBoard: React.FC = () => {
           setIsLoading(false);
       }
   };
+
+  // --- Derived State for Dropdowns ---
+  
+  // 1. Available States (Only those present in registeredClasses)
+  const availableStates = useMemo(() => {
+      const states = registeredClasses.map(c => c.state).filter(Boolean);
+      return Array.from(new Set(states)).sort();
+  }, [registeredClasses]);
+
+  // 2. Available Cities (Filtered by selected State)
+  const availableCities = useMemo(() => {
+      if (!dealFormData.courseState) return [];
+      const cities = registeredClasses
+          .filter(c => c.state === dealFormData.courseState)
+          .map(c => c.city)
+          .filter(Boolean);
+      return Array.from(new Set(cities)).sort();
+  }, [registeredClasses, dealFormData.courseState]);
+
+  // 3. Available Mod 1 Codes (Filtered by City and State)
+  const availableMod1Codes = useMemo(() => {
+      if (!dealFormData.courseCity) return [];
+      return registeredClasses
+          .filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity && c.mod1Code)
+          .map(c => c.mod1Code);
+  }, [registeredClasses, dealFormData.courseState, dealFormData.courseCity]);
+
+  // 4. Available Mod 2 Codes (Filtered by City and State)
+  const availableMod2Codes = useMemo(() => {
+      if (!dealFormData.courseCity) return [];
+      return registeredClasses
+          .filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity && c.mod2Code)
+          .map(c => c.mod2Code);
+  }, [registeredClasses, dealFormData.courseState, dealFormData.courseCity]);
+
 
   // --- Helpers & Logic ---
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -744,16 +771,22 @@ export const CrmBoard: React.FC = () => {
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                               
-                              {/* SELETORES DE ESTADO/CIDADE */}
+                              {/* SELETORES DE ESTADO/CIDADE FILTRADOS PELAS TURMAS EXISTENTES */}
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Estado (UF)</label>
                                   <select 
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
                                     value={dealFormData.courseState}
-                                    onChange={e => setDealFormData({...dealFormData, courseState: e.target.value, courseCity: ''})}
+                                    onChange={e => setDealFormData({
+                                        ...dealFormData, 
+                                        courseState: e.target.value, 
+                                        courseCity: '',
+                                        classMod1: '',
+                                        classMod2: ''
+                                    })}
                                   >
                                       <option value="">Selecione...</option>
-                                      {states.map(uf => <option key={uf.id} value={uf.sigla}>{uf.sigla} - {uf.nome}</option>)}
+                                      {availableStates.map(uf => <option key={uf} value={uf}>{uf}</option>)}
                                   </select>
                               </div>
                               <div>
@@ -761,26 +794,41 @@ export const CrmBoard: React.FC = () => {
                                   <select 
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100"
                                     value={dealFormData.courseCity}
-                                    onChange={e => setDealFormData({...dealFormData, courseCity: e.target.value})}
-                                    disabled={!dealFormData.courseState || isLoadingCities}
+                                    onChange={e => setDealFormData({
+                                        ...dealFormData, 
+                                        courseCity: e.target.value,
+                                        classMod1: '',
+                                        classMod2: ''
+                                    })}
+                                    disabled={!dealFormData.courseState || availableCities.length === 0}
                                   >
-                                      <option value="">{isLoadingCities ? 'Carregando...' : 'Selecione...'}</option>
-                                      {cities.map(city => <option key={city.id} value={city.nome}>{city.nome}</option>)}
+                                      <option value="">{availableCities.length === 0 ? 'Nenhuma turma neste UF' : 'Selecione...'}</option>
+                                      {availableCities.map(city => <option key={city} value={city}>{city}</option>)}
                                   </select>
                               </div>
 
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 1</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})}>
+                                  <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" 
+                                    value={dealFormData.classMod1} 
+                                    onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})}
+                                    disabled={!dealFormData.courseCity || availableMod1Codes.length === 0}
+                                  >
                                       <option value="">Selecione a turma...</option>
-                                      {availableClasses.map(c => <option key={c.id} value={c.code}>{c.code} - {c.city}</option>)}
+                                      {availableMod1Codes.map(code => <option key={code} value={code}>{code}</option>)}
                                   </select>
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 2</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.classMod2} onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})}>
+                                  <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" 
+                                    value={dealFormData.classMod2} 
+                                    onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})}
+                                    disabled={!dealFormData.courseCity || availableMod2Codes.length === 0}
+                                  >
                                       <option value="">Selecione a turma...</option>
-                                      {availableClasses.map(c => <option key={c.id} value={c.code}>{c.code} - {c.city}</option>)}
+                                      {availableMod2Codes.map(code => <option key={code} value={code}>{code}</option>)}
                                   </select>
                               </div>
                           </div>

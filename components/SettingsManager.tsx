@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS public.crm_products (
   description text
 );
 
--- 4. TABELA FRANQUIAS (NOVO)
+-- 4. TABELA FRANQUIAS
 CREATE TABLE IF NOT EXISTS public.crm_franchises (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS public.crm_franchises (
   phone text,
   email text,
   residential_address text,
-  company_name text, -- Razão Social
+  company_name text, 
   cnpj text,
   commercial_address text,
   commercial_neighborhood text,
@@ -99,16 +99,29 @@ CREATE TABLE IF NOT EXISTS public.crm_franchises (
   contract_end_date date,
   franchisee_folder_link text,
   observations text,
-  path_info text, -- Campo Caminho
+  path_info text,
   partner_1_name text,
   partner_2_name text
 );
 
--- 5. TABELA NEGOCIACOES (ATUALIZAÇÃO)
+-- 5. TABELA LISTA DE CHAMADA (NOVO)
+CREATE TABLE IF NOT EXISTS public.crm_attendance (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  class_id uuid, -- ID da Turma
+  student_id uuid, -- ID do Aluno (Deal)
+  date date, -- Data da chamada
+  present boolean,
+  UNIQUE(class_id, student_id, date) -- Evita duplicidade no mesmo dia
+);
+ALTER TABLE public.crm_attendance ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total attendance" ON public.crm_attendance FOR ALL USING (true) WITH CHECK (true);
+
+-- 6. TABELA NEGOCIACOES (ATUALIZAÇÃO)
 CREATE TABLE IF NOT EXISTS public.crm_deals (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now());
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS product_type text, ADD COLUMN IF NOT EXISTS product_name text;
 
--- 6. LIMPEZA DE CACHE
+-- 7. LIMPEZA DE CACHE
 NOTIFY pgrst, 'reload config';
   `;
 

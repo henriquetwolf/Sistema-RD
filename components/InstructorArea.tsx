@@ -176,6 +176,8 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
               classItem={selectedClass} 
               onClose={() => setSelectedClass(null)} 
               variant="modal"
+              hideFinancials={true} // Ocultar dados financeiros
+              canTakeAttendance={true} // Permitir chamada
           />
       )}
     </div>

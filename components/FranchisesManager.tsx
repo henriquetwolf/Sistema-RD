@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   Store, Plus, Search, MoreVertical, MapPin, Phone, Mail, 
   ArrowLeft, Save, X, Edit2, Trash2, Loader2, Calendar, FileText, 
-  CheckSquare, DollarSign, User, Building, Paperclip, Briefcase, Map as MapIcon, List
+  CheckSquare, DollarSign, User, Building, Paperclip, Briefcase, Map as MapIcon, List,
+  Navigation, AlertTriangle, CheckCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import * as L from 'leaflet';
 
 // Fix for default Leaflet marker icon missing in some build environments
@@ -20,6 +21,16 @@ const DefaultIcon = L.icon({
     shadowSize: [41, 41]
 });
 L.Marker.prototype.options.icon = DefaultIcon;
+
+// Custom Icon for Potential Location
+const PotentialIcon = L.icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+});
 
 // --- Types ---
 export interface Franchise {
@@ -77,6 +88,15 @@ interface FranchisesManagerProps {
   onBack: () => void;
 }
 
+// --- Helper Components ---
+const MapFlyTo = ({ center }: { center: [number, number] }) => {
+    const map = useMap();
+    useEffect(() => {
+        if (center) map.flyTo(center, 14);
+    }, [center, map]);
+    return null;
+};
+
 export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) => {
   const [franchises, setFranchises] = useState<Franchise[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -92,6 +112,12 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
   const [states, setStates] = useState<IBGEUF[]>([]);
   const [cities, setCities] = useState<IBGECity[]>([]);
   const [isLoadingCities, setIsLoadingCities] = useState(false);
+
+  // Map Search State
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [isSearchingMap, setIsSearchingMap] = useState(false);
+  const [potentialLocation, setPotentialLocation] = useState<{ lat: number, lng: number } | null>(null);
+  const [conflicts, setConflicts] = useState<{ name: string, distance: number }[]>([]);
 
   const initialFormState: Franchise = {
       id: '',
@@ -268,6 +294,79 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
       setActiveMenuId(null);
   };
 
+  // --- MAP SEARCH LOGIC ---
+
+  // Haversine formula to calculate distance in KM
+  const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1); 
+    const dLon = deg2rad(lon2 - lon1); 
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2); 
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+    const d = R * c; // Distance in km
+    return d;
+  };
+
+  const deg2rad = (deg: number) => {
+    return deg * (Math.PI/180)
+  };
+
+  const handleAddressSearch = async () => {
+      if (!mapSearchQuery) return;
+      setIsSearchingMap(true);
+      setPotentialLocation(null);
+      setConflicts([]);
+
+      try {
+          // Using OpenStreetMap Nominatim API (Free, no key required for low volume)
+          const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapSearchQuery)}&countrycodes=br&limit=1`);
+          const data = await response.json();
+
+          if (data && data.length > 0) {
+              const lat = parseFloat(data[0].lat);
+              const lng = parseFloat(data[0].lon);
+              
+              setPotentialLocation({ lat, lng });
+
+              // Check Conflicts
+              const conflictsFound: { name: string, distance: number }[] = [];
+              
+              mapFranchises.forEach(f => {
+                  const fLat = parseFloat(f.latitude);
+                  const fLng = parseFloat(f.longitude);
+                  
+                  if (!isNaN(fLat) && !isNaN(fLng)) {
+                      const dist = getDistanceFromLatLonInKm(lat, lng, fLat, fLng);
+                      // Radius Protection: 1km. 
+                      // If new location is within 1km of an existing one, it's a conflict.
+                      if (dist < 1.0) {
+                          conflictsFound.push({ name: f.franchiseeName, distance: dist });
+                      }
+                  }
+              });
+
+              setConflicts(conflictsFound);
+
+          } else {
+              alert("Endereço não encontrado.");
+          }
+      } catch (e) {
+          console.error("Geocoding error", e);
+          alert("Erro ao buscar endereço.");
+      } finally {
+          setIsSearchingMap(false);
+      }
+  };
+
+  const clearMapSearch = () => {
+      setMapSearchQuery('');
+      setPotentialLocation(null);
+      setConflicts([]);
+  };
+
   const filtered = franchises.filter(f => 
       f.franchiseeName.toLowerCase().includes(searchTerm.toLowerCase()) || 
       f.commercialCity.toLowerCase().includes(searchTerm.toLowerCase())
@@ -419,11 +518,61 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
             {/* VIEW: MAP */}
             {viewMode === 'map' && (
                 <div className="h-full w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm relative">
-                    {mapFranchises.length === 0 ? (
+                    
+                    {/* MAP SEARCH OVERLAY */}
+                    <div className="absolute top-4 left-4 z-[1000] w-full max-w-sm flex flex-col gap-2">
+                        <div className="bg-white rounded-lg shadow-lg border border-slate-200 flex items-center p-1">
+                            <div className="pl-3 text-slate-400">
+                                <Search size={18} />
+                            </div>
+                            <input 
+                                type="text"
+                                className="w-full px-3 py-2 outline-none text-sm text-slate-700 bg-transparent"
+                                placeholder="Verificar nova localização (Endereço)"
+                                value={mapSearchQuery}
+                                onChange={(e) => setMapSearchQuery(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}
+                            />
+                            {mapSearchQuery && (
+                                <button onClick={clearMapSearch} className="p-2 text-slate-400 hover:text-slate-600">
+                                    <X size={16} />
+                                </button>
+                            )}
+                            <button 
+                                onClick={handleAddressSearch}
+                                disabled={isSearchingMap || !mapSearchQuery}
+                                className="bg-teal-600 hover:bg-teal-700 text-white rounded p-2 m-1 transition-colors disabled:opacity-50"
+                            >
+                                {isSearchingMap ? <Loader2 size={16} className="animate-spin" /> : <Navigation size={16} />}
+                            </button>
+                        </div>
+
+                        {/* Search Feedback Alert */}
+                        {potentialLocation && (
+                            <div className={clsx(
+                                "rounded-lg shadow-lg border p-4 text-sm animate-in slide-in-from-top-2",
+                                conflicts.length > 0 ? "bg-red-50 border-red-200 text-red-800" : "bg-green-50 border-green-200 text-green-800"
+                            )}>
+                                <div className="flex items-center gap-2 mb-1 font-bold">
+                                    {conflicts.length > 0 ? <AlertTriangle size={18} /> : <CheckCircle size={18} />}
+                                    {conflicts.length > 0 ? "Conflito de Raio Detectado!" : "Localização Disponível"}
+                                </div>
+                                <p className="text-xs opacity-90">
+                                    {conflicts.length > 0 
+                                        ? `Esta localização invade o raio de 1km de: ${conflicts.map(c => `${c.name} (${c.distance.toFixed(2)}km)`).join(', ')}`
+                                        : "Nenhum conflito com franquias existentes num raio de 1km."
+                                    }
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* MAP */}
+                    {mapFranchises.length === 0 && !potentialLocation ? (
                         <div className="flex flex-col items-center justify-center h-full bg-slate-50">
                             <MapPin size={48} className="text-slate-300 mb-2" />
-                            <p className="text-slate-500">Nenhuma franquia com coordenadas (Latitude/Longitude) encontrada.</p>
-                            <p className="text-xs text-slate-400">Edite as franquias para adicionar localização.</p>
+                            <p className="text-slate-500">Nenhuma franquia com coordenadas encontrada.</p>
+                            <p className="text-xs text-slate-400">Edite as franquias para adicionar latitude/longitude.</p>
                         </div>
                     ) : (
                         <MapContainer center={mapCenter} zoom={4} scrollWheelZoom={true} style={{ height: '100%', width: '100%' }}>
@@ -431,12 +580,13 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
+                            
+                            {/* Existing Franchises */}
                             {mapFranchises.map(f => {
                                 const lat = parseFloat(f.latitude);
                                 const lng = parseFloat(f.longitude);
                                 return (
                                     <React.Fragment key={f.id}>
-                                        {/* Marker */}
                                         <Marker position={[lat, lng]}>
                                             <Popup>
                                                 <div className="text-sm">
@@ -448,16 +598,34 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                                 </div>
                                             </Popup>
                                         </Marker>
-                                        
-                                        {/* 1km Radius Circle */}
                                         <Circle 
                                             center={[lat, lng]} 
-                                            radius={1000} // 1000 meters = 1km
+                                            radius={1000} // 1000 meters = 1km protection
                                             pathOptions={{ color: '#0d9488', fillColor: '#0d9488', fillOpacity: 0.1 }} 
                                         />
                                     </React.Fragment>
                                 );
                             })}
+
+                            {/* Potential Location (Search Result) */}
+                            {potentialLocation && (
+                                <React.Fragment>
+                                    <MapFlyTo center={[potentialLocation.lat, potentialLocation.lng]} />
+                                    <Marker position={[potentialLocation.lat, potentialLocation.lng]} icon={PotentialIcon}>
+                                        <Popup>Nova Localização Pesquisada</Popup>
+                                    </Marker>
+                                    <Circle 
+                                        center={[potentialLocation.lat, potentialLocation.lng]} 
+                                        radius={1000} 
+                                        pathOptions={{ 
+                                            color: conflicts.length > 0 ? '#ef4444' : '#8b5cf6', 
+                                            fillColor: conflicts.length > 0 ? '#ef4444' : '#8b5cf6', 
+                                            fillOpacity: 0.2,
+                                            dashArray: '5, 5' 
+                                        }} 
+                                    />
+                                </React.Fragment>
+                            )}
                         </MapContainer>
                     )}
                     
@@ -467,9 +635,13 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                             <MapPin size={12} className="text-blue-600" />
                             <span className="font-bold text-slate-700">Franquias VOLL</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 mb-1">
                             <div className="w-3 h-3 rounded-full border border-teal-600 bg-teal-600/20"></div>
                             <span className="text-slate-600">Raio de Proteção (1km)</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-200">
+                            <MapPin size={12} className="text-purple-600" />
+                            <span className="font-bold text-slate-700">Pesquisa Atual</span>
                         </div>
                     </div>
                 </div>

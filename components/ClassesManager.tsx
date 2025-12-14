@@ -624,6 +624,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                       classItem={selectedClass} 
                       onClose={() => setSelectedClassId(null)} 
                       variant="embedded"
+                      canTakeAttendance={true} // Allow Admin to view/edit attendance
                   />
               ) : (
                   <div className="flex flex-col items-center justify-center h-full text-slate-400 p-8 text-center">
@@ -631,7 +632,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                           <Users size={32} className="text-slate-300" />
                       </div>
                       <h3 className="text-lg font-medium text-slate-600">Nenhuma turma selecionada</h3>
-                      <p className="text-sm max-w-xs mx-auto mt-2">Selecione uma turma na lista à esquerda para visualizar os alunos inscritos e detalhes financeiros.</p>
+                      <p className="text-sm max-w-xs mx-auto mt-2">Selecione uma turma na lista à esquerda para visualizar os alunos inscritos, financeiro e lista de presença.</p>
                   </div>
               )}
           </div>
@@ -651,6 +652,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                               classItem={selectedClass} 
                               onClose={() => setSelectedClassId(null)} 
                               variant="embedded"
+                              canTakeAttendance={true} // Allow Admin to view/edit attendance
                           />
                       </div>
                   </div>
@@ -666,6 +668,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
               classItem={modalViewerClass} 
               onClose={() => setModalViewerClass(null)} 
               variant="modal"
+              canTakeAttendance={true} // Allow Admin to view/edit attendance
           />
       )}
 

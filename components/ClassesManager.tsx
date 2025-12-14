@@ -3,11 +3,12 @@ import {
   GraduationCap, Plus, Search, Calendar, Clock, MapPin, 
   ArrowLeft, Save, X, MoreHorizontal, BookOpen, CheckSquare, 
   Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
-  Edit2, Trash2, Hash, Loader2
+  Edit2, Trash2, Hash, Loader2, Users
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 import { appBackend } from '../services/appBackend';
+import { ClassStudentsViewer } from './ClassStudentsViewer';
 
 // --- Types ---
 interface ClassItem {
@@ -73,6 +74,9 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  
+  // Viewer State
+  const [viewingStudentsClass, setViewingStudentsClass] = useState<ClassItem | null>(null);
   
   // IBGE State
   const [states, setStates] = useState<IBGEUF[]>([]);
@@ -179,8 +183,12 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             attachments: [] 
           }));
           setClasses(mapped);
-      } catch (e) {
+      } catch (e: any) {
           console.error("Erro ao buscar turmas:", e);
+          const msg = e.message || JSON.stringify(e);
+          if (msg.includes('does not exist')) {
+              alert("A tabela 'crm_classes' não existe. Vá em Configurações > Diagnóstico e execute o SQL de correção.");
+          }
       } finally {
           setIsLoadingData(false);
       }
@@ -238,6 +246,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       setFormData({ ...item });
       setActiveMenuId(null);
       setShowModal(true);
+  };
+
+  const handleViewStudents = (item: ClassItem) => {
+      setViewingStudentsClass(item);
+      setActiveMenuId(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -365,6 +378,13 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                     {activeMenuId === cls.id && (
                         <div className="absolute right-0 top-8 w-40 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
                             <button 
+                                onClick={() => handleViewStudents(cls)}
+                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            >
+                                <Users size={14} className="text-blue-600" /> Ver Alunos
+                            </button>
+                            <div className="h-px bg-slate-100 my-0"></div>
+                            <button 
                                 onClick={() => handleEdit(cls)}
                                 className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
                             >
@@ -436,6 +456,14 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             <span className="font-medium">Cadastrar nova turma</span>
         </button>
       </div>
+      )}
+
+      {/* STUDENTS VIEWER MODAL */}
+      {viewingStudentsClass && (
+          <ClassStudentsViewer 
+            classItem={viewingStudentsClass} 
+            onClose={() => setViewingStudentsClass(null)} 
+          />
       )}
 
       {/* Modal Full Screen / Large */}

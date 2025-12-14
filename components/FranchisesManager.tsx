@@ -2,11 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { 
   Store, Plus, Search, MoreVertical, MapPin, Phone, Mail, 
   ArrowLeft, Save, X, Edit2, Trash2, Loader2, Calendar, FileText, 
-  CheckSquare, DollarSign, User, Building, Paperclip, Briefcase
+  CheckSquare, DollarSign, User, Building, Paperclip, Briefcase, Map as MapIcon, List
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
+import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import * as L from 'leaflet';
+
+// Fix for default Leaflet marker icon missing in some build environments
+const DefaultIcon = L.icon({
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
 
 // --- Types ---
 export interface Franchise {
@@ -71,6 +84,9 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  
+  // View Mode
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
   // IBGE State
   const [states, setStates] = useState<IBGEUF[]>([]);
@@ -257,10 +273,25 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
       f.commercialCity.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Map Filter: Only franchises with Lat/Long
+  const mapFranchises = filtered.filter(f => {
+      const lat = parseFloat(f.latitude);
+      const lng = parseFloat(f.longitude);
+      return !isNaN(lat) && !isNaN(lng);
+  });
+
+  // Calculate Map Center (Average or Default Brazil)
+  const mapCenter: [number, number] = mapFranchises.length > 0
+      ? [
+          mapFranchises.reduce((acc, f) => acc + parseFloat(f.latitude), 0) / mapFranchises.length,
+          mapFranchises.reduce((acc, f) => acc + parseFloat(f.longitude), 0) / mapFranchises.length
+        ]
+      : [-14.235, -51.925]; // Brazil Center
+
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20 h-full flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
             <div className="flex items-center gap-4">
                 <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
                     <ArrowLeft size={20} />
@@ -272,88 +303,176 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                     <p className="text-slate-500 text-sm">Controle de unidades franqueadas e implantação.</p>
                 </div>
             </div>
-            <button 
-                onClick={() => { setFormData(initialFormState); setShowModal(true); }}
-                className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
-            >
-                <Plus size={18} /> Nova Franquia
-            </button>
-        </div>
+            
+            <div className="flex items-center gap-3">
+                {/* View Toggle */}
+                <div className="bg-slate-100 p-1 rounded-lg flex items-center">
+                    <button 
+                        onClick={() => setViewMode('list')}
+                        className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'list' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                    >
+                        <List size={16} /> Lista
+                    </button>
+                    <button 
+                        onClick={() => setViewMode('map')}
+                        className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'map' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                    >
+                        <MapIcon size={16} /> Mapa
+                    </button>
+                </div>
 
-        {/* Toolbar */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input 
-                    type="text" 
-                    placeholder="Buscar por franqueado ou cidade..." 
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
-                />
+                <button 
+                    onClick={() => { setFormData(initialFormState); setShowModal(true); }}
+                    className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
+                >
+                    <Plus size={18} /> Nova Franquia
+                </button>
             </div>
         </div>
 
-        {/* Grid List */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {isLoading ? (
-                <div className="col-span-full flex justify-center py-12"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
-            ) : filtered.length === 0 ? (
-                <div className="col-span-full text-center py-12 text-slate-400">Nenhuma franquia encontrada.</div>
-            ) : (
-                filtered.map(item => (
-                    <div key={item.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
-                        <div className="p-5 flex-1">
-                            <div className="flex justify-between items-start mb-3">
-                                <span className={clsx(
-                                    "text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide",
-                                    item.studioStatus === 'Ativo' ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"
-                                )}>
-                                    {item.studioStatus || 'Status N/A'}
-                                </span>
-                                <div className="relative">
-                                    <button 
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setActiveMenuId(activeMenuId === item.id ? null : item.id);
-                                        }}
-                                        className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 franchise-menu-btn"
-                                    >
-                                        <MoreVertical size={18} />
-                                    </button>
-                                    {activeMenuId === item.id && (
-                                        <div className="absolute right-0 top-8 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
-                                            <button onClick={() => handleEdit(item)} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2">
-                                                <Edit2 size={12} /> Editar
-                                            </button>
-                                            <button onClick={() => handleDelete(item.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
-                                                <Trash2 size={12} /> Excluir
-                                            </button>
+        {/* Toolbar */}
+        {viewMode === 'list' && (
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm shrink-0">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Buscar por franqueado ou cidade..." 
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
+                    />
+                </div>
+            </div>
+        )}
+
+        {/* CONTENT AREA */}
+        <div className="flex-1 overflow-hidden relative min-h-[500px]">
+            
+            {/* VIEW: LIST */}
+            {viewMode === 'list' && (
+                <div className="h-full overflow-y-auto custom-scrollbar pr-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
+                        {isLoading ? (
+                            <div className="col-span-full flex justify-center py-12"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
+                        ) : filtered.length === 0 ? (
+                            <div className="col-span-full text-center py-12 text-slate-400">Nenhuma franquia encontrada.</div>
+                        ) : (
+                            filtered.map(item => (
+                                <div key={item.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
+                                    <div className="p-5 flex-1">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <span className={clsx(
+                                                "text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide",
+                                                item.studioStatus === 'Ativo' ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"
+                                            )}>
+                                                {item.studioStatus || 'Status N/A'}
+                                            </span>
+                                            <div className="relative">
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setActiveMenuId(activeMenuId === item.id ? null : item.id);
+                                                    }}
+                                                    className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 franchise-menu-btn"
+                                                >
+                                                    <MoreVertical size={18} />
+                                                </button>
+                                                {activeMenuId === item.id && (
+                                                    <div className="absolute right-0 top-8 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                                                        <button onClick={() => handleEdit(item)} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                                                            <Edit2 size={12} /> Editar
+                                                        </button>
+                                                        <button onClick={() => handleDelete(item.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                                            <Trash2 size={12} /> Excluir
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    )}
-                                </div>
-                            </div>
 
-                            <h3 className="font-bold text-slate-800 text-lg mb-1">{item.franchiseeName}</h3>
-                            <div className="flex items-center gap-2 text-xs text-slate-500 mb-4">
-                                <MapPin size={12} /> {item.commercialCity}/{item.commercialState}
-                            </div>
+                                        <h3 className="font-bold text-slate-800 text-lg mb-1">{item.franchiseeName}</h3>
+                                        <div className="flex items-center gap-2 text-xs text-slate-500 mb-4">
+                                            <MapPin size={12} /> {item.commercialCity}/{item.commercialState}
+                                        </div>
 
-                            <div className="space-y-2 text-sm text-slate-600">
-                                <div className="flex items-center gap-2">
-                                    <Phone size={14} className="text-slate-400" /> {item.phone || '-'}
+                                        <div className="space-y-2 text-sm text-slate-600">
+                                            <div className="flex items-center gap-2">
+                                                <Phone size={14} className="text-slate-400" /> {item.phone || '-'}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Mail size={14} className="text-slate-400" /> {item.email || '-'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex justify-between text-xs text-slate-500">
+                                        <span>Venda: {item.saleNumber}</span>
+                                        <span>{item.contractStartDate ? new Date(item.contractStartDate).toLocaleDateString() : 'S/ Data'}</span>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <Mail size={14} className="text-slate-400" /> {item.email || '-'}
-                                </div>
-                            </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* VIEW: MAP */}
+            {viewMode === 'map' && (
+                <div className="h-full w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm relative">
+                    {mapFranchises.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full bg-slate-50">
+                            <MapPin size={48} className="text-slate-300 mb-2" />
+                            <p className="text-slate-500">Nenhuma franquia com coordenadas (Latitude/Longitude) encontrada.</p>
+                            <p className="text-xs text-slate-400">Edite as franquias para adicionar localização.</p>
                         </div>
-                        <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex justify-between text-xs text-slate-500">
-                            <span>Venda: {item.saleNumber}</span>
-                            <span>{item.contractStartDate ? new Date(item.contractStartDate).toLocaleDateString() : 'S/ Data'}</span>
+                    ) : (
+                        <MapContainer center={mapCenter} zoom={4} scrollWheelZoom={true} style={{ height: '100%', width: '100%' }}>
+                            <TileLayer
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            {mapFranchises.map(f => {
+                                const lat = parseFloat(f.latitude);
+                                const lng = parseFloat(f.longitude);
+                                return (
+                                    <React.Fragment key={f.id}>
+                                        {/* Marker */}
+                                        <Marker position={[lat, lng]}>
+                                            <Popup>
+                                                <div className="text-sm">
+                                                    <strong className="block text-slate-800 text-base mb-1">{f.franchiseeName}</strong>
+                                                    <p className="text-slate-600 mb-1">{f.commercialCity} / {f.commercialState}</p>
+                                                    <span className={clsx("inline-block px-2 py-0.5 rounded text-[10px] font-bold", f.studioStatus === 'Ativo' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700')}>
+                                                        {f.studioStatus}
+                                                    </span>
+                                                </div>
+                                            </Popup>
+                                        </Marker>
+                                        
+                                        {/* 1km Radius Circle */}
+                                        <Circle 
+                                            center={[lat, lng]} 
+                                            radius={1000} // 1000 meters = 1km
+                                            pathOptions={{ color: '#0d9488', fillColor: '#0d9488', fillOpacity: 0.1 }} 
+                                        />
+                                    </React.Fragment>
+                                );
+                            })}
+                        </MapContainer>
+                    )}
+                    
+                    {/* Map Overlay Legend */}
+                    <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-slate-200 z-[1000] text-xs">
+                        <div className="flex items-center gap-2 mb-1">
+                            <MapPin size={12} className="text-blue-600" />
+                            <span className="font-bold text-slate-700">Franquias VOLL</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full border border-teal-600 bg-teal-600/20"></div>
+                            <span className="text-slate-600">Raio de Proteção (1km)</span>
                         </div>
                     </div>
-                ))
+                </div>
             )}
         </div>
 
@@ -475,11 +594,11 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-600 mb-1">Latitude</label>
-                                    <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.latitude} onChange={e => handleInputChange('latitude', e.target.value)} />
+                                    <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.latitude} onChange={e => handleInputChange('latitude', e.target.value)} placeholder="-23.5505" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-600 mb-1">Longitude</label>
-                                    <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.longitude} onChange={e => handleInputChange('longitude', e.target.value)} />
+                                    <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.longitude} onChange={e => handleInputChange('longitude', e.target.value)} placeholder="-46.6333" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-600 mb-1">KM Ponto de Rua</label>

@@ -104,6 +104,13 @@ CREATE TABLE IF NOT EXISTS public.crm_franchises (
   partner_2_name text
 );
 
+-- GARANTIR COLUNAS DE MAPA (CASO A TABELA JÁ EXISTA ANTIGA)
+ALTER TABLE public.crm_franchises ADD COLUMN IF NOT EXISTS latitude text;
+ALTER TABLE public.crm_franchises ADD COLUMN IF NOT EXISTS longitude text;
+ALTER TABLE public.crm_franchises ADD COLUMN IF NOT EXISTS commercial_neighborhood text;
+ALTER TABLE public.crm_franchises ADD COLUMN IF NOT EXISTS km_street_point text;
+ALTER TABLE public.crm_franchises ADD COLUMN IF NOT EXISTS km_commercial_building text;
+
 -- 5. TABELA LISTA DE CHAMADA (NOVO)
 CREATE TABLE IF NOT EXISTS public.crm_attendance (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,

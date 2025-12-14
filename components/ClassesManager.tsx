@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  GraduationCap, Plus, Search, Calendar, Clock, MapPin, 
+  GraduationCap, Plus, Search, Calendar as CalendarIcon, Clock, MapPin, 
   ArrowLeft, Save, X, MoreHorizontal, BookOpen, CheckSquare, 
   Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
-  Edit2, Trash2, Hash, Loader2, Users, Filter, ChevronRight
+  Edit2, Trash2, Hash, Loader2, Users, Filter, ChevronRight,
+  LayoutList, ChevronLeft, ChevronRight as ChevronRightIcon
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
@@ -75,8 +76,15 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [showModal, setShowModal] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   
+  // View Mode State
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [calendarDate, setCalendarDate] = useState(new Date());
+
   // Selection / Filter State
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  // Separate state for modal viewing (Calendar interactions) vs embedded viewing (List interactions)
+  const [modalViewerClass, setModalViewerClass] = useState<ClassItem | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
   
@@ -186,8 +194,8 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           }));
           setClasses(mapped);
           
-          // Select first class by default if available
-          if (mapped.length > 0) {
+          // Select first class by default if available (only in list mode)
+          if (mapped.length > 0 && viewMode === 'list') {
               setSelectedClassId(mapped[0].id);
           }
       } catch (e: any) {
@@ -334,7 +342,14 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Filter Logic
+  // --- CALENDAR LOGIC ---
+  const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+
+  const nextMonth = () => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
+  const prevMonth = () => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
+
+  // --- FILTERING ---
   const filteredClasses = classes.filter(c => {
       const matchesSearch = c.course.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             c.city.toLowerCase().includes(searchTerm.toLowerCase());
@@ -348,7 +363,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 h-full flex flex-col pb-20">
       
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
                 <ArrowLeft size={20} />
@@ -360,15 +375,116 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                 <p className="text-slate-500 text-sm">Planejamento logístico e financeiro.</p>
             </div>
         </div>
-        <button 
-            onClick={handleOpenNew}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
-        >
-            <Plus size={18} /> Nova Turma
-        </button>
+        
+        <div className="flex items-center gap-3">
+            {/* View Mode Toggle */}
+            <div className="bg-slate-100 p-1 rounded-lg flex items-center">
+                <button 
+                    onClick={() => setViewMode('list')}
+                    className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                >
+                    <LayoutList size={16} /> Lista
+                </button>
+                <button 
+                    onClick={() => setViewMode('calendar')}
+                    className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'calendar' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                >
+                    <CalendarIcon size={16} /> Calendário
+                </button>
+            </div>
+
+            <button 
+                onClick={handleOpenNew}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
+            >
+                <Plus size={18} /> Nova Turma
+            </button>
+        </div>
       </div>
 
-      {/* Main Layout: Split View */}
+      {/* VIEW: CALENDAR */}
+      {viewMode === 'calendar' && (
+          <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+              {/* Calendar Controls */}
+              <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                  <div className="flex items-center gap-4">
+                      <button onClick={prevMonth} className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-600"><ChevronLeft size={20} /></button>
+                      <h3 className="text-lg font-bold text-slate-800 capitalize">
+                          {calendarDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+                      </h3>
+                      <button onClick={nextMonth} className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-600"><ChevronRightIcon size={20} /></button>
+                  </div>
+                  <div className="text-sm text-slate-500 flex gap-4">
+                      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-100 border border-purple-300"></span> Módulo 1</div>
+                      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-orange-100 border border-orange-300"></span> Módulo 2</div>
+                  </div>
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="flex-1 overflow-auto custom-scrollbar p-4">
+                  <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-lg overflow-hidden">
+                      {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map(day => (
+                          <div key={day} className="bg-slate-50 p-2 text-center text-xs font-bold text-slate-500 uppercase">
+                              {day}
+                          </div>
+                      ))}
+                      
+                      {/* Empty Cells for start of month */}
+                      {Array.from({ length: getFirstDayOfMonth(calendarDate) }).map((_, i) => (
+                          <div key={`empty-${i}`} className="bg-white min-h-[120px]"></div>
+                      ))}
+
+                      {/* Days */}
+                      {Array.from({ length: getDaysInMonth(calendarDate) }).map((_, i) => {
+                          const day = i + 1;
+                          const currentDateStr = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), day).toISOString().split('T')[0];
+                          
+                          // Find classes on this day
+                          const dayClasses = classes.filter(c => c.dateMod1 === currentDateStr || c.dateMod2 === currentDateStr);
+
+                          return (
+                              <div key={day} className="bg-white min-h-[120px] p-2 hover:bg-slate-50 transition-colors">
+                                  <div className="flex justify-between items-start mb-2">
+                                      <span className={clsx(
+                                          "w-6 h-6 flex items-center justify-center rounded-full text-xs font-medium",
+                                          new Date().toISOString().split('T')[0] === currentDateStr 
+                                              ? "bg-purple-600 text-white" 
+                                              : "text-slate-700"
+                                      )}>
+                                          {day}
+                                      </span>
+                                  </div>
+                                  
+                                  <div className="space-y-1">
+                                      {dayClasses.map(cls => {
+                                          const isMod1 = cls.dateMod1 === currentDateStr;
+                                          return (
+                                              <button 
+                                                  key={`${cls.id}-${isMod1 ? 'm1' : 'm2'}`}
+                                                  onClick={() => setModalViewerClass(cls)}
+                                                  className={clsx(
+                                                      "w-full text-left px-2 py-1.5 rounded border text-[10px] font-medium transition-all shadow-sm mb-1",
+                                                      isMod1 
+                                                          ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" 
+                                                          : "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                                                  )}
+                                              >
+                                                  <div className="font-bold truncate">{cls.course}</div>
+                                                  <div className="truncate opacity-80">{cls.city} - {isMod1 ? 'Mod 1' : 'Mod 2'}</div>
+                                              </button>
+                                          );
+                                      })}
+                                  </div>
+                              </div>
+                          );
+                      })}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* VIEW: LIST (Split Pane) */}
+      {viewMode === 'list' && (
       <div className="flex flex-col lg:flex-row flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-[calc(100vh-180px)]">
           
           {/* LEFT PANE: List & Filters */}
@@ -473,7 +589,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                   </div>
 
                                   <div className="flex items-center gap-2 text-[10px] text-slate-400 bg-slate-50/50 p-1.5 rounded">
-                                      <Calendar size={12} /> Mod 1: {cls.dateMod1 ? new Date(cls.dateMod1).toLocaleDateString('pt-BR') : '--'}
+                                      <CalendarIcon size={12} /> Mod 1: {cls.dateMod1 ? new Date(cls.dateMod1).toLocaleDateString('pt-BR') : '--'}
                                   </div>
                               </div>
                           ))}
@@ -523,6 +639,16 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           </div>
 
       </div>
+      )}
+
+      {/* MODAL VIEWER (Used by Calendar) */}
+      {modalViewerClass && (
+          <ClassStudentsViewer 
+              classItem={modalViewerClass} 
+              onClose={() => setModalViewerClass(null)} 
+              variant="modal"
+          />
+      )}
 
       {/* Modal Full Screen / Large (CREATE/EDIT) */}
       {showModal && (
@@ -635,7 +761,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                     {/* SEÇÃO 2: MÓDULO 1 */}
                     <div>
                         <h4 className="text-sm font-bold text-purple-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
-                            <Calendar size={16} /> Módulo 1 (Logística)
+                            <CalendarIcon size={16} /> Módulo 1 (Logística)
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             <div className="lg:col-span-4">
@@ -735,7 +861,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                     {/* SEÇÃO 3: MÓDULO 2 */}
                     <div>
                         <h4 className="text-sm font-bold text-purple-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
-                            <Calendar size={16} /> Módulo 2 (Logística)
+                            <CalendarIcon size={16} /> Módulo 2 (Logística)
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             <div className="lg:col-span-4">

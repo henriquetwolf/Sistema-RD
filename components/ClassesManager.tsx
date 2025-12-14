@@ -3,7 +3,7 @@ import {
   GraduationCap, Plus, Search, Calendar, Clock, MapPin, 
   ArrowLeft, Save, X, MoreHorizontal, BookOpen, CheckSquare, 
   Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
-  Edit2, Trash2, Hash, Loader2, Users
+  Edit2, Trash2, Hash, Loader2, Users, Filter, ChevronRight
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
@@ -75,8 +75,10 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [showModal, setShowModal] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   
-  // Viewer State
-  const [viewingStudentsClass, setViewingStudentsClass] = useState<ClassItem | null>(null);
+  // Selection / Filter State
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('Todos');
   
   // IBGE State
   const [states, setStates] = useState<IBGEUF[]>([]);
@@ -183,6 +185,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             attachments: [] 
           }));
           setClasses(mapped);
+          
+          // Select first class by default if available
+          if (mapped.length > 0) {
+              setSelectedClassId(mapped[0].id);
+          }
       } catch (e: any) {
           console.error("Erro ao buscar turmas:", e);
           const msg = e.message || JSON.stringify(e);
@@ -248,17 +255,13 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       setShowModal(true);
   };
 
-  const handleViewStudents = (item: ClassItem) => {
-      setViewingStudentsClass(item);
-      setActiveMenuId(null);
-  };
-
   const handleDelete = async (id: string) => {
       if (window.confirm("Tem certeza que deseja excluir esta turma?")) {
           try {
               const { error } = await appBackend.client.from('crm_classes').delete().eq('id', id);
               if (error) throw error;
               setClasses(prev => prev.filter(c => c.id !== id));
+              if (selectedClassId === id) setSelectedClassId(null);
           } catch(e) {
               alert("Erro ao excluir turma.");
           }
@@ -331,9 +334,21 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Filter Logic
+  const filteredClasses = classes.filter(c => {
+      const matchesSearch = c.course.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            c.city.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === 'Todos' || c.status === statusFilter;
+      return matchesSearch && matchesStatus;
+  });
+
+  const selectedClass = classes.find(c => c.id === selectedClassId);
+
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 h-full flex flex-col pb-20">
+      
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
                 <ArrowLeft size={20} />
@@ -342,7 +357,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                 <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                     <GraduationCap className="text-purple-600" /> Gestão de Turmas
                 </h2>
-                <p className="text-slate-500 text-sm">Planejamento logístico e financeiro de cursos.</p>
+                <p className="text-slate-500 text-sm">Planejamento logístico e financeiro.</p>
             </div>
         </div>
         <button 
@@ -353,120 +368,163 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
         </button>
       </div>
 
-      {isLoadingData ? (
-          <div className="flex justify-center py-20">
-              <Loader2 size={40} className="animate-spin text-purple-600" />
+      {/* Main Layout: Split View */}
+      <div className="flex flex-col lg:flex-row flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-[calc(100vh-180px)]">
+          
+          {/* LEFT PANE: List & Filters */}
+          <div className="w-full lg:w-1/3 flex flex-col border-r border-slate-200">
+              
+              {/* Filters Header */}
+              <div className="p-4 border-b border-slate-200 bg-white z-10 space-y-3">
+                  <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input 
+                          type="text" 
+                          placeholder="Buscar por curso ou cidade..." 
+                          value={searchTerm}
+                          onChange={e => setSearchTerm(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                  </div>
+                  <div className="flex gap-2">
+                      <select 
+                          value={statusFilter}
+                          onChange={e => setStatusFilter(e.target.value)}
+                          className="flex-1 bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-2 outline-none"
+                      >
+                          <option value="Todos">Todos Status</option>
+                          <option value="Planejamento">Planejamento</option>
+                          <option value="Confirmado">Confirmado</option>
+                          <option value="Concluído">Concluído</option>
+                          <option value="Cancelado">Cancelado</option>
+                      </select>
+                      <div className="text-xs text-slate-400 flex items-center px-2">
+                          {filteredClasses.length} turmas
+                      </div>
+                  </div>
+              </div>
+
+              {/* Scrollable List */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50">
+                  {isLoadingData ? (
+                      <div className="flex justify-center py-10">
+                          <Loader2 size={32} className="animate-spin text-purple-600" />
+                      </div>
+                  ) : filteredClasses.length === 0 ? (
+                      <div className="p-8 text-center text-slate-400 text-sm">
+                          Nenhuma turma encontrada.
+                      </div>
+                  ) : (
+                      <div className="divide-y divide-slate-100">
+                          {filteredClasses.map(cls => (
+                              <div 
+                                  key={cls.id}
+                                  onClick={() => setSelectedClassId(cls.id)}
+                                  className={clsx(
+                                      "p-4 cursor-pointer transition-all hover:bg-white relative group",
+                                      selectedClassId === cls.id ? "bg-white border-l-4 border-l-purple-600 shadow-sm z-10" : "bg-transparent border-l-4 border-l-transparent text-slate-600"
+                                  )}
+                              >
+                                  <div className="flex justify-between items-start mb-1">
+                                      <span className={clsx("text-[10px] font-bold px-1.5 py-0.5 rounded uppercase", 
+                                          cls.status === 'Confirmado' ? 'bg-green-100 text-green-700' : 
+                                          cls.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                                      )}>
+                                          {cls.status}
+                                      </span>
+                                      
+                                      {/* Context Menu Trigger */}
+                                      <div className="relative">
+                                          <button 
+                                              onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setActiveMenuId(activeMenuId === cls.id ? null : cls.id);
+                                              }}
+                                              className="p-1 hover:bg-slate-100 rounded text-slate-400 class-menu-btn"
+                                          >
+                                              <MoreHorizontal size={16} />
+                                          </button>
+                                          
+                                          {activeMenuId === cls.id && (
+                                              <div className="absolute right-0 top-6 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                                                  <button 
+                                                      onClick={(e) => { e.stopPropagation(); handleEdit(cls); }}
+                                                      className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                  >
+                                                      <Edit2 size={12} /> Editar
+                                                  </button>
+                                                  <button 
+                                                      onClick={(e) => { e.stopPropagation(); handleDelete(cls.id); }}
+                                                      className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                                  >
+                                                      <Trash2 size={12} /> Excluir
+                                                  </button>
+                                              </div>
+                                          )}
+                                      </div>
+                                  </div>
+
+                                  <h3 className={clsx("font-bold text-sm mb-1 leading-snug", selectedClassId === cls.id ? "text-purple-900" : "text-slate-800")}>
+                                      {cls.course}
+                                  </h3>
+                                  
+                                  <div className="flex items-center gap-1 text-xs text-slate-500 mb-2">
+                                      <MapPin size={12} /> {cls.city}/{cls.state} <span className="text-slate-300">|</span> T: {cls.classCode}
+                                  </div>
+
+                                  <div className="flex items-center gap-2 text-[10px] text-slate-400 bg-slate-50/50 p-1.5 rounded">
+                                      <Calendar size={12} /> Mod 1: {cls.dateMod1 ? new Date(cls.dateMod1).toLocaleDateString('pt-BR') : '--'}
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  )}
+              </div>
           </div>
-      ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {classes.map(cls => (
-            <div key={cls.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-5 group relative">
-                
-                {/* Menu Dropdown Trigger */}
-                <div className="absolute top-5 right-5">
-                    <button 
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveMenuId(activeMenuId === cls.id ? null : cls.id);
-                        }}
-                        className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded p-1 class-menu-btn"
-                    >
-                        <MoreHorizontal size={20} />
-                    </button>
-                    
-                    {/* Dropdown Menu */}
-                    {activeMenuId === cls.id && (
-                        <div className="absolute right-0 top-8 w-40 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
-                            <button 
-                                onClick={() => handleViewStudents(cls)}
-                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                            >
-                                <Users size={14} className="text-blue-600" /> Ver Alunos
-                            </button>
-                            <div className="h-px bg-slate-100 my-0"></div>
-                            <button 
-                                onClick={() => handleEdit(cls)}
-                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                            >
-                                <Edit2 size={14} /> Editar
-                            </button>
-                            <div className="h-px bg-slate-100 my-0"></div>
-                            <button 
-                                onClick={() => handleDelete(cls.id)}
-                                className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                            >
-                                <Trash2 size={14} /> Excluir
-                            </button>
-                        </div>
-                    )}
-                </div>
-                
-                <div className="flex items-start gap-4 mb-4">
-                    <div className="w-12 h-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                        <BookOpen size={24} />
-                    </div>
-                    <div className="pr-6">
-                        <h3 className="font-bold text-slate-800 leading-tight">{cls.course}</h3>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                             <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase", 
-                                 cls.status === 'Confirmado' ? 'bg-green-100 text-green-700' : 
-                                 cls.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                             )}>
-                                {cls.status}
-                             </span>
-                             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">
-                                T: {cls.classCode}
-                             </span>
-                        </div>
-                    </div>
-                </div>
 
-                <div className="space-y-2 text-sm text-slate-600 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <div className="flex items-center gap-2">
-                        <MapPin size={16} className="text-slate-400" /> <span className="font-medium">{cls.city} - {cls.state}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Calendar size={16} className="text-slate-400" /> Mod 1: {cls.dateMod1 ? new Date(cls.dateMod1).toLocaleDateString('pt-BR') : '--/--'}
-                    </div>
-                    {cls.dateMod2 && (
-                        <div className="flex items-center gap-2">
-                            <Calendar size={16} className="text-slate-400" /> Mod 2: {new Date(cls.dateMod2).toLocaleDateString('pt-BR')}
-                        </div>
-                    )}
-                </div>
+          {/* RIGHT PANE: Detail View (Student List) */}
+          <div className="hidden lg:flex flex-col flex-1 bg-slate-50 overflow-hidden relative">
+              {selectedClass ? (
+                  <ClassStudentsViewer 
+                      classItem={selectedClass} 
+                      onClose={() => setSelectedClassId(null)} 
+                      variant="embedded"
+                  />
+              ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400 p-8 text-center">
+                      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                          <Users size={32} className="text-slate-300" />
+                      </div>
+                      <h3 className="text-lg font-medium text-slate-600">Nenhuma turma selecionada</h3>
+                      <p className="text-sm max-w-xs mx-auto mt-2">Selecione uma turma na lista à esquerda para visualizar os alunos inscritos e detalhes financeiros.</p>
+                  </div>
+              )}
+          </div>
 
-                <div className="pt-2 flex items-center justify-between text-xs text-slate-400">
-                    <div className="flex gap-2">
-                        {cls.isReady && <span title="Pronto" className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded flex items-center gap-1"><CheckSquare size={12}/> Pronto</span>}
-                        {cls.onSite && <span title="No Site" className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1"><FileText size={12}/> Site</span>}
-                    </div>
-                    <span>Criado: {new Date(cls.createdAt).toLocaleDateString()}</span>
-                </div>
-            </div>
-        ))}
-        
-        {/* Empty State / Add New Card */}
-        <button 
-            onClick={handleOpenNew}
-            className="border-2 border-dashed border-slate-200 rounded-xl p-5 flex flex-col items-center justify-center text-slate-400 hover:text-purple-600 hover:border-purple-200 hover:bg-purple-50 transition-all min-h-[200px]"
-        >
-            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-2">
-                <Plus size={24} />
-            </div>
-            <span className="font-medium">Cadastrar nova turma</span>
-        </button>
+          {/* MOBILE VIEW MODAL (When a class is selected on mobile) */}
+          <div className={clsx("lg:hidden fixed inset-0 z-40 bg-white transition-transform duration-300 transform", selectedClassId ? "translate-x-0" : "translate-x-full")}>
+              {selectedClass && (
+                  <div className="h-full flex flex-col">
+                      <div className="p-4 border-b border-slate-100 flex items-center gap-3">
+                          <button onClick={() => setSelectedClassId(null)} className="p-2 hover:bg-slate-100 rounded-full">
+                              <ArrowLeft size={20} />
+                          </button>
+                          <span className="font-bold text-slate-800">Detalhes da Turma</span>
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                          <ClassStudentsViewer 
+                              classItem={selectedClass} 
+                              onClose={() => setSelectedClassId(null)} 
+                              variant="embedded"
+                          />
+                      </div>
+                  </div>
+              )}
+          </div>
+
       </div>
-      )}
 
-      {/* STUDENTS VIEWER MODAL */}
-      {viewingStudentsClass && (
-          <ClassStudentsViewer 
-            classItem={viewingStudentsClass} 
-            onClose={() => setViewingStudentsClass(null)} 
-          />
-      )}
-
-      {/* Modal Full Screen / Large */}
+      {/* Modal Full Screen / Large (CREATE/EDIT) */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">

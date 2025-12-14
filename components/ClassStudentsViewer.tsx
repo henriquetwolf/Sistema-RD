@@ -16,24 +16,25 @@ interface ClassItem {
 
 interface StudentDeal {
   id: string;
-  title: string; // Nome do aluno geralmente está aqui ou em contact_name
+  title: string; 
   contact_name: string;
-  email?: string; // Se existir no deal, senao tentamos buscar user
+  email?: string; 
   company_name: string;
   value: number;
   stage: string;
   status: string;
   class_mod_1: string;
   class_mod_2: string;
-  phone?: string; // As vezes salvo na descrição ou campo customizado, aqui assumindo que possa não vir direto, mas vamos tentar mapear se houver join
+  phone?: string; 
 }
 
 interface ClassStudentsViewerProps {
   classItem: ClassItem;
   onClose: () => void;
+  variant?: 'modal' | 'embedded'; // New prop to control layout mode
 }
 
-export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({ classItem, onClose }) => {
+export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({ classItem, onClose, variant = 'modal' }) => {
   const [students, setStudents] = useState<StudentDeal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -44,8 +45,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({ classI
   const fetchStudents = async () => {
     setIsLoading(true);
     try {
-      // Construir query OR para pegar alunos em qualquer um dos módulos desta turma
-      // Precisamos garantir que os códigos não sejam vazios para não trazer lixo
       const filters = [];
       if (classItem.mod1Code) filters.push(`class_mod_1.eq."${classItem.mod1Code}"`);
       if (classItem.mod2Code) filters.push(`class_mod_2.eq."${classItem.mod2Code}"`);
@@ -110,12 +109,21 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({ classI
     window.print();
   };
 
+  // Layout Conditionals
+  const containerClasses = variant === 'modal' 
+    ? "fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:p-0 print:bg-white"
+    : "h-full flex flex-col bg-white rounded-r-xl overflow-hidden border-l border-slate-200"; // Embedded style
+
+  const contentWrapperClasses = variant === 'modal'
+    ? "bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 print:shadow-none print:max-w-none print:h-auto print:max-h-none"
+    : "flex flex-col h-full w-full";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:p-0 print:bg-white">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 print:shadow-none print:max-w-none print:h-auto print:max-h-none">
+    <div className={containerClasses}>
+      <div className={contentWrapperClasses}>
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 print:bg-white print:border-b-2 print:border-black">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 print:bg-white print:border-b-2 print:border-black shrink-0">
             <div>
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                     <BookOpen className="text-purple-600" /> Lista de Alunos
@@ -128,7 +136,8 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({ classI
                 <button onClick={handlePrint} className="p-2 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors" title="Imprimir">
                     <Printer size={20} />
                 </button>
-                <button onClick={onClose} className="p-2 hover:bg-red-100 hover:text-red-600 rounded-lg text-slate-400 transition-colors">
+                {/* Only show Close button if in modal mode OR if user wants to deselect in embedded mode */}
+                <button onClick={onClose} className="p-2 hover:bg-red-100 hover:text-red-600 rounded-lg text-slate-400 transition-colors" title="Fechar Visualização">
                     <X size={24} />
                 </button>
             </div>
@@ -214,12 +223,14 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({ classI
             )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 text-right print:hidden">
-            <button onClick={onClose} className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold transition-colors">
-                Fechar
-            </button>
-        </div>
+        {/* Footer (Only show in Modal Mode) */}
+        {variant === 'modal' && (
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 text-right print:hidden">
+                <button onClick={onClose} className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold transition-colors">
+                    Fechar
+                </button>
+            </div>
+        )}
       </div>
     </div>
   );

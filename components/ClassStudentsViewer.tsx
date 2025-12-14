@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Phone, DollarSign, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save } from 'lucide-react';
+import { X, User, Mail, Phone, DollarSign, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
 
@@ -48,6 +48,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   
   // Attendance State
   const [attendanceMode, setAttendanceMode] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   // Map stores presence: key is `${studentId}_${dateString}`
   const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({}); 
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
@@ -58,7 +59,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
 
   // Fetch existing attendance when entering mode
   useEffect(() => {
-      if (attendanceMode && canTakeAttendance) {
+      if (attendanceMode) {
           fetchAttendance();
       }
   }, [attendanceMode, classItem]);
@@ -125,6 +126,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   };
 
   const saveAttendance = async () => {
+      if (isReadOnly) return;
       setIsSavingAttendance(true);
       try {
           const updates: any[] = [];
@@ -174,7 +176,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   };
 
   const togglePresence = (studentId: string, dateStr: string) => {
-      if (!dateStr) return;
+      if (!dateStr || isReadOnly) return;
       const key = `${studentId}_${dateStr}`;
       setPresenceMap(prev => ({
           ...prev,
@@ -248,18 +250,46 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                 </p>
             </div>
             <div className="flex items-center gap-2 print:hidden">
+                {/* Visualizar Presença Button */}
+                <button 
+                    onClick={() => {
+                        if (attendanceMode && isReadOnly) {
+                            setAttendanceMode(false);
+                        } else {
+                            setAttendanceMode(true);
+                            setIsReadOnly(true);
+                        }
+                    }} 
+                    className={clsx(
+                        "px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors border",
+                        attendanceMode && isReadOnly
+                            ? "bg-blue-100 text-blue-700 border-blue-200" 
+                            : "bg-white hover:bg-blue-50 text-slate-600 border-slate-200"
+                    )}
+                    title="Visualizar Chamada"
+                >
+                    <Eye size={18} /> {attendanceMode && isReadOnly ? 'Fechar Visualização' : 'Visualizar Chamada'}
+                </button>
+
                 {canTakeAttendance && (
                     <button 
-                        onClick={() => setAttendanceMode(!attendanceMode)} 
+                        onClick={() => {
+                            if (attendanceMode && !isReadOnly) {
+                                setAttendanceMode(false);
+                            } else {
+                                setAttendanceMode(true);
+                                setIsReadOnly(false);
+                            }
+                        }} 
                         className={clsx(
-                            "px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors border",
-                            attendanceMode 
+                            "px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors border",
+                            attendanceMode && !isReadOnly
                                 ? "bg-orange-100 text-orange-700 border-orange-200" 
                                 : "bg-white hover:bg-orange-50 text-slate-600 border-slate-200"
                         )}
-                        title="Realizar Chamada"
+                        title="Editar Chamada"
                     >
-                        <CheckSquare size={18} /> {attendanceMode ? 'Cancelar Chamada' : 'Realizar Chamada'}
+                        <CheckSquare size={18} /> {attendanceMode && !isReadOnly ? 'Cancelar Edição' : 'Editar Chamada'}
                     </button>
                 )}
                 
@@ -277,13 +307,16 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
 
         {/* ATTENDANCE HEADER */}
         {attendanceMode && (
-            <div className="bg-orange-50 border-b border-orange-100 px-6 py-3 flex items-center gap-4 animate-in slide-in-from-top-2">
+            <div className={clsx(
+                "border-b px-6 py-3 flex items-center gap-4 animate-in slide-in-from-top-2",
+                isReadOnly ? "bg-blue-50 border-blue-100 text-blue-800" : "bg-orange-50 border-orange-100 text-orange-800"
+            )}>
                 <div className="flex items-center gap-2">
-                    <Calendar size={18} className="text-orange-600" />
-                    <span className="text-sm font-bold text-orange-800">Modo Chamada:</span>
+                    <Calendar size={18} className={isReadOnly ? "text-blue-600" : "text-orange-600"} />
+                    <span className="text-sm font-bold">{isReadOnly ? "Modo Visualização:" : "Modo Chamada:"}</span>
                 </div>
-                <div className="flex-1 text-xs text-orange-700">
-                    Marque a presença nos dias correspondentes aos módulos.
+                <div className={clsx("flex-1 text-xs", isReadOnly ? "text-blue-700" : "text-orange-700")}>
+                    {isReadOnly ? "Visualizando lista de presença (Somente Leitura)." : "Marque a presença nos dias correspondentes aos módulos."}
                 </div>
             </div>
         )}
@@ -369,9 +402,13 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                         <td className={clsx("px-4 py-3 text-center border-l border-r", isPresent1 ? "bg-purple-50 border-purple-100" : "border-slate-100")}>
                                             <input 
                                                 type="checkbox" 
-                                                className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                                className={clsx(
+                                                    "w-5 h-5 rounded border-slate-300 focus:ring-purple-500",
+                                                    isReadOnly ? "text-slate-400 cursor-not-allowed bg-slate-100" : "text-purple-600 cursor-pointer"
+                                                )}
                                                 checked={isPresent1}
-                                                onChange={() => togglePresence(student.id, classItem.dateMod1)}
+                                                onChange={() => !isReadOnly && togglePresence(student.id, classItem.dateMod1)}
+                                                disabled={isReadOnly}
                                             />
                                         </td>
                                     )}
@@ -381,9 +418,13 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                         <td className={clsx("px-4 py-3 text-center border-r", isPresent2 ? "bg-orange-50 border-orange-100" : "border-slate-100")}>
                                             <input 
                                                 type="checkbox" 
-                                                className="w-5 h-5 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                                                className={clsx(
+                                                    "w-5 h-5 rounded border-slate-300 focus:ring-orange-500",
+                                                    isReadOnly ? "text-slate-400 cursor-not-allowed bg-slate-100" : "text-orange-600 cursor-pointer"
+                                                )}
                                                 checked={isPresent2}
-                                                onChange={() => togglePresence(student.id, classItem.dateMod2)}
+                                                onChange={() => !isReadOnly && togglePresence(student.id, classItem.dateMod2)}
+                                                disabled={isReadOnly}
                                             />
                                         </td>
                                     )}
@@ -421,7 +462,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
         {/* Footer (Only show in Modal Mode) */}
         {variant === 'modal' && (
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 print:hidden">
-                {attendanceMode ? (
+                {attendanceMode && !isReadOnly ? (
                     <button 
                         onClick={saveAttendance} 
                         disabled={isSavingAttendance}

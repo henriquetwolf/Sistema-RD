@@ -62,7 +62,7 @@ interface ClassItem {
 
 // --- Dropdown Options Mock ---
 const COURSES = ['Formação Completa em Pilates', 'Pilates Clínico', 'Pilates Suspenso', 'Gestão de Studios', 'MIT Movimento Inteligente'];
-const INSTRUCTORS = ['Dra. Ana Silva', 'Dr. Carlos Souza', 'Ft. Mariana Lima', 'Ft. Roberto Junior', 'Equipe VOLL'];
+// INSTRUCTORS removed - fetched dynamically
 const STUDIOS = ['Studio Central', 'Espaço Vida', 'Pilates Zone', 'Clinica Integrada', 'Box Cross Pilates'];
 
 interface ClassesManagerProps {
@@ -92,6 +92,9 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [states, setStates] = useState<IBGEUF[]>([]);
   const [cities, setCities] = useState<IBGECity[]>([]);
   const [isLoadingCities, setIsLoadingCities] = useState(false);
+
+  // Instructors State
+  const [instructorsList, setInstructorsList] = useState<string[]>([]);
 
   // Click outside to close menu
   useEffect(() => {
@@ -147,6 +150,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   // Fetch Data on Mount
   useEffect(() => {
       fetchClasses();
+      fetchInstructors();
       ibgeService.getStates().then(setStates);
   }, []);
 
@@ -206,6 +210,21 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           }
       } finally {
           setIsLoadingData(false);
+      }
+  };
+
+  const fetchInstructors = async () => {
+      try {
+          const { data, error } = await appBackend.client
+              .from('crm_teachers')
+              .select('full_name')
+              .order('full_name', { ascending: true });
+          
+          if (!error && data) {
+              setInstructorsList(data.map((t: any) => t.full_name));
+          }
+      } catch (e) {
+          console.error("Erro ao buscar instrutores:", e);
       }
   };
 
@@ -803,7 +822,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                     onChange={e => handleInputChange('instructorMod1', e.target.value)}
                                 >
                                     <option value="">Selecione...</option>
-                                    {INSTRUCTORS.map(i => <option key={i} value={i}>{i}</option>)}
+                                    {instructorsList.map(i => <option key={i} value={i}>{i}</option>)}
                                 </select>
                             </div>
                             <div>
@@ -892,7 +911,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                     onChange={e => handleInputChange('instructorMod2', e.target.value)}
                                 >
                                     <option value="">Selecione...</option>
-                                    {INSTRUCTORS.map(i => <option key={i} value={i}>{i}</option>)}
+                                    {instructorsList.map(i => <option key={i} value={i}>{i}</option>)}
                                 </select>
                             </div>
                              <div>

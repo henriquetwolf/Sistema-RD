@@ -18,6 +18,7 @@ import { ContractsManager } from './components/ContractsManager';
 import { ContractSigning } from './components/ContractSigning';
 import { ProductsManager } from './components/ProductsManager';
 import { InstructorArea } from './components/InstructorArea';
+import { FranchisesManager } from './components/FranchisesManager';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -28,7 +29,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag
+  FileSignature, ShoppingBag, Store
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -60,7 +61,7 @@ function App() {
   
   // Dashboard UI State
   // Extended types to include management tabs
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'global_settings'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'global_settings'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -631,7 +632,7 @@ function App() {
                                     onClick={() => setDashboardTab('overview')}
                                     className={clsx(
                                         "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        (dashboardTab === 'overview' || ['collaborators', 'classes', 'teachers'].includes(dashboardTab))
+                                        (dashboardTab === 'overview' || ['collaborators', 'classes', 'teachers', 'franchises'].includes(dashboardTab))
                                             ? "bg-teal-50 text-teal-700 shadow-sm" 
                                             : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                                     )}
@@ -698,6 +699,18 @@ function App() {
                                 >
                                     <ShoppingBag size={18} />
                                     Produtos Digitais
+                                </button>
+                                <button
+                                    onClick={() => setDashboardTab('franchises')}
+                                    className={clsx(
+                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                        dashboardTab === 'franchises' 
+                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
+                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    )}
+                                >
+                                    <Store size={18} />
+                                    Franquias
                                 </button>
                                 <button
                                     onClick={() => setDashboardTab('tables')}
@@ -911,16 +924,16 @@ function App() {
                                             <p className="text-xs text-slate-500">Gestão do corpo docente.</p>
                                         </div>
 
-                                        {/* Card Produtos */}
+                                        {/* Card Franquias */}
                                         <div 
-                                            onClick={() => setDashboardTab('products')}
+                                            onClick={() => setDashboardTab('franchises')}
                                             className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"
                                         >
-                                            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                                <ShoppingBag size={24} />
+                                            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                                                <Store size={24} />
                                             </div>
-                                            <h4 className="font-bold text-slate-800 mb-1 group-hover:text-indigo-700">Produtos Online</h4>
-                                            <p className="text-xs text-slate-500">Gestão de cursos e e-books.</p>
+                                            <h4 className="font-bold text-slate-800 mb-1 group-hover:text-emerald-700">Franquias</h4>
+                                            <p className="text-xs text-slate-500">Gestão de unidades e implantação.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -945,6 +958,7 @@ function App() {
                         {dashboardTab === 'collaborators' && <CollaboratorsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'classes' && <ClassesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'franchises' && <FranchisesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'contracts' && <ContractsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'products' && <ProductsManager onBack={() => setDashboardTab('overview')} />}

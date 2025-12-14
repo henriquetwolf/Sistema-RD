@@ -1,8 +1,16 @@
 import React, { useState } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, School, ShieldCheck } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
+import { Teacher } from './TeachersManager';
+import clsx from 'clsx';
 
-export const LoginPanel: React.FC = () => {
+interface LoginPanelProps {
+    onInstructorLogin?: (teacher: Teacher) => void;
+}
+
+export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin }) => {
+  const [activeTab, setActiveTab] = useState<'admin' | 'instructor'>('admin');
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
@@ -20,7 +28,48 @@ export const LoginPanel: React.FC = () => {
     setError(null);
 
     try {
-      await appBackend.auth.signIn(email, password);
+        if (activeTab === 'admin') {
+            // ADMIN LOGIN (Supabase Auth)
+            await appBackend.auth.signIn(email, password);
+        } else {
+            // INSTRUCTOR LOGIN (Custom Table Query)
+            const { data, error } = await appBackend.client
+                .from('crm_teachers')
+                .select('*')
+                .eq('email', email.trim())
+                .eq('password', password.trim()) // Plain text match for simple requirement
+                .single();
+
+            if (error || !data) {
+                throw new Error('Credenciais inválidas ou instrutor não encontrado.');
+            }
+
+            if (!data.is_active) {
+                throw new Error('Acesso de instrutor inativo. Contate a administração.');
+            }
+
+            // Map DB to Teacher Interface
+            const teacher: Teacher = {
+                id: data.id,
+                fullName: data.full_name,
+                email: data.email,
+                phone: data.phone,
+                photoUrl: data.photo_url,
+                // ... map other essential fields if needed, but these suffice for dashboard header
+                rg: '', cpf: '', birthDate: '', maritalStatus: '', motherName: '',
+                address: '', district: '', city: '', state: '', cep: '',
+                emergencyContactName: '', emergencyContactPhone: '',
+                profession: '', councilNumber: '', isCouncilActive: true, cnpj: '', companyName: '', hasCnpjActive: true,
+                academicFormation: '', otherFormation: '', courseType: '', teacherLevel: '', isActive: true,
+                bank: '', agency: '', accountNumber: '', accountDigit: '', hasPjAccount: true, pixKeyPj: '', pixKeyPf: '',
+                regionAvailability: '', weekAvailability: '', shirtSize: '', hasNotebook: true, hasVehicle: true, hasStudio: false, studioAddress: '',
+                additional1: '', valueAdditional1: '', dateAdditional1: '',
+                additional2: '', valueAdditional2: '', dateAdditional2: '',
+                additional3: '', valueAdditional3: '', dateAdditional3: ''
+            };
+
+            if (onInstructorLogin) onInstructorLogin(teacher);
+        }
     } catch (err: any) {
       console.error(err);
       if (err.message === 'Invalid login credentials') {
@@ -46,8 +95,25 @@ export const LoginPanel: React.FC = () => {
                 className="h-16 w-auto" 
             />
           </div>
+          
+          {/* Tabs */}
+          <div className="flex bg-slate-100 p-1 rounded-lg mb-6">
+              <button 
+                onClick={() => { setActiveTab('admin'); setError(null); }}
+                className={clsx("flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2", activeTab === 'admin' ? "bg-white shadow text-teal-700" : "text-slate-500 hover:text-slate-700")}
+              >
+                  <ShieldCheck size={16} /> Administrativo
+              </button>
+              <button 
+                onClick={() => { setActiveTab('instructor'); setError(null); }}
+                className={clsx("flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2", activeTab === 'instructor' ? "bg-white shadow text-orange-600" : "text-slate-500 hover:text-slate-700")}
+              >
+                  <School size={16} /> Área Instrutor
+              </button>
+          </div>
+
           <h1 className="text-xl font-bold text-slate-800">
-            Acesso ao Sistema
+            {activeTab === 'admin' ? 'Acesso Administrativo' : 'Portal do Instrutor'}
           </h1>
           <p className="text-slate-500 mt-1 text-sm">
             Entre com suas credenciais para continuar
@@ -64,13 +130,16 @@ export const LoginPanel: React.FC = () => {
             )}
             
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email Corporativo</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all"
-                placeholder="seu.nome@voll.com.br"
+                className={clsx(
+                    "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none transition-all focus:ring-2",
+                    activeTab === 'admin' ? "focus:ring-teal-500 focus:border-teal-500" : "focus:ring-orange-500 focus:border-orange-500"
+                )}
+                placeholder="seu.email@exemplo.com"
                 disabled={isLoading}
               />
             </div>
@@ -81,7 +150,10 @@ export const LoginPanel: React.FC = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all"
+                className={clsx(
+                    "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none transition-all focus:ring-2",
+                    activeTab === 'admin' ? "focus:ring-teal-500 focus:border-teal-500" : "focus:ring-orange-500 focus:border-orange-500"
+                )}
                 placeholder="••••••••"
                 disabled={isLoading}
               />
@@ -90,7 +162,10 @@ export const LoginPanel: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-70 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 mt-4 shadow-lg shadow-teal-600/20"
+              className={clsx(
+                  "w-full text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 mt-4 shadow-lg disabled:opacity-70",
+                  activeTab === 'admin' ? "bg-teal-600 hover:bg-teal-700 shadow-teal-600/20" : "bg-orange-600 hover:bg-orange-700 shadow-orange-600/20"
+              )}
             >
               {isLoading ? (
                 <>

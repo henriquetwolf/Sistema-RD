@@ -3,19 +3,20 @@ import {
   School, Plus, Search, MoreVertical, Phone, Mail, 
   ArrowLeft, Save, X, Book, User, MapPin, DollarSign, 
   Briefcase, Truck, Calendar, FileText, CheckSquare, Image as ImageIcon,
-  Loader2, Trash2, Edit2
+  Loader2, Trash2, Edit2, KeyRound, Lock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 import { appBackend } from '../services/appBackend';
 
 // --- Types ---
-interface Teacher {
+export interface Teacher {
   id: string;
   // Pessoal
   fullName: string;
   email: string;
   phone: string;
+  password?: string; // Access Key
   rg: string;
   cpf: string;
   birthDate: string;
@@ -101,7 +102,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
   // Initial Form State
   const initialFormState: Teacher = {
       id: '',
-      fullName: '', email: '', phone: '', rg: '', cpf: '', birthDate: '', maritalStatus: '', motherName: '', photoUrl: '',
+      fullName: '', email: '', phone: '', password: '', rg: '', cpf: '', birthDate: '', maritalStatus: '', motherName: '', photoUrl: '',
       address: '', district: '', city: '', state: '', cep: '',
       emergencyContactName: '', emergencyContactPhone: '',
       profession: '', councilNumber: '', isCouncilActive: true, cnpj: '', companyName: '', hasCnpjActive: true,
@@ -164,6 +165,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
               fullName: t.full_name,
               email: t.email,
               phone: t.phone,
+              password: t.password || '', // Access Credential
               rg: t.rg,
               cpf: t.cpf,
               birthDate: t.birth_date,
@@ -237,6 +239,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
         full_name: formData.fullName,
         email: formData.email,
         phone: formData.phone,
+        password: formData.password, // Save password
         rg: formData.rg,
         cpf: formData.cpf,
         birth_date: formData.birthDate || null,
@@ -471,17 +474,27 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                 {/* Modal Body - Scrollable */}
                 <div className="p-8 overflow-y-auto custom-scrollbar space-y-8">
                     
-                    {/* ... (Previous Sections 1, 2, 3 remain identical) ... */}
-                    {/* Re-rendering Section 1: Dados Pessoais */}
+                    {/* Section 1: Dados Pessoais & ACESSO */}
                     <div>
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
-                            <User size={16} /> Dados Pessoais
+                            <User size={16} /> Dados Pessoais e Acesso
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="lg:col-span-2">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Nome Completo</label>
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.fullName} onChange={e => handleInputChange('fullName', e.target.value)} />
                             </div>
+                            
+                            {/* EMAIL E SENHA PARA LOGIN */}
+                            <div className="lg:col-span-1">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">E-mail (Login)</label>
+                                <input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.email} onChange={e => handleInputChange('email', e.target.value)} />
+                            </div>
+                            <div className="lg:col-span-1">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1"><KeyRound size={12} /> Senha de Acesso</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-orange-50 text-orange-800" placeholder="Definir senha..." value={formData.password} onChange={e => handleInputChange('password', e.target.value)} />
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Data de Nascimento</label>
                                 <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.birthDate} onChange={e => handleInputChange('birthDate', e.target.value)} />
@@ -507,7 +520,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Nome da Mãe</label>
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.motherName} onChange={e => handleInputChange('motherName', e.target.value)} />
                             </div>
-                            <div>
+                            <div className="lg:col-span-2">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Foto (URL)</label>
                                 <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-1.5 bg-slate-50 hover:bg-slate-100">
                                     <ImageIcon size={16} className="text-slate-400"/>
@@ -524,14 +537,10 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">E-mail</label>
-                                <input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.email} onChange={e => handleInputChange('email', e.target.value)} />
-                            </div>
-                            <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Telefone Principal</label>
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.phone} onChange={e => handleInputChange('phone', e.target.value)} />
                             </div>
-                            <div className="lg:col-span-2">
+                            <div className="lg:col-span-3">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Endereço (Rua, Nº, Compl)</label>
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.address} onChange={e => handleInputChange('address', e.target.value)} />
                             </div>

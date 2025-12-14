@@ -3,14 +3,25 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   LineChart, Line, AreaChart, Area, PieChart, Pie, Cell 
 } from 'recharts';
-import { Calendar, Filter, Download, TrendingUp, DollarSign, Target, Briefcase, Loader2, RefreshCw } from 'lucide-react';
+import { Calendar, Filter, Download, TrendingUp, DollarSign, Target, Briefcase, Loader2, RefreshCw, Users, LayoutGrid } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { MOCK_COLLABORATORS } from './CollaboratorsManager';
+import clsx from 'clsx';
+
+interface Team {
+  id: string;
+  name: string;
+  members: string[]; // IDs of collaborators
+}
 
 export const SalesAnalysis: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [deals, setDeals] = useState<any[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   
+  // UI State
+  const [activeTab, setActiveTab] = useState<'general' | 'teams'>('general');
+
   // Filters
   const [dateRange, setDateRange] = useState({
     start: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0], // Inicio do ano atual
@@ -19,19 +30,23 @@ export const SalesAnalysis: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'open'>('all');
 
   useEffect(() => {
-    fetchDeals();
+    fetchData();
   }, []);
 
-  const fetchDeals = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await appBackend.client
-        .from('crm_deals')
-        .select('*')
-        .order('created_at', { ascending: true });
+      // Fetch Deals and Teams in parallel
+      const [dealsResult, teamsResult] = await Promise.all([
+        appBackend.client.from('crm_deals').select('*').order('created_at', { ascending: true }),
+        appBackend.client.from('crm_teams').select('*')
+      ]);
 
-      if (error) throw error;
-      setDeals(data || []);
+      if (dealsResult.error) throw dealsResult.error;
+      
+      setDeals(dealsResult.data || []);
+      setTeams(teamsResult.data || []);
+
     } catch (e) {
       console.error("Erro ao buscar dados:", e);
     } finally {
@@ -57,7 +72,7 @@ export const SalesAnalysis: React.FC = () => {
       return isDateValid && isStatusValid;
     });
 
-    // 2. Metrics
+    // 2. Metrics General
     const totalRevenue = filtered
         .filter(d => d.stage === 'closed')
         .reduce((acc, curr) => acc + (Number(curr.value) || 0), 0);
@@ -111,11 +126,37 @@ export const SalesAnalysis: React.FC = () => {
         .sort((a, b) => b.valor - a.valor)
         .slice(0, 5); // Top 5
 
+    // D) Sales by Team (New)
+    const teamStats = teams.map(team => {
+        // Find deals where the owner is a member of this team
+        // Assuming members is an array of IDs
+        const teamDeals = filtered.filter(d => 
+            team.members && Array.isArray(team.members) && team.members.includes(d.owner_id)
+        );
+
+        const revenue = teamDeals
+            .filter(d => d.stage === 'closed')
+            .reduce((acc, curr) => acc + (Number(curr.value) || 0), 0);
+        
+        const closedCount = teamDeals.filter(d => d.stage === 'closed').length;
+        const totalCount = teamDeals.length;
+        const avg = closedCount > 0 ? revenue / closedCount : 0;
+
+        return {
+            name: team.name,
+            revenue,
+            deals: totalCount,
+            closed: closedCount,
+            avgTicket: avg,
+            conversion: totalCount > 0 ? ((closedCount / totalCount) * 100).toFixed(1) : '0'
+        };
+    }).sort((a, b) => b.revenue - a.revenue);
+
     return {
         metrics: { totalRevenue, totalDeals, conversionRate, avgTicket },
-        charts: { salesOverTimeData, funnelData, topSellersData }
+        charts: { salesOverTimeData, funnelData, topSellersData, teamStats }
     };
-  }, [deals, dateRange, statusFilter]);
+  }, [deals, teams, dateRange, statusFilter]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -132,6 +173,22 @@ export const SalesAnalysis: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+            {/* View Toggle */}
+            <div className="bg-slate-100 p-1 rounded-lg flex items-center mr-2">
+                <button 
+                    onClick={() => setActiveTab('general')}
+                    className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", activeTab === 'general' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                >
+                    <LayoutGrid size={16} /> Geral
+                </button>
+                <button 
+                    onClick={() => setActiveTab('teams')}
+                    className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", activeTab === 'teams' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                >
+                    <Users size={16} /> Equipes
+                </button>
+            </div>
+
             <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200 p-1">
                 <div className="flex items-center px-2 text-slate-500 border-r border-slate-200">
                     <Calendar size={16} className="mr-2" />
@@ -153,7 +210,7 @@ export const SalesAnalysis: React.FC = () => {
             </div>
 
             <button 
-                onClick={fetchDeals}
+                onClick={fetchData}
                 className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors border border-transparent hover:border-teal-200"
                 title="Atualizar dados"
             >
@@ -162,158 +219,261 @@ export const SalesAnalysis: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group hover:border-teal-300 transition-all">
-              <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <DollarSign size={64} className="text-teal-600" />
+      {/* --- TAB: GENERAL OVERVIEW --- */}
+      {activeTab === 'general' && (
+        <>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-left-4">
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group hover:border-teal-300 transition-all">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <DollarSign size={64} className="text-teal-600" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-slate-500 mb-1">Receita Total (Fechado)</p>
+                        <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(processedData.metrics.totalRevenue)}</h3>
+                    </div>
+                    <div className="text-xs text-teal-600 font-medium flex items-center gap-1">
+                        <TrendingUp size={14} /> No período selecionado
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group hover:border-indigo-300 transition-all">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <Briefcase size={64} className="text-indigo-600" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-slate-500 mb-1">Total de Negócios</p>
+                        <h3 className="text-2xl font-bold text-slate-800">{processedData.metrics.totalDeals}</h3>
+                    </div>
+                    <div className="text-xs text-indigo-600 font-medium flex items-center gap-1">
+                        <Target size={14} /> Oportunidades criadas
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group hover:border-blue-300 transition-all">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <Target size={64} className="text-blue-600" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-slate-500 mb-1">Taxa de Conversão</p>
+                        <h3 className="text-2xl font-bold text-slate-800">{processedData.metrics.conversionRate}%</h3>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2">
+                        <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(Number(processedData.metrics.conversionRate), 100)}%` }}></div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group hover:border-orange-300 transition-all">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <DollarSign size={64} className="text-orange-600" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-slate-500 mb-1">Ticket Médio</p>
+                        <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(processedData.metrics.avgTicket)}</h3>
+                    </div>
+                    <div className="text-xs text-orange-600 font-medium">
+                        Por venda fechada
+                    </div>
+                </div>
+            </div>
+
+            {/* Charts Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4">
+                
+                {/* Chart 1: Revenue Timeline */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
+                    <h3 className="text-lg font-bold text-slate-800 mb-6">Evolução de Receita</h3>
+                    <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={processedData.charts.salesOverTimeData}>
+                                <defs>
+                                    <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#0d9488" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#0d9488" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis 
+                                    dataKey="date" 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{fontSize: 12, fill: '#64748b'}} 
+                                    dy={10}
+                                />
+                                <YAxis 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{fontSize: 12, fill: '#64748b'}} 
+                                    tickFormatter={(value) => `R$ ${value/1000}k`} 
+                                />
+                                <Tooltip 
+                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    formatter={(value: number) => [formatCurrency(value), 'Vendas']}
+                                />
+                                <Area type="monotone" dataKey="vendas" stroke="#0d9488" fillOpacity={1} fill="url(#colorVendas)" strokeWidth={2} />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Chart 2: Funnel */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 className="text-lg font-bold text-slate-800 mb-6">Pipeline de Oportunidades</h3>
+                    <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={processedData.charts.funnelData} layout="vertical">
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                <XAxis type="number" hide />
+                                <YAxis 
+                                    dataKey="name" 
+                                    type="category" 
+                                    width={100} 
+                                    axisLine={false} 
+                                    tickLine={false}
+                                    tick={{fontSize: 12, fill: '#64748b'}}
+                                />
+                                <Tooltip 
+                                    cursor={{fill: '#f8fafc'}}
+                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                />
+                                <Bar dataKey="quantidade" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={32}>
+                                    {processedData.charts.funnelData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={index === 4 ? '#10b981' : '#6366f1'} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Chart 3: Top Sellers */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 className="text-lg font-bold text-slate-800 mb-6">Top Vendedores (Receita)</h3>
+                    <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={processedData.charts.topSellersData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis 
+                                    dataKey="name" 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{fontSize: 12, fill: '#64748b'}} 
+                                    interval={0}
+                                />
+                                <YAxis 
+                                    hide
+                                />
+                                <Tooltip 
+                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    formatter={(value: number) => [formatCurrency(value), 'Total Vendido']}
+                                />
+                                <Bar dataKey="valor" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={40} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+        </>
+      )}
+
+      {/* --- TAB: TEAMS COMPARISON --- */}
+      {activeTab === 'teams' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+              
+              {/* Teams Overview Chart */}
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <h3 className="text-lg font-bold text-slate-800 mb-2">Receita por Equipe</h3>
+                  <p className="text-sm text-slate-500 mb-6">Comparativo de vendas fechadas entre os times comerciais.</p>
+                  
+                  {processedData.charts.teamStats.length === 0 ? (
+                      <div className="h-[200px] flex items-center justify-center text-slate-400">
+                          Nenhuma equipe com vendas no período ou equipes não cadastradas.
+                      </div>
+                  ) : (
+                      <div className="h-[350px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={processedData.charts.teamStats}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                  <XAxis 
+                                      dataKey="name" 
+                                      axisLine={false} 
+                                      tickLine={false} 
+                                      tick={{fontSize: 12, fill: '#64748b'}} 
+                                  />
+                                  <YAxis 
+                                      axisLine={false} 
+                                      tickLine={false} 
+                                      tick={{fontSize: 12, fill: '#64748b'}} 
+                                      tickFormatter={(value) => `R$ ${value/1000}k`} 
+                                  />
+                                  <Tooltip 
+                                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                      formatter={(value: number) => [formatCurrency(value), 'Receita Total']}
+                                  />
+                                  <Legend />
+                                  <Bar dataKey="revenue" name="Receita Total" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={50} />
+                              </BarChart>
+                          </ResponsiveContainer>
+                      </div>
+                  )}
               </div>
-              <div>
-                  <p className="text-sm font-medium text-slate-500 mb-1">Receita Total (Fechado)</p>
-                  <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(processedData.metrics.totalRevenue)}</h3>
-              </div>
-              <div className="text-xs text-teal-600 font-medium flex items-center gap-1">
-                  <TrendingUp size={14} /> No período selecionado
+
+              {/* Detailed Teams Table */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-slate-100">
+                      <h3 className="text-lg font-bold text-slate-800">Detalhamento de Performance</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm text-slate-600">
+                          <thead className="bg-slate-50 text-xs text-slate-500 uppercase font-semibold">
+                              <tr>
+                                  <th className="px-6 py-4">Equipe</th>
+                                  <th className="px-6 py-4 text-right">Vendas Fechadas</th>
+                                  <th className="px-6 py-4 text-right">Taxa Conversão</th>
+                                  <th className="px-6 py-4 text-right">Ticket Médio</th>
+                                  <th className="px-6 py-4 text-right">Receita Total</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                              {processedData.charts.teamStats.map((team, idx) => (
+                                  <tr key={team.name} className="hover:bg-slate-50 transition-colors">
+                                      <td className="px-6 py-4 font-medium text-slate-800">
+                                          <div className="flex items-center gap-3">
+                                              <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-bold border border-slate-200">{idx + 1}</span>
+                                              {team.name}
+                                          </div>
+                                      </td>
+                                      <td className="px-6 py-4 text-right">
+                                          <span className="font-bold text-slate-700">{team.closed}</span>
+                                          <span className="text-xs text-slate-400 ml-1">/ {team.deals} total</span>
+                                      </td>
+                                      <td className="px-6 py-4 text-right">
+                                          <span className={clsx("px-2 py-1 rounded text-xs font-bold", Number(team.conversion) > 20 ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600")}>
+                                              {team.conversion}%
+                                          </span>
+                                      </td>
+                                      <td className="px-6 py-4 text-right font-mono text-slate-600">
+                                          {formatCurrency(team.avgTicket)}
+                                      </td>
+                                      <td className="px-6 py-4 text-right font-bold text-emerald-600 text-base">
+                                          {formatCurrency(team.revenue)}
+                                      </td>
+                                  </tr>
+                              ))}
+                              {processedData.charts.teamStats.length === 0 && (
+                                  <tr>
+                                      <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
+                                          Nenhuma equipe encontrada. Cadastre equipes no CRM para visualizar o comparativo.
+                                      </td>
+                                  </tr>
+                              )}
+                          </tbody>
+                      </table>
+                  </div>
               </div>
           </div>
+      )}
 
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group hover:border-indigo-300 transition-all">
-              <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Briefcase size={64} className="text-indigo-600" />
-              </div>
-              <div>
-                  <p className="text-sm font-medium text-slate-500 mb-1">Total de Negócios</p>
-                  <h3 className="text-2xl font-bold text-slate-800">{processedData.metrics.totalDeals}</h3>
-              </div>
-              <div className="text-xs text-indigo-600 font-medium flex items-center gap-1">
-                  <Target size={14} /> Oportunidades criadas
-              </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group hover:border-blue-300 transition-all">
-              <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Target size={64} className="text-blue-600" />
-              </div>
-              <div>
-                  <p className="text-sm font-medium text-slate-500 mb-1">Taxa de Conversão</p>
-                  <h3 className="text-2xl font-bold text-slate-800">{processedData.metrics.conversionRate}%</h3>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2">
-                  <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(Number(processedData.metrics.conversionRate), 100)}%` }}></div>
-              </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group hover:border-orange-300 transition-all">
-              <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <DollarSign size={64} className="text-orange-600" />
-              </div>
-              <div>
-                  <p className="text-sm font-medium text-slate-500 mb-1">Ticket Médio</p>
-                  <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(processedData.metrics.avgTicket)}</h3>
-              </div>
-              <div className="text-xs text-orange-600 font-medium">
-                  Por venda fechada
-              </div>
-          </div>
-      </div>
-
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
-          {/* Chart 1: Revenue Timeline */}
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
-              <h3 className="text-lg font-bold text-slate-800 mb-6">Evolução de Receita</h3>
-              <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={processedData.charts.salesOverTimeData}>
-                          <defs>
-                              <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="5%" stopColor="#0d9488" stopOpacity={0.8}/>
-                                  <stop offset="95%" stopColor="#0d9488" stopOpacity={0}/>
-                              </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis 
-                            dataKey="date" 
-                            axisLine={false} 
-                            tickLine={false} 
-                            tick={{fontSize: 12, fill: '#64748b'}} 
-                            dy={10}
-                          />
-                          <YAxis 
-                            axisLine={false} 
-                            tickLine={false} 
-                            tick={{fontSize: 12, fill: '#64748b'}} 
-                            tickFormatter={(value) => `R$ ${value/1000}k`} 
-                          />
-                          <Tooltip 
-                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                            formatter={(value: number) => [formatCurrency(value), 'Vendas']}
-                          />
-                          <Area type="monotone" dataKey="vendas" stroke="#0d9488" fillOpacity={1} fill="url(#colorVendas)" strokeWidth={2} />
-                      </AreaChart>
-                  </ResponsiveContainer>
-              </div>
-          </div>
-
-          {/* Chart 2: Funnel */}
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-800 mb-6">Pipeline de Oportunidades</h3>
-              <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={processedData.charts.funnelData} layout="vertical">
-                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                          <XAxis type="number" hide />
-                          <YAxis 
-                            dataKey="name" 
-                            type="category" 
-                            width={100} 
-                            axisLine={false} 
-                            tickLine={false}
-                            tick={{fontSize: 12, fill: '#64748b'}}
-                          />
-                          <Tooltip 
-                            cursor={{fill: '#f8fafc'}}
-                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                          />
-                          <Bar dataKey="quantidade" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={32}>
-                            {processedData.charts.funnelData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={index === 4 ? '#10b981' : '#6366f1'} />
-                            ))}
-                          </Bar>
-                      </BarChart>
-                  </ResponsiveContainer>
-              </div>
-          </div>
-
-          {/* Chart 3: Top Sellers */}
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-800 mb-6">Top Vendedores (Receita)</h3>
-              <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={processedData.charts.topSellersData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis 
-                            dataKey="name" 
-                            axisLine={false} 
-                            tickLine={false} 
-                            tick={{fontSize: 12, fill: '#64748b'}} 
-                            interval={0}
-                          />
-                          <YAxis 
-                            hide
-                          />
-                          <Tooltip 
-                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                            formatter={(value: number) => [formatCurrency(value), 'Total Vendido']}
-                          />
-                          <Bar dataKey="valor" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={40} />
-                      </BarChart>
-                  </ResponsiveContainer>
-              </div>
-          </div>
-
-      </div>
     </div>
   );
 };

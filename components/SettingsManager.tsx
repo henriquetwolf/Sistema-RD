@@ -142,6 +142,7 @@ ALTER TABLE public.crm_teachers
 ADD COLUMN IF NOT EXISTS full_name text,
 ADD COLUMN IF NOT EXISTS email text,
 ADD COLUMN IF NOT EXISTS phone text,
+ADD COLUMN IF NOT EXISTS password text, -- Login do Instrutor
 ADD COLUMN IF NOT EXISTS rg text,
 ADD COLUMN IF NOT EXISTS cpf text,
 ADD COLUMN IF NOT EXISTS birth_date text,

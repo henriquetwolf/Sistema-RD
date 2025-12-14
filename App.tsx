@@ -9,7 +9,7 @@ import { TableViewer } from './components/TableViewer';
 import { CrmBoard } from './components/CrmBoard'; 
 import { CollaboratorsManager } from './components/CollaboratorsManager';
 import { ClassesManager } from './components/ClassesManager';
-import { TeachersManager } from './components/TeachersManager';
+import { TeachersManager, Teacher } from './components/TeachersManager';
 import { FormsManager } from './components/FormsManager';
 import { FormViewer } from './components/FormViewer';
 import { SettingsManager } from './components/SettingsManager';
@@ -17,6 +17,7 @@ import { SalesAnalysis } from './components/SalesAnalysis';
 import { ContractsManager } from './components/ContractsManager';
 import { ContractSigning } from './components/ContractSigning';
 import { ProductsManager } from './components/ProductsManager';
+import { InstructorArea } from './components/InstructorArea';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -49,6 +50,9 @@ function App() {
   // Auth State
   const [session, setSession] = useState<any>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
+  
+  // Instructor Auth State
+  const [currentInstructor, setCurrentInstructor] = useState<Teacher | null>(null);
 
   // Dashboard State (Persisted Jobs)
   const [jobs, setJobs] = useState<SyncJob[]>([]);
@@ -131,11 +135,19 @@ function App() {
             }
         }
 
-        // 3. Check Auth
+        // 3. Check Auth (Admin)
         appBackend.auth.getSession().then((s) => {
             setSession(s);
             setIsLoadingSession(false);
         });
+        
+        // 4. Check Auth (Instructor - Persisted in SessionStorage for simple auth)
+        const savedInstructor = sessionStorage.getItem('instructor_session');
+        if (savedInstructor) {
+            try {
+                setCurrentInstructor(JSON.parse(savedInstructor));
+            } catch (e) {}
+        }
     };
 
     initApp();
@@ -175,10 +187,10 @@ function App() {
 
   // --- FETCH SALES DATA (WIDGET) ---
   useEffect(() => {
-      if (dashboardTab === 'overview' && !publicForm && !publicContract) {
+      if (dashboardTab === 'overview' && !publicForm && !publicContract && !currentInstructor) {
           fetchSalesData();
       }
-  }, [dashboardTab, salesDateRange, publicForm, publicContract]);
+  }, [dashboardTab, salesDateRange, publicForm, publicContract, currentInstructor]);
 
   const fetchSalesData = async () => {
       setIsLoadingSales(true);
@@ -441,7 +453,17 @@ function App() {
   };
 
   const handleLogout = async () => {
-    await appBackend.auth.signOut();
+    if (currentInstructor) {
+        setCurrentInstructor(null);
+        sessionStorage.removeItem('instructor_session');
+    } else {
+        await appBackend.auth.signOut();
+    }
+  };
+
+  const handleInstructorLogin = (teacher: Teacher) => {
+      setCurrentInstructor(teacher);
+      sessionStorage.setItem('instructor_session', JSON.stringify(teacher));
   };
 
   const getIntervalLabel = (minutes: number) => {
@@ -463,9 +485,15 @@ function App() {
   // 2. Check for Auth Loading
   if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
   
-  // 3. Check for Session
-  if (!session) return <LoginPanel />;
+  // 3. Check for Session (Either Admin or Instructor)
+  if (!session && !currentInstructor) return <LoginPanel onInstructorLogin={handleInstructorLogin} />;
 
+  // 4. INSTRUCTOR AREA
+  if (currentInstructor) {
+      return <InstructorArea instructor={currentInstructor} onLogout={handleLogout} />;
+  }
+
+  // 5. ADMIN AREA
   const isLocalMode = session?.user?.id === 'local-user';
 
   // Stats Calculation

@@ -16,6 +16,7 @@ import { SettingsManager } from './components/SettingsManager';
 import { SalesAnalysis } from './components/SalesAnalysis';
 import { ContractsManager } from './components/ContractsManager';
 import { ContractSigning } from './components/ContractSigning';
+import { ProductsManager } from './components/ProductsManager';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -26,7 +27,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature
+  FileSignature, ShoppingBag
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -55,7 +56,7 @@ function App() {
   
   // Dashboard UI State
   // Extended types to include management tabs
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'global_settings'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'global_settings'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -659,6 +660,18 @@ function App() {
                                     Contratos
                                 </button>
                                 <button
+                                    onClick={() => setDashboardTab('products')}
+                                    className={clsx(
+                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                        dashboardTab === 'products' 
+                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
+                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    )}
+                                >
+                                    <ShoppingBag size={18} />
+                                    Produtos Digitais
+                                </button>
+                                <button
                                     onClick={() => setDashboardTab('tables')}
                                     className={clsx(
                                         "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
@@ -833,7 +846,7 @@ function App() {
                                 {/* --- SECTION: CADASTROS --- */}
                                 <div className="pt-2">
                                     <h3 className="text-lg font-bold text-slate-800 mb-4">Módulos Administrativos</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         {/* Card Colaboradores */}
                                         <div 
                                             onClick={() => setDashboardTab('collaborators')}
@@ -869,6 +882,18 @@ function App() {
                                             <h4 className="font-bold text-slate-800 mb-1 group-hover:text-orange-700">Professores</h4>
                                             <p className="text-xs text-slate-500">Gestão do corpo docente.</p>
                                         </div>
+
+                                        {/* Card Produtos */}
+                                        <div 
+                                            onClick={() => setDashboardTab('products')}
+                                            className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"
+                                        >
+                                            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                                <ShoppingBag size={24} />
+                                            </div>
+                                            <h4 className="font-bold text-slate-800 mb-1 group-hover:text-indigo-700">Produtos Online</h4>
+                                            <p className="text-xs text-slate-500">Gestão de cursos e e-books.</p>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -894,6 +919,7 @@ function App() {
                         {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'contracts' && <ContractsManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'products' && <ProductsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} />}
                         {dashboardTab === 'analysis' && <SalesAnalysis />}
 

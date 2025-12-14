@@ -190,7 +190,27 @@ ADD COLUMN IF NOT EXISTS additional_3 text,
 ADD COLUMN IF NOT EXISTS value_additional_3 text,
 ADD COLUMN IF NOT EXISTS date_additional_3 text;
 
--- 3. LIMPEZA DE CACHE
+-- 3. TABELA PRODUTOS DIGITAIS (NOVO)
+CREATE TABLE IF NOT EXISTS public.crm_products (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  name text,
+  category text,
+  platform text,
+  price numeric,
+  url text,
+  status text,
+  description text
+);
+
+-- 4. TABELA NEGOCIACOES (ATUALIZAÇÃO)
+CREATE TABLE IF NOT EXISTS public.crm_deals (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now());
+
+ALTER TABLE public.crm_deals
+ADD COLUMN IF NOT EXISTS product_type text,
+ADD COLUMN IF NOT EXISTS product_name text;
+
+-- 5. LIMPEZA DE CACHE
 NOTIFY pgrst, 'reload config';
   `;
 
@@ -284,10 +304,10 @@ NOTIFY pgrst, 'reload config';
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 flex items-start gap-3">
                     <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={20} />
                     <div>
-                        <h4 className="text-sm font-bold text-amber-800">Correção de Tabelas (Colaboradores e Instrutores)</h4>
+                        <h4 className="text-sm font-bold text-amber-800">Correção de Tabelas</h4>
                         <p className="text-xs text-amber-700 mt-1">
-                            Se você adicionou novos campos no sistema e eles não estão salvando, é necessário atualizar a estrutura do banco de dados. 
-                            O script abaixo cria todas as colunas necessárias automaticamente.
+                            Se você adicionou novos campos ou módulos no sistema, é necessário atualizar a estrutura do banco de dados. 
+                            O script abaixo cria todas as colunas e tabelas necessárias automaticamente.
                         </p>
                     </div>
                 </div>

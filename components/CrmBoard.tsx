@@ -4,7 +4,7 @@ import {
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
-  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap
+  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -29,6 +29,10 @@ interface Deal {
   installments?: number; // Número de Parcelas
   installmentValue?: number; // Valor das Parcelas
   
+  // Product Logic
+  productType?: 'Digital' | 'Presencial';
+  productName?: string;
+
   cpf?: string;
   firstDueDate?: string; // Dia do primeiro Vencimento
   receiptLink?: string; // Link do Comprovante
@@ -73,8 +77,14 @@ interface RegisteredClass {
     id: string;
     state: string;
     city: string;
+    course: string; // Added course name
     mod1Code: string;
     mod2Code: string;
+}
+
+interface DigitalProduct {
+    id: string;
+    name: string;
 }
 
 interface CollaboratorSimple {
@@ -117,7 +127,7 @@ const handleDbError = (e: any) => {
     if (msg.includes('relation "crm_deals" does not exist')) {
        alert("Erro Crítico: A tabela 'crm_deals' não existe no banco de dados.");
     } else if (msg.includes('column') && msg.includes('does not exist')) {
-       alert(`Erro de Schema: Uma coluna nova (ex: cpf, campaign) não existe no banco de dados.\n\nDetalhe: ${msg}`);
+       alert(`Erro de Schema: Uma coluna nova (ex: cpf, product_type) não existe no banco de dados.\n\nDetalhe: ${msg}\n\nVá em Configurações > Diagnóstico e execute o SQL.`);
     } else {
        alert(`Erro ao salvar: ${msg}`);
     }
@@ -130,7 +140,8 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
     cpf: '', firstDueDate: '', receiptLink: '', transactionCode: '',
     zipCode: '', address: '', addressNumber: '',
     registrationData: '', observation: '', courseState: '', courseCity: '', classMod1: '', classMod2: '',
-    pipeline: 'Padrão'
+    pipeline: 'Padrão',
+    productType: 'Presencial', productName: ''
 };
 
 export const CrmBoard: React.FC = () => {
@@ -144,6 +155,8 @@ export const CrmBoard: React.FC = () => {
   
   // Real Classes Data for Dropdowns
   const [registeredClasses, setRegisteredClasses] = useState<RegisteredClass[]>([]);
+  // Digital Products Data
+  const [digitalProducts, setDigitalProducts] = useState<DigitalProduct[]>([]);
   
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -196,6 +209,8 @@ export const CrmBoard: React.FC = () => {
               entryValue: Number(d.entry_value || 0),
               installments: Number(d.installments || 1),
               installmentValue: Number(d.installment_value || 0),
+              productType: d.product_type,
+              productName: d.product_name,
               cpf: d.cpf,
               firstDueDate: d.first_due_date,
               receiptLink: d.receipt_link,
@@ -224,20 +239,31 @@ export const CrmBoard: React.FC = () => {
           // 3. Fetch Classes (for Dropdowns)
           const { data: classesData, error: classesError } = await appBackend.client
               .from('crm_classes')
-              .select('id, state, city, mod_1_code, mod_2_code');
+              .select('id, course, state, city, mod_1_code, mod_2_code');
           
           if (!classesError && classesData) {
               const mappedClasses = classesData.map((c: any) => ({
                   id: c.id,
                   state: c.state,
                   city: c.city,
+                  course: c.course,
                   mod1Code: c.mod_1_code,
                   mod2Code: c.mod_2_code
               }));
               setRegisteredClasses(mappedClasses);
           }
 
-          // 4. Fetch Collaborators (Real Data)
+          // 4. Fetch Products (Digital)
+          const { data: productsData, error: productsError } = await appBackend.client
+              .from('crm_products')
+              .select('id, name')
+              .eq('status', 'active');
+          
+          if (!productsError && productsData) {
+              setDigitalProducts(productsData);
+          }
+
+          // 5. Fetch Collaborators (Real Data)
           const { data: collabData, error: collabError } = await appBackend.client
               .from('crm_collaborators')
               .select('id, full_name, department')
@@ -292,6 +318,17 @@ export const CrmBoard: React.FC = () => {
           .filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity && c.mod2Code)
           .map(c => c.mod2Code);
   }, [registeredClasses, dealFormData.courseState, dealFormData.courseCity]);
+
+  // 5. Product Options (Dynamic based on Type)
+  const productOptions = useMemo(() => {
+      if (dealFormData.productType === 'Digital') {
+          return digitalProducts.map(p => p.name).sort();
+      } else {
+          // For 'Presencial', list distinct course names from classes
+          const courseNames = registeredClasses.map(c => c.course).filter(Boolean);
+          return Array.from(new Set(courseNames)).sort();
+      }
+  }, [dealFormData.productType, digitalProducts, registeredClasses]);
 
 
   // --- Helpers & Logic ---
@@ -481,6 +518,8 @@ export const CrmBoard: React.FC = () => {
           entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1,
           installment_value: Number(dealFormData.installmentValue) || 0,
+          product_type: dealFormData.productType,
+          product_name: dealFormData.productName,
           cpf: dealFormData.cpf,
           first_due_date: dealFormData.firstDueDate,
           receipt_link: dealFormData.receiptLink,
@@ -699,6 +738,30 @@ export const CrmBoard: React.FC = () => {
                                   </select>
                               </div>
 
+                              {/* NEW PRODUCT FIELDS */}
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Tipo de Produto</label>
+                                  <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={dealFormData.productType}
+                                    onChange={e => setDealFormData({...dealFormData, productType: e.target.value as any, productName: ''})} // Reset product name on type change
+                                  >
+                                      <option value="Presencial">Curso Presencial</option>
+                                      <option value="Digital">Produto Digital</option>
+                                  </select>
+                              </div>
+                              <div className="md:col-span-2">
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Produto</label>
+                                  <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={dealFormData.productName}
+                                    onChange={e => setDealFormData({...dealFormData, productName: e.target.value})}
+                                  >
+                                      <option value="">Selecione o produto...</option>
+                                      {productOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                  </select>
+                              </div>
+
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Fonte</label>
                                   <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Ex: Instagram, Indicação" value={dealFormData.source} onChange={e => setDealFormData({...dealFormData, source: e.target.value})} />
@@ -800,74 +863,76 @@ export const CrmBoard: React.FC = () => {
                       </div>
 
                       {/* Section 4: Logística / Turmas */}
-                      <div>
-                          <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
-                              <GraduationCap size={16} /> Dados do Curso / Turma
-                          </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                              
-                              {/* SELETORES DE ESTADO/CIDADE FILTRADOS PELAS TURMAS EXISTENTES */}
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Estado (UF)</label>
-                                  <select 
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-                                    value={dealFormData.courseState}
-                                    onChange={e => setDealFormData({
-                                        ...dealFormData, 
-                                        courseState: e.target.value, 
-                                        courseCity: '',
-                                        classMod1: '',
-                                        classMod2: ''
-                                    })}
-                                  >
-                                      <option value="">Selecione...</option>
-                                      {availableStates.map(uf => <option key={uf} value={uf}>{uf}</option>)}
-                                  </select>
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Cidade do Curso</label>
-                                  <select 
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100"
-                                    value={dealFormData.courseCity}
-                                    onChange={e => setDealFormData({
-                                        ...dealFormData, 
-                                        courseCity: e.target.value,
-                                        classMod1: '',
-                                        classMod2: ''
-                                    })}
-                                    disabled={!dealFormData.courseState || availableCities.length === 0}
-                                  >
-                                      <option value="">{availableCities.length === 0 ? 'Nenhuma turma neste UF' : 'Selecione...'}</option>
-                                      {availableCities.map(city => <option key={city} value={city}>{city}</option>)}
-                                  </select>
-                              </div>
+                      {dealFormData.productType === 'Presencial' && (
+                          <div className="animate-in fade-in slide-in-from-top-2">
+                              <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                                  <GraduationCap size={16} /> Logística do Curso (Presencial)
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                  
+                                  {/* SELETORES DE ESTADO/CIDADE FILTRADOS PELAS TURMAS EXISTENTES */}
+                                  <div>
+                                      <label className="block text-xs font-bold text-slate-600 mb-1">Estado (UF)</label>
+                                      <select 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                        value={dealFormData.courseState}
+                                        onChange={e => setDealFormData({
+                                            ...dealFormData, 
+                                            courseState: e.target.value, 
+                                            courseCity: '',
+                                            classMod1: '',
+                                            classMod2: ''
+                                        })}
+                                      >
+                                          <option value="">Selecione...</option>
+                                          {availableStates.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                                      </select>
+                                  </div>
+                                  <div>
+                                      <label className="block text-xs font-bold text-slate-600 mb-1">Cidade do Curso</label>
+                                      <select 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100"
+                                        value={dealFormData.courseCity}
+                                        onChange={e => setDealFormData({
+                                            ...dealFormData, 
+                                            courseCity: e.target.value,
+                                            classMod1: '',
+                                            classMod2: ''
+                                        })}
+                                        disabled={!dealFormData.courseState || availableCities.length === 0}
+                                      >
+                                          <option value="">{availableCities.length === 0 ? 'Nenhuma turma neste UF' : 'Selecione...'}</option>
+                                          {availableCities.map(city => <option key={city} value={city}>{city}</option>)}
+                                      </select>
+                                  </div>
 
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 1</label>
-                                  <select 
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" 
-                                    value={dealFormData.classMod1} 
-                                    onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})}
-                                    disabled={!dealFormData.courseCity || availableMod1Codes.length === 0}
-                                  >
-                                      <option value="">Selecione a turma...</option>
-                                      {availableMod1Codes.map(code => <option key={code} value={code}>{code}</option>)}
-                                  </select>
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 2</label>
-                                  <select 
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" 
-                                    value={dealFormData.classMod2} 
-                                    onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})}
-                                    disabled={!dealFormData.courseCity || availableMod2Codes.length === 0}
-                                  >
-                                      <option value="">Selecione a turma...</option>
-                                      {availableMod2Codes.map(code => <option key={code} value={code}>{code}</option>)}
-                                  </select>
+                                  <div>
+                                      <label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 1</label>
+                                      <select 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" 
+                                        value={dealFormData.classMod1} 
+                                        onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})}
+                                        disabled={!dealFormData.courseCity || availableMod1Codes.length === 0}
+                                      >
+                                          <option value="">Selecione a turma...</option>
+                                          {availableMod1Codes.map(code => <option key={code} value={code}>{code}</option>)}
+                                      </select>
+                                  </div>
+                                  <div>
+                                      <label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 2</label>
+                                      <select 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" 
+                                        value={dealFormData.classMod2} 
+                                        onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})}
+                                        disabled={!dealFormData.courseCity || availableMod2Codes.length === 0}
+                                      >
+                                          <option value="">Selecione a turma...</option>
+                                          {availableMod2Codes.map(code => <option key={code} value={code}>{code}</option>)}
+                                      </select>
+                                  </div>
                               </div>
                           </div>
-                      </div>
+                      )}
 
                       {/* Section 5: Outros */}
                       <div>

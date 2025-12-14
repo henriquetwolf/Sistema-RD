@@ -48,20 +48,20 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   
   // Attendance State
   const [attendanceMode, setAttendanceMode] = useState(false);
-  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
-  const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({}); // studentId -> present
+  // Map stores presence: key is `${studentId}_${dateString}`
+  const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({}); 
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
 
   useEffect(() => {
     fetchStudents();
   }, [classItem]);
 
-  // Fetch existing attendance when entering mode or changing date
+  // Fetch existing attendance when entering mode
   useEffect(() => {
       if (attendanceMode && canTakeAttendance) {
           fetchAttendance();
       }
-  }, [attendanceMode, attendanceDate]);
+  }, [attendanceMode, classItem]);
 
   const fetchStudents = async () => {
     setIsLoading(true);
@@ -96,22 +96,27 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
 
   const fetchAttendance = async () => {
       try {
+          const datesToFetch = [];
+          if (classItem.dateMod1) datesToFetch.push(classItem.dateMod1);
+          if (classItem.dateMod2) datesToFetch.push(classItem.dateMod2);
+
+          if (datesToFetch.length === 0) return;
+
+          // Build query manually or use .in()
           const { data, error } = await appBackend.client
               .from('crm_attendance')
-              .select('student_id, present')
+              .select('student_id, date, present')
               .eq('class_id', classItem.id)
-              .eq('date', attendanceDate);
+              .in('date', datesToFetch);
           
           if (error) throw error;
 
           const map: Record<string, boolean> = {};
           data.forEach((row: any) => {
-              map[row.student_id] = row.present;
+              const key = `${row.student_id}_${row.date}`;
+              map[key] = row.present;
           });
           
-          // Default: If no record, assume true? Or false? Let's assume unchecked (false) initially for safety, 
-          // or initialize all to true if creating new? 
-          // Let's keep strict to DB: if undefined, it's unchecked.
           setPresenceMap(map);
 
       } catch(e) {
@@ -122,12 +127,31 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   const saveAttendance = async () => {
       setIsSavingAttendance(true);
       try {
-          const updates = students.map(student => ({
-              class_id: classItem.id,
-              student_id: student.id,
-              date: attendanceDate,
-              present: !!presenceMap[student.id]
-          }));
+          const updates: any[] = [];
+          const datesToSave = [];
+          if (classItem.dateMod1) datesToSave.push(classItem.dateMod1);
+          if (classItem.dateMod2) datesToSave.push(classItem.dateMod2);
+
+          if (datesToSave.length === 0) {
+              alert("Esta turma não possui datas configuradas para Módulo 1 ou 2.");
+              setIsSavingAttendance(false);
+              return;
+          }
+
+          students.forEach(student => {
+              datesToSave.forEach(dateStr => {
+                  const key = `${student.id}_${dateStr}`;
+                  // If key exists in map, save it. Default to false if not checked but tracking
+                  const isPresent = !!presenceMap[key];
+                  
+                  updates.push({
+                      class_id: classItem.id,
+                      student_id: student.id,
+                      date: dateStr,
+                      present: isPresent
+                  });
+              });
+          });
 
           const { error } = await appBackend.client
               .from('crm_attendance')
@@ -149,14 +173,22 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
       }
   };
 
-  const togglePresence = (studentId: string) => {
+  const togglePresence = (studentId: string, dateStr: string) => {
+      if (!dateStr) return;
+      const key = `${studentId}_${dateStr}`;
       setPresenceMap(prev => ({
           ...prev,
-          [studentId]: !prev[studentId]
+          [key]: !prev[key]
       }));
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  
+  const formatDateSimple = (dateStr: string) => {
+      if (!dateStr) return 'S/ Data';
+      const [y, m, d] = dateStr.split('-');
+      return `${d}/${m}`;
+  };
 
   const getModuleBadge = (student: StudentDeal) => {
     const isMod1 = student.class_mod_1 === classItem.mod1Code;
@@ -243,21 +275,15 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
             </div>
         </div>
 
-        {/* ATTENDANCE CONTROLS */}
+        {/* ATTENDANCE HEADER */}
         {attendanceMode && (
             <div className="bg-orange-50 border-b border-orange-100 px-6 py-3 flex items-center gap-4 animate-in slide-in-from-top-2">
                 <div className="flex items-center gap-2">
                     <Calendar size={18} className="text-orange-600" />
-                    <span className="text-sm font-bold text-orange-800">Data da Chamada:</span>
+                    <span className="text-sm font-bold text-orange-800">Modo Chamada:</span>
                 </div>
-                <input 
-                    type="date" 
-                    value={attendanceDate} 
-                    onChange={e => setAttendanceDate(e.target.value)}
-                    className="border border-orange-200 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-                <div className="flex-1 text-right text-xs text-orange-700">
-                    Selecione a data e marque os alunos presentes.
+                <div className="flex-1 text-xs text-orange-700">
+                    Marque a presença nos dias correspondentes aos módulos.
                 </div>
             </div>
         )}
@@ -301,58 +327,92 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                 <table className="w-full text-left text-sm border-collapse">
                     <thead className="bg-slate-100 text-slate-600 uppercase text-xs font-bold sticky top-0 z-10 print:bg-gray-100">
                         <tr>
-                            {attendanceMode && <th className="px-6 py-3 border-b border-slate-200 w-16 text-center">Presença</th>}
-                            <th className="px-6 py-3 border-b border-slate-200">#</th>
+                            <th className="px-6 py-3 border-b border-slate-200 w-12 text-center">#</th>
                             <th className="px-6 py-3 border-b border-slate-200">Nome do Aluno</th>
+                            
+                            {/* DYNAMIC DATE HEADERS */}
+                            {attendanceMode && classItem.dateMod1 && (
+                                <th className="px-4 py-3 border-b border-slate-200 text-center bg-purple-50 text-purple-800 border-l border-r border-purple-100 w-32">
+                                    Módulo 1 <br/> <span className="text-[10px] font-normal">{formatDateSimple(classItem.dateMod1)}</span>
+                                </th>
+                            )}
+                            {attendanceMode && classItem.dateMod2 && (
+                                <th className="px-4 py-3 border-b border-slate-200 text-center bg-orange-50 text-orange-800 border-r border-orange-100 w-32">
+                                    Módulo 2 <br/> <span className="text-[10px] font-normal">{formatDateSimple(classItem.dateMod2)}</span>
+                                </th>
+                            )}
+
                             <th className="px-6 py-3 border-b border-slate-200">Status</th>
                             <th className="px-6 py-3 border-b border-slate-200">Módulo</th>
                             {!attendanceMode && <th className="px-6 py-3 border-b border-slate-200 print:hidden">Detalhes</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {students.map((student, idx) => (
-                            <tr key={student.id} className={clsx("transition-colors", attendanceMode && presenceMap[student.id] ? "bg-green-50" : "hover:bg-slate-50")}>
-                                {attendanceMode && (
-                                    <td className="px-6 py-3 text-center">
-                                        <input 
-                                            type="checkbox" 
-                                            className="w-5 h-5 rounded border-slate-300 text-green-600 focus:ring-green-500 cursor-pointer"
-                                            checked={!!presenceMap[student.id]}
-                                            onChange={() => togglePresence(student.id)}
-                                        />
-                                    </td>
-                                )}
-                                <td className="px-6 py-3 text-slate-400 w-12">{idx + 1}</td>
-                                <td className="px-6 py-3">
-                                    <div className="flex flex-col">
-                                        <span className="font-bold text-slate-800">{student.contact_name || student.title}</span>
-                                        <span className="text-xs text-slate-500">{student.company_name}</span>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-3">
-                                    <div className="flex flex-col gap-1 items-start">
-                                        <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border uppercase", getStatusColor(student.stage))}>
-                                            {getStatusLabel(student.stage)}
-                                        </span>
-                                        {!hideFinancials && (
-                                            <span className="text-xs font-medium text-slate-600">
-                                                {formatCurrency(student.value)}
-                                            </span>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-3">
-                                    {getModuleBadge(student)}
-                                </td>
-                                {!attendanceMode && (
-                                    <td className="px-6 py-3 print:hidden">
-                                        <div className="text-xs text-slate-400">
-                                            Ref: {student.id.substring(0,6)}
+                        {students.map((student, idx) => {
+                            const mod1Key = `${student.id}_${classItem.dateMod1}`;
+                            const mod2Key = `${student.id}_${classItem.dateMod2}`;
+                            const isPresent1 = !!presenceMap[mod1Key];
+                            const isPresent2 = !!presenceMap[mod2Key];
+
+                            return (
+                                <tr key={student.id} className={clsx("transition-colors hover:bg-slate-50")}>
+                                    <td className="px-6 py-3 text-slate-400 text-center">{idx + 1}</td>
+                                    <td className="px-6 py-3">
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-slate-800">{student.contact_name || student.title}</span>
+                                            <span className="text-xs text-slate-500">{student.company_name}</span>
                                         </div>
                                     </td>
-                                )}
-                            </tr>
-                        ))}
+
+                                    {/* MÓDULO 1 CHECKBOX */}
+                                    {attendanceMode && classItem.dateMod1 && (
+                                        <td className={clsx("px-4 py-3 text-center border-l border-r", isPresent1 ? "bg-purple-50 border-purple-100" : "border-slate-100")}>
+                                            <input 
+                                                type="checkbox" 
+                                                className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                                checked={isPresent1}
+                                                onChange={() => togglePresence(student.id, classItem.dateMod1)}
+                                            />
+                                        </td>
+                                    )}
+
+                                    {/* MÓDULO 2 CHECKBOX */}
+                                    {attendanceMode && classItem.dateMod2 && (
+                                        <td className={clsx("px-4 py-3 text-center border-r", isPresent2 ? "bg-orange-50 border-orange-100" : "border-slate-100")}>
+                                            <input 
+                                                type="checkbox" 
+                                                className="w-5 h-5 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                                                checked={isPresent2}
+                                                onChange={() => togglePresence(student.id, classItem.dateMod2)}
+                                            />
+                                        </td>
+                                    )}
+
+                                    <td className="px-6 py-3">
+                                        <div className="flex flex-col gap-1 items-start">
+                                            <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border uppercase", getStatusColor(student.stage))}>
+                                                {getStatusLabel(student.stage)}
+                                            </span>
+                                            {!hideFinancials && (
+                                                <span className="text-xs font-medium text-slate-600">
+                                                    {formatCurrency(student.value)}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-3">
+                                        {getModuleBadge(student)}
+                                    </td>
+                                    {!attendanceMode && (
+                                        <td className="px-6 py-3 print:hidden">
+                                            <div className="text-xs text-slate-400">
+                                                Ref: {student.id.substring(0,6)}
+                                            </div>
+                                        </td>
+                                    )}
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             )}
@@ -368,7 +428,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                         className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors flex items-center gap-2"
                     >
                         {isSavingAttendance ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                        Salvar Lista de Presença
+                        Salvar Chamada
                     </button>
                 ) : (
                     <button onClick={onClose} className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold transition-colors">

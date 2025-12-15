@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Award, Plus, Search, Edit2, Trash2, 
   ArrowLeft, Save, X, Printer, Image as ImageIcon, Loader2,
-  Calendar, MapPin, User, FlipHorizontal, Book, Type, MousePointer2, Move
+  Calendar, MapPin, User, FlipHorizontal, Book, Type, MousePointer2, Move, AlignCenter, AlignLeft
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { CertificateModel, CertificateLayout, TextStyle } from '../types';
@@ -39,16 +39,22 @@ interface InteractableTextProps {
     style: TextStyle;
     isSelected: boolean;
     onSelect: () => void;
+    onMouseDown: (e: React.MouseEvent) => void; // Pass down logic
     scale: number;
 }
 
-const InteractableText: React.FC<InteractableTextProps> = ({ text, style, isSelected, onSelect, scale }) => {
+const InteractableText: React.FC<InteractableTextProps> = ({ text, style, isSelected, onSelect, onMouseDown, scale }) => {
     return (
         <div 
-            onMouseDown={(e) => { e.stopPropagation(); onSelect(); }}
+            onMouseDown={(e) => {
+                e.stopPropagation(); // Prevent container drag/click
+                onSelect(); // Select immediately
+                onMouseDown(e); // Start drag logic
+            }}
+            onClick={(e) => e.stopPropagation()} // CRITICAL: Stop click from bubbling to container (which deselects)
             className={clsx(
-                "absolute cursor-move select-none p-2 border-2 transition-colors",
-                isSelected ? "border-amber-500 bg-amber-50/20 z-20" : "border-transparent hover:border-slate-300/50 z-10"
+                "absolute cursor-move select-none p-2 border-2 transition-all group",
+                isSelected ? "border-amber-500 bg-amber-50/30 z-20 shadow-sm" : "border-transparent hover:border-slate-300/50 z-10"
             )}
             style={{
                 left: `${style.x}%`,
@@ -60,13 +66,16 @@ const InteractableText: React.FC<InteractableTextProps> = ({ text, style, isSele
                 color: style.color,
                 fontWeight: style.fontWeight,
                 textAlign: style.textAlign,
-                whiteSpace: 'pre-wrap'
+                whiteSpace: 'pre-wrap',
+                lineHeight: 1.4
             }}
         >
             {text}
+            
+            {/* Visual Indicator when selected */}
             {isSelected && (
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[10px] px-2 rounded-full whitespace-nowrap shadow-sm">
-                    Arrastar para mover
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex gap-1">
+                    <div className="bg-amber-500 w-2 h-2 rounded-full"></div>
                 </div>
             )}
         </div>
@@ -188,10 +197,8 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
   };
 
   // --- DRAG LOGIC ---
-  const handleMouseDown = (e: React.MouseEvent, element: 'body' | 'name' | 'footer') => {
-      e.stopPropagation();
-      e.preventDefault();
-      setSelectedElement(element);
+  const handleElementMouseDown = (e: React.MouseEvent, element: 'body' | 'name' | 'footer') => {
+      // Logic handled in InteractableText, here we just prepare state
       setIsDragging(true);
       dragStartRef.current = { x: e.clientX, y: e.clientY };
       
@@ -202,14 +209,12 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
   const handleMouseMove = (e: React.MouseEvent) => {
       if (!isDragging || !selectedElement || !containerRef.current || !dragStartRef.current || !elementStartRef.current) return;
 
+      e.preventDefault();
       const rect = containerRef.current.getBoundingClientRect();
       const deltaX = e.clientX - dragStartRef.current.x;
       const deltaY = e.clientY - dragStartRef.current.y;
 
-      // Because of scale(0.5), visual 1px move requires 1/0.5 = 2px logic adjustment?
-      // Actually, rect gives visualized dimensions.
-      // We work in Percentages.
-      
+      // Calculate percentage movement relative to container size
       const percentX = (deltaX / rect.width) * 100;
       const percentY = (deltaY / rect.height) * 100;
 
@@ -360,18 +365,18 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                 {/* Sidebar Configuration */}
                 <div className="w-96 bg-white border-r border-slate-200 overflow-y-auto p-6 space-y-6 shadow-sm z-10 shrink-0">
                     
-                    {/* GENERAL SETTINGS OR ELEMENT SETTINGS */}
+                    {/* STYLE EDITOR (Show if element selected) */}
                     {selectedElement ? (
                         <div className="animate-in fade-in slide-in-from-right-2 duration-200">
-                            <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
                                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
                                     <Type size={16} className="text-amber-500" />
                                     Estilo: {selectedElement === 'name' ? 'Nome do Aluno' : selectedElement === 'body' ? 'Texto Principal' : 'Rodapé (Cidade/Data)'}
                                 </h3>
-                                <button onClick={() => setSelectedElement(null)} className="text-xs text-slate-400 hover:text-slate-600"><X size={16}/></button>
+                                <button onClick={() => setSelectedElement(null)} className="text-xs text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Voltar</button>
                             </div>
 
-                            <div className="space-y-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                            <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Fonte</label>
                                     <select 
@@ -379,10 +384,11 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                         value={activeStyle?.fontFamily}
                                         onChange={(e) => updateStyle('fontFamily', e.target.value)}
                                     >
-                                        <option value="serif">Serifa Padrão</option>
-                                        <option value="sans-serif">Sans-Serif (Moderna)</option>
+                                        <option value="serif">Serifa Padrão (Times)</option>
+                                        <option value="sans-serif">Sans-Serif (Arial)</option>
                                         <option value="'Great Vibes', cursive">Manuscrita (Great Vibes)</option>
                                         <option value="'Dancing Script', cursive">Manuscrita (Dancing Script)</option>
+                                        <option value="'Playfair Display', serif">Elegante (Playfair)</option>
                                     </select>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
@@ -438,92 +444,117 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                             </div>
                             <div className="mt-4 p-3 bg-amber-50 text-amber-800 text-xs rounded border border-amber-100 flex gap-2">
                                 <MousePointer2 size={16} className="shrink-0" />
-                                <span>Você também pode arrastar o texto na imagem ao lado para posicioná-lo.</span>
+                                <span>Você pode arrastar o texto na imagem para posicioná-lo.</span>
                             </div>
                         </div>
                     ) : (
                         <>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Título do Modelo</label>
-                                <input 
-                                    type="text" 
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                                    value={currentCert.title}
-                                    onChange={e => setCurrentCert({...currentCert, title: e.target.value})}
-                                    placeholder="Ex: Certificado Padrão 2024"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Associar ao Curso</label>
-                                <select
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-                                    value={currentCert.linkedProductId || ''}
-                                    onChange={e => setCurrentCert({...currentCert, linkedProductId: e.target.value})}
-                                >
-                                    <option value="">-- Selecione um curso --</option>
+                            {/* GENERAL CONFIGURATION */}
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Configurações Gerais</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-2"
+                                        value={currentCert.title}
+                                        onChange={e => setCurrentCert({...currentCert, title: e.target.value})}
+                                        placeholder="Nome do Modelo (Ex: Curso Pilates 2024)"
+                                    />
                                     
-                                    {/* STANDARD PHYSICAL COURSES */}
-                                    <optgroup label="Cursos Presenciais (Padrão)">
-                                        {STANDARD_COURSES.map(course => (
-                                            <option key={course} value={course}>{course}</option>
-                                        ))}
-                                    </optgroup>
-
-                                    {/* DIGITAL PRODUCTS */}
-                                    {products.length > 0 && (
-                                        <optgroup label="Produtos Digitais">
-                                            {products.map(p => (
-                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                    <select
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                        value={currentCert.linkedProductId || ''}
+                                        onChange={e => setCurrentCert({...currentCert, linkedProductId: e.target.value})}
+                                    >
+                                        <option value="">-- Associar ao Curso --</option>
+                                        
+                                        <optgroup label="Cursos Presenciais">
+                                            {STANDARD_COURSES.map(course => (
+                                                <option key={course} value={course}>{course}</option>
                                             ))}
                                         </optgroup>
-                                    )}
-                                </select>
-                                <p className="text-[10px] text-slate-400 mt-1">Isso permite emissão direta na lista de alunos.</p>
-                            </div>
 
-                            <div className="border-t border-slate-100 pt-4">
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                                    {editorSide === 'front' ? 'Imagem de Fundo (Frente)' : 'Imagem de Fundo (Verso)'}
-                                </label>
-                                <div 
-                                    className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer flex flex-col justify-center"
-                                    style={{ aspectRatio: '297/210' }}
-                                >
-                                    <input 
-                                        type="file" 
-                                        accept="image/*" 
-                                        onChange={(e) => handleImageUpload(e, editorSide)} 
-                                        className="absolute inset-0 opacity-0 cursor-pointer" 
-                                    />
-                                    <ImageIcon className="mx-auto text-slate-300 mb-2" size={32} />
-                                    <p className="text-xs text-slate-500">Clique para enviar (A4 Paisagem)</p>
+                                        {products.length > 0 && (
+                                            <optgroup label="Produtos Digitais">
+                                                {products.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
+                                            </optgroup>
+                                        )}
+                                    </select>
                                 </div>
-                                {((editorSide === 'front' && currentCert.backgroundData) || (editorSide === 'back' && currentCert.backBackgroundData)) && (
-                                    <div className="mt-2 text-xs text-green-600 font-medium flex items-center gap-1">
-                                        <div className="w-2 h-2 bg-green-500 rounded-full"></div> Imagem carregada
+
+                                <div className="border-t border-slate-100 pt-4">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                                        Imagem de Fundo ({editorSide === 'front' ? 'Frente' : 'Verso'})
+                                    </label>
+                                    <div 
+                                        className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50 transition-colors relative cursor-pointer"
+                                    >
+                                        <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            onChange={(e) => handleImageUpload(e, editorSide)} 
+                                            className="absolute inset-0 opacity-0 cursor-pointer" 
+                                        />
+                                        <div className="flex flex-col items-center">
+                                            <ImageIcon className="text-slate-300 mb-1" size={24} />
+                                            <span className="text-xs text-slate-500">Trocar Imagem</span>
+                                        </div>
                                     </div>
-                                )}
+                                </div>
                             </div>
 
+                            {/* FIELDS LIST */}
                             {editorSide === 'front' && (
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Texto do Certificado (Corpo)</label>
-                                    <textarea 
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-32 resize-none"
-                                        value={currentCert.bodyText}
-                                        onChange={e => setCurrentCert({...currentCert, bodyText: e.target.value})}
-                                        placeholder="Digite o texto..."
-                                    ></textarea>
-                                    <p className="text-xs text-slate-400 mt-2">
-                                        Variáveis: [NOME ALUNO], [CIDADE], [DATA].<br/>
-                                        Clique no texto na prévia para editar fonte e posição.
-                                    </p>
+                                <div className="mt-6 pt-6 border-t border-slate-200">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Campos do Certificado</label>
+                                    
+                                    <div className="space-y-3">
+                                        {/* Name Field */}
+                                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 group hover:border-amber-300 transition-colors">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className="text-sm font-bold text-slate-700 flex items-center gap-1"><User size={14}/> Nome do Aluno</span>
+                                                <button onClick={() => setSelectedElement('name')} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors">
+                                                    Editar Estilo
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400">Campo dinâmico (preenchido automaticamente).</p>
+                                        </div>
+
+                                        {/* Body Text Field */}
+                                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 group hover:border-amber-300 transition-colors">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-sm font-bold text-slate-700 flex items-center gap-1"><AlignLeft size={14}/> Texto Principal</span>
+                                                <button onClick={() => setSelectedElement('body')} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors">
+                                                    Editar Estilo
+                                                </button>
+                                            </div>
+                                            <textarea 
+                                                className="w-full px-3 py-2 border border-slate-300 rounded text-sm h-24 resize-none bg-white focus:ring-1 focus:ring-amber-500 outline-none"
+                                                value={currentCert.bodyText}
+                                                onChange={e => setCurrentCert({...currentCert, bodyText: e.target.value})}
+                                                placeholder="Digite o texto do certificado..."
+                                            ></textarea>
+                                            <p className="text-[10px] text-slate-400 mt-1">Variáveis: [NOME ALUNO], [CIDADE], [DATA].</p>
+                                        </div>
+
+                                        {/* Footer Field */}
+                                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 group hover:border-amber-300 transition-colors">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className="text-sm font-bold text-slate-700 flex items-center gap-1"><MapPin size={14}/> Local e Data</span>
+                                                <button onClick={() => setSelectedElement('footer')} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors">
+                                                    Editar Estilo
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400">Campo dinâmico (preenchido automaticamente).</p>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                             
                             {editorSide === 'back' && (
-                                <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-xs border border-blue-100">
+                                <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-xs border border-blue-100 mt-4">
                                     <strong>Nota:</strong> O código de autenticação (Hash) do certificado será inserido automaticamente no canto inferior direito do verso.
                                 </div>
                             )}
@@ -564,6 +595,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                     style={(currentCert.layoutConfig || DEFAULT_LAYOUT).body}
                                     isSelected={selectedElement === 'body'}
                                     onSelect={() => setSelectedElement('body')}
+                                    onMouseDown={(e) => handleElementMouseDown(e, 'body')}
                                     scale={0.5}
                                 />
                                 
@@ -572,6 +604,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                     style={(currentCert.layoutConfig || DEFAULT_LAYOUT).name}
                                     isSelected={selectedElement === 'name'}
                                     onSelect={() => setSelectedElement('name')}
+                                    onMouseDown={(e) => handleElementMouseDown(e, 'name')}
                                     scale={0.5}
                                 />
 
@@ -580,6 +613,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                     style={(currentCert.layoutConfig || DEFAULT_LAYOUT).footer}
                                     isSelected={selectedElement === 'footer'}
                                     onSelect={() => setSelectedElement('footer')}
+                                    onMouseDown={(e) => handleElementMouseDown(e, 'footer')}
                                     scale={0.5}
                                 />
                             </>

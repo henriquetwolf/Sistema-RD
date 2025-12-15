@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -20,8 +21,10 @@ import { ProductsManager } from './components/ProductsManager';
 import { InstructorArea } from './components/InstructorArea';
 import { FranchisesManager } from './components/FranchisesManager';
 import { CertificatesManager } from './components/CertificatesManager';
-import { CertificateViewer } from './components/CertificateViewer'; // Imported
-import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract } from './types';
+import { StudentsManager } from './components/StudentsManager'; // New
+import { StudentArea } from './components/StudentArea'; // New
+import { CertificateViewer } from './components/CertificateViewer'; 
+import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
@@ -57,6 +60,9 @@ function App() {
   
   // Instructor Auth State
   const [currentInstructor, setCurrentInstructor] = useState<Teacher | null>(null);
+  
+  // Student Auth State
+  const [currentStudent, setCurrentStudent] = useState<StudentSession | null>(null);
 
   // Dashboard State (Persisted Jobs)
   const [jobs, setJobs] = useState<SyncJob[]>([]);
@@ -64,7 +70,7 @@ function App() {
   
   // Dashboard UI State
   // Extended types to include management tabs
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'global_settings'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'global_settings'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -148,11 +154,19 @@ function App() {
             setIsLoadingSession(false);
         });
         
-        // 4. Check Auth (Instructor - Persisted in SessionStorage for simple auth)
+        // 4. Check Auth (Instructor)
         const savedInstructor = sessionStorage.getItem('instructor_session');
         if (savedInstructor) {
             try {
                 setCurrentInstructor(JSON.parse(savedInstructor));
+            } catch (e) {}
+        }
+
+        // 5. Check Auth (Student)
+        const savedStudent = sessionStorage.getItem('student_session');
+        if (savedStudent) {
+            try {
+                setCurrentStudent(JSON.parse(savedStudent));
             } catch (e) {}
         }
     };
@@ -171,10 +185,7 @@ function App() {
   // --- SAVE JOBS & UPDATE REF ---
   useEffect(() => {
     jobsRef.current = jobs; // Keep ref updated
-    
-    // FIX: Always save, even if empty array, to persist deletions correctly
     localStorage.setItem('csv_syncer_jobs', JSON.stringify(jobs));
-    
   }, [jobs]);
 
   // --- GLOBAL SYNC LOOP ---
@@ -194,10 +205,10 @@ function App() {
 
   // --- FETCH SALES DATA (WIDGET) ---
   useEffect(() => {
-      if (dashboardTab === 'overview' && !publicForm && !publicContract && !publicCertificateHash && !currentInstructor) {
+      if (dashboardTab === 'overview' && !publicForm && !publicContract && !publicCertificateHash && !currentInstructor && !currentStudent) {
           fetchSalesData();
       }
-  }, [dashboardTab, salesDateRange, publicForm, publicContract, publicCertificateHash, currentInstructor]);
+  }, [dashboardTab, salesDateRange, publicForm, publicContract, publicCertificateHash, currentInstructor, currentStudent]);
 
   const fetchSalesData = async () => {
       setIsLoadingSales(true);
@@ -463,6 +474,9 @@ function App() {
     if (currentInstructor) {
         setCurrentInstructor(null);
         sessionStorage.removeItem('instructor_session');
+    } else if (currentStudent) {
+        setCurrentStudent(null);
+        sessionStorage.removeItem('student_session');
     } else {
         await appBackend.auth.signOut();
     }
@@ -471,6 +485,11 @@ function App() {
   const handleInstructorLogin = (teacher: Teacher) => {
       setCurrentInstructor(teacher);
       sessionStorage.setItem('instructor_session', JSON.stringify(teacher));
+  };
+
+  const handleStudentLogin = (student: StudentSession) => {
+      setCurrentStudent(student);
+      sessionStorage.setItem('student_session', JSON.stringify(student));
   };
 
   const getIntervalLabel = (minutes: number) => {
@@ -493,15 +512,20 @@ function App() {
   // 2. Check for Auth Loading
   if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
   
-  // 3. Check for Session (Either Admin or Instructor)
-  if (!session && !currentInstructor) return <LoginPanel onInstructorLogin={handleInstructorLogin} />;
+  // 3. Check for Session (Either Admin, Instructor or Student)
+  if (!session && !currentInstructor && !currentStudent) return <LoginPanel onInstructorLogin={handleInstructorLogin} onStudentLogin={handleStudentLogin} />;
 
   // 4. INSTRUCTOR AREA
   if (currentInstructor) {
       return <InstructorArea instructor={currentInstructor} onLogout={handleLogout} />;
   }
 
-  // 5. ADMIN AREA
+  // 5. STUDENT AREA
+  if (currentStudent) {
+      return <StudentArea student={currentStudent} onLogout={handleLogout} />;
+  }
+
+  // 6. ADMIN AREA
   const isLocalMode = session?.user?.id === 'local-user';
 
   // Stats Calculation
@@ -694,6 +718,18 @@ function App() {
                                 >
                                     <FileSignature size={18} />
                                     Contratos
+                                </button>
+                                <button
+                                    onClick={() => setDashboardTab('students')}
+                                    className={clsx(
+                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                        dashboardTab === 'students' 
+                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
+                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    )}
+                                >
+                                    <Users size={18} />
+                                    Alunos
                                 </button>
                                 <button
                                     onClick={() => setDashboardTab('certificates')}
@@ -982,6 +1018,7 @@ function App() {
                         {dashboardTab === 'contracts' && <ContractsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'certificates' && <CertificatesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'products' && <ProductsManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'students' && <StudentsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} />}
                         {dashboardTab === 'analysis' && <SalesAnalysis />}
 

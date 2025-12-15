@@ -177,3 +177,12 @@ export interface Product {
   certificateTemplateId?: string; // New: Link to certificate model
   createdAt: string;
 }
+
+// --- STUDENT AREA ---
+
+export interface StudentSession {
+  email: string;
+  cpf: string;
+  name: string;
+  deals: any[]; // The raw deals associated with this student
+}

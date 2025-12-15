@@ -1,15 +1,18 @@
+
 import React, { useState } from 'react';
-import { Loader2, AlertCircle, School, ShieldCheck } from 'lucide-react';
+import { Loader2, AlertCircle, School, ShieldCheck, GraduationCap } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { Teacher } from './TeachersManager';
+import { StudentSession } from '../types';
 import clsx from 'clsx';
 
 interface LoginPanelProps {
     onInstructorLogin?: (teacher: Teacher) => void;
+    onStudentLogin?: (student: StudentSession) => void;
 }
 
-export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin }) => {
-  const [activeTab, setActiveTab] = useState<'admin' | 'instructor'>('admin');
+export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStudentLogin }) => {
+  const [activeTab, setActiveTab] = useState<'admin' | 'instructor' | 'student'>('admin');
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +34,7 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin }) => 
         if (activeTab === 'admin') {
             // ADMIN LOGIN (Supabase Auth)
             await appBackend.auth.signIn(email, password);
-        } else {
+        } else if (activeTab === 'instructor') {
             // INSTRUCTOR LOGIN (Custom Table Query)
             const { data, error } = await appBackend.client
                 .from('crm_teachers')
@@ -55,7 +58,7 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin }) => 
                 email: data.email,
                 phone: data.phone,
                 photoUrl: data.photo_url,
-                // ... map other essential fields if needed, but these suffice for dashboard header
+                // ... map other essential fields if needed
                 rg: '', cpf: '', birthDate: '', maritalStatus: '', motherName: '',
                 address: '', district: '', city: '', state: '', cep: '',
                 emergencyContactName: '', emergencyContactPhone: '',
@@ -69,6 +72,50 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin }) => 
             };
 
             if (onInstructorLogin) onInstructorLogin(teacher);
+        } else {
+            // STUDENT LOGIN (CRM Deals Table)
+            // Needs email and CPF (password)
+            // Normalize CPF: remove non-digits
+            const cleanCpf = password.replace(/\D/g, '');
+            
+            // Fetch deals for this student. We fetch ALL deals to check if any has access enabled.
+            // Note: In a real world scenario, you'd want a separate Users table. Here we use deals.
+            const { data: deals, error } = await appBackend.client
+                .from('crm_deals')
+                .select('*')
+                .eq('email', email.trim()); // First match by email
+
+            if (error || !deals || deals.length === 0) {
+                throw new Error('Aluno não encontrado com este e-mail.');
+            }
+
+            // Verify CPF matches at least one record AND access is enabled on at least one
+            const studentDeals = deals.filter((d: any) => {
+                const dbCpf = d.cpf ? d.cpf.replace(/\D/g, '') : '';
+                return dbCpf === cleanCpf;
+            });
+
+            if (studentDeals.length === 0) {
+                throw new Error('CPF incorreto.');
+            }
+
+            // Check if blocked
+            // Logic: If user has at least one deal with access_enabled = true (or null which defaults to true in logic), they can enter.
+            const hasAccess = studentDeals.some((d: any) => d.student_access_enabled !== false);
+
+            if (!hasAccess) {
+                throw new Error('Acesso à área do aluno está bloqueado. Contate o suporte.');
+            }
+
+            // Login Success
+            const studentInfo: StudentSession = {
+                email: studentDeals[0].email,
+                cpf: studentDeals[0].cpf,
+                name: studentDeals[0].contact_name,
+                deals: studentDeals
+            };
+
+            if (onStudentLogin) onStudentLogin(studentInfo);
         }
     } catch (err: any) {
       console.error(err);
@@ -100,23 +147,29 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin }) => 
           <div className="flex bg-slate-100 p-1 rounded-lg mb-6">
               <button 
                 onClick={() => { setActiveTab('admin'); setError(null); }}
-                className={clsx("flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2", activeTab === 'admin' ? "bg-white shadow text-teal-700" : "text-slate-500 hover:text-slate-700")}
+                className={clsx("flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1", activeTab === 'admin' ? "bg-white shadow text-teal-700" : "text-slate-500 hover:text-slate-700")}
               >
-                  <ShieldCheck size={16} /> Administrativo
+                  <ShieldCheck size={14} /> Admin
               </button>
               <button 
                 onClick={() => { setActiveTab('instructor'); setError(null); }}
-                className={clsx("flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2", activeTab === 'instructor' ? "bg-white shadow text-orange-600" : "text-slate-500 hover:text-slate-700")}
+                className={clsx("flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1", activeTab === 'instructor' ? "bg-white shadow text-orange-600" : "text-slate-500 hover:text-slate-700")}
               >
-                  <School size={16} /> Área Instrutor
+                  <School size={14} /> Instrutor
+              </button>
+              <button 
+                onClick={() => { setActiveTab('student'); setError(null); }}
+                className={clsx("flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1", activeTab === 'student' ? "bg-white shadow text-purple-600" : "text-slate-500 hover:text-slate-700")}
+              >
+                  <GraduationCap size={14} /> Aluno
               </button>
           </div>
 
           <h1 className="text-xl font-bold text-slate-800">
-            {activeTab === 'admin' ? 'Acesso Administrativo' : 'Portal do Instrutor'}
+            {activeTab === 'admin' ? 'Acesso Administrativo' : activeTab === 'instructor' ? 'Portal do Instrutor' : 'Área do Aluno'}
           </h1>
           <p className="text-slate-500 mt-1 text-sm">
-            Entre com suas credenciais para continuar
+            {activeTab === 'student' ? 'Entre com seu Email e CPF (somente números)' : 'Entre com suas credenciais para continuar'}
           </p>
         </div>
 
@@ -137,7 +190,7 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin }) => 
                 onChange={(e) => setEmail(e.target.value)}
                 className={clsx(
                     "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none transition-all focus:ring-2",
-                    activeTab === 'admin' ? "focus:ring-teal-500 focus:border-teal-500" : "focus:ring-orange-500 focus:border-orange-500"
+                    activeTab === 'admin' ? "focus:ring-teal-500 focus:border-teal-500" : activeTab === 'instructor' ? "focus:ring-orange-500 focus:border-orange-500" : "focus:ring-purple-500 focus:border-purple-500"
                 )}
                 placeholder="seu.email@exemplo.com"
                 disabled={isLoading}
@@ -145,16 +198,16 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin }) => 
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Senha</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">{activeTab === 'student' ? 'CPF (Senha)' : 'Senha'}</label>
               <input
-                type="password"
+                type={activeTab === 'student' ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className={clsx(
                     "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none transition-all focus:ring-2",
-                    activeTab === 'admin' ? "focus:ring-teal-500 focus:border-teal-500" : "focus:ring-orange-500 focus:border-orange-500"
+                    activeTab === 'admin' ? "focus:ring-teal-500 focus:border-teal-500" : activeTab === 'instructor' ? "focus:ring-orange-500 focus:border-orange-500" : "focus:ring-purple-500 focus:border-purple-500"
                 )}
-                placeholder="••••••••"
+                placeholder={activeTab === 'student' ? "Apenas números" : "••••••••"}
                 disabled={isLoading}
               />
             </div>
@@ -164,7 +217,7 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin }) => 
               disabled={isLoading}
               className={clsx(
                   "w-full text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 mt-4 shadow-lg disabled:opacity-70",
-                  activeTab === 'admin' ? "bg-teal-600 hover:bg-teal-700 shadow-teal-600/20" : "bg-orange-600 hover:bg-orange-700 shadow-orange-600/20"
+                  activeTab === 'admin' ? "bg-teal-600 hover:bg-teal-700 shadow-teal-600/20" : activeTab === 'instructor' ? "bg-orange-600 hover:bg-orange-700 shadow-orange-600/20" : "bg-purple-600 hover:bg-purple-700 shadow-purple-600/20"
               )}
             >
               {isLoading ? (

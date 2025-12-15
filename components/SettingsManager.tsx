@@ -166,10 +166,12 @@ CREATE TABLE IF NOT EXISTS public.crm_events (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
   name text,
+  description text, -- Nova Coluna
   location text,
   dates jsonb,
   registration_open boolean DEFAULT false
 );
+ALTER TABLE public.crm_events ADD COLUMN IF NOT EXISTS description text;
 ALTER TABLE public.crm_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total events" ON public.crm_events FOR ALL USING (true) WITH CHECK (true);
 
@@ -189,13 +191,15 @@ CREATE TABLE IF NOT EXISTS public.crm_workshops (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
   event_id uuid REFERENCES public.crm_events(id) ON DELETE CASCADE,
-  block_id uuid REFERENCES public.crm_event_blocks(id) ON DELETE CASCADE, -- Vincula ao bloco
+  block_id uuid REFERENCES public.crm_event_blocks(id) ON DELETE CASCADE,
   title text,
+  description text, -- Nova Coluna
   speaker text,
   date date,
   time text,
   spots integer
 );
+ALTER TABLE public.crm_workshops ADD COLUMN IF NOT EXISTS description text;
 ALTER TABLE public.crm_workshops ADD COLUMN IF NOT EXISTS block_id uuid REFERENCES public.crm_event_blocks(id) ON DELETE CASCADE;
 
 ALTER TABLE public.crm_workshops ENABLE ROW LEVEL SECURITY;

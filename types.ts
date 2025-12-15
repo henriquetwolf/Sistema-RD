@@ -202,6 +202,7 @@ export interface Workshop {
   eventId: string;
   blockId?: string; // Links to EventBlock
   title: string;
+  description?: string; // Resume/Info about the workshop
   speaker: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
@@ -211,6 +212,7 @@ export interface Workshop {
 export interface EventModel {
   id: string;
   name: string;
+  description?: string; // General info about the event
   location: string;
   dates: string[]; // Array of YYYY-MM-DD strings
   createdAt: string;

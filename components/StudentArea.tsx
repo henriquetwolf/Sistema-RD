@@ -4,7 +4,7 @@ import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock } f
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, BookOpen, Award, ExternalLink, Calendar, MapPin, 
-    Video, Download, Loader2, UserCircle, User, CheckCircle, Mic, CheckSquare, Clock, Users, X, Save, Lock, AlertCircle, DollarSign, Layers, Edit2
+    Video, Download, Loader2, UserCircle, User, CheckCircle, Mic, CheckSquare, Clock, Users, X, Save, Lock, AlertCircle, DollarSign, Layers, Edit2, List
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -36,6 +36,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [workshopCounts, setWorkshopCounts] = useState<Record<string, number>>({}); // workshopId -> count (GLOBAL COUNT)
     const [selectedWorkshops, setSelectedWorkshops] = useState<string[]>([]); // workshop IDs
     const [isSavingReg, setIsSavingReg] = useState(false);
+
+    // My Agenda View Modal
+    const [showMyAgenda, setShowMyAgenda] = useState<EventModel | null>(null);
 
     useEffect(() => {
         loadStudentData();
@@ -168,6 +171,21 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         }
     };
 
+    // New: Handle View My Agenda
+    const handleViewAgenda = async (event: EventModel) => {
+        setShowMyAgenda(event);
+        setIsLoading(true);
+        try {
+            // Fetch workshops just to show details
+            const ws = await appBackend.getWorkshops(event.id);
+            setEventWorkshops(ws);
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleToggleWorkshop = (wId: string) => {
         // Find the workshop
         const workshop = eventWorkshops.find(w => w.id === wId);
@@ -181,8 +199,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         // --- SELECTION LOGIC ---
         if (!isCurrentlySelected) {
             // 1. Check Capacity (Smart Check)
-            // We must subtract "Me" from the global count to know if there is space for me
-            // (In case I am editing and already holding a spot in DB but UI state is unchecked momentarily)
             const amIInDbForThis = myRegistrations.some(r => r.workshopId === wId);
             const globalCount = workshopCounts[wId] || 0;
             const countOthers = globalCount - (amIInDbForThis ? 1 : 0);
@@ -194,15 +210,12 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             // 2. Check Block Limit
             if (block) {
-                // Count how many workshops from this block are already selected in UI
                 const selectedInBlock = selectedWorkshops.filter(id => {
                     const w = eventWorkshops.find(ew => ew.id === id);
                     return w?.blockId === block.id;
                 });
 
                 if (selectedInBlock.length >= block.maxSelections) {
-                    // Option B: Auto-deselect the first one (Better UX for "Choose 1")
-                    // Allows swapping without manual deselect
                     if (block.maxSelections === 1) {
                         const toRemove = selectedInBlock[0];
                         setSelectedWorkshops(prev => [...prev.filter(id => id !== toRemove), wId]);
@@ -315,7 +328,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
                 {/* Content */}
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    {isLoading && !selectedEvent ? (
+                    {isLoading && !selectedEvent && !showMyAgenda ? (
                         <div className="flex justify-center py-20"><Loader2 className="animate-spin text-purple-600" size={32}/></div>
                     ) : (
                         <>
@@ -461,6 +474,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                         )}
                                                     </div>
                                                     
+                                                    {/* Event Information */}
+                                                    {event.description && (
+                                                        <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                            <p className="text-sm text-slate-600 whitespace-pre-wrap">{event.description}</p>
+                                                        </div>
+                                                    )}
+                                                    
                                                     <div className="flex items-center gap-2 mb-6">
                                                         <Calendar size={16} className="text-slate-400" />
                                                         <span className="text-sm text-slate-600">
@@ -468,19 +488,32 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                         </span>
                                                     </div>
 
-                                                    <button 
-                                                        onClick={() => handleOpenEvent(event)}
-                                                        disabled={!canAccess}
-                                                        className={clsx(
-                                                            "w-full py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors",
-                                                            canAccess 
-                                                                ? "bg-purple-600 hover:bg-purple-700 text-white" 
-                                                                : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            onClick={() => handleOpenEvent(event)}
+                                                            disabled={!canAccess}
+                                                            className={clsx(
+                                                                "flex-1 py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors",
+                                                                canAccess 
+                                                                    ? "bg-purple-600 hover:bg-purple-700 text-white" 
+                                                                    : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                                            )}
+                                                        >
+                                                            <StatusIcon size={18} />
+                                                            {statusLabel}
+                                                        </button>
+                                                        
+                                                        {/* Button View Agenda */}
+                                                        {myRegs > 0 && (
+                                                            <button 
+                                                                onClick={() => handleViewAgenda(event)}
+                                                                className="px-4 py-3 bg-white text-purple-600 border border-purple-200 hover:bg-purple-50 rounded-lg font-bold text-sm transition-colors flex items-center justify-center"
+                                                                title="Visualizar Detalhes dos Workshops Escolhidos"
+                                                            >
+                                                                <List size={18} /> Minha Agenda
+                                                            </button>
                                                         )}
-                                                    >
-                                                        <StatusIcon size={18} />
-                                                        {statusLabel}
-                                                    </button>
+                                                    </div>
                                                 </div>
                                             );
                                         })
@@ -542,6 +575,71 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     )}
                 </div>
             </main>
+
+            {/* MY AGENDA MODAL (READ ONLY) */}
+            {showMyAgenda && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl shrink-0">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800">Minha Agenda</h3>
+                                <p className="text-xs text-slate-500">{showMyAgenda.name}</p>
+                            </div>
+                            <button onClick={() => setShowMyAgenda(null)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={20}/></button>
+                        </div>
+                        
+                        <div className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-white">
+                            {myRegistrations.filter(r => r.eventId === showMyAgenda.id).length === 0 ? (
+                                <div className="text-center text-slate-400 py-8">Nenhum workshop selecionado.</div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {/* Group my workshops by Date */}
+                                    {showMyAgenda.dates.sort().map(dateStr => {
+                                        const myWorkshopsForDay = eventWorkshops.filter(w => 
+                                            w.date === dateStr && myRegistrations.some(r => r.workshopId === w.id)
+                                        ).sort((a,b) => a.time.localeCompare(b.time));
+
+                                        if (myWorkshopsForDay.length === 0) return null;
+
+                                        return (
+                                            <div key={dateStr}>
+                                                <h4 className="text-sm font-bold text-slate-700 border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+                                                    <Calendar size={14} className="text-purple-600"/>
+                                                    {formatDate(dateStr)}
+                                                </h4>
+                                                <div className="space-y-4">
+                                                    {myWorkshopsForDay.map(w => (
+                                                        <div key={w.id} className="bg-purple-50 rounded-xl p-4 border border-purple-100">
+                                                            <div className="flex justify-between items-start mb-2">
+                                                                <h5 className="font-bold text-purple-900 text-sm">{w.title}</h5>
+                                                                <span className="bg-white text-purple-700 text-xs font-mono px-2 py-1 rounded border border-purple-200 shadow-sm flex items-center gap-1">
+                                                                    <Clock size={12}/> {w.time}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-xs text-purple-800 mb-2 flex items-center gap-1">
+                                                                <Mic size={12}/> {w.speaker}
+                                                            </div>
+                                                            {w.description && (
+                                                                <div className="text-xs text-slate-600 bg-white p-3 rounded-lg border border-purple-100 mt-2 whitespace-pre-wrap">
+                                                                    {w.description}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end rounded-b-xl">
+                            <button onClick={() => setShowMyAgenda(null)} className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium text-sm">Fechar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* EVENT REGISTRATION MODAL */}
             {selectedEvent && (
@@ -693,6 +791,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                         <Mic size={12} /> {w.speaker}
                     </p>
+                    {/* Show description in registration list too if useful, or keep concise */}
+                    {w.description && (
+                        <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">{w.description}</p>
+                    )}
                 </div>
 
                 <div className="text-right shrink-0">

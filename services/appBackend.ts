@@ -613,10 +613,11 @@ export const appBackend = {
     return data.map((d: any) => ({
       id: d.id,
       name: d.name,
+      description: d.description, // Map description
       location: d.location,
       dates: d.dates || [],
       createdAt: d.created_at,
-      registrationOpen: d.registration_open || false // Map new field
+      registrationOpen: d.registration_open || false
     }));
   },
 
@@ -626,9 +627,10 @@ export const appBackend = {
     const payload = {
       id: event.id,
       name: event.name,
+      description: event.description, // Save description
       location: event.location,
       dates: event.dates,
-      registration_open: event.registrationOpen // Save new field
+      registration_open: event.registrationOpen 
     };
 
     const { data, error } = await supabase
@@ -642,6 +644,7 @@ export const appBackend = {
     return {
       id: data.id,
       name: data.name,
+      description: data.description,
       location: data.location,
       dates: data.dates || [],
       createdAt: data.created_at,
@@ -655,7 +658,7 @@ export const appBackend = {
     if (error) throw error;
   },
 
-  // --- BLOCKS (NEW) ---
+  // --- BLOCKS ---
   
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
     if (!isConfigured) return [];
@@ -667,7 +670,6 @@ export const appBackend = {
         .order('title', { ascending: true });
 
     if (error) {
-        // Silent fail if table not exists yet
         console.warn(error); 
         return [];
     }
@@ -733,8 +735,9 @@ export const appBackend = {
     return data.map((d: any) => ({
       id: d.id,
       eventId: d.event_id,
-      blockId: d.block_id, // Map blockId
+      blockId: d.block_id, 
       title: d.title,
+      description: d.description, // Map description
       speaker: d.speaker,
       date: d.date,
       time: d.time,
@@ -748,8 +751,9 @@ export const appBackend = {
     const payload = {
       id: workshop.id,
       event_id: workshop.eventId,
-      block_id: workshop.blockId || null, // Save blockId
+      block_id: workshop.blockId || null, 
       title: workshop.title,
+      description: workshop.description, // Save description
       speaker: workshop.speaker,
       date: workshop.date,
       time: workshop.time,
@@ -769,6 +773,7 @@ export const appBackend = {
       eventId: data.event_id,
       blockId: data.block_id,
       title: data.title,
+      description: data.description,
       speaker: data.speaker,
       date: data.date,
       time: data.time,
@@ -782,9 +787,8 @@ export const appBackend = {
     if (error) throw error;
   },
 
-  // --- EVENT REGISTRATIONS (NEW) ---
+  // --- EVENT REGISTRATIONS ---
 
-  // Get all registrations for an event (useful for admin and calculating spots)
   getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
     if (!isConfigured) return [];
 
@@ -809,7 +813,6 @@ export const appBackend = {
     }));
   },
 
-  // Save multiple registrations for a student at once (clearing previous ones for this event to avoid duplicates)
   saveEventRegistrations: async (eventId: string, studentId: string, studentName: string, studentEmail: string, workshopIds: string[]): Promise<void> => {
     if (!isConfigured) throw new Error("Backend not configured");
 

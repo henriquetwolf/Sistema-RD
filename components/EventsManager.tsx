@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Calendar, MapPin, Users, Mic, Clock, Plus, Search, 
   MoreVertical, Edit2, Trash2, ArrowLeft, Save, X, 
-  Loader2, ChevronRight, Hash, BarChart3, User, RefreshCw, Lock, Unlock, Layers
+  Loader2, ChevronRight, Hash, BarChart3, User, RefreshCw, Lock, Unlock, Layers, FileText
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { EventModel, Workshop, EventRegistration, EventBlock } from '../types';
@@ -16,6 +16,7 @@ interface EventsManagerProps {
 const INITIAL_EVENT: EventModel = {
     id: '',
     name: '',
+    description: '', // Init description
     location: '',
     dates: [],
     createdAt: '',
@@ -26,6 +27,7 @@ const INITIAL_WORKSHOP: Workshop = {
     id: '',
     eventId: '',
     title: '',
+    description: '', // Init description
     speaker: '',
     date: '',
     time: '',
@@ -42,7 +44,7 @@ const formatDateDisplay = (dateString: string) => {
 export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   const [events, setEvents] = useState<EventModel[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
-  const [blocks, setBlocks] = useState<EventBlock[]>([]); // New state for blocks
+  const [blocks, setBlocks] = useState<EventBlock[]>([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   
@@ -304,7 +306,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
 
   // --- REPORT VIEW ---
   if (viewMode === 'report' && selectedEventId) {
-      // (Keep existing Report View code, it just reads workshops/registrations)
+      // (Report view code remains same)
       const currentEvent = events.find(e => e.id === selectedEventId);
       const totalCapacity = workshops.reduce((acc, w) => acc + w.spots, 0);
       const totalRegistrations = registrations.length;
@@ -488,6 +490,11 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                 <MapPin size={14} /> {evt.location || 'Local não definido'}
                             </div>
 
+                            {/* Description Preview */}
+                            {evt.description && (
+                                <p className="text-xs text-slate-500 mb-3 line-clamp-2">{evt.description}</p>
+                            )}
+
                             {/* Status Indicator */}
                             <div className="mb-4">
                                 <button 
@@ -552,6 +559,15 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                 <div className="md:col-span-2">
                                     <label className="block text-xs font-semibold text-slate-600 mb-1">Nome do Evento</label>
                                     <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Ex: Congresso Brasileiro de Pilates" />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Informações do Evento</label>
+                                    <textarea 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-20 resize-none" 
+                                        value={formData.description || ''} 
+                                        onChange={e => setFormData({...formData, description: e.target.value})} 
+                                        placeholder="Descrição detalhada sobre o evento..." 
+                                    />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-600 mb-1">Local</label>
@@ -683,16 +699,15 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                                                         <div className="bg-slate-100 p-3 rounded-lg border border-slate-200 mb-2 animate-in fade-in zoom-in-95">
                                                                             <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
                                                                                 <div className="md:col-span-2">
-                                                                                    <input type="text" placeholder="Título" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.title} onChange={e => setWorkshopForm({...workshopForm, title: e.target.value})} />
+                                                                                    <input type="text" placeholder="Título" className="w-full px-2 py-1.5 border rounded text-xs mb-2" value={workshopForm.title} onChange={e => setWorkshopForm({...workshopForm, title: e.target.value})} />
+                                                                                    <textarea placeholder="Resumo do Workshop" className="w-full px-2 py-1.5 border rounded text-xs resize-none h-16" value={workshopForm.description || ''} onChange={e => setWorkshopForm({...workshopForm, description: e.target.value})} />
                                                                                 </div>
-                                                                                <div>
-                                                                                    <input type="text" placeholder="Palestrante" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.speaker} onChange={e => setWorkshopForm({...workshopForm, speaker: e.target.value})} />
-                                                                                </div>
-                                                                                <div>
-                                                                                    <input type="time" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.time} onChange={e => setWorkshopForm({...workshopForm, time: e.target.value})} />
-                                                                                </div>
-                                                                                <div>
-                                                                                    <input type="number" placeholder="Vagas" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.spots} onChange={e => setWorkshopForm({...workshopForm, spots: parseInt(e.target.value) || 0})} />
+                                                                                <div className="md:col-span-2">
+                                                                                    <div className="grid grid-cols-3 gap-2">
+                                                                                        <input type="text" placeholder="Palestrante" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.speaker} onChange={e => setWorkshopForm({...workshopForm, speaker: e.target.value})} />
+                                                                                        <input type="time" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.time} onChange={e => setWorkshopForm({...workshopForm, time: e.target.value})} />
+                                                                                        <input type="number" placeholder="Vagas" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.spots} onChange={e => setWorkshopForm({...workshopForm, spots: parseInt(e.target.value) || 0})} />
+                                                                                    </div>
                                                                                 </div>
                                                                             </div>
                                                                             <div className="flex justify-end gap-2">
@@ -706,7 +721,8 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                                                         <div key={w.id} className="flex justify-between items-center bg-white border border-slate-100 p-2 rounded hover:border-slate-300 transition-colors">
                                                                             <div className="flex-1">
                                                                                 <p className="text-xs font-bold text-slate-700">{w.title}</p>
-                                                                                <p className="text-[10px] text-slate-500">{w.time} • {w.speaker} • {w.spots} vagas</p>
+                                                                                <p className="text-[10px] text-slate-500 mb-1">{w.time} • {w.speaker} • {w.spots} vagas</p>
+                                                                                {w.description && <p className="text-[10px] text-slate-400 italic line-clamp-1">{w.description}</p>}
                                                                             </div>
                                                                             <div className="flex gap-1">
                                                                                 <button onClick={() => handleEditWorkshop(w)} className="p-1 text-slate-400 hover:text-slate-600"><Edit2 size={12}/></button>

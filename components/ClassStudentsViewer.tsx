@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { X, User, Mail, Phone, DollarSign, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
@@ -105,6 +106,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
           const productNames = Array.from(new Set(deals.map((d: any) => d.product_name).filter(Boolean)));
           
           if (productNames.length > 0) {
+              // Strategy 1: Check if product in crm_products has a template linked
               const { data: products } = await appBackend.client
                   .from('crm_products')
                   .select('name, certificate_template_id')
@@ -114,6 +116,20 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
               products?.forEach((p: any) => {
                   if (p.certificate_template_id) templatesMap[p.name] = p.certificate_template_id;
               });
+
+              // Strategy 2: Check if there is a certificate template directly linked to this Course Name (Text Link)
+              // We look for certificates where linked_product_id matches one of our productNames
+              // Note: linked_product_id is now TEXT in DB
+              const { data: directCerts } = await appBackend.client
+                  .from('crm_certificates')
+                  .select('id, linked_product_id')
+                  .in('linked_product_id', productNames);
+              
+              directCerts?.forEach((c: any) => {
+                  // If we found a certificate linked to this product name, use it (override if needed)
+                  if (c.linked_product_id) templatesMap[c.linked_product_id] = c.id;
+              });
+
               setProductTemplates(templatesMap);
           }
 
@@ -230,7 +246,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   const handleIssueCertificate = async (student: StudentDeal) => {
       const templateId = productTemplates[student.product_name || ''];
       if (!templateId) {
-          alert("Este produto não possui um modelo de certificado associado. Edite o Produto e selecione um modelo.");
+          alert("Este produto não possui um modelo de certificado associado. Edite o Modelo em 'Certificados' e associe ao curso/produto.");
           return;
       }
 

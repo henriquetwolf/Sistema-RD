@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, Copy, AlertTriangle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
@@ -129,16 +130,20 @@ CREATE POLICY "Acesso total attendance" ON public.crm_attendance FOR ALL USING (
 CREATE TABLE IF NOT EXISTS public.crm_deals (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now());
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS product_type text, ADD COLUMN IF NOT EXISTS product_name text;
 
--- 7. TABELA CERTIFICADOS (NOVO)
+-- 7. TABELA CERTIFICADOS (ATUALIZAÇÃO LAYOUT)
 CREATE TABLE IF NOT EXISTS public.crm_certificates (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
   title text,
   background_base64 text,
-  back_background_base64 text, -- VERSO (NOVO)
-  linked_product_id uuid, -- CURSO ASSOCIADO (NOVO)
+  back_background_base64 text,
+  linked_product_id text, -- ALTERADO PARA TEXT PARA SUPORTAR NOMES DE CURSOS
   body_text text
 );
+-- CORREÇÃO DE TIPO SE JÁ EXISTIR COMO UUID
+ALTER TABLE public.crm_certificates ALTER COLUMN linked_product_id TYPE text; 
+
+ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS layout_config jsonb; -- CONFIGURACAO DE FONTE E POSICAO
 ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total certificates" ON public.crm_certificates FOR ALL USING (true) WITH CHECK (true);
 

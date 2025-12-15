@@ -127,6 +127,23 @@ export interface Contract {
 
 // --- CERTIFICATES ---
 
+export interface TextStyle {
+  x: number; // Percentage 0-100
+  y: number; // Percentage 0-100
+  fontSize: number; // px
+  fontFamily: string;
+  color: string;
+  fontWeight: string;
+  textAlign: 'left' | 'center' | 'right';
+  width: number; // Percentage width
+}
+
+export interface CertificateLayout {
+  body: TextStyle;
+  name: TextStyle;
+  footer: TextStyle;
+}
+
 export interface CertificateModel {
   id: string;
   title: string;
@@ -134,6 +151,7 @@ export interface CertificateModel {
   backBackgroundData?: string; // Base64 image string (Back) - NEW
   linkedProductId?: string; // ID of the course/product - NEW
   bodyText: string; // The static text (e.g. "Concluiu com êxito...")
+  layoutConfig?: CertificateLayout; // NEW: Stores positions and styles
   createdAt: string;
 }
 

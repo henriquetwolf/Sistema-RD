@@ -1,16 +1,26 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Award, Plus, Search, Edit2, Trash2, 
   ArrowLeft, Save, X, Printer, Image as ImageIcon, Loader2,
-  Calendar, MapPin, User, FlipHorizontal, Book
+  Calendar, MapPin, User, FlipHorizontal, Book, Type, MousePointer2, Move
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { CertificateModel } from '../types';
+import { CertificateModel, CertificateLayout, TextStyle } from '../types';
 import clsx from 'clsx';
 
 interface CertificatesManagerProps {
   onBack: () => void;
 }
+
+const DEFAULT_LAYOUT: CertificateLayout = {
+    body: { x: 50, y: 40, fontSize: 18, fontFamily: 'serif', color: '#1e293b', fontWeight: 'normal', textAlign: 'center', width: 80 },
+    name: { x: 50, y: 55, fontSize: 60, fontFamily: "'Great Vibes', cursive", color: '#0f172a', fontWeight: 'normal', textAlign: 'center', width: 90 },
+    footer: { x: 50, y: 80, fontSize: 16, fontFamily: 'serif', color: '#475569', fontWeight: 'normal', textAlign: 'center', width: 80 }
+};
+
+// Hardcoded Courses from ClassesManager to allow direct linking
+const STANDARD_COURSES = ['Formação Completa em Pilates', 'Pilates Clínico', 'Pilates Suspenso', 'Gestão de Studios', 'MIT Movimento Inteligente'];
 
 const INITIAL_CERT: CertificateModel = {
     id: '',
@@ -19,7 +29,48 @@ const INITIAL_CERT: CertificateModel = {
     backBackgroundData: '',
     linkedProductId: '',
     bodyText: 'Certificamos que [NOME ALUNO] concluiu com êxito o curso, realizado em [CIDADE], na data de [DATA].',
+    layoutConfig: DEFAULT_LAYOUT,
     createdAt: ''
+};
+
+// Helper Component for Dragging
+interface InteractableTextProps {
+    text: string | React.ReactNode;
+    style: TextStyle;
+    isSelected: boolean;
+    onSelect: () => void;
+    scale: number;
+}
+
+const InteractableText: React.FC<InteractableTextProps> = ({ text, style, isSelected, onSelect, scale }) => {
+    return (
+        <div 
+            onMouseDown={(e) => { e.stopPropagation(); onSelect(); }}
+            className={clsx(
+                "absolute cursor-move select-none p-2 border-2 transition-colors",
+                isSelected ? "border-amber-500 bg-amber-50/20 z-20" : "border-transparent hover:border-slate-300/50 z-10"
+            )}
+            style={{
+                left: `${style.x}%`,
+                top: `${style.y}%`,
+                transform: 'translate(-50%, -50%)',
+                width: `${style.width}%`,
+                fontSize: `${style.fontSize}px`,
+                fontFamily: style.fontFamily,
+                color: style.color,
+                fontWeight: style.fontWeight,
+                textAlign: style.textAlign,
+                whiteSpace: 'pre-wrap'
+            }}
+        >
+            {text}
+            {isSelected && (
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[10px] px-2 rounded-full whitespace-nowrap shadow-sm">
+                    Arrastar para mover
+                </div>
+            )}
+        </div>
+    );
 };
 
 export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack }) => {
@@ -30,6 +81,11 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
   
   // Editor State
   const [editorSide, setEditorSide] = useState<'front' | 'back'>('front');
+  const [selectedElement, setSelectedElement] = useState<'body' | 'name' | 'footer' | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{x: number, y: number} | null>(null);
+  const elementStartRef = useRef<{x: number, y: number} | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Generator State
   const [genName, setGenName] = useState('');
@@ -67,13 +123,17 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
   };
 
   const handleEdit = (cert: CertificateModel) => {
-      setCurrentCert(cert);
+      // Merge with default layout if missing (migration)
+      const layout = cert.layoutConfig || DEFAULT_LAYOUT;
+      setCurrentCert({ ...cert, layoutConfig: layout });
       setView('editor');
       setEditorSide('front');
+      setSelectedElement(null);
   };
 
   const handleGenerate = (cert: CertificateModel) => {
-      setCurrentCert(cert);
+      const layout = cert.layoutConfig || DEFAULT_LAYOUT;
+      setCurrentCert({ ...cert, layoutConfig: layout });
       setGenDate(new Date().toLocaleDateString('pt-BR'));
       setView('generator');
   };
@@ -127,6 +187,54 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       window.print();
   };
 
+  // --- DRAG LOGIC ---
+  const handleMouseDown = (e: React.MouseEvent, element: 'body' | 'name' | 'footer') => {
+      e.stopPropagation();
+      e.preventDefault();
+      setSelectedElement(element);
+      setIsDragging(true);
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      
+      const layout = currentCert.layoutConfig || DEFAULT_LAYOUT;
+      elementStartRef.current = { x: layout[element].x, y: layout[element].y };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+      if (!isDragging || !selectedElement || !containerRef.current || !dragStartRef.current || !elementStartRef.current) return;
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const deltaX = e.clientX - dragStartRef.current.x;
+      const deltaY = e.clientY - dragStartRef.current.y;
+
+      // Because of scale(0.5), visual 1px move requires 1/0.5 = 2px logic adjustment?
+      // Actually, rect gives visualized dimensions.
+      // We work in Percentages.
+      
+      const percentX = (deltaX / rect.width) * 100;
+      const percentY = (deltaY / rect.height) * 100;
+
+      const newX = Math.max(0, Math.min(100, elementStartRef.current.x + percentX));
+      const newY = Math.max(0, Math.min(100, elementStartRef.current.y + percentY));
+
+      const updatedLayout = { ...currentCert.layoutConfig! };
+      updatedLayout[selectedElement] = { ...updatedLayout[selectedElement], x: newX, y: newY };
+      setCurrentCert({ ...currentCert, layoutConfig: updatedLayout });
+  };
+
+  const handleMouseUp = () => {
+      setIsDragging(false);
+      dragStartRef.current = null;
+      elementStartRef.current = null;
+  };
+
+  // --- STYLE UPDATE ---
+  const updateStyle = (field: keyof TextStyle, value: any) => {
+      if (!selectedElement) return;
+      const updatedLayout = { ...currentCert.layoutConfig! };
+      updatedLayout[selectedElement] = { ...updatedLayout[selectedElement], [field]: value };
+      setCurrentCert({ ...currentCert, layoutConfig: updatedLayout });
+  };
+
   // --- RENDERERS ---
 
   // 1. LIST VIEW
@@ -146,7 +254,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                     </div>
                 </div>
                 <button 
-                    onClick={() => { setCurrentCert(INITIAL_CERT); setView('editor'); setEditorSide('front'); }}
+                    onClick={() => { setCurrentCert({...INITIAL_CERT, layoutConfig: DEFAULT_LAYOUT}); setView('editor'); setEditorSide('front'); }}
                     className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
                 >
                     <Plus size={18} /> Novo Modelo
@@ -187,7 +295,8 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                     {cert.linkedProductId && (
                                         <span className="flex items-center gap-1 text-teal-600 font-medium">
                                             <Book size={10} /> 
-                                            {products.find(p => p.id === cert.linkedProductId)?.name || 'Produto Vinculado'}
+                                            {/* Try to match Product ID first, if not found, assume it is a Course Name (text) */}
+                                            {products.find(p => p.id === cert.linkedProductId)?.name || cert.linkedProductId}
                                         </span>
                                     )}
                                 </div>
@@ -208,6 +317,9 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
 
   // 2. EDITOR VIEW
   if (view === 'editor') {
+      const layout = currentCert.layoutConfig || DEFAULT_LAYOUT;
+      const activeStyle = selectedElement ? layout[selectedElement] : null;
+
       return (
         <div className="h-full flex flex-col bg-slate-50">
             {/* Header */}
@@ -220,13 +332,13 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                     {/* View Switcher */}
                     <div className="bg-slate-100 rounded-lg p-1 flex mr-4">
                         <button 
-                            onClick={() => setEditorSide('front')}
+                            onClick={() => { setEditorSide('front'); setSelectedElement(null); }}
                             className={clsx("px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-2", editorSide === 'front' ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700")}
                         >
                             Frente
                         </button>
                         <button 
-                            onClick={() => setEditorSide('back')}
+                            onClick={() => { setEditorSide('back'); setSelectedElement(null); }}
                             className={clsx("px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-2", editorSide === 'back' ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700")}
                         >
                             <FlipHorizontal size={14} /> Verso
@@ -247,81 +359,187 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
             <div className="flex-1 flex overflow-hidden">
                 {/* Sidebar Configuration */}
                 <div className="w-96 bg-white border-r border-slate-200 overflow-y-auto p-6 space-y-6 shadow-sm z-10 shrink-0">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Título do Modelo</label>
-                        <input 
-                            type="text" 
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                            value={currentCert.title}
-                            onChange={e => setCurrentCert({...currentCert, title: e.target.value})}
-                            placeholder="Ex: Certificado Padrão 2024"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Associar ao Curso</label>
-                        <select
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-                            value={currentCert.linkedProductId || ''}
-                            onChange={e => setCurrentCert({...currentCert, linkedProductId: e.target.value})}
-                        >
-                            <option value="">-- Selecione um curso --</option>
-                            {products.map(p => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                        </select>
-                        <p className="text-[10px] text-slate-400 mt-1">Isso permite emissão direta na lista de alunos.</p>
-                    </div>
-
-                    <div className="border-t border-slate-100 pt-4">
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                            {editorSide === 'front' ? 'Imagem de Fundo (Frente)' : 'Imagem de Fundo (Verso)'}
-                        </label>
-                        <div 
-                            className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer flex flex-col justify-center"
-                            style={{ aspectRatio: '297/210' }}
-                        >
-                            <input 
-                                type="file" 
-                                accept="image/*" 
-                                onChange={(e) => handleImageUpload(e, editorSide)} 
-                                className="absolute inset-0 opacity-0 cursor-pointer" 
-                            />
-                            <ImageIcon className="mx-auto text-slate-300 mb-2" size={32} />
-                            <p className="text-xs text-slate-500">Clique para enviar (A4 Paisagem)</p>
-                        </div>
-                        {((editorSide === 'front' && currentCert.backgroundData) || (editorSide === 'back' && currentCert.backBackgroundData)) && (
-                            <div className="mt-2 text-xs text-green-600 font-medium flex items-center gap-1">
-                                <div className="w-2 h-2 bg-green-500 rounded-full"></div> Imagem carregada
-                            </div>
-                        )}
-                    </div>
-
-                    {editorSide === 'front' && (
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Texto do Certificado (Frente)</label>
-                            <textarea 
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-32 resize-none"
-                                value={currentCert.bodyText}
-                                onChange={e => setCurrentCert({...currentCert, bodyText: e.target.value})}
-                                placeholder="Digite o texto..."
-                            ></textarea>
-                            <p className="text-xs text-slate-400 mt-2">
-                                Variáveis: [NOME ALUNO], [CIDADE], [DATA].
-                            </p>
-                        </div>
-                    )}
                     
-                    {editorSide === 'back' && (
-                        <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-xs border border-blue-100">
-                            <strong>Nota:</strong> O código de autenticação (Hash) do certificado será inserido automaticamente no canto inferior direito do verso.
+                    {/* GENERAL SETTINGS OR ELEMENT SETTINGS */}
+                    {selectedElement ? (
+                        <div className="animate-in fade-in slide-in-from-right-2 duration-200">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                    <Type size={16} className="text-amber-500" />
+                                    Estilo: {selectedElement === 'name' ? 'Nome do Aluno' : selectedElement === 'body' ? 'Texto Principal' : 'Rodapé (Cidade/Data)'}
+                                </h3>
+                                <button onClick={() => setSelectedElement(null)} className="text-xs text-slate-400 hover:text-slate-600"><X size={16}/></button>
+                            </div>
+
+                            <div className="space-y-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">Fonte</label>
+                                    <select 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm bg-white"
+                                        value={activeStyle?.fontFamily}
+                                        onChange={(e) => updateStyle('fontFamily', e.target.value)}
+                                    >
+                                        <option value="serif">Serifa Padrão</option>
+                                        <option value="sans-serif">Sans-Serif (Moderna)</option>
+                                        <option value="'Great Vibes', cursive">Manuscrita (Great Vibes)</option>
+                                        <option value="'Dancing Script', cursive">Manuscrita (Dancing Script)</option>
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">Tamanho (px)</label>
+                                        <input 
+                                            type="number" 
+                                            className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                                            value={activeStyle?.fontSize}
+                                            onChange={(e) => updateStyle('fontSize', Number(e.target.value))}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">Cor</label>
+                                        <div className="flex items-center gap-2">
+                                            <input 
+                                                type="color" 
+                                                className="w-8 h-9 border border-slate-300 rounded cursor-pointer p-0.5"
+                                                value={activeStyle?.color}
+                                                onChange={(e) => updateStyle('color', e.target.value)}
+                                            />
+                                            <span className="text-xs text-slate-500 font-mono uppercase">{activeStyle?.color}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">Alinhamento</label>
+                                    <div className="flex bg-white border border-slate-300 rounded overflow-hidden">
+                                        {['left', 'center', 'right'].map((align) => (
+                                            <button 
+                                                key={align}
+                                                className={clsx(
+                                                    "flex-1 py-1.5 text-xs font-medium capitalize hover:bg-slate-50",
+                                                    activeStyle?.textAlign === align ? "bg-amber-50 text-amber-700" : "text-slate-600"
+                                                )}
+                                                onClick={() => updateStyle('textAlign', align)}
+                                            >
+                                                {align === 'left' ? 'Esq' : align === 'center' ? 'Centro' : 'Dir'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">Largura da Área (%)</label>
+                                    <input 
+                                        type="range" min="20" max="100" 
+                                        value={activeStyle?.width} 
+                                        onChange={(e) => updateStyle('width', Number(e.target.value))}
+                                        className="w-full accent-amber-500"
+                                    />
+                                    <div className="text-right text-[10px] text-slate-400">{activeStyle?.width}%</div>
+                                </div>
+                            </div>
+                            <div className="mt-4 p-3 bg-amber-50 text-amber-800 text-xs rounded border border-amber-100 flex gap-2">
+                                <MousePointer2 size={16} className="shrink-0" />
+                                <span>Você também pode arrastar o texto na imagem ao lado para posicioná-lo.</span>
+                            </div>
                         </div>
+                    ) : (
+                        <>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Título do Modelo</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                    value={currentCert.title}
+                                    onChange={e => setCurrentCert({...currentCert, title: e.target.value})}
+                                    placeholder="Ex: Certificado Padrão 2024"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Associar ao Curso</label>
+                                <select
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={currentCert.linkedProductId || ''}
+                                    onChange={e => setCurrentCert({...currentCert, linkedProductId: e.target.value})}
+                                >
+                                    <option value="">-- Selecione um curso --</option>
+                                    
+                                    {/* STANDARD PHYSICAL COURSES */}
+                                    <optgroup label="Cursos Presenciais (Padrão)">
+                                        {STANDARD_COURSES.map(course => (
+                                            <option key={course} value={course}>{course}</option>
+                                        ))}
+                                    </optgroup>
+
+                                    {/* DIGITAL PRODUCTS */}
+                                    {products.length > 0 && (
+                                        <optgroup label="Produtos Digitais">
+                                            {products.map(p => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </optgroup>
+                                    )}
+                                </select>
+                                <p className="text-[10px] text-slate-400 mt-1">Isso permite emissão direta na lista de alunos.</p>
+                            </div>
+
+                            <div className="border-t border-slate-100 pt-4">
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                                    {editorSide === 'front' ? 'Imagem de Fundo (Frente)' : 'Imagem de Fundo (Verso)'}
+                                </label>
+                                <div 
+                                    className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer flex flex-col justify-center"
+                                    style={{ aspectRatio: '297/210' }}
+                                >
+                                    <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        onChange={(e) => handleImageUpload(e, editorSide)} 
+                                        className="absolute inset-0 opacity-0 cursor-pointer" 
+                                    />
+                                    <ImageIcon className="mx-auto text-slate-300 mb-2" size={32} />
+                                    <p className="text-xs text-slate-500">Clique para enviar (A4 Paisagem)</p>
+                                </div>
+                                {((editorSide === 'front' && currentCert.backgroundData) || (editorSide === 'back' && currentCert.backBackgroundData)) && (
+                                    <div className="mt-2 text-xs text-green-600 font-medium flex items-center gap-1">
+                                        <div className="w-2 h-2 bg-green-500 rounded-full"></div> Imagem carregada
+                                    </div>
+                                )}
+                            </div>
+
+                            {editorSide === 'front' && (
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Texto do Certificado (Corpo)</label>
+                                    <textarea 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-32 resize-none"
+                                        value={currentCert.bodyText}
+                                        onChange={e => setCurrentCert({...currentCert, bodyText: e.target.value})}
+                                        placeholder="Digite o texto..."
+                                    ></textarea>
+                                    <p className="text-xs text-slate-400 mt-2">
+                                        Variáveis: [NOME ALUNO], [CIDADE], [DATA].<br/>
+                                        Clique no texto na prévia para editar fonte e posição.
+                                    </p>
+                                </div>
+                            )}
+                            
+                            {editorSide === 'back' && (
+                                <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-xs border border-blue-100">
+                                    <strong>Nota:</strong> O código de autenticação (Hash) do certificado será inserido automaticamente no canto inferior direito do verso.
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
 
                 {/* Preview Canvas */}
-                <div className="flex-1 bg-slate-200 p-8 overflow-auto flex items-center justify-center">
+                <div 
+                    className="flex-1 bg-slate-200 p-8 overflow-auto flex items-center justify-center select-none"
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                >
                     <div 
+                        ref={containerRef}
                         className="bg-white shadow-2xl relative overflow-hidden transition-all duration-300 flex-shrink-0 origin-center" 
                         style={{ 
                             // A4 Landscape Dimensions: 297mm x 210mm
@@ -330,29 +548,40 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                             // Scale down to 0.5 to ensure fit on standard screens
                             transform: 'scale(0.5)', 
                         }}
+                        onClick={() => setSelectedElement(null)} // Deselect if clicking background
                     >
                         {/* Render Based on Active Side */}
                         {editorSide === 'front' ? (
                             <>
                                 {/* Background Front */}
                                 {currentCert.backgroundData && (
-                                    <img src={currentCert.backgroundData} alt="bg" className="absolute inset-0 w-full h-full object-cover z-0" />
+                                    <img src={currentCert.backgroundData} alt="bg" className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none" />
                                 )}
 
-                                {/* Content Overlay Front */}
-                                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-20">
-                                    <div className="text-2xl text-slate-800 max-w-5xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
-                                        {currentCert.bodyText || "Texto do certificado..."}
-                                    </div>
-                                    <div className="my-10">
-                                        <h1 className="text-7xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
-                                            Nome do Aluno
-                                        </h1>
-                                    </div>
-                                    <div className="mt-auto pt-10 text-xl text-slate-600 font-serif">
-                                        Cidade Exemplo, {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                                    </div>
-                                </div>
+                                {/* Content Overlay Front - DRAGGABLE ELEMENTS */}
+                                <InteractableText 
+                                    text={currentCert.bodyText || "Texto do certificado..."}
+                                    style={(currentCert.layoutConfig || DEFAULT_LAYOUT).body}
+                                    isSelected={selectedElement === 'body'}
+                                    onSelect={() => setSelectedElement('body')}
+                                    scale={0.5}
+                                />
+                                
+                                <InteractableText 
+                                    text="Nome do Aluno"
+                                    style={(currentCert.layoutConfig || DEFAULT_LAYOUT).name}
+                                    isSelected={selectedElement === 'name'}
+                                    onSelect={() => setSelectedElement('name')}
+                                    scale={0.5}
+                                />
+
+                                <InteractableText 
+                                    text={`Cidade Exemplo, ${new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}`}
+                                    style={(currentCert.layoutConfig || DEFAULT_LAYOUT).footer}
+                                    isSelected={selectedElement === 'footer'}
+                                    onSelect={() => setSelectedElement('footer')}
+                                    scale={0.5}
+                                />
                             </>
                         ) : (
                             <>
@@ -380,6 +609,8 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
 
   // 3. GENERATOR VIEW (Preview before print)
   if (view === 'generator') {
+      const layout = currentCert.layoutConfig || DEFAULT_LAYOUT;
+
       return (
         <div className="h-full flex flex-col bg-slate-50">
             {/* Header (Hidden on Print) */}
@@ -458,24 +689,56 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                             <img src={currentCert.backgroundData} alt="bg" className="absolute inset-0 w-full h-full object-cover z-0" style={{printColorAdjust: 'exact'}} />
                         )}
 
-                        {/* Content Overlay */}
-                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-20">
-                            {/* Body Text */}
-                            <div className="text-2xl text-slate-800 max-w-5xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
-                                {currentCert.bodyText}
-                            </div>
+                        {/* Content Overlay - Using Configured Layout */}
+                        <div 
+                            className="absolute z-10 whitespace-pre-wrap"
+                            style={{
+                                left: `${layout.body.x}%`,
+                                top: `${layout.body.y}%`,
+                                transform: 'translate(-50%, -50%)',
+                                width: `${layout.body.width}%`,
+                                fontSize: `${layout.body.fontSize}px`,
+                                fontFamily: layout.body.fontFamily,
+                                color: layout.body.color,
+                                fontWeight: layout.body.fontWeight,
+                                textAlign: layout.body.textAlign as any
+                            }}
+                        >
+                            {currentCert.bodyText}
+                        </div>
 
-                            {/* Name */}
-                            <div className="my-10">
-                                <h1 className="text-7xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
-                                    {genName || 'Nome do Aluno'}
-                                </h1>
-                            </div>
+                        <div 
+                            className="absolute z-10 whitespace-pre-wrap"
+                            style={{
+                                left: `${layout.name.x}%`,
+                                top: `${layout.name.y}%`,
+                                transform: 'translate(-50%, -50%)',
+                                width: `${layout.name.width}%`,
+                                fontSize: `${layout.name.fontSize}px`,
+                                fontFamily: layout.name.fontFamily,
+                                color: layout.name.color,
+                                fontWeight: layout.name.fontWeight,
+                                textAlign: layout.name.textAlign as any
+                            }}
+                        >
+                            {genName || 'Nome do Aluno'}
+                        </div>
 
-                            {/* Footer */}
-                            <div className="mt-auto pt-10 text-xl text-slate-600 font-serif">
-                                {genCity || 'Cidade'}, {genDate || 'Data'}
-                            </div>
+                        <div 
+                            className="absolute z-10 whitespace-pre-wrap"
+                            style={{
+                                left: `${layout.footer.x}%`,
+                                top: `${layout.footer.y}%`,
+                                transform: 'translate(-50%, -50%)',
+                                width: `${layout.footer.width}%`,
+                                fontSize: `${layout.footer.fontSize}px`,
+                                fontFamily: layout.footer.fontFamily,
+                                color: layout.footer.color,
+                                fontWeight: layout.footer.fontWeight,
+                                textAlign: layout.footer.textAlign as any
+                            }}
+                        >
+                            {genCity || 'Cidade'}, {genDate || 'Data'}
                         </div>
                     </div>
 

@@ -1,11 +1,18 @@
+
 import React, { useEffect, useState } from 'react';
 import { appBackend } from '../services/appBackend';
-import { CertificateModel } from '../types';
+import { CertificateModel, CertificateLayout } from '../types';
 import { Loader2, Printer, X, Download } from 'lucide-react';
 
 interface CertificateViewerProps {
     hash: string;
 }
+
+const DEFAULT_LAYOUT: CertificateLayout = {
+    body: { x: 50, y: 40, fontSize: 18, fontFamily: 'serif', color: '#1e293b', fontWeight: 'normal', textAlign: 'center', width: 80 },
+    name: { x: 50, y: 55, fontSize: 60, fontFamily: "'Great Vibes', cursive", color: '#0f172a', fontWeight: 'normal', textAlign: 'center', width: 90 },
+    footer: { x: 50, y: 80, fontSize: 16, fontFamily: 'serif', color: '#475569', fontWeight: 'normal', textAlign: 'center', width: 80 }
+};
 
 export const CertificateViewer: React.FC<CertificateViewerProps> = ({ hash }) => {
     const [data, setData] = useState<{
@@ -48,8 +55,10 @@ export const CertificateViewer: React.FC<CertificateViewerProps> = ({ hash }) =>
 
     const { template, studentName, studentCity, issuedAt } = data;
     const formattedDate = new Date(issuedAt).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+    const layout = template.layoutConfig || DEFAULT_LAYOUT;
 
-    // Text Replacement
+    // Text Replacement (Only for Body if needed, but BodyText usually doesn't have name/footer inside if separate fields are used. 
+    // However, if the user put [NOME ALUNO] inside body text, we still replace it).
     const finalBodyText = template.bodyText
         .replace('[NOME ALUNO]', studentName)
         .replace('[NOME DO ALUNO]', studentName)
@@ -113,24 +122,58 @@ export const CertificateViewer: React.FC<CertificateViewerProps> = ({ hash }) =>
                             />
                         )}
 
-                        {/* Content Overlay */}
-                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-20">
-                            {/* Body Text */}
-                            <div className="text-2xl text-slate-800 max-w-5xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
-                                {finalBodyText}
-                            </div>
+                        {/* BODY TEXT */}
+                        <div 
+                            className="absolute z-10 whitespace-pre-wrap"
+                            style={{
+                                left: `${layout.body.x}%`,
+                                top: `${layout.body.y}%`,
+                                transform: 'translate(-50%, -50%)',
+                                width: `${layout.body.width}%`,
+                                fontSize: `${layout.body.fontSize}px`,
+                                fontFamily: layout.body.fontFamily,
+                                color: layout.body.color,
+                                fontWeight: layout.body.fontWeight,
+                                textAlign: layout.body.textAlign as any
+                            }}
+                        >
+                            {finalBodyText}
+                        </div>
 
-                            {/* Name Overlay */}
-                            <div className="my-10">
-                                <h1 className="text-7xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
-                                    {studentName}
-                                </h1>
-                            </div>
-                            
-                            {/* Footer */}
-                            <div className="mt-auto pt-10 text-xl text-slate-600 font-serif">
-                                {studentCity}, {formattedDate}
-                            </div>
+                        {/* NAME */}
+                        <div 
+                            className="absolute z-10 whitespace-pre-wrap"
+                            style={{
+                                left: `${layout.name.x}%`,
+                                top: `${layout.name.y}%`,
+                                transform: 'translate(-50%, -50%)',
+                                width: `${layout.name.width}%`,
+                                fontSize: `${layout.name.fontSize}px`,
+                                fontFamily: layout.name.fontFamily,
+                                color: layout.name.color,
+                                fontWeight: layout.name.fontWeight,
+                                textAlign: layout.name.textAlign as any
+                            }}
+                        >
+                            {studentName}
+                        </div>
+
+                        {/* FOOTER */}
+                        <div 
+                            className="absolute z-10 whitespace-pre-wrap"
+                            style={{
+                                left: `${layout.footer.x}%`,
+                                top: `${layout.footer.y}%`,
+                                transform: 'translate(-50%, -50%)',
+                                width: `${layout.footer.width}%`,
+                                fontSize: `${layout.footer.fontSize}px`,
+                                fontFamily: layout.footer.fontFamily,
+                                color: layout.footer.color,
+                                fontWeight: layout.footer.fontWeight,
+                                textAlign: layout.footer.textAlign as any
+                            }}
+                        >
+                            {studentCity}, {formattedDate}
                         </div>
                     </div>
 

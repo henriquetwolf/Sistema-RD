@@ -1,3 +1,4 @@
+
 import { createClient, Session } from '@supabase/supabase-js';
 import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate } from '../types';
 
@@ -477,9 +478,10 @@ export const appBackend = {
       id: d.id,
       title: d.title,
       backgroundData: d.background_base64,
-      backBackgroundData: d.back_background_base64, // NEW
-      linkedProductId: d.linked_product_id, // NEW
+      backBackgroundData: d.back_background_base64,
+      linkedProductId: d.linked_product_id,
       bodyText: d.body_text,
+      layoutConfig: d.layout_config, // Map layout config
       createdAt: d.created_at
     }));
   },
@@ -498,9 +500,10 @@ export const appBackend = {
       id: cert.id,
       title: cert.title,
       background_base64: cert.backgroundData,
-      back_background_base64: cert.backBackgroundData, // NEW
-      linked_product_id: cert.linkedProductId || null, // NEW
-      body_text: cert.bodyText
+      back_background_base64: cert.backBackgroundData,
+      linked_product_id: cert.linkedProductId || null,
+      body_text: cert.bodyText,
+      layout_config: cert.layoutConfig // Save layout config
     };
 
     const { error } = await supabase.from('crm_certificates').upsert(payload);
@@ -576,9 +579,10 @@ export const appBackend = {
         id: templateData.id,
         title: templateData.title,
         backgroundData: templateData.background_base64,
-        backBackgroundData: templateData.back_background_base64, // NEW
-        linkedProductId: templateData.linked_product_id, // NEW
+        backBackgroundData: templateData.back_background_base64,
+        linkedProductId: templateData.linked_product_id,
         bodyText: templateData.body_text,
+        layoutConfig: templateData.layout_config, // Map Layout
         createdAt: templateData.created_at
       }
     };

@@ -277,7 +277,10 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
                             {editorSide === 'front' ? 'Imagem de Fundo (Frente)' : 'Imagem de Fundo (Verso)'}
                         </label>
-                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer aspect-video flex flex-col justify-center">
+                        <div 
+                            className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer flex flex-col justify-center"
+                            style={{ aspectRatio: '297/210' }}
+                        >
                             <input 
                                 type="file" 
                                 accept="image/*" 
@@ -319,13 +322,13 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                 {/* Preview Canvas */}
                 <div className="flex-1 bg-slate-200 p-8 overflow-auto flex items-center justify-center">
                     <div 
-                        className="bg-white shadow-2xl relative overflow-hidden transition-all duration-300" 
+                        className="bg-white shadow-2xl relative overflow-hidden transition-all duration-300 flex-shrink-0 origin-center" 
                         style={{ 
-                            // A4 Landscape Dimensions
+                            // A4 Landscape Dimensions: 297mm x 210mm
                             width: '297mm', 
                             height: '210mm', 
-                            transform: 'scale(0.6)', // Reduced visual scaling for standard screens
-                            transformOrigin: 'center center'
+                            // Scale down to 0.5 to ensure fit on standard screens
+                            transform: 'scale(0.5)', 
                         }}
                     >
                         {/* Render Based on Active Side */}
@@ -338,15 +341,15 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
 
                                 {/* Content Overlay Front */}
                                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-20">
-                                    <div className="text-xl text-slate-800 max-w-4xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
+                                    <div className="text-2xl text-slate-800 max-w-5xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
                                         {currentCert.bodyText || "Texto do certificado..."}
                                     </div>
                                     <div className="my-10">
-                                        <h1 className="text-6xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
+                                        <h1 className="text-7xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
                                             Nome do Aluno
                                         </h1>
                                     </div>
-                                    <div className="mt-auto pt-10 text-lg text-slate-600 font-serif">
+                                    <div className="mt-auto pt-10 text-xl text-slate-600 font-serif">
                                         Cidade Exemplo, {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
                                     </div>
                                 </div>
@@ -363,7 +366,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                 )}
                                 
                                 {/* Hash Placeholder */}
-                                <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-xs z-10 bg-white/80 px-2 py-1 rounded border border-slate-200">
+                                <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-sm z-10 bg-white/80 px-3 py-1 rounded border border-slate-200">
                                     ID: 8f4b2c-example-hash-code
                                 </div>
                             </>
@@ -458,19 +461,19 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                         {/* Content Overlay */}
                         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-20">
                             {/* Body Text */}
-                            <div className="text-xl text-slate-800 max-w-4xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
+                            <div className="text-2xl text-slate-800 max-w-5xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
                                 {currentCert.bodyText}
                             </div>
 
                             {/* Name */}
                             <div className="my-10">
-                                <h1 className="text-6xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
+                                <h1 className="text-7xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
                                     {genName || 'Nome do Aluno'}
                                 </h1>
                             </div>
 
                             {/* Footer */}
-                            <div className="mt-auto pt-10 text-lg text-slate-600 font-serif">
+                            <div className="mt-auto pt-10 text-xl text-slate-600 font-serif">
                                 {genCity || 'Cidade'}, {genDate || 'Data'}
                             </div>
                         </div>
@@ -488,7 +491,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                             <img src={currentCert.backBackgroundData} alt="bg-back" className="absolute inset-0 w-full h-full object-cover z-0" style={{printColorAdjust: 'exact'}} />
                             
                             {/* Hash Placeholder */}
-                            <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-sm z-10 bg-white/80 px-2 py-1 rounded border border-slate-200">
+                            <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-sm z-10 bg-white/80 px-3 py-1 rounded border border-slate-200">
                                 ID: PREVIEW-HASH-CODE
                             </div>
                         </div>

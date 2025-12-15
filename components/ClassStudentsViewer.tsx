@@ -544,16 +544,26 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                                         href={`/?certificateHash=${certInfo.hash}`} 
                                                         target="_blank" 
                                                         rel="noreferrer"
-                                                        className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"
-                                                        title="Visualizar Certificado"
+                                                        className="p-1.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                                                        title="Visualizar"
                                                     >
-                                                        <ExternalLink size={14} />
+                                                        <Eye size={14} />
+                                                    </a>
+                                                    <a 
+                                                        href={`/?certificateHash=${certInfo.hash}`} 
+                                                        target="_blank" 
+                                                        rel="noreferrer"
+                                                        className="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100 border border-green-200 transition-colors"
+                                                        title="Baixar PDF"
+                                                    >
+                                                        <Download size={14} />
                                                     </a>
                                                     <button 
                                                         onClick={() => copyCertLink(certInfo.hash)}
-                                                        className={clsx("p-1.5 rounded transition-colors text-xs font-bold", copiedLink === certInfo.hash ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}
+                                                        className={clsx("p-1.5 rounded transition-colors text-xs font-bold", copiedLink === certInfo.hash ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-400 hover:bg-slate-200")}
+                                                        title="Copiar Link Público"
                                                     >
-                                                        {copiedLink === certInfo.hash ? "Copiado" : "Link"}
+                                                        {copiedLink === certInfo.hash ? <CheckCircle size={14} /> : <ExternalLink size={14} />}
                                                     </button>
                                                 </div>
                                             ) : hasTemplate ? (

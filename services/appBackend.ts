@@ -539,6 +539,12 @@ export const appBackend = {
     return hash;
   },
 
+  deleteStudentCertificate: async (id: string): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured.");
+    const { error } = await supabase.from('crm_student_certificates').delete().eq('id', id);
+    if (error) throw error;
+  },
+
   getStudentCertificate: async (hash: string): Promise<StudentCertificate & { studentName: string, studentCity: string, template: CertificateModel } | null> => {
     if (!isConfigured) return null;
 
@@ -552,9 +558,10 @@ export const appBackend = {
     if (certError || !certData) return null;
 
     // Fetch Student Info (Deal)
+    // NOTE: 'company_name' is mapped to "Nome Completo do Cliente" in the CRM
     const { data: dealData } = await supabase
       .from('crm_deals')
-      .select('contact_name, course_city')
+      .select('contact_name, company_name, course_city')
       .eq('id', certData.student_deal_id)
       .single();
 
@@ -573,7 +580,7 @@ export const appBackend = {
       certificateTemplateId: certData.certificate_template_id,
       hash: certData.hash,
       issuedAt: certData.issued_at,
-      studentName: dealData.contact_name,
+      studentName: dealData.company_name || dealData.contact_name, // Prefer Full Name (Company Name in CRM logic)
       studentCity: dealData.course_city || 'Local',
       template: {
         id: templateData.id,

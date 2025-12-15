@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
-  Award, Eye, Download, ExternalLink, CheckCircle
+  Award, Eye, Download, ExternalLink, CheckCircle, Trash2
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -14,6 +14,7 @@ interface StudentsManagerProps {
 interface StudentDeal {
     id: string;
     contact_name: string;
+    company_name: string; // This is the "Full Name" in CRM
     cpf: string;
     email: string;
     phone: string;
@@ -23,6 +24,7 @@ interface StudentDeal {
 }
 
 interface CertStatus {
+    id: string; // Cert ID
     hash: string;
     issuedAt: string;
 }
@@ -36,6 +38,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [issuingId, setIssuingId] = useState<string | null>(null);
+  const [deletingCertId, setDeletingCertId] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,7 +50,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
     try {
         const { data, error } = await appBackend.client
             .from('crm_deals')
-            .select('id, contact_name, cpf, email, phone, product_name, status, student_access_enabled')
+            .select('id, contact_name, company_name, cpf, email, phone, product_name, status, student_access_enabled')
             .order('contact_name', { ascending: true });
         
         if (error) throw error;
@@ -95,12 +98,12 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
             const dealIds = deals.map((d: any) => d.id);
             const { data: issuedCerts } = await appBackend.client
                 .from('crm_student_certificates')
-                .select('student_deal_id, hash, issued_at')
+                .select('id, student_deal_id, hash, issued_at')
                 .in('student_deal_id', dealIds);
             
             const certMap: Record<string, CertStatus> = {};
             issuedCerts?.forEach((c: any) => {
-                certMap[c.student_deal_id] = { hash: c.hash, issuedAt: c.issued_at };
+                certMap[c.student_deal_id] = { id: c.id, hash: c.hash, issuedAt: c.issued_at };
             });
             setCertificates(certMap);
         }
@@ -136,19 +139,45 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       const templateId = productTemplates[student.product_name || ''];
       if (!templateId) return;
 
-      if (!window.confirm(`Emitir certificado para ${student.contact_name}?`)) return;
+      if (!window.confirm(`Emitir certificado para ${student.company_name || student.contact_name}?`)) return;
 
       setIssuingId(student.id);
       try {
           const hash = await appBackend.issueCertificate(student.id, templateId);
-          setCertificates(prev => ({
-              ...prev,
-              [student.id]: { hash, issuedAt: new Date().toISOString() }
-          }));
+          // Re-fetch to get the ID properly
+          const { data: issuedCert } = await appBackend.client
+              .from('crm_student_certificates')
+              .select('id, hash, issued_at')
+              .eq('hash', hash)
+              .single();
+          
+          if(issuedCert) {
+              setCertificates(prev => ({
+                  ...prev,
+                  [student.id]: { id: issuedCert.id, hash: issuedCert.hash, issuedAt: issuedCert.issued_at }
+              }));
+          }
       } catch (e: any) {
           alert(`Erro ao emitir: ${e.message}`);
       } finally {
           setIssuingId(null);
+      }
+  };
+
+  const handleDeleteCertificate = async (studentId: string, certId: string) => {
+      if(!window.confirm("ATENÇÃO: Deseja realmente excluir este certificado emitido? O link deixará de funcionar.")) return;
+      
+      setDeletingCertId(studentId);
+      try {
+          await appBackend.deleteStudentCertificate(certId);
+          // Remove from local state
+          const newCerts = { ...certificates };
+          delete newCerts[studentId];
+          setCertificates(newCerts);
+      } catch(e: any) {
+          alert(`Erro ao excluir: ${e.message}`);
+      } finally {
+          setDeletingCertId(null);
       }
   };
 
@@ -161,6 +190,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
   const filtered = students.filter(s => 
       (s.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (s.company_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.cpf || '').includes(searchTerm)
   );
@@ -227,7 +257,8 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             return (
                                 <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 font-medium text-slate-800">
-                                        {s.contact_name || 'Sem nome'}
+                                        {/* Use Company Name (Full Client Name) if available, otherwise Contact Name */}
+                                        {s.company_name || s.contact_name || 'Sem nome'}
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex flex-col gap-1 text-xs">
@@ -270,6 +301,16 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                     title="Copiar Link"
                                                 >
                                                     {copiedLink === cert.hash ? <CheckCircle size={14} /> : <ExternalLink size={14} />}
+                                                </button>
+                                                
+                                                {/* DELETE BUTTON */}
+                                                <button 
+                                                    onClick={() => handleDeleteCertificate(s.id, cert.id)}
+                                                    disabled={deletingCertId === s.id}
+                                                    className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                    title="Excluir Certificado"
+                                                >
+                                                    {deletingCertId === s.id ? <Loader2 size={14} className="animate-spin"/> : <Trash2 size={14} />}
                                                 </button>
                                             </div>
                                         ) : hasTemplate ? (

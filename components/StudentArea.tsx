@@ -4,7 +4,7 @@ import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock } f
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, BookOpen, Award, ExternalLink, Calendar, MapPin, 
-    Video, Download, Loader2, UserCircle, User, CheckCircle, Mic, CheckSquare, Clock, Users, X, Save, Lock, AlertCircle, DollarSign, Layers
+    Video, Download, Loader2, UserCircle, User, CheckCircle, Mic, CheckSquare, Clock, Users, X, Save, Lock, AlertCircle, DollarSign, Layers, Edit2
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -33,7 +33,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [selectedEvent, setSelectedEvent] = useState<EventModel | null>(null);
     const [eventWorkshops, setEventWorkshops] = useState<Workshop[]>([]);
     const [eventBlocks, setEventBlocks] = useState<EventBlock[]>([]); // Blocks state
-    const [workshopCounts, setWorkshopCounts] = useState<Record<string, number>>({}); // workshopId -> count
+    const [workshopCounts, setWorkshopCounts] = useState<Record<string, number>>({}); // workshopId -> count (GLOBAL COUNT)
     const [selectedWorkshops, setSelectedWorkshops] = useState<string[]>([]); // workshop IDs
     const [isSavingReg, setIsSavingReg] = useState(false);
 
@@ -176,35 +176,39 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         // Find the block
         const block = eventBlocks.find(b => b.id === workshop.blockId);
         
+        const isCurrentlySelected = selectedWorkshops.includes(wId);
+
         // --- SELECTION LOGIC ---
-        if (!selectedWorkshops.includes(wId)) {
-            // 1. Check Capacity
-            const currentCount = workshopCounts[wId] || 0;
-            if (currentCount >= workshop.spots) {
+        if (!isCurrentlySelected) {
+            // 1. Check Capacity (Smart Check)
+            // We must subtract "Me" from the global count to know if there is space for me
+            // (In case I am editing and already holding a spot in DB but UI state is unchecked momentarily)
+            const amIInDbForThis = myRegistrations.some(r => r.workshopId === wId);
+            const globalCount = workshopCounts[wId] || 0;
+            const countOthers = globalCount - (amIInDbForThis ? 1 : 0);
+            
+            if (countOthers >= workshop.spots) {
                 alert("Desculpe, este workshop já está lotado.");
                 return;
             }
 
             // 2. Check Block Limit
             if (block) {
-                // Count how many workshops from this block are already selected
+                // Count how many workshops from this block are already selected in UI
                 const selectedInBlock = selectedWorkshops.filter(id => {
                     const w = eventWorkshops.find(ew => ew.id === id);
                     return w?.blockId === block.id;
                 });
 
                 if (selectedInBlock.length >= block.maxSelections) {
-                    // Option A: Prevent selection
-                    // alert(`Você já escolheu o máximo de ${block.maxSelections} workshops para o bloco "${block.title}". Desmarque um para trocar.`);
-                    // return;
-
                     // Option B: Auto-deselect the first one (Better UX for "Choose 1")
+                    // Allows swapping without manual deselect
                     if (block.maxSelections === 1) {
                         const toRemove = selectedInBlock[0];
                         setSelectedWorkshops(prev => [...prev.filter(id => id !== toRemove), wId]);
                         return;
                     } else {
-                        alert(`Limite atingido para "${block.title}". Você só pode escolher ${block.maxSelections}.`);
+                        alert(`Limite atingido para "${block.title}". Você só pode escolher ${block.maxSelections}. Desmarque uma opção anterior.`);
                         return;
                     }
                 }
@@ -229,7 +233,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             await appBackend.saveEventRegistrations(selectedEvent.id, studentId, studentName, studentEmail, selectedWorkshops);
             
-            alert("Inscrição realizada com sucesso!");
+            alert("Agenda atualizada com sucesso!");
             
             // Refresh
             await loadEventsData();
@@ -252,6 +256,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             default: return 'bg-amber-100 text-amber-700 border-amber-200'; // Planejamento
         }
     };
+
+    const hasExistingRegistration = selectedEvent && myRegistrations.some(r => r.eventId === selectedEvent.id);
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -435,8 +441,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                 StatusIcon = Lock;
                                             } else {
                                                 canAccess = true;
-                                                statusLabel = myRegs > 0 ? 'Gerenciar Minha Agenda' : 'Escolher Workshops';
-                                                StatusIcon = CheckSquare;
+                                                statusLabel = myRegs > 0 ? 'Editar Minha Agenda' : 'Escolher Workshops';
+                                                StatusIcon = myRegs > 0 ? Edit2 : CheckSquare;
                                             }
 
                                             return (
@@ -621,7 +627,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                     className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm disabled:opacity-70"
                                 >
                                     {isSavingReg ? <Loader2 size={16} className="animate-spin"/> : <Save size={16} />}
-                                    Confirmar Inscrição
+                                    {hasExistingRegistration ? 'Atualizar Inscrição' : 'Confirmar Inscrição'}
                                 </button>
                             </div>
                         </div>
@@ -633,13 +639,23 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
     // Helper to render workshop item to avoid duplication
     function renderWorkshopItem(w: Workshop, maxLimit: number, siblings: Workshop[]) {
-        const current = workshopCounts[w.id] || 0;
-        const max = w.spots;
-        const isFull = current >= max;
+        // Calculate dynamic availability
+        const amIInDb = myRegistrations.some(r => r.workshopId === w.id);
+        const globalCount = workshopCounts[w.id] || 0;
+        
+        // Count excluding ME (if I am in DB)
+        // This represents spots taken by others
+        const countOthers = globalCount - (amIInDb ? 1 : 0);
+        
+        // Total Spots - Spots taken by others = Spots available for me to take
+        const availableForMe = w.spots - countOthers;
+        
+        const isFull = availableForMe <= 0;
         const isSelected = selectedWorkshops.includes(w.id);
         
-        // Count selections in this block
+        // Count selections in this block (UI State)
         const selectedInBlock = selectedWorkshops.filter(id => siblings.some(s => s.id === id)).length;
+        // Block is full if limit reached AND this specific item is NOT selected
         const isBlockFull = selectedInBlock >= maxLimit && !isSelected;
 
         return (
@@ -648,10 +664,16 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 className={clsx(
                     "border rounded-xl p-4 transition-all flex items-start md:items-center gap-4 cursor-pointer",
                     isSelected ? "bg-purple-50 border-purple-500 ring-1 ring-purple-500 shadow-md" : "bg-white border-slate-200 hover:border-purple-300 shadow-sm",
-                    (isFull && !isSelected) || (isBlockFull) ? "opacity-60 grayscale cursor-not-allowed" : ""
+                    (isFull && !isSelected) ? "opacity-60 grayscale cursor-not-allowed" : "" // Only disable if full and NOT selected
                 )}
                 onClick={() => {
-                    if ((!isFull && !isBlockFull) || isSelected) handleToggleWorkshop(w.id);
+                    if ((!isFull && !isBlockFull) || isSelected || (isBlockFull && maxLimit === 1)) {
+                        // Allow click if:
+                        // 1. Not full and block not full
+                        // 2. Already selected (to deselect)
+                        // 3. Block is full BUT it's a single choice block (we will auto-swap)
+                        handleToggleWorkshop(w.id);
+                    }
                 }}
             >
                 <div className={clsx(
@@ -678,7 +700,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         "text-xs font-bold px-2 py-1 rounded",
                         isFull && !isSelected ? "bg-red-100 text-red-600" : "bg-green-100 text-green-700"
                     )}>
-                        {isFull && !isSelected ? 'Esgotado' : `${max - current} vagas`}
+                        {isFull && !isSelected ? 'Esgotado' : `${availableForMe} vagas`}
                     </div>
                 </div>
             </div>

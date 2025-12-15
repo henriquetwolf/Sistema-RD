@@ -43,15 +43,36 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 if (classesData) setClasses(classesData);
             }
 
-            // 2. Load Certificates
+            // 2. Load Certificates (Robust Method: Fetch issued -> Fetch Titles manually)
             const dealIds = student.deals.map(d => d.id);
             if (dealIds.length > 0) {
-                const { data: certsData } = await appBackend.client
+                // Step A: Get issued certificates for these deals
+                const { data: issuedCerts, error: certError } = await appBackend.client
                     .from('crm_student_certificates')
-                    .select('*, crm_certificates(title)')
+                    .select('*')
                     .in('student_deal_id', dealIds);
                 
-                if (certsData) setCertificates(certsData);
+                if (issuedCerts && issuedCerts.length > 0) {
+                    // Step B: Get the template titles
+                    const templateIds = issuedCerts.map((c: any) => c.certificate_template_id);
+                    const { data: templates } = await appBackend.client
+                        .from('crm_certificates')
+                        .select('id, title')
+                        .in('id', templateIds);
+                    
+                    // Step C: Merge
+                    const mergedCerts = issuedCerts.map((cert: any) => {
+                        const template = templates?.find((t: any) => t.id === cert.certificate_template_id);
+                        return {
+                            ...cert,
+                            crm_certificates: { title: template?.title || 'Certificado' }
+                        };
+                    });
+                    
+                    setCertificates(mergedCerts);
+                } else {
+                    setCertificates([]);
+                }
             }
 
         } catch (e) {
@@ -216,7 +237,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                             {activeTab === 'certificates' && (
                                 <div className="space-y-4">
                                     {certificates.length === 0 ? (
-                                        <div className="text-center py-12 text-slate-400">Nenhum certificado emitido ainda.</div>
+                                        <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
+                                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+                                                <Award size={32} />
+                                            </div>
+                                            <p className="text-slate-500 font-medium">Nenhum certificado emitido ainda.</p>
+                                            <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                                                Os certificados aparecem aqui após a conclusão do curso e liberação pela secretaria.
+                                            </p>
+                                        </div>
                                     ) : (
                                         certificates.map(cert => (
                                             <div key={cert.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -239,8 +268,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                         >
                                                             <ExternalLink size={16} /> Visualizar
                                                         </a>
-                                                        {/* Note: Download usually requires generating PDF on client or server. 
-                                                            Since we use browser print for PDF, we can guide user to print. */}
                                                         <a 
                                                             href={`/?certificateHash=${cert.hash}`} 
                                                             target="_blank" 

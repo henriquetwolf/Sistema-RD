@@ -163,7 +163,18 @@ CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
 ALTER TABLE public.crm_student_certificates ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total student_certificates" ON public.crm_student_certificates FOR ALL USING (true) WITH CHECK (true);
 
--- 9. LIMPEZA DE CACHE
+-- 9. GARANTIR FOREIGN KEYS
+DO $$ 
+BEGIN 
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_certificate_template') THEN 
+    ALTER TABLE public.crm_student_certificates 
+    ADD CONSTRAINT fk_certificate_template 
+    FOREIGN KEY (certificate_template_id) 
+    REFERENCES public.crm_certificates(id); 
+  END IF; 
+END $$;
+
+-- 10. LIMPEZA DE CACHE
 NOTIFY pgrst, 'reload config';
   `;
 

@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   LineChart, Line, AreaChart, Area, PieChart, Pie, Cell 
 } from 'recharts';
-import { Calendar, Filter, Download, TrendingUp, DollarSign, Target, Briefcase, Loader2, RefreshCw, Users, LayoutGrid } from 'lucide-react';
+import { Calendar, Filter, Download, TrendingUp, DollarSign, Target, Briefcase, Loader2, RefreshCw, Users, LayoutGrid, ShoppingBag, Tag } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { MOCK_COLLABORATORS } from './CollaboratorsManager';
 import clsx from 'clsx';
@@ -28,6 +29,10 @@ export const SalesAnalysis: React.FC = () => {
     end: new Date().toISOString().split('T')[0]
   });
   const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'open'>('all');
+  
+  // New Filters
+  const [filterType, setFilterType] = useState<string>('Todos');
+  const [filterProduct, setFilterProduct] = useState<string>('Todos');
 
   useEffect(() => {
     fetchData();
@@ -54,6 +59,22 @@ export const SalesAnalysis: React.FC = () => {
     }
   };
 
+  // --- DERIVED OPTIONS FOR FILTERS ---
+  const availableTypes = useMemo(() => {
+      const types = deals.map(d => d.product_type).filter(Boolean);
+      return Array.from(new Set(types)).sort();
+  }, [deals]);
+
+  const availableProducts = useMemo(() => {
+      let filteredDeals = deals;
+      // If a specific type is selected, show only products of that type
+      if (filterType !== 'Todos') {
+          filteredDeals = deals.filter(d => d.product_type === filterType);
+      }
+      const products = filteredDeals.map(d => d.product_name).filter(Boolean);
+      return Array.from(new Set(products)).sort();
+  }, [deals, filterType]);
+
   // --- DATA PROCESSING ---
   const processedData = useMemo(() => {
     const start = new Date(dateRange.start);
@@ -67,9 +88,20 @@ export const SalesAnalysis: React.FC = () => {
       
       let isStatusValid = true;
       if (statusFilter === 'won') isStatusValid = deal.stage === 'closed';
-      if (statusFilter === 'open') isStatusValid = deal.stage !== 'closed'; // Simplificação
+      if (statusFilter === 'open') isStatusValid = deal.stage !== 'closed'; 
       
-      return isDateValid && isStatusValid;
+      // New Filters Logic
+      let isTypeValid = true;
+      if (filterType !== 'Todos') {
+          isTypeValid = deal.product_type === filterType;
+      }
+
+      let isProductValid = true;
+      if (filterProduct !== 'Todos') {
+          isProductValid = deal.product_name === filterProduct;
+      }
+      
+      return isDateValid && isStatusValid && isTypeValid && isProductValid;
     });
 
     // 2. Metrics General
@@ -128,8 +160,6 @@ export const SalesAnalysis: React.FC = () => {
 
     // D) Sales by Team (New)
     const teamStats = teams.map(team => {
-        // Find deals where the owner is a member of this team
-        // Assuming members is an array of IDs
         const teamDeals = filtered.filter(d => 
             team.members && Array.isArray(team.members) && team.members.includes(d.owner_id)
         );
@@ -156,7 +186,7 @@ export const SalesAnalysis: React.FC = () => {
         metrics: { totalRevenue, totalDeals, conversionRate, avgTicket },
         charts: { salesOverTimeData, funnelData, topSellersData, teamStats }
     };
-  }, [deals, teams, dateRange, statusFilter]);
+  }, [deals, teams, dateRange, statusFilter, filterType, filterProduct]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -164,7 +194,7 @@ export const SalesAnalysis: React.FC = () => {
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
       
       {/* Header & Filters */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
         <div>
             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                 <TrendingUp className="text-teal-600" /> Análise de Vendas
@@ -172,7 +202,7 @@ export const SalesAnalysis: React.FC = () => {
             <p className="text-slate-500 text-sm">Dashboard de performance comercial.</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
             {/* View Toggle */}
             <div className="bg-slate-100 p-1 rounded-lg flex items-center mr-2">
                 <button 
@@ -189,23 +219,54 @@ export const SalesAnalysis: React.FC = () => {
                 </button>
             </div>
 
+            {/* PRODUCT TYPE FILTER */}
+            <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200 p-1">
+                <div className="flex items-center px-2 text-slate-500 border-r border-slate-200" title="Tipo de Produto">
+                    <Tag size={16} />
+                </div>
+                <select 
+                    value={filterType}
+                    onChange={(e) => { setFilterType(e.target.value); setFilterProduct('Todos'); }}
+                    className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 px-2 py-1 outline-none w-32"
+                >
+                    <option value="Todos">Todos Tipos</option>
+                    {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+            </div>
+
+            {/* PRODUCT NAME FILTER */}
+            <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200 p-1">
+                <div className="flex items-center px-2 text-slate-500 border-r border-slate-200" title="Produto">
+                    <ShoppingBag size={16} />
+                </div>
+                <select 
+                    value={filterProduct}
+                    onChange={(e) => setFilterProduct(e.target.value)}
+                    className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 px-2 py-1 outline-none w-40"
+                >
+                    <option value="Todos">Todos Produtos</option>
+                    {availableProducts.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+            </div>
+
+            {/* DATE RANGE */}
             <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200 p-1">
                 <div className="flex items-center px-2 text-slate-500 border-r border-slate-200">
                     <Calendar size={16} className="mr-2" />
-                    <span className="text-xs font-semibold uppercase">Período</span>
+                    <span className="text-xs font-semibold uppercase hidden sm:inline">Período</span>
                 </div>
                 <input 
                     type="date" 
                     value={dateRange.start}
                     onChange={e => setDateRange({...dateRange, start: e.target.value})}
-                    className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 px-2 py-1 outline-none"
+                    className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 px-2 py-1 outline-none w-28"
                 />
                 <span className="text-slate-300">-</span>
                 <input 
                     type="date" 
                     value={dateRange.end}
                     onChange={e => setDateRange({...dateRange, end: e.target.value})}
-                    className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 px-2 py-1 outline-none"
+                    className="bg-transparent border-none text-sm text-slate-700 focus:ring-0 px-2 py-1 outline-none w-28"
                 />
             </div>
 
@@ -233,7 +294,7 @@ export const SalesAnalysis: React.FC = () => {
                         <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(processedData.metrics.totalRevenue)}</h3>
                     </div>
                     <div className="text-xs text-teal-600 font-medium flex items-center gap-1">
-                        <TrendingUp size={14} /> No período selecionado
+                        <TrendingUp size={14} /> Filtrado
                     </div>
                 </div>
 
@@ -383,7 +444,7 @@ export const SalesAnalysis: React.FC = () => {
               {/* Teams Overview Chart */}
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                   <h3 className="text-lg font-bold text-slate-800 mb-2">Receita por Equipe</h3>
-                  <p className="text-sm text-slate-500 mb-6">Comparativo de vendas fechadas entre os times comerciais.</p>
+                  <p className="text-sm text-slate-500 mb-6">Comparativo de vendas fechadas entre os times comerciais (com filtros aplicados).</p>
                   
                   {processedData.charts.teamStats.length === 0 ? (
                       <div className="h-[200px] flex items-center justify-center text-slate-400">
@@ -463,7 +524,7 @@ export const SalesAnalysis: React.FC = () => {
                               {processedData.charts.teamStats.length === 0 && (
                                   <tr>
                                       <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
-                                          Nenhuma equipe encontrada. Cadastre equipes no CRM para visualizar o comparativo.
+                                          Nenhuma equipe encontrada com os filtros atuais.
                                       </td>
                                   </tr>
                               )}

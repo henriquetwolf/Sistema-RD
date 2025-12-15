@@ -77,13 +77,19 @@ export const SalesAnalysis: React.FC = () => {
 
   // --- DATA PROCESSING ---
   const processedData = useMemo(() => {
-    const start = new Date(dateRange.start);
-    const end = new Date(dateRange.end);
-    end.setHours(23, 59, 59, 999);
+    // Correct Date Parsing to Local Time to prevent timezone offset issues
+    const [startYear, startMonth, startDay] = dateRange.start.split('-').map(Number);
+    const start = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
+
+    const [endYear, endMonth, endDay] = dateRange.end.split('-').map(Number);
+    const end = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
 
     // 1. Filter Data
     const filtered = deals.filter(deal => {
-      const dealDate = new Date(deal.created_at);
+      // Use closed_at for won deals if available, otherwise created_at
+      const dateToCheck = deal.stage === 'closed' && deal.closed_at ? deal.closed_at : deal.created_at;
+      const dealDate = new Date(dateToCheck);
+      
       const isDateValid = dealDate >= start && dealDate <= end;
       
       let isStatusValid = true;
@@ -120,14 +126,24 @@ export const SalesAnalysis: React.FC = () => {
     const salesByDateMap: Record<string, number> = {};
     filtered.forEach(deal => {
         if (deal.stage === 'closed') {
-            const dateKey = new Date(deal.closed_at || deal.created_at).toLocaleDateString('pt-BR');
+            // Use closed_at for sales timeline
+            const dateObj = new Date(deal.closed_at || deal.created_at);
+            const dateKey = dateObj.toLocaleDateString('pt-BR');
             salesByDateMap[dateKey] = (salesByDateMap[dateKey] || 0) + Number(deal.value);
         }
     });
-    const salesOverTimeData = Object.keys(salesByDateMap).map(date => ({
-        date,
-        vendas: salesByDateMap[date]
-    }));
+    
+    // Sort dates
+    const salesOverTimeData = Object.keys(salesByDateMap)
+        .sort((a, b) => {
+            const [da, ma, ya] = a.split('/').map(Number);
+            const [db, mb, yb] = b.split('/').map(Number);
+            return new Date(ya, ma-1, da).getTime() - new Date(yb, mb-1, db).getTime();
+        })
+        .map(date => ({
+            date,
+            vendas: salesByDateMap[date]
+        }));
 
     // B) Funnel Stages (Bar Chart)
     const stageCounts: Record<string, number> = { new: 0, contacted: 0, proposal: 0, negotiation: 0, closed: 0 };

@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS public.crm_products (
   status text,
   description text
 );
-ALTER TABLE public.crm_products ADD COLUMN IF NOT EXISTS certificate_template_id uuid; -- NOVO
+ALTER TABLE public.crm_products ADD COLUMN IF NOT EXISTS certificate_template_id uuid;
 
 -- 4. TABELA FRANQUIAS
 CREATE TABLE IF NOT EXISTS public.crm_franchises (
@@ -106,94 +106,108 @@ CREATE TABLE IF NOT EXISTS public.crm_franchises (
   partner_2_name text
 );
 
--- GARANTIR COLUNAS DE MAPA (CASO A TABELA JÁ EXISTA ANTIGA)
 ALTER TABLE public.crm_franchises ADD COLUMN IF NOT EXISTS latitude text;
 ALTER TABLE public.crm_franchises ADD COLUMN IF NOT EXISTS longitude text;
 ALTER TABLE public.crm_franchises ADD COLUMN IF NOT EXISTS commercial_neighborhood text;
 ALTER TABLE public.crm_franchises ADD COLUMN IF NOT EXISTS km_street_point text;
 ALTER TABLE public.crm_franchises ADD COLUMN IF NOT EXISTS km_commercial_building text;
 
--- 5. TABELA LISTA DE CHAMADA (NOVO)
+-- 5. TABELA LISTA DE CHAMADA
 CREATE TABLE IF NOT EXISTS public.crm_attendance (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
-  class_id uuid, -- ID da Turma
-  student_id uuid, -- ID do Aluno (Deal)
-  date date, -- Data da chamada
+  class_id uuid,
+  student_id uuid,
+  date date,
   present boolean,
-  UNIQUE(class_id, student_id, date) -- Evita duplicidade no mesmo dia
+  UNIQUE(class_id, student_id, date)
 );
 ALTER TABLE public.crm_attendance ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total attendance" ON public.crm_attendance FOR ALL USING (true) WITH CHECK (true);
 
--- 6. TABELA NEGOCIACOES (ATUALIZAÇÃO)
+-- 6. TABELA NEGOCIACOES
 CREATE TABLE IF NOT EXISTS public.crm_deals (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now());
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS product_type text, ADD COLUMN IF NOT EXISTS product_name text;
-ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS student_access_enabled boolean DEFAULT true; -- CONTROLE DE ACESSO ALUNO
-ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS email text; -- CONTATO EMAIL
-ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS phone text; -- CONTATO TELEFONE
+ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS student_access_enabled boolean DEFAULT true;
+ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS phone text;
 
--- 7. TABELA CERTIFICADOS (ATUALIZAÇÃO LAYOUT E VERSO)
+-- 7. TABELA CERTIFICADOS
 CREATE TABLE IF NOT EXISTS public.crm_certificates (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
   title text,
   background_base64 text,
   back_background_base64 text,
-  linked_product_id text, -- ALTERADO PARA TEXT PARA SUPORTAR NOMES DE CURSOS
+  linked_product_id text,
   body_text text
 );
--- CORREÇÃO DE TIPOS E NOVAS COLUNAS
 ALTER TABLE public.crm_certificates ALTER COLUMN linked_product_id TYPE text; 
-ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS layout_config jsonb; -- CONFIGURACAO DE FONTE E POSICAO
-ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS back_background_base64 text; -- VERSO DO CERTIFICADO
+ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS layout_config jsonb;
+ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS back_background_base64 text;
 
 ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total certificates" ON public.crm_certificates FOR ALL USING (true) WITH CHECK (true);
 
--- 8. TABELA ALUNOS_CERTIFICADOS (NOVO - EMITIDOS)
+-- 8. TABELA ALUNOS_CERTIFICADOS
 CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
   student_deal_id uuid,
   certificate_template_id uuid,
-  hash text, -- Código unico para URL publica
+  hash text,
   issued_at timestamptz DEFAULT now()
 );
 ALTER TABLE public.crm_student_certificates ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total student_certificates" ON public.crm_student_certificates FOR ALL USING (true) WITH CHECK (true);
 
--- 9. EVENTOS E WORKSHOPS (NOVO)
+-- 9. EVENTOS E WORKSHOPS (NOVO SISTEMA DE BLOCOS)
 CREATE TABLE IF NOT EXISTS public.crm_events (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
   name text,
   location text,
-  dates jsonb -- Array de strings YYYY-MM-DD
+  dates jsonb,
+  registration_open boolean DEFAULT false
 );
 ALTER TABLE public.crm_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total events" ON public.crm_events FOR ALL USING (true) WITH CHECK (true);
+
+-- Tabela de Blocos de Horário (NOVO)
+CREATE TABLE IF NOT EXISTS public.crm_event_blocks (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  event_id uuid REFERENCES public.crm_events(id) ON DELETE CASCADE,
+  date date,
+  title text,
+  max_selections integer DEFAULT 1
+);
+ALTER TABLE public.crm_event_blocks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total event blocks" ON public.crm_event_blocks FOR ALL USING (true) WITH CHECK (true);
 
 CREATE TABLE IF NOT EXISTS public.crm_workshops (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
   event_id uuid REFERENCES public.crm_events(id) ON DELETE CASCADE,
+  block_id uuid REFERENCES public.crm_event_blocks(id) ON DELETE CASCADE, -- Vincula ao bloco
   title text,
   speaker text,
   date date,
-  time text, -- HH:MM
+  time text,
   spots integer
 );
+ALTER TABLE public.crm_workshops ADD COLUMN IF NOT EXISTS block_id uuid REFERENCES public.crm_event_blocks(id) ON DELETE CASCADE;
+
 ALTER TABLE public.crm_workshops ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total workshops" ON public.crm_workshops FOR ALL USING (true) WITH CHECK (true);
 
--- 10. INSCRIÇÃO EM EVENTOS (NOVO)
+-- 10. INSCRIÇÃO EM EVENTOS
 CREATE TABLE IF NOT EXISTS public.crm_event_registrations (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
   event_id uuid REFERENCES public.crm_events(id) ON DELETE CASCADE,
   workshop_id uuid REFERENCES public.crm_workshops(id) ON DELETE CASCADE,
-  student_id uuid, -- ID do Deal
+  student_id uuid,
   student_name text,
   student_email text
 );

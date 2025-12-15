@@ -1,9 +1,10 @@
+
 import React, { useEffect, useState } from 'react';
-import { StudentSession, EventModel, Workshop, EventRegistration } from '../types';
+import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, BookOpen, Award, ExternalLink, Calendar, MapPin, 
-    Video, Download, Loader2, UserCircle, User, CheckCircle, Mic, CheckSquare, Clock, Users, X, Save
+    Video, Download, Loader2, UserCircle, User, CheckCircle, Mic, CheckSquare, Clock, Users, X, Save, Lock, AlertCircle, DollarSign, Layers
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -31,6 +32,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     // Event Registration Modal
     const [selectedEvent, setSelectedEvent] = useState<EventModel | null>(null);
     const [eventWorkshops, setEventWorkshops] = useState<Workshop[]>([]);
+    const [eventBlocks, setEventBlocks] = useState<EventBlock[]>([]); // Blocks state
     const [workshopCounts, setWorkshopCounts] = useState<Record<string, number>>({}); // workshopId -> count
     const [selectedWorkshops, setSelectedWorkshops] = useState<string[]>([]); // workshop IDs
     const [isSavingReg, setIsSavingReg] = useState(false);
@@ -106,7 +108,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             setEvents(eventsData);
 
             // Fetch My Registrations (Using student ID/Email)
-            // Ideally use ID if we can match it. We'll use the main deal ID.
             const mainStudentId = student.deals[0]?.id;
             if (mainStudentId) {
                 const { data: regs } = await appBackend.client
@@ -138,9 +139,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         setSelectedEvent(event);
         setIsLoading(true);
         try {
-            // 1. Get Workshops
-            const ws = await appBackend.getWorkshops(event.id);
+            // 1. Get Workshops and Blocks
+            const [ws, blks] = await Promise.all([
+                appBackend.getWorkshops(event.id),
+                appBackend.getBlocks(event.id)
+            ]);
             setEventWorkshops(ws);
+            setEventBlocks(blks);
 
             // 2. Get All Registrations for this event (to calc available spots)
             const allRegs = await appBackend.getEventRegistrations(event.id);
@@ -164,20 +169,53 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     };
 
     const handleToggleWorkshop = (wId: string) => {
-        // If selecting, check availability
+        // Find the workshop
+        const workshop = eventWorkshops.find(w => w.id === wId);
+        if (!workshop) return;
+
+        // Find the block
+        const block = eventBlocks.find(b => b.id === workshop.blockId);
+        
+        // --- SELECTION LOGIC ---
         if (!selectedWorkshops.includes(wId)) {
-            const workshop = eventWorkshops.find(w => w.id === wId);
+            // 1. Check Capacity
             const currentCount = workshopCounts[wId] || 0;
-            if (workshop && currentCount >= workshop.spots) {
+            if (currentCount >= workshop.spots) {
                 alert("Desculpe, este workshop já está lotado.");
                 return;
             }
-        }
 
-        setSelectedWorkshops(prev => {
-            if (prev.includes(wId)) return prev.filter(id => id !== wId);
-            return [...prev, wId];
-        });
+            // 2. Check Block Limit
+            if (block) {
+                // Count how many workshops from this block are already selected
+                const selectedInBlock = selectedWorkshops.filter(id => {
+                    const w = eventWorkshops.find(ew => ew.id === id);
+                    return w?.blockId === block.id;
+                });
+
+                if (selectedInBlock.length >= block.maxSelections) {
+                    // Option A: Prevent selection
+                    // alert(`Você já escolheu o máximo de ${block.maxSelections} workshops para o bloco "${block.title}". Desmarque um para trocar.`);
+                    // return;
+
+                    // Option B: Auto-deselect the first one (Better UX for "Choose 1")
+                    if (block.maxSelections === 1) {
+                        const toRemove = selectedInBlock[0];
+                        setSelectedWorkshops(prev => [...prev.filter(id => id !== toRemove), wId]);
+                        return;
+                    } else {
+                        alert(`Limite atingido para "${block.title}". Você só pode escolher ${block.maxSelections}.`);
+                        return;
+                    }
+                }
+            }
+
+            // Add
+            setSelectedWorkshops(prev => [...prev, wId]);
+        } else {
+            // Remove
+            setSelectedWorkshops(prev => prev.filter(id => id !== wId));
+        }
     };
 
     const handleSaveRegistration = async () => {
@@ -245,25 +283,25 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
                     <button 
                         onClick={() => setActiveTab('classes')}
-                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'classes' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:bg-slate-50")}
+                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'classes' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-700")}
                     >
                         <GraduationCap size={18} /> Minhas Turmas
                     </button>
                     <button 
                         onClick={() => setActiveTab('products')}
-                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'products' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:bg-slate-50")}
+                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'products' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-700")}
                     >
                         <BookOpen size={18} /> Produtos Digitais
                     </button>
                     <button 
                         onClick={() => setActiveTab('events')}
-                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'events' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:bg-slate-50")}
+                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'events' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-700")}
                     >
                         <Mic size={18} /> Eventos
                     </button>
                     <button 
                         onClick={() => setActiveTab('certificates')}
-                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'certificates' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:bg-slate-50")}
+                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'certificates' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-700")}
                     >
                         <Award size={18} /> Certificados
                     </button>
@@ -371,6 +409,36 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                     ) : (
                                         events.map(event => {
                                             const myRegs = myRegistrations.filter(r => r.eventId === event.id).length;
+                                            
+                                            // 1. Find the Deal associated with this Event for the student
+                                            const eventDeal = student.deals.find(d => 
+                                                d.product_type === 'Evento' && d.product_name === event.name
+                                            );
+
+                                            // 2. Check Deal Stage
+                                            const isDealClosed = eventDeal?.stage === 'closed';
+                                            const isOpen = event.registrationOpen;
+                                            
+                                            // 3. Determine Access and Labels
+                                            let canAccess = false;
+                                            let statusLabel = '';
+                                            let StatusIcon = Lock;
+
+                                            if (!eventDeal) {
+                                                statusLabel = 'Inscrição não encontrada';
+                                                StatusIcon = AlertCircle;
+                                            } else if (!isDealClosed) {
+                                                statusLabel = 'Aguardando Confirmação de Pagamento';
+                                                StatusIcon = DollarSign;
+                                            } else if (!isOpen && myRegs === 0) {
+                                                statusLabel = 'Aguardando Liberação de Agenda';
+                                                StatusIcon = Lock;
+                                            } else {
+                                                canAccess = true;
+                                                statusLabel = myRegs > 0 ? 'Gerenciar Minha Agenda' : 'Escolher Workshops';
+                                                StatusIcon = CheckSquare;
+                                            }
+
                                             return (
                                                 <div key={event.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
                                                     <div className="flex justify-between items-start mb-4">
@@ -396,10 +464,16 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
                                                     <button 
                                                         onClick={() => handleOpenEvent(event)}
-                                                        className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                                                        disabled={!canAccess}
+                                                        className={clsx(
+                                                            "w-full py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors",
+                                                            canAccess 
+                                                                ? "bg-purple-600 hover:bg-purple-700 text-white" 
+                                                                : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                                        )}
                                                     >
-                                                        <CheckSquare size={18} /> 
-                                                        {myRegs > 0 ? 'Gerenciar Minha Agenda' : 'Escolher Workshops'}
+                                                        <StatusIcon size={18} />
+                                                        {statusLabel}
                                                     </button>
                                                 </div>
                                             );
@@ -476,69 +550,60 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         </div>
 
                         <div className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-50/50">
-                            {/* Group by Date */}
+                            {/* Group by Date, then by Block */}
                             {selectedEvent.dates.sort().map(dateStr => {
+                                const dayBlocks = eventBlocks.filter(b => b.date === dateStr).sort((a,b) => a.title.localeCompare(b.title));
                                 const dayWorkshops = eventWorkshops.filter(w => w.date === dateStr);
+                                
                                 if (dayWorkshops.length === 0) return null;
 
                                 return (
-                                    <div key={dateStr} className="mb-6">
-                                        <h4 className="text-sm font-bold text-purple-700 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-100 inline-block mb-3">
+                                    <div key={dateStr} className="mb-8">
+                                        <h4 className="text-sm font-bold text-purple-700 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-100 inline-block mb-4">
                                             {formatDate(dateStr)}
                                         </h4>
-                                        <div className="space-y-3">
-                                            {dayWorkshops.map(w => {
-                                                const current = workshopCounts[w.id] || 0;
-                                                const max = w.spots;
-                                                const isFull = current >= max;
-                                                const isSelected = selectedWorkshops.includes(w.id);
-                                                // If I am registered, I am one of the 'current', so I occupy a spot.
-                                                // If I uncheck, I free a spot. 
-                                                // Display logic: show available.
-                                                
-                                                return (
-                                                    <div 
-                                                        key={w.id} 
-                                                        className={clsx(
-                                                            "bg-white border rounded-xl p-4 transition-all flex items-start md:items-center gap-4 cursor-pointer",
-                                                            isSelected ? "border-purple-500 ring-1 ring-purple-500 shadow-md" : "border-slate-200 hover:border-purple-300 shadow-sm",
-                                                            (isFull && !isSelected) ? "opacity-60 grayscale cursor-not-allowed" : ""
-                                                        )}
-                                                        onClick={() => {
-                                                            if (!isFull || isSelected) handleToggleWorkshop(w.id);
-                                                        }}
-                                                    >
-                                                        <div className={clsx(
-                                                            "w-6 h-6 rounded border flex items-center justify-center shrink-0 transition-colors mt-1 md:mt-0",
-                                                            isSelected ? "bg-purple-600 border-purple-600 text-white" : "border-slate-300 bg-white"
-                                                        )}>
-                                                            {isSelected && <CheckCircle size={14} />}
-                                                        </div>
-                                                        
-                                                        <div className="flex-1">
-                                                            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-1">
-                                                                <h5 className="font-bold text-slate-800 text-sm">{w.title}</h5>
-                                                                <div className="flex items-center gap-2 text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-600 w-fit">
-                                                                    <Clock size={12} /> {w.time}
-                                                                </div>
-                                                            </div>
-                                                            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                                                                <Mic size={12} /> {w.speaker}
-                                                            </p>
-                                                        </div>
+                                        
+                                        {/* IF THERE ARE BLOCKS, GROUP BY BLOCK */}
+                                        {dayBlocks.length > 0 ? (
+                                            <div className="space-y-6">
+                                                {dayBlocks.map(block => {
+                                                    const blockWorkshops = dayWorkshops.filter(w => w.blockId === block.id);
+                                                    if (blockWorkshops.length === 0) return null;
 
-                                                        <div className="text-right shrink-0">
-                                                            <div className={clsx(
-                                                                "text-xs font-bold px-2 py-1 rounded",
-                                                                isFull && !isSelected ? "bg-red-100 text-red-600" : "bg-green-100 text-green-700"
-                                                            )}>
-                                                                {isFull && !isSelected ? 'Esgotado' : `${max - current} vagas`}
+                                                    return (
+                                                        <div key={block.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                                            <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-50">
+                                                                <h5 className="font-bold text-slate-800 flex items-center gap-2">
+                                                                    <Layers size={16} className="text-indigo-500"/> {block.title}
+                                                                </h5>
+                                                                <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                                                                    Escolha até <strong className="text-slate-700">{block.maxSelections}</strong>
+                                                                </span>
                                                             </div>
+                                                            <div className="space-y-3">
+                                                                {blockWorkshops.map(w => renderWorkshopItem(w, block.maxSelections, blockWorkshops))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {/* Show workshops without block at the end */}
+                                                {dayWorkshops.filter(w => !w.blockId).length > 0 && (
+                                                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                                        <div className="mb-3 pb-2 border-b border-slate-50">
+                                                            <h5 className="font-bold text-slate-800">Horários Extras</h5>
+                                                        </div>
+                                                        <div className="space-y-3">
+                                                            {dayWorkshops.filter(w => !w.blockId).map(w => renderWorkshopItem(w, 999, []))}
                                                         </div>
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            /* NO BLOCKS DEFINED - LIST ALL */
+                                            <div className="space-y-3">
+                                                {dayWorkshops.map(w => renderWorkshopItem(w, 999, []))}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -565,4 +630,58 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             )}
         </div>
     );
+
+    // Helper to render workshop item to avoid duplication
+    function renderWorkshopItem(w: Workshop, maxLimit: number, siblings: Workshop[]) {
+        const current = workshopCounts[w.id] || 0;
+        const max = w.spots;
+        const isFull = current >= max;
+        const isSelected = selectedWorkshops.includes(w.id);
+        
+        // Count selections in this block
+        const selectedInBlock = selectedWorkshops.filter(id => siblings.some(s => s.id === id)).length;
+        const isBlockFull = selectedInBlock >= maxLimit && !isSelected;
+
+        return (
+            <div 
+                key={w.id} 
+                className={clsx(
+                    "border rounded-xl p-4 transition-all flex items-start md:items-center gap-4 cursor-pointer",
+                    isSelected ? "bg-purple-50 border-purple-500 ring-1 ring-purple-500 shadow-md" : "bg-white border-slate-200 hover:border-purple-300 shadow-sm",
+                    (isFull && !isSelected) || (isBlockFull) ? "opacity-60 grayscale cursor-not-allowed" : ""
+                )}
+                onClick={() => {
+                    if ((!isFull && !isBlockFull) || isSelected) handleToggleWorkshop(w.id);
+                }}
+            >
+                <div className={clsx(
+                    "w-6 h-6 rounded-full border flex items-center justify-center shrink-0 transition-colors mt-1 md:mt-0",
+                    isSelected ? "bg-purple-600 border-purple-600 text-white" : "border-slate-300 bg-white"
+                )}>
+                    {isSelected && <CheckCircle size={14} />}
+                </div>
+                
+                <div className="flex-1">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-1">
+                        <h5 className="font-bold text-slate-800 text-sm">{w.title}</h5>
+                        <div className="flex items-center gap-2 text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-600 w-fit">
+                            <Clock size={12} /> {w.time}
+                        </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                        <Mic size={12} /> {w.speaker}
+                    </p>
+                </div>
+
+                <div className="text-right shrink-0">
+                    <div className={clsx(
+                        "text-xs font-bold px-2 py-1 rounded",
+                        isFull && !isSelected ? "bg-red-100 text-red-600" : "bg-green-100 text-green-700"
+                    )}>
+                        {isFull && !isSelected ? 'Esgotado' : `${max - current} vagas`}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 };

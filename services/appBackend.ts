@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration } from '../types';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -615,7 +615,8 @@ export const appBackend = {
       name: d.name,
       location: d.location,
       dates: d.dates || [],
-      createdAt: d.created_at
+      createdAt: d.created_at,
+      registrationOpen: d.registration_open || false // Map new field
     }));
   },
 
@@ -626,7 +627,8 @@ export const appBackend = {
       id: event.id,
       name: event.name,
       location: event.location,
-      dates: event.dates
+      dates: event.dates,
+      registration_open: event.registrationOpen // Save new field
     };
 
     const { data, error } = await supabase
@@ -642,7 +644,8 @@ export const appBackend = {
       name: data.name,
       location: data.location,
       dates: data.dates || [],
-      createdAt: data.created_at
+      createdAt: data.created_at,
+      registrationOpen: data.registration_open || false
     };
   },
 
@@ -650,6 +653,66 @@ export const appBackend = {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_events').delete().eq('id', id);
     if (error) throw error;
+  },
+
+  // --- BLOCKS (NEW) ---
+  
+  getBlocks: async (eventId: string): Promise<EventBlock[]> => {
+    if (!isConfigured) return [];
+    
+    const { data, error } = await supabase
+        .from('crm_event_blocks')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('title', { ascending: true });
+
+    if (error) {
+        // Silent fail if table not exists yet
+        console.warn(error); 
+        return [];
+    }
+
+    return data.map((d: any) => ({
+        id: d.id,
+        eventId: d.event_id,
+        date: d.date,
+        title: d.title,
+        maxSelections: d.max_selections
+    }));
+  },
+
+  saveBlock: async (block: EventBlock): Promise<EventBlock> => {
+      if (!isConfigured) throw new Error("Backend not configured");
+      
+      const payload = {
+          id: block.id,
+          event_id: block.eventId,
+          date: block.date,
+          title: block.title,
+          max_selections: block.maxSelections
+      };
+
+      const { data, error } = await supabase
+          .from('crm_event_blocks')
+          .upsert(payload)
+          .select()
+          .single();
+      
+      if (error) throw error;
+
+      return {
+          id: data.id,
+          eventId: data.event_id,
+          date: data.date,
+          title: data.title,
+          maxSelections: data.max_selections
+      };
+  },
+
+  deleteBlock: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_event_blocks').delete().eq('id', id);
+      if (error) throw error;
   },
 
   getWorkshops: async (eventId: string): Promise<Workshop[]> => {
@@ -670,6 +733,7 @@ export const appBackend = {
     return data.map((d: any) => ({
       id: d.id,
       eventId: d.event_id,
+      blockId: d.block_id, // Map blockId
       title: d.title,
       speaker: d.speaker,
       date: d.date,
@@ -684,6 +748,7 @@ export const appBackend = {
     const payload = {
       id: workshop.id,
       event_id: workshop.eventId,
+      block_id: workshop.blockId || null, // Save blockId
       title: workshop.title,
       speaker: workshop.speaker,
       date: workshop.date,
@@ -702,6 +767,7 @@ export const appBackend = {
     return {
       id: data.id,
       eventId: data.event_id,
+      blockId: data.block_id,
       title: data.title,
       speaker: data.speaker,
       date: data.date,

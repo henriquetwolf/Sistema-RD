@@ -189,9 +189,18 @@ export interface StudentSession {
 
 // --- EVENTS & WORKSHOPS ---
 
+export interface EventBlock {
+  id: string;
+  eventId: string;
+  date: string; // YYYY-MM-DD that this block belongs to
+  title: string; // e.g., "Manhã", "Bloco A (09:00 - 12:00)"
+  maxSelections: number; // How many workshops a student can pick in this block
+}
+
 export interface Workshop {
   id: string;
   eventId: string;
+  blockId?: string; // Links to EventBlock
   title: string;
   speaker: string;
   date: string; // YYYY-MM-DD
@@ -205,6 +214,7 @@ export interface EventModel {
   location: string;
   dates: string[]; // Array of YYYY-MM-DD strings
   createdAt: string;
+  registrationOpen: boolean; // Controls if students can see/register
 }
 
 export interface EventRegistration {

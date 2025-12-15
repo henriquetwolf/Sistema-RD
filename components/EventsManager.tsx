@@ -3,10 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   Calendar, MapPin, Users, Mic, Clock, Plus, Search, 
   MoreVertical, Edit2, Trash2, ArrowLeft, Save, X, 
-  Loader2, ChevronRight, Hash, BarChart3, User, RefreshCw
+  Loader2, ChevronRight, Hash, BarChart3, User, RefreshCw, Lock, Unlock, Layers
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { EventModel, Workshop, EventRegistration } from '../types';
+import { EventModel, Workshop, EventRegistration, EventBlock } from '../types';
 import clsx from 'clsx';
 
 interface EventsManagerProps {
@@ -18,7 +18,8 @@ const INITIAL_EVENT: EventModel = {
     name: '',
     location: '',
     dates: [],
-    createdAt: ''
+    createdAt: '',
+    registrationOpen: false
 };
 
 const INITIAL_WORKSHOP: Workshop = {
@@ -41,6 +42,7 @@ const formatDateDisplay = (dateString: string) => {
 export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   const [events, setEvents] = useState<EventModel[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
+  const [blocks, setBlocks] = useState<EventBlock[]>([]); // New state for blocks
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   
@@ -60,17 +62,22 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   // Workshop Form State
   const [workshopForm, setWorkshopForm] = useState<Workshop>(INITIAL_WORKSHOP);
   const [isEditingWorkshop, setIsEditingWorkshop] = useState(false);
+  
+  // Block Form State
+  const [showBlockForm, setShowBlockForm] = useState(false);
+  const [blockForm, setBlockForm] = useState<EventBlock>({ id: '', eventId: '', date: '', title: '', maxSelections: 1 });
 
   useEffect(() => {
     fetchEvents();
   }, []);
 
-  // Fetch workshops when an event is selected for editing (formData.id is set)
+  // Fetch workshops and blocks when an event is selected for editing (formData.id is set)
   useEffect(() => {
       if (formData.id) {
-          fetchWorkshops(formData.id);
+          fetchEventDetails(formData.id);
       } else {
           setWorkshops([]);
+          setBlocks([]);
       }
   }, [formData.id]);
 
@@ -93,10 +100,14 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
       }
   };
 
-  const fetchWorkshops = async (eventId: string) => {
+  const fetchEventDetails = async (eventId: string) => {
       try {
-          const data = await appBackend.getWorkshops(eventId);
-          setWorkshops(data);
+          const [ws, blks] = await Promise.all([
+              appBackend.getWorkshops(eventId),
+              appBackend.getBlocks(eventId)
+          ]);
+          setWorkshops(ws);
+          setBlocks(blks);
       } catch (e) {
           console.error(e);
       }
@@ -142,7 +153,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
           }
           
           if (!formData.id) {
-              alert("Evento criado! Agora você pode adicionar os workshops.");
+              alert("Evento criado! Agora você pode criar blocos e adicionar workshops.");
           } else {
               setShowModal(false);
           }
@@ -168,13 +179,75 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   };
 
   const handleRemoveDate = (dateToRemove: string) => {
-      setFormData(prev => ({ ...prev, dates: prev.dates.filter(d => d !== dateToRemove) }));
+      if (window.confirm("Remover esta data apagará os blocos e workshops associados? (Lógica de backend deve tratar)")) {
+          setFormData(prev => ({ ...prev, dates: prev.dates.filter(d => d !== dateToRemove) }));
+      }
   };
 
-  // Workshop Logic
+  const toggleRegistration = async (evt: EventModel) => {
+      // Optimistic update
+      const newValue = !evt.registrationOpen;
+      const updatedEvt = { ...evt, registrationOpen: newValue };
+      
+      setEvents(prev => prev.map(e => e.id === evt.id ? updatedEvt : e));
+
+      try {
+          await appBackend.saveEvent(updatedEvt);
+      } catch (e) {
+          alert("Erro ao atualizar status");
+          // Revert on error
+          setEvents(prev => prev.map(e => e.id === evt.id ? evt : e));
+      }
+  };
+
+  // --- BLOCK MANAGEMENT ---
+  const handleSaveBlock = async () => {
+      if (!blockForm.title || !blockForm.date) {
+          alert("Título e Data do bloco são obrigatórios.");
+          return;
+      }
+
+      try {
+          const savedBlock = await appBackend.saveBlock({
+              ...blockForm,
+              id: blockForm.id || crypto.randomUUID(),
+              eventId: formData.id
+          });
+
+          setBlocks(prev => {
+              const existing = prev.findIndex(b => b.id === savedBlock.id);
+              if (existing >= 0) {
+                  const updated = [...prev];
+                  updated[existing] = savedBlock;
+                  return updated;
+              }
+              return [...prev, savedBlock];
+          });
+
+          setShowBlockForm(false);
+          setBlockForm({ id: '', eventId: '', date: '', title: '', maxSelections: 1 });
+      } catch (e: any) {
+          alert(`Erro ao salvar bloco: ${e.message}`);
+      }
+  };
+
+  const handleDeleteBlock = async (id: string) => {
+      if (window.confirm("Excluir bloco? Todos os workshops dentro dele serão apagados.")) {
+          try {
+              await appBackend.deleteBlock(id);
+              setBlocks(prev => prev.filter(b => b.id !== id));
+              // Also remove workshops locally
+              setWorkshops(prev => prev.filter(w => w.blockId !== id));
+          } catch (e: any) {
+              alert(`Erro: ${e.message}`);
+          }
+      }
+  };
+
+  // --- WORKSHOP MANAGEMENT ---
   const handleSaveWorkshop = async () => {
-      if (!workshopForm.title || !workshopForm.date || !workshopForm.speaker) {
-          alert("Preencha título, palestrante e data.");
+      if (!workshopForm.title || !workshopForm.date || !workshopForm.speaker || !workshopForm.blockId) {
+          alert("Preencha título, palestrante, data e o bloco de horário.");
           return;
       }
       
@@ -214,6 +287,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   const openNewModal = () => {
       setFormData(INITIAL_EVENT);
       setWorkshops([]);
+      setBlocks([]);
       setShowModal(true);
   };
 
@@ -230,9 +304,8 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
 
   // --- REPORT VIEW ---
   if (viewMode === 'report' && selectedEventId) {
+      // (Keep existing Report View code, it just reads workshops/registrations)
       const currentEvent = events.find(e => e.id === selectedEventId);
-      
-      // Calculate Stats
       const totalCapacity = workshops.reduce((acc, w) => acc + w.spots, 0);
       const totalRegistrations = registrations.length;
       const uniqueStudents = new Set(registrations.map(r => r.studentId)).size;
@@ -415,6 +488,23 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                 <MapPin size={14} /> {evt.location || 'Local não definido'}
                             </div>
 
+                            {/* Status Indicator */}
+                            <div className="mb-4">
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); toggleRegistration(evt); }}
+                                    className={clsx(
+                                        "text-xs font-bold px-2 py-1.5 rounded-md border flex items-center gap-1.5 transition-all w-fit",
+                                        evt.registrationOpen 
+                                            ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-200" 
+                                            : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+                                    )}
+                                    title="Clique para alterar"
+                                >
+                                    {evt.registrationOpen ? <Unlock size={12}/> : <Lock size={12}/>}
+                                    {evt.registrationOpen ? 'Inscrições Abertas' : 'Inscrições Fechadas'}
+                                </button>
+                            </div>
+
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2 text-xs text-slate-600">
                                     <Calendar size={14} className="text-slate-400" />
@@ -495,67 +585,147 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                             </div>
                         </div>
 
-                        {/* Section 2: Workshops (Only visible if Event ID exists) */}
+                        {/* Section 2: Blocks & Workshops (Only visible if Event ID exists) */}
                         {formData.id && (
                             <div className="animate-in fade-in slide-in-from-bottom-2">
-                                <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
-                                    <Mic size={16} /> Workshops & Palestras
-                                </h4>
-                                
-                                {/* Add/Edit Form */}
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
-                                    <h5 className="text-xs font-bold text-slate-600 mb-3 uppercase">{isEditingWorkshop ? 'Editar Workshop' : 'Novo Workshop'}</h5>
-                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                                        <div className="md:col-span-2">
-                                            <input type="text" placeholder="Título do Workshop" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={workshopForm.title} onChange={e => setWorkshopForm({...workshopForm, title: e.target.value})} />
-                                        </div>
-                                        <div className="md:col-span-2">
-                                            <input type="text" placeholder="Palestrante" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={workshopForm.speaker} onChange={e => setWorkshopForm({...workshopForm, speaker: e.target.value})} />
-                                        </div>
-                                        <div>
-                                            <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={workshopForm.date} onChange={e => setWorkshopForm({...workshopForm, date: e.target.value})}>
-                                                <option value="">Selecione o Dia...</option>
-                                                {formData.dates.map(d => (
-                                                    <option key={d} value={d}>{formatDateDisplay(d)}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <input type="time" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={workshopForm.time} onChange={e => setWorkshopForm({...workshopForm, time: e.target.value})} />
-                                        </div>
-                                        <div>
-                                            <input type="number" placeholder="Vagas" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={workshopForm.spots} onChange={e => setWorkshopForm({...workshopForm, spots: parseInt(e.target.value) || 0})} />
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={handleSaveWorkshop} className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-xs">Salvar</button>
-                                            {isEditingWorkshop && (
-                                                <button onClick={() => { setIsEditingWorkshop(false); setWorkshopForm({...INITIAL_WORKSHOP, eventId: formData.id}); }} className="px-3 bg-slate-200 text-slate-600 rounded-lg font-bold text-xs hover:bg-slate-300">Cancelar</button>
-                                            )}
-                                        </div>
-                                    </div>
+                                <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
+                                    <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide flex items-center gap-2">
+                                        <Layers size={16} /> Grade de Horários (Blocos)
+                                    </h4>
+                                    <button 
+                                        onClick={() => setShowBlockForm(true)}
+                                        className="text-xs bg-slate-100 hover:bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg font-bold border border-slate-200 hover:border-indigo-200 flex items-center gap-1 transition-colors"
+                                    >
+                                        <Plus size={14} /> Novo Bloco
+                                    </button>
                                 </div>
 
-                                {/* List */}
-                                <div className="space-y-2">
-                                    {workshops.map(w => (
-                                        <div key={w.id} className="bg-white border border-slate-200 p-3 rounded-lg flex items-center justify-between hover:border-indigo-300 transition-colors">
-                                            <div className="flex-1">
-                                                <h5 className="font-bold text-slate-800 text-sm">{w.title}</h5>
-                                                <div className="flex gap-4 text-xs text-slate-500 mt-1">
-                                                    <span className="flex items-center gap-1"><Mic size={12}/> {w.speaker}</span>
-                                                    <span className="flex items-center gap-1"><Calendar size={12}/> {formatDateDisplay(w.date)}</span>
-                                                    <span className="flex items-center gap-1"><Clock size={12}/> {w.time}</span>
-                                                    <span className="flex items-center gap-1"><Users size={12}/> {w.spots} vagas</span>
-                                                </div>
+                                {/* ADD BLOCK FORM */}
+                                {showBlockForm && (
+                                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-6">
+                                        <h5 className="text-xs font-bold text-indigo-700 mb-3 uppercase">Configurar Bloco</h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                            <div className="md:col-span-2">
+                                                <input type="text" placeholder="Título (ex: Manhã)" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={blockForm.title} onChange={e => setBlockForm({...blockForm, title: e.target.value})} />
                                             </div>
-                                            <div className="flex gap-1">
-                                                <button onClick={() => handleEditWorkshop(w)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600"><Edit2 size={14}/></button>
-                                                <button onClick={() => handleDeleteWorkshop(w.id)} className="p-1.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
+                                            <div>
+                                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={blockForm.date} onChange={e => setBlockForm({...blockForm, date: e.target.value})}>
+                                                    <option value="">Data...</option>
+                                                    {formData.dates.map(d => (
+                                                        <option key={d} value={d}>{formatDateDisplay(d)}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <input type="number" placeholder="Max Escolhas" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={blockForm.maxSelections} onChange={e => setBlockForm({...blockForm, maxSelections: parseInt(e.target.value) || 1})} min={1} />
+                                            </div>
+                                            <div className="md:col-span-4 flex justify-end gap-2 mt-2">
+                                                <button onClick={() => setShowBlockForm(false)} className="px-4 py-2 text-slate-500 text-sm hover:text-slate-700">Cancelar</button>
+                                                <button onClick={handleSaveBlock} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700">Salvar Bloco</button>
                                             </div>
                                         </div>
-                                    ))}
-                                    {workshops.length === 0 && <p className="text-center text-sm text-slate-400 py-4">Nenhum workshop adicionado.</p>}
-                                </div>
+                                    </div>
+                                )}
+
+                                {/* BLOCKS LIST */}
+                                {blocks.length === 0 ? (
+                                    <div className="text-center py-8 text-slate-400 border-2 border-dashed border-slate-100 rounded-xl">
+                                        <Layers size={32} className="mx-auto mb-2 opacity-50"/>
+                                        <p className="text-sm">Nenhum bloco de horário criado.</p>
+                                        <p className="text-xs">Crie blocos (ex: Manhã, Tarde) para agrupar os workshops.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {/* Group Blocks by Date */}
+                                        {formData.dates.sort().map(dateStr => {
+                                            const dayBlocks = blocks.filter(b => b.date === dateStr);
+                                            if (dayBlocks.length === 0) return null;
+
+                                            return (
+                                                <div key={dateStr} className="border border-slate-200 rounded-xl overflow-hidden">
+                                                    <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
+                                                        <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                                            <Calendar size={14} className="text-slate-400"/>
+                                                            {formatDateDisplay(dateStr)}
+                                                        </span>
+                                                    </div>
+                                                    
+                                                    <div className="divide-y divide-slate-100">
+                                                        {dayBlocks.map(block => (
+                                                            <div key={block.id} className="p-4 bg-white hover:bg-slate-50 transition-colors">
+                                                                <div className="flex justify-between items-start mb-3">
+                                                                    <div>
+                                                                        <h5 className="font-bold text-indigo-700 text-sm">{block.title}</h5>
+                                                                        <p className="text-xs text-slate-500">
+                                                                            Aluno pode escolher até <strong className="text-slate-700">{block.maxSelections}</strong> workshop(s).
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="flex gap-2">
+                                                                        <button 
+                                                                            onClick={() => {
+                                                                                setWorkshopForm({ ...INITIAL_WORKSHOP, eventId: formData.id, blockId: block.id, date: block.date });
+                                                                                setIsEditingWorkshop(false);
+                                                                            }}
+                                                                            className="text-xs bg-white border border-slate-200 hover:border-indigo-300 text-indigo-600 px-2 py-1 rounded flex items-center gap-1 shadow-sm"
+                                                                        >
+                                                                            <Plus size={12}/> Add Workshop
+                                                                        </button>
+                                                                        <button onClick={() => handleDeleteBlock(block.id)} className="text-slate-400 hover:text-red-500 p-1">
+                                                                            <Trash2 size={14} />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* WORKSHOPS IN THIS BLOCK */}
+                                                                <div className="pl-4 border-l-2 border-slate-100 space-y-2">
+                                                                    {/* Add/Edit Workshop Form (Embedded) */}
+                                                                    {workshopForm.blockId === block.id && (
+                                                                        <div className="bg-slate-100 p-3 rounded-lg border border-slate-200 mb-2 animate-in fade-in zoom-in-95">
+                                                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
+                                                                                <div className="md:col-span-2">
+                                                                                    <input type="text" placeholder="Título" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.title} onChange={e => setWorkshopForm({...workshopForm, title: e.target.value})} />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <input type="text" placeholder="Palestrante" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.speaker} onChange={e => setWorkshopForm({...workshopForm, speaker: e.target.value})} />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <input type="time" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.time} onChange={e => setWorkshopForm({...workshopForm, time: e.target.value})} />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <input type="number" placeholder="Vagas" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.spots} onChange={e => setWorkshopForm({...workshopForm, spots: parseInt(e.target.value) || 0})} />
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex justify-end gap-2">
+                                                                                <button onClick={() => setWorkshopForm(INITIAL_WORKSHOP)} className="text-xs text-slate-500">Cancelar</button>
+                                                                                <button onClick={handleSaveWorkshop} className="text-xs bg-green-600 text-white px-3 py-1 rounded font-bold">Salvar</button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {workshops.filter(w => w.blockId === block.id).map(w => (
+                                                                        <div key={w.id} className="flex justify-between items-center bg-white border border-slate-100 p-2 rounded hover:border-slate-300 transition-colors">
+                                                                            <div className="flex-1">
+                                                                                <p className="text-xs font-bold text-slate-700">{w.title}</p>
+                                                                                <p className="text-[10px] text-slate-500">{w.time} • {w.speaker} • {w.spots} vagas</p>
+                                                                            </div>
+                                                                            <div className="flex gap-1">
+                                                                                <button onClick={() => handleEditWorkshop(w)} className="p-1 text-slate-400 hover:text-slate-600"><Edit2 size={12}/></button>
+                                                                                <button onClick={() => handleDeleteWorkshop(w.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12}/></button>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                    {workshops.filter(w => w.blockId === block.id).length === 0 && !isEditingWorkshop && (
+                                                                        <p className="text-[10px] text-slate-400 italic">Nenhum workshop neste bloco.</p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         )}
 

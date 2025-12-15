@@ -133,7 +133,7 @@ ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS student_access_enabled boo
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS email text; -- CONTATO EMAIL
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS phone text; -- CONTATO TELEFONE
 
--- 7. TABELA CERTIFICADOS (ATUALIZAÇÃO LAYOUT)
+-- 7. TABELA CERTIFICADOS (ATUALIZAÇÃO LAYOUT E VERSO)
 CREATE TABLE IF NOT EXISTS public.crm_certificates (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
@@ -143,10 +143,11 @@ CREATE TABLE IF NOT EXISTS public.crm_certificates (
   linked_product_id text, -- ALTERADO PARA TEXT PARA SUPORTAR NOMES DE CURSOS
   body_text text
 );
--- CORREÇÃO DE TIPO SE JÁ EXISTIR COMO UUID
+-- CORREÇÃO DE TIPOS E NOVAS COLUNAS
 ALTER TABLE public.crm_certificates ALTER COLUMN linked_product_id TYPE text; 
-
 ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS layout_config jsonb; -- CONFIGURACAO DE FONTE E POSICAO
+ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS back_background_base64 text; -- VERSO DO CERTIFICADO
+
 ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total certificates" ON public.crm_certificates FOR ALL USING (true) WITH CHECK (true);
 

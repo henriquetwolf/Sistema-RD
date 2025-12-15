@@ -4,7 +4,7 @@ import { StudentSession, StudentCertificate } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, BookOpen, Award, ExternalLink, Calendar, MapPin, 
-    Video, Download, Loader2, UserCircle 
+    Video, Download, Loader2, UserCircle, User, CheckCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -34,6 +34,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             if (allCodes.length > 0) {
                 // Fetch classes that match either mod1 or mod2 codes
+                // Note: The previous logic relied on exact string match of the code which is stored in mod_1_code column
                 const { data: classesData } = await appBackend.client
                     .from('crm_classes')
                     .select('*')
@@ -62,6 +63,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
     // Filter Products based on deals (Digital Products)
     const myProducts = student.deals.filter(d => d.product_type === 'Digital');
+
+    const getStatusStyle = (status: string) => {
+        switch(status) {
+            case 'Confirmado': return 'bg-green-100 text-green-700 border-green-200';
+            case 'Concluído': return 'bg-blue-100 text-blue-700 border-blue-200';
+            case 'Cancelado': return 'bg-red-100 text-red-700 border-red-200';
+            default: return 'bg-amber-100 text-amber-700 border-amber-200'; // Planejamento
+        }
+    };
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -124,28 +134,57 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                         <div className="text-center py-12 text-slate-400">Nenhuma turma presencial encontrada.</div>
                                     ) : (
                                         classes.map(cls => (
-                                            <div key={cls.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                                                <h3 className="font-bold text-lg text-slate-800 mb-2">{cls.course}</h3>
-                                                <div className="flex flex-wrap gap-4 text-sm text-slate-600 mb-4">
-                                                    <div className="flex items-center gap-1.5"><MapPin size={16} className="text-purple-500"/> {cls.city}/{cls.state}</div>
-                                                    <div className="flex items-center gap-1.5"><Calendar size={16} className="text-purple-500"/> Mod 1: {cls.date_mod_1 ? new Date(cls.date_mod_1).toLocaleDateString() : 'A definir'}</div>
-                                                    {cls.date_mod_2 && <div className="flex items-center gap-1.5"><Calendar size={16} className="text-orange-500"/> Mod 2: {new Date(cls.date_mod_2).toLocaleDateString()}</div>}
+                                            <div key={cls.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+                                                {/* STATUS BADGE */}
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className="text-xs font-mono text-slate-400">#{cls.class_code}</span>
+                                                    <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold uppercase border", getStatusStyle(cls.status))}>
+                                                        {cls.status}
+                                                    </span>
+                                                </div>
+
+                                                <h3 className="text-lg font-bold text-slate-800 mb-1">{cls.course}</h3>
+                                                
+                                                <div className="flex items-center gap-1 text-sm text-slate-600 mb-4">
+                                                    <MapPin size={16} className="text-slate-400" />
+                                                    {cls.city}/{cls.state}
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-slate-50 p-4 rounded-lg border border-slate-100">
+                                                    <div>
+                                                        <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Módulo 1</span>
+                                                        <div className="flex items-center gap-2 text-slate-700 mb-1">
+                                                            <Calendar size={14} className="text-purple-600" />
+                                                            {cls.date_mod_1 ? new Date(cls.date_mod_1).toLocaleDateString('pt-BR') : 'A definir'}
+                                                        </div>
+                                                        {cls.instructor_mod_1 && (
+                                                            <div className="flex items-center gap-2 text-slate-700">
+                                                                <User size={14} className="text-slate-400" />
+                                                                <span className="text-xs">{cls.instructor_mod_1}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Módulo 2</span>
+                                                        <div className="flex items-center gap-2 text-slate-700 mb-1">
+                                                            <Calendar size={14} className="text-orange-600" />
+                                                            {cls.date_mod_2 ? new Date(cls.date_mod_2).toLocaleDateString('pt-BR') : 'A definir'}
+                                                        </div>
+                                                        {cls.instructor_mod_2 && (
+                                                            <div className="flex items-center gap-2 text-slate-700">
+                                                                <User size={14} className="text-slate-400" />
+                                                                <span className="text-xs">{cls.instructor_mod_2}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100 text-xs">
-                                                    {cls.studio_mod_1 && (
-                                                        <div>
-                                                            <strong className="block text-slate-700 mb-1 uppercase">Local Módulo 1</strong>
-                                                            {cls.studio_mod_1}
-                                                        </div>
-                                                    )}
-                                                    {cls.hotel_mod_1 && (
-                                                        <div>
-                                                            <strong className="block text-slate-700 mb-1 uppercase">Sugestão Hotel</strong>
-                                                            {cls.hotel_mod_1} ({cls.hotel_loc_mod_1})
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                {cls.status === 'Confirmado' && (
+                                                    <div className="mt-4 flex items-center gap-2 text-xs text-green-700 bg-green-50 px-3 py-2 rounded border border-green-100">
+                                                        <CheckCircle size={14} />
+                                                        <span>Turma confirmada! Prepare-se para o curso.</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))
                                     )}
@@ -154,17 +193,17 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
                             {/* PRODUCTS TAB */}
                             {activeTab === 'products' && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-4">
                                     {myProducts.length === 0 ? (
-                                        <div className="col-span-full text-center py-12 text-slate-400">Nenhum produto digital encontrado.</div>
+                                        <div className="text-center py-12 text-slate-400">Nenhum produto digital liberado.</div>
                                     ) : (
                                         myProducts.map(prod => (
-                                            <div key={prod.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between h-40">
+                                            <div key={prod.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
                                                 <div>
-                                                    <h3 className="font-bold text-slate-800 mb-1">{prod.product_name || 'Produto Digital'}</h3>
-                                                    <p className="text-xs text-slate-500">Adquirido em {new Date(prod.created_at).toLocaleDateString()}</p>
+                                                    <h3 className="font-bold text-slate-800">{prod.product_name || 'Produto Digital'}</h3>
+                                                    <p className="text-sm text-slate-500">Curso Online</p>
                                                 </div>
-                                                <button className="w-full py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2">
+                                                <button className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
                                                     <Video size={16} /> Acessar Conteúdo
                                                 </button>
                                             </div>
@@ -175,31 +214,42 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
                             {/* CERTIFICATES TAB */}
                             {activeTab === 'certificates' && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-4">
                                     {certificates.length === 0 ? (
-                                        <div className="col-span-full text-center py-12 text-slate-400">Nenhum certificado emitido ainda.</div>
+                                        <div className="text-center py-12 text-slate-400">Nenhum certificado emitido ainda.</div>
                                     ) : (
                                         certificates.map(cert => (
-                                            <div key={cert.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex items-center justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-12 h-12 bg-green-50 text-green-600 rounded-lg flex items-center justify-center">
-                                                        <Award size={24} />
+                                            <div key={cert.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow">
+                                                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center">
+                                                            <Award size={24} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="font-bold text-slate-800">{cert.crm_certificates?.title || 'Certificado de Conclusão'}</h3>
+                                                            <p className="text-xs text-slate-500">Emitido em: {new Date(cert.issued_at).toLocaleDateString()}</p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <h3 className="font-bold text-slate-800 text-sm">{cert.crm_certificates?.title || 'Certificado'}</h3>
-                                                        <p className="text-xs text-slate-500">Emitido em {new Date(cert.issued_at).toLocaleDateString()}</p>
+                                                    <div className="flex gap-2">
+                                                        <a 
+                                                            href={`/?certificateHash=${cert.hash}`} 
+                                                            target="_blank" 
+                                                            rel="noreferrer"
+                                                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
+                                                        >
+                                                            <ExternalLink size={16} /> Visualizar
+                                                        </a>
+                                                        {/* Note: Download usually requires generating PDF on client or server. 
+                                                            Since we use browser print for PDF, we can guide user to print. */}
+                                                        <a 
+                                                            href={`/?certificateHash=${cert.hash}`} 
+                                                            target="_blank" 
+                                                            rel="noreferrer"
+                                                            className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
+                                                        >
+                                                            <Download size={16} /> Baixar PDF
+                                                        </a>
                                                     </div>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <a 
-                                                        href={`/?certificateHash=${cert.hash}`} 
-                                                        target="_blank" 
-                                                        rel="noreferrer" 
-                                                        className="p-2 bg-slate-100 hover:bg-purple-50 text-slate-600 hover:text-purple-600 rounded-lg transition-colors"
-                                                        title="Visualizar"
-                                                    >
-                                                        <ExternalLink size={18} />
-                                                    </a>
                                                 </div>
                                             </div>
                                         ))
@@ -209,7 +259,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         </>
                     )}
                 </div>
-
             </main>
         </div>
     );

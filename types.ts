@@ -206,3 +206,13 @@ export interface EventModel {
   dates: string[]; // Array of YYYY-MM-DD strings
   createdAt: string;
 }
+
+export interface EventRegistration {
+  id: string;
+  eventId: string;
+  workshopId: string;
+  studentId: string; // ID from crm_deals
+  studentName: string; // Denormalized for easier display
+  studentEmail: string;
+  registeredAt: string;
+}

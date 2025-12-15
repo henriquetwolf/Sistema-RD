@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop } from '../types';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -714,5 +714,63 @@ export const appBackend = {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_workshops').delete().eq('id', id);
     if (error) throw error;
+  },
+
+  // --- EVENT REGISTRATIONS (NEW) ---
+
+  // Get all registrations for an event (useful for admin and calculating spots)
+  getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
+    if (!isConfigured) return [];
+
+    const { data, error } = await supabase
+      .from('crm_event_registrations')
+      .select('*')
+      .eq('event_id', eventId);
+
+    if (error) {
+      console.error("Error fetching event registrations:", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      eventId: d.event_id,
+      workshopId: d.workshop_id,
+      studentId: d.student_id,
+      studentName: d.student_name,
+      studentEmail: d.student_email,
+      registeredAt: d.created_at
+    }));
+  },
+
+  // Save multiple registrations for a student at once (clearing previous ones for this event to avoid duplicates)
+  saveEventRegistrations: async (eventId: string, studentId: string, studentName: string, studentEmail: string, workshopIds: string[]): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    // 1. Delete existing registrations for this student in this event
+    const { error: deleteError } = await supabase
+      .from('crm_event_registrations')
+      .delete()
+      .eq('event_id', eventId)
+      .eq('student_id', studentId);
+
+    if (deleteError) throw deleteError;
+
+    // 2. Insert new registrations
+    if (workshopIds.length > 0) {
+      const payload = workshopIds.map(wId => ({
+        event_id: eventId,
+        workshop_id: wId,
+        student_id: studentId,
+        student_name: studentName,
+        student_email: studentEmail
+      }));
+
+      const { error: insertError } = await supabase
+        .from('crm_event_registrations')
+        .insert(payload);
+
+      if (insertError) throw insertError;
+    }
   }
 };

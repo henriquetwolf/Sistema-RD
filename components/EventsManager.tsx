@@ -3,10 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   Calendar, MapPin, Users, Mic, Clock, Plus, Search, 
   MoreVertical, Edit2, Trash2, ArrowLeft, Save, X, 
-  Loader2, ChevronRight, Hash 
+  Loader2, ChevronRight, Hash, BarChart3, User, RefreshCw
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { EventModel, Workshop } from '../types';
+import { EventModel, Workshop, EventRegistration } from '../types';
 import clsx from 'clsx';
 
 interface EventsManagerProps {
@@ -31,12 +31,27 @@ const INITIAL_WORKSHOP: Workshop = {
     spots: 0
 };
 
+// Helper to format YYYY-MM-DD to DD/MM/YYYY without timezone issues
+const formatDateDisplay = (dateString: string) => {
+  if (!dateString) return '';
+  const [year, month, day] = dateString.split('-');
+  return `${day}/${month}/${year}`;
+};
+
 export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   const [events, setEvents] = useState<EventModel[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   
+  // View Mode: List vs Report
+  const [viewMode, setViewMode] = useState<'list' | 'report'>('list');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  
+  // Report Data
+  const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
+
   // Form State
   const [formData, setFormData] = useState<EventModel>(INITIAL_EVENT);
   const [newDate, setNewDate] = useState('');
@@ -59,6 +74,13 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
       }
   }, [formData.id]);
 
+  // Load report data when entering report mode
+  useEffect(() => {
+      if (viewMode === 'report' && selectedEventId) {
+          fetchReportData(selectedEventId);
+      }
+  }, [viewMode, selectedEventId]);
+
   const fetchEvents = async () => {
       setLoading(true);
       try {
@@ -77,6 +99,23 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
           setWorkshops(data);
       } catch (e) {
           console.error(e);
+      }
+  };
+
+  const fetchReportData = async (eventId: string) => {
+      setReportLoading(true);
+      try {
+          // Parallel fetch
+          const [ws, regs] = await Promise.all([
+              appBackend.getWorkshops(eventId),
+              appBackend.getEventRegistrations(eventId)
+          ]);
+          setWorkshops(ws);
+          setRegistrations(regs);
+      } catch(e) {
+          console.error(e);
+      } finally {
+          setReportLoading(false);
       }
   };
 
@@ -184,6 +223,126 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
       setActiveMenuId(null);
   };
 
+  const openReport = (e: EventModel) => {
+      setSelectedEventId(e.id);
+      setViewMode('report');
+  };
+
+  // --- REPORT VIEW ---
+  if (viewMode === 'report' && selectedEventId) {
+      const currentEvent = events.find(e => e.id === selectedEventId);
+      
+      // Calculate Stats
+      const totalCapacity = workshops.reduce((acc, w) => acc + w.spots, 0);
+      const totalRegistrations = registrations.length;
+      const uniqueStudents = new Set(registrations.map(r => r.studentId)).size;
+      const occupancyRate = totalCapacity > 0 ? (totalRegistrations / totalCapacity) * 100 : 0;
+
+      return (
+          <div className="animate-in fade-in slide-in-from-right-4 duration-300 pb-20">
+              <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-4">
+                      <button onClick={() => setViewMode('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
+                          <ArrowLeft size={20} />
+                      </button>
+                      <div>
+                          <h2 className="text-xl font-bold text-slate-800">{currentEvent?.name}</h2>
+                          <p className="text-sm text-slate-500">Relatório de Ocupação e Inscrições</p>
+                      </div>
+                  </div>
+                  <button onClick={() => fetchReportData(selectedEventId)} className="p-2 text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 rounded-lg hover:bg-indigo-50">
+                      <RefreshCw size={18} className={clsx(reportLoading && "animate-spin")} />
+                  </button>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                      <p className="text-xs text-slate-500 font-bold uppercase">Workshops</p>
+                      <p className="text-2xl font-bold text-slate-800">{workshops.length}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                      <p className="text-xs text-slate-500 font-bold uppercase">Vagas Totais</p>
+                      <p className="text-2xl font-bold text-slate-800">{totalCapacity}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                      <p className="text-xs text-slate-500 font-bold uppercase">Alunos Únicos</p>
+                      <p className="text-2xl font-bold text-indigo-600">{uniqueStudents}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                      <p className="text-xs text-slate-500 font-bold uppercase">Ocupação Geral</p>
+                      <div className="flex items-center gap-2">
+                          <p className="text-2xl font-bold text-slate-800">{occupancyRate.toFixed(1)}%</p>
+                          <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-green-500" style={{width: `${Math.min(occupancyRate, 100)}%`}}></div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
+              {/* Workshops Detail */}
+              <div className="space-y-6">
+                  {workshops.map(w => {
+                      const wRegs = registrations.filter(r => r.workshopId === w.id);
+                      const occupation = (wRegs.length / w.spots) * 100;
+                      const isFull = wRegs.length >= w.spots;
+
+                      return (
+                          <div key={w.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                              <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                  <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                          <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded">{formatDateDisplay(w.date)} • {w.time}</span>
+                                          {isFull && <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-0.5 rounded">LOTADO</span>}
+                                      </div>
+                                      <h3 className="font-bold text-slate-800">{w.title}</h3>
+                                      <p className="text-sm text-slate-500 flex items-center gap-1"><Mic size={14}/> {w.speaker}</p>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-4 min-w-[200px]">
+                                      <div className="flex-1">
+                                          <div className="flex justify-between text-xs mb-1">
+                                              <span className="font-medium text-slate-600">{wRegs.length} / {w.spots} vagas</span>
+                                              <span className="font-bold text-slate-800">{occupation.toFixed(0)}%</span>
+                                          </div>
+                                          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                              <div className={clsx("h-full rounded-full", isFull ? "bg-red-500" : "bg-green-500")} style={{width: `${Math.min(occupation, 100)}%`}}></div>
+                                          </div>
+                                      </div>
+                                  </div>
+                              </div>
+                              
+                              {/* Student List Expandable */}
+                              <div className="bg-slate-50 p-4">
+                                  <details className="group">
+                                      <summary className="flex items-center gap-2 text-xs font-bold text-slate-500 cursor-pointer hover:text-indigo-600 w-fit">
+                                          <ChevronRight size={14} className="group-open:rotate-90 transition-transform" />
+                                          Ver Lista de Inscritos ({wRegs.length})
+                                      </summary>
+                                      <div className="mt-3 pl-6 space-y-1">
+                                          {wRegs.length === 0 ? (
+                                              <p className="text-xs text-slate-400 italic">Nenhum inscrito.</p>
+                                          ) : (
+                                              wRegs.map(r => (
+                                                  <div key={r.id} className="flex items-center gap-2 text-sm text-slate-700 border-b border-slate-100 pb-1 last:border-0">
+                                                      <User size={12} className="text-slate-400" />
+                                                      <span className="font-medium">{r.studentName}</span>
+                                                      <span className="text-slate-400 text-xs">({r.studentEmail})</span>
+                                                  </div>
+                                              ))
+                                          )}
+                                      </div>
+                                  </details>
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+          </div>
+      );
+  }
+
+  // --- LIST VIEW ---
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
         {/* Header */}
@@ -235,9 +394,13 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                         <MoreVertical size={18} />
                                     </button>
                                     {activeMenuId === evt.id && (
-                                        <div className="absolute right-0 top-8 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                                        <div className="absolute right-0 top-8 w-40 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                                            <button onClick={() => openReport(evt)} className="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 font-bold">
+                                                <BarChart3 size={12} /> Relatório / Vagas
+                                            </button>
+                                            <div className="h-px bg-slate-100 my-1"></div>
                                             <button onClick={() => openEditModal(evt)} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2">
-                                                <Edit2 size={12} /> Editar
+                                                <Edit2 size={12} /> Editar Evento
                                             </button>
                                             <button onClick={() => handleDeleteEvent(evt.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
                                                 <Trash2 size={12} /> Excluir
@@ -256,7 +419,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                 <div className="flex items-center gap-2 text-xs text-slate-600">
                                     <Calendar size={14} className="text-slate-400" />
                                     {evt.dates.length > 0 ? (
-                                        <span>{evt.dates.length} dias: {evt.dates.map(d => new Date(d).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})).join(', ')}</span>
+                                        <span>{evt.dates.length} dias: {evt.dates.map(d => formatDateDisplay(d)).join(', ')}</span>
                                     ) : (
                                         <span className="italic">Nenhuma data definida</span>
                                     )}
@@ -264,9 +427,11 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                             </div>
                         </div>
                         <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500">
-                            <span>Criado em {new Date(evt.createdAt).toLocaleDateString()}</span>
-                            <button onClick={() => openEditModal(evt)} className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1">
-                                Ver Workshops <ChevronRight size={14} />
+                            <button onClick={() => openReport(evt)} className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1">
+                                <BarChart3 size={14} /> Ver Inscrições
+                            </button>
+                            <button onClick={() => openEditModal(evt)} className="text-slate-600 hover:text-indigo-800 font-medium flex items-center gap-1">
+                                Workshops <ChevronRight size={14} />
                             </button>
                         </div>
                     </div>
@@ -314,7 +479,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                     <div className="flex flex-wrap gap-2">
                                         {formData.dates.map(date => (
                                             <span key={date} className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs border border-slate-200 flex items-center gap-2">
-                                                {new Date(date).toLocaleDateString('pt-BR')}
+                                                {formatDateDisplay(date)}
                                                 <button onClick={() => handleRemoveDate(date)} className="text-slate-400 hover:text-red-500"><X size={12}/></button>
                                             </span>
                                         ))}
@@ -351,7 +516,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                             <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={workshopForm.date} onChange={e => setWorkshopForm({...workshopForm, date: e.target.value})}>
                                                 <option value="">Selecione o Dia...</option>
                                                 {formData.dates.map(d => (
-                                                    <option key={d} value={d}>{new Date(d).toLocaleDateString('pt-BR')}</option>
+                                                    <option key={d} value={d}>{formatDateDisplay(d)}</option>
                                                 ))}
                                             </select>
                                         </div>
@@ -378,7 +543,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                                 <h5 className="font-bold text-slate-800 text-sm">{w.title}</h5>
                                                 <div className="flex gap-4 text-xs text-slate-500 mt-1">
                                                     <span className="flex items-center gap-1"><Mic size={12}/> {w.speaker}</span>
-                                                    <span className="flex items-center gap-1"><Calendar size={12}/> {new Date(w.date).toLocaleDateString('pt-BR')}</span>
+                                                    <span className="flex items-center gap-1"><Calendar size={12}/> {formatDateDisplay(w.date)}</span>
                                                     <span className="flex items-center gap-1"><Clock size={12}/> {w.time}</span>
                                                     <span className="flex items-center gap-1"><Users size={12}/> {w.spots} vagas</span>
                                                 </div>

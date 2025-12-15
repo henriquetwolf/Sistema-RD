@@ -187,7 +187,20 @@ CREATE TABLE IF NOT EXISTS public.crm_workshops (
 ALTER TABLE public.crm_workshops ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total workshops" ON public.crm_workshops FOR ALL USING (true) WITH CHECK (true);
 
--- 10. GARANTIR FOREIGN KEYS
+-- 10. INSCRIÇÃO EM EVENTOS (NOVO)
+CREATE TABLE IF NOT EXISTS public.crm_event_registrations (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  event_id uuid REFERENCES public.crm_events(id) ON DELETE CASCADE,
+  workshop_id uuid REFERENCES public.crm_workshops(id) ON DELETE CASCADE,
+  student_id uuid, -- ID do Deal
+  student_name text,
+  student_email text
+);
+ALTER TABLE public.crm_event_registrations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total event registrations" ON public.crm_event_registrations FOR ALL USING (true) WITH CHECK (true);
+
+-- 11. GARANTIR FOREIGN KEYS
 DO $$ 
 BEGIN 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_certificate_template') THEN 
@@ -198,7 +211,7 @@ BEGIN
   END IF; 
 END $$;
 
--- 11. LIMPEZA DE CACHE
+-- 12. LIMPEZA DE CACHE
 NOTIFY pgrst, 'reload config';
   `;
 

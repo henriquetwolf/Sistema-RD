@@ -5,7 +5,7 @@ import {
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
-  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag
+  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -31,7 +31,7 @@ interface Deal {
   installmentValue?: number; // Valor das Parcelas
   
   // Product Logic
-  productType?: 'Digital' | 'Presencial';
+  productType?: 'Digital' | 'Presencial' | 'Evento';
   productName?: string;
 
   // Contact Info
@@ -162,6 +162,8 @@ export const CrmBoard: React.FC = () => {
   const [registeredClasses, setRegisteredClasses] = useState<RegisteredClass[]>([]);
   // Digital Products Data
   const [digitalProducts, setDigitalProducts] = useState<DigitalProduct[]>([]);
+  // Events Data
+  const [eventsList, setEventsList] = useState<{id: string, name: string}[]>([]);
   
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -270,7 +272,17 @@ export const CrmBoard: React.FC = () => {
               setDigitalProducts(productsData);
           }
 
-          // 5. Fetch Collaborators (Real Data)
+          // 5. Fetch Events
+          const { data: eventsData, error: eventsError } = await appBackend.client
+              .from('crm_events')
+              .select('id, name')
+              .order('created_at', { ascending: false });
+          
+          if (!eventsError && eventsData) {
+              setEventsList(eventsData);
+          }
+
+          // 6. Fetch Collaborators (Real Data)
           const { data: collabData, error: collabError } = await appBackend.client
               .from('crm_collaborators')
               .select('id, full_name, department')
@@ -330,12 +342,14 @@ export const CrmBoard: React.FC = () => {
   const productOptions = useMemo(() => {
       if (dealFormData.productType === 'Digital') {
           return digitalProducts.map(p => p.name).sort();
+      } else if (dealFormData.productType === 'Evento') {
+          return eventsList.map(e => e.name).sort();
       } else {
           // For 'Presencial', list distinct course names from classes
           const courseNames = registeredClasses.map(c => c.course).filter(Boolean);
           return Array.from(new Set(courseNames)).sort();
       }
-  }, [dealFormData.productType, digitalProducts, registeredClasses]);
+  }, [dealFormData.productType, digitalProducts, registeredClasses, eventsList]);
 
 
   // --- Helpers & Logic ---
@@ -759,10 +773,13 @@ export const CrmBoard: React.FC = () => {
                                   >
                                       <option value="Presencial">Curso Presencial</option>
                                       <option value="Digital">Produto Digital</option>
+                                      <option value="Evento">Evento Presencial</option>
                                   </select>
                               </div>
                               <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Produto</label>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">
+                                      {dealFormData.productType === 'Evento' ? 'Evento' : dealFormData.productType === 'Digital' ? 'Curso Online / E-book' : 'Curso Presencial'}
+                                  </label>
                                   <select 
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
                                     value={dealFormData.productName}

@@ -46,9 +46,17 @@ interface ClassStudentsViewerProps {
 // Helper to add days to a date string "YYYY-MM-DD"
 const addDays = (dateStr: string, days: number): string => {
     if (!dateStr) return '';
-    const date = new Date(dateStr + 'T12:00:00'); // Add time to avoid timezone issues
+    // Create date treating input as UTC/Local specific to avoid timezone jumps
+    const parts = dateStr.split('-');
+    const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    
     date.setDate(date.getDate() + days);
-    return date.toISOString().split('T')[0];
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
 };
 
 export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({ 
@@ -143,15 +151,12 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
               });
 
               // Strategy 2: Check if there is a certificate template directly linked to this Course Name (Text Link)
-              // We look for certificates where linked_product_id matches one of our productNames
-              // Note: linked_product_id is now TEXT in DB
               const { data: directCerts } = await appBackend.client
                   .from('crm_certificates')
                   .select('id, linked_product_id')
                   .in('linked_product_id', productNames);
               
               directCerts?.forEach((c: any) => {
-                  // If we found a certificate linked to this product name, use it (override if needed)
                   if (c.linked_product_id) templatesMap[c.linked_product_id] = c.id;
               });
 
@@ -336,10 +341,10 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   // Layout Conditionals
   const containerClasses = variant === 'modal' 
     ? "fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:p-0 print:bg-white"
-    : "h-full flex flex-col bg-white rounded-r-xl overflow-hidden border-l border-slate-200"; // Embedded style
+    : "h-full flex flex-col bg-white rounded-r-xl overflow-hidden border-l border-slate-200"; 
 
   const contentWrapperClasses = variant === 'modal'
-    ? "bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 print:shadow-none print:max-w-none print:h-auto print:max-h-none"
+    ? "bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 print:shadow-none print:max-w-none print:h-auto print:max-h-none"
     : "flex flex-col h-full w-full";
 
   return (
@@ -405,7 +410,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                         <Printer size={20} />
                     </button>
                 )}
-                {/* Only show Close button if in modal mode OR if user wants to deselect in embedded mode */}
+                
                 <button onClick={onClose} className="p-2 hover:bg-red-100 hover:text-red-600 rounded-lg text-slate-400 transition-colors" title="Fechar Visualização">
                     <X size={24} />
                 </button>
@@ -423,7 +428,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                     <span className="text-sm font-bold">{isReadOnly ? "Modo Visualização:" : "Modo Chamada:"}</span>
                 </div>
                 <div className={clsx("flex-1 text-xs", isReadOnly ? "text-blue-700" : "text-orange-700")}>
-                    {isReadOnly ? "Visualizando lista de presença (Somente Leitura)." : "Marque a presença nos 4 dias de curso (Módulo 1 e Módulo 2)."}
+                    {isReadOnly ? "Visualizando lista de presença." : "Marque a presença nos 4 dias de curso (Módulo 1 e Módulo 2)."}
                 </div>
             </div>
         )}
@@ -431,26 +436,28 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
         {/* Content */}
         <div className="p-0 overflow-y-auto custom-scrollbar flex-1 bg-white">
             {/* Info Cards Row (Hidden if hideFinancials is true) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-6 bg-slate-50/50 border-b border-slate-100 print:hidden">
-                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-                    <span className="text-xs text-slate-400 uppercase font-bold">Total Alunos</span>
-                    <p className="text-2xl font-bold text-slate-800">{students.length}</p>
-                </div>
-                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-                    <span className="text-xs text-slate-400 uppercase font-bold">Matriculados</span>
-                    <p className="text-2xl font-bold text-green-600">
-                        {students.filter(s => s.stage === 'closed').length}
-                    </p>
-                </div>
-                {!hideFinancials && (
+            {!attendanceMode && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-6 bg-slate-50/50 border-b border-slate-100 print:hidden">
                     <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-                        <span className="text-xs text-slate-400 uppercase font-bold">Valor em Potencial</span>
-                        <p className="text-2xl font-bold text-slate-800">
-                            {formatCurrency(students.reduce((acc, curr) => acc + (curr.value || 0), 0))}
+                        <span className="text-xs text-slate-400 uppercase font-bold">Total Alunos</span>
+                        <p className="text-2xl font-bold text-slate-800">{students.length}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                        <span className="text-xs text-slate-400 uppercase font-bold">Matriculados</span>
+                        <p className="text-2xl font-bold text-green-600">
+                            {students.filter(s => s.stage === 'closed').length}
                         </p>
                     </div>
-                )}
-            </div>
+                    {!hideFinancials && (
+                        <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                            <span className="text-xs text-slate-400 uppercase font-bold">Valor em Potencial</span>
+                            <p className="text-2xl font-bold text-slate-800">
+                                {formatCurrency(students.reduce((acc, curr) => acc + (curr.value || 0), 0))}
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20">
@@ -468,29 +475,35 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                     <thead className="bg-slate-100 text-slate-600 uppercase text-xs font-bold sticky top-0 z-10 print:bg-gray-100">
                         <tr>
                             <th className="px-6 py-3 border-b border-slate-200 w-12 text-center">#</th>
-                            <th className="px-6 py-3 border-b border-slate-200">Nome do Aluno</th>
+                            <th className="px-6 py-3 border-b border-slate-200 min-w-[200px]">Nome do Aluno</th>
                             
                             {/* DYNAMIC DATE HEADERS (4 DAYS) */}
-                            {attendanceMode && courseDates.mod1Day1 && (
-                                <th className="px-2 py-3 border-b border-slate-200 text-center bg-purple-50 text-purple-800 border-l border-r border-purple-100 w-24">
-                                    M1 Dia 1 <br/> <span className="text-[10px] font-normal">{formatDateSimple(courseDates.mod1Day1)}</span>
-                                </th>
-                            )}
-                            {attendanceMode && courseDates.mod1Day2 && (
-                                <th className="px-2 py-3 border-b border-slate-200 text-center bg-purple-50 text-purple-800 border-r border-purple-100 w-24">
-                                    M1 Dia 2 <br/> <span className="text-[10px] font-normal">{formatDateSimple(courseDates.mod1Day2)}</span>
-                                </th>
-                            )}
+                            {attendanceMode && (
+                                <>
+                                    {courseDates.mod1Day1 ? (
+                                        <th className="px-2 py-3 border-b border-slate-200 text-center bg-purple-50 text-purple-800 border-l border-r border-purple-100 min-w-[80px]">
+                                            M1 D1 <br/> <span className="text-[9px] font-normal opacity-75">{formatDateSimple(courseDates.mod1Day1)}</span>
+                                        </th>
+                                    ) : <th className="px-2 py-3 border-b border-slate-200 bg-slate-50"></th>}
+                                    
+                                    {courseDates.mod1Day2 ? (
+                                        <th className="px-2 py-3 border-b border-slate-200 text-center bg-purple-50 text-purple-800 border-r border-purple-100 min-w-[80px]">
+                                            M1 D2 <br/> <span className="text-[9px] font-normal opacity-75">{formatDateSimple(courseDates.mod1Day2)}</span>
+                                        </th>
+                                    ) : <th className="px-2 py-3 border-b border-slate-200 bg-slate-50"></th>}
 
-                            {attendanceMode && courseDates.mod2Day1 && (
-                                <th className="px-2 py-3 border-b border-slate-200 text-center bg-orange-50 text-orange-800 border-r border-orange-100 w-24">
-                                    M2 Dia 1 <br/> <span className="text-[10px] font-normal">{formatDateSimple(courseDates.mod2Day1)}</span>
-                                </th>
-                            )}
-                            {attendanceMode && courseDates.mod2Day2 && (
-                                <th className="px-2 py-3 border-b border-slate-200 text-center bg-orange-50 text-orange-800 border-r border-orange-100 w-24">
-                                    M2 Dia 2 <br/> <span className="text-[10px] font-normal">{formatDateSimple(courseDates.mod2Day2)}</span>
-                                </th>
+                                    {courseDates.mod2Day1 ? (
+                                        <th className="px-2 py-3 border-b border-slate-200 text-center bg-orange-50 text-orange-800 border-r border-orange-100 min-w-[80px]">
+                                            M2 D1 <br/> <span className="text-[9px] font-normal opacity-75">{formatDateSimple(courseDates.mod2Day1)}</span>
+                                        </th>
+                                    ) : <th className="px-2 py-3 border-b border-slate-200 bg-slate-50"></th>}
+                                    
+                                    {courseDates.mod2Day2 ? (
+                                        <th className="px-2 py-3 border-b border-slate-200 text-center bg-orange-50 text-orange-800 border-r border-orange-100 min-w-[80px]">
+                                            M2 D2 <br/> <span className="text-[9px] font-normal opacity-75">{formatDateSimple(courseDates.mod2Day2)}</span>
+                                        </th>
+                                    ) : <th className="px-2 py-3 border-b border-slate-200 bg-slate-50"></th>}
+                                </>
                             )}
 
                             <th className="px-6 py-3 border-b border-slate-200">Status</th>
@@ -502,6 +515,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                         {students.map((student, idx) => {
                             // Helper to render a checkbox cell
                             const renderCheckCell = (dateStr: string, colorClass: string) => {
+                                if (!dateStr) return <td className="bg-slate-50 border-r border-slate-100"></td>;
                                 const key = `${student.id}_${dateStr}`;
                                 const isPresent = !!presenceMap[key];
                                 return (
@@ -509,8 +523,8 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                         <input 
                                             type="checkbox" 
                                             className={clsx(
-                                                "w-5 h-5 rounded border-slate-300 focus:ring-opacity-50",
-                                                isReadOnly ? "text-slate-400 cursor-not-allowed bg-slate-100" : "cursor-pointer"
+                                                "w-5 h-5 rounded border-slate-300 focus:ring-opacity-50 transition-all",
+                                                isReadOnly ? "text-slate-400 cursor-not-allowed bg-slate-100" : "cursor-pointer text-purple-600 focus:ring-purple-500"
                                             )}
                                             checked={isPresent}
                                             onChange={() => !isReadOnly && togglePresence(student.id, dateStr)}
@@ -533,15 +547,15 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                         </div>
                                     </td>
 
-                                    {/* M1 D1 */}
-                                    {attendanceMode && courseDates.mod1Day1 && renderCheckCell(courseDates.mod1Day1, "bg-purple-50")}
-                                    {/* M1 D2 */}
-                                    {attendanceMode && courseDates.mod1Day2 && renderCheckCell(courseDates.mod1Day2, "bg-purple-50")}
-                                    
-                                    {/* M2 D1 */}
-                                    {attendanceMode && courseDates.mod2Day1 && renderCheckCell(courseDates.mod2Day1, "bg-orange-50")}
-                                    {/* M2 D2 */}
-                                    {attendanceMode && courseDates.mod2Day2 && renderCheckCell(courseDates.mod2Day2, "bg-orange-50")}
+                                    {/* 4 CHECKBOX COLUMNS */}
+                                    {attendanceMode && (
+                                        <>
+                                            {renderCheckCell(courseDates.mod1Day1, "bg-purple-50")}
+                                            {renderCheckCell(courseDates.mod1Day2, "bg-purple-50")}
+                                            {renderCheckCell(courseDates.mod2Day1, "bg-orange-50")}
+                                            {renderCheckCell(courseDates.mod2Day2, "bg-orange-50")}
+                                        </>
+                                    )}
 
                                     <td className="px-6 py-3">
                                         <div className="flex flex-col gap-1 items-start">

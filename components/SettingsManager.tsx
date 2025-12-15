@@ -163,7 +163,31 @@ CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
 ALTER TABLE public.crm_student_certificates ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total student_certificates" ON public.crm_student_certificates FOR ALL USING (true) WITH CHECK (true);
 
--- 9. GARANTIR FOREIGN KEYS
+-- 9. EVENTOS E WORKSHOPS (NOVO)
+CREATE TABLE IF NOT EXISTS public.crm_events (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  name text,
+  location text,
+  dates jsonb -- Array de strings YYYY-MM-DD
+);
+ALTER TABLE public.crm_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total events" ON public.crm_events FOR ALL USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS public.crm_workshops (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  event_id uuid REFERENCES public.crm_events(id) ON DELETE CASCADE,
+  title text,
+  speaker text,
+  date date,
+  time text, -- HH:MM
+  spots integer
+);
+ALTER TABLE public.crm_workshops ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total workshops" ON public.crm_workshops FOR ALL USING (true) WITH CHECK (true);
+
+-- 10. GARANTIR FOREIGN KEYS
 DO $$ 
 BEGIN 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_certificate_template') THEN 
@@ -174,7 +198,7 @@ BEGIN
   END IF; 
 END $$;
 
--- 10. LIMPEZA DE CACHE
+-- 11. LIMPEZA DE CACHE
 NOTIFY pgrst, 'reload config';
   `;
 

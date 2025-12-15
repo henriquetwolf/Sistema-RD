@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate } from '../types';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -593,5 +593,126 @@ export const appBackend = {
         createdAt: templateData.created_at
       }
     };
+  },
+
+  // --- EVENTS & WORKSHOPS ---
+
+  getEvents: async (): Promise<EventModel[]> => {
+    if (!isConfigured) return [];
+    
+    const { data, error } = await supabase
+      .from('crm_events')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching events:", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      name: d.name,
+      location: d.location,
+      dates: d.dates || [],
+      createdAt: d.created_at
+    }));
+  },
+
+  saveEvent: async (event: EventModel): Promise<EventModel> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    const payload = {
+      id: event.id,
+      name: event.name,
+      location: event.location,
+      dates: event.dates
+    };
+
+    const { data, error } = await supabase
+      .from('crm_events')
+      .upsert(payload)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      name: data.name,
+      location: data.location,
+      dates: data.dates || [],
+      createdAt: data.created_at
+    };
+  },
+
+  deleteEvent: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_events').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  getWorkshops: async (eventId: string): Promise<Workshop[]> => {
+    if (!isConfigured) return [];
+
+    const { data, error } = await supabase
+      .from('crm_workshops')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('date', { ascending: true })
+      .order('time', { ascending: true });
+
+    if (error) {
+      console.error("Error fetching workshops:", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      eventId: d.event_id,
+      title: d.title,
+      speaker: d.speaker,
+      date: d.date,
+      time: d.time,
+      spots: d.spots
+    }));
+  },
+
+  saveWorkshop: async (workshop: Workshop): Promise<Workshop> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    const payload = {
+      id: workshop.id,
+      event_id: workshop.eventId,
+      title: workshop.title,
+      speaker: workshop.speaker,
+      date: workshop.date,
+      time: workshop.time,
+      spots: workshop.spots
+    };
+
+    const { data, error } = await supabase
+      .from('crm_workshops')
+      .upsert(payload)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      eventId: data.event_id,
+      title: data.title,
+      speaker: data.speaker,
+      date: data.date,
+      time: data.time,
+      spots: data.spots
+    };
+  },
+
+  deleteWorkshop: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_workshops').delete().eq('id', id);
+    if (error) throw error;
   }
 };

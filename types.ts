@@ -186,3 +186,23 @@ export interface StudentSession {
   name: string;
   deals: any[]; // The raw deals associated with this student
 }
+
+// --- EVENTS & WORKSHOPS ---
+
+export interface Workshop {
+  id: string;
+  eventId: string;
+  title: string;
+  speaker: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  spots: number;
+}
+
+export interface EventModel {
+  id: string;
+  name: string;
+  location: string;
+  dates: string[]; // Array of YYYY-MM-DD strings
+  createdAt: string;
+}

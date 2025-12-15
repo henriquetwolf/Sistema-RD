@@ -21,9 +21,10 @@ import { ProductsManager } from './components/ProductsManager';
 import { InstructorArea } from './components/InstructorArea';
 import { FranchisesManager } from './components/FranchisesManager';
 import { CertificatesManager } from './components/CertificatesManager';
-import { StudentsManager } from './components/StudentsManager'; // New
-import { StudentArea } from './components/StudentArea'; // New
+import { StudentsManager } from './components/StudentsManager';
+import { StudentArea } from './components/StudentArea';
 import { CertificateViewer } from './components/CertificateViewer'; 
+import { EventsManager } from './components/EventsManager'; // NEW IMPORT
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -34,7 +35,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award
+  FileSignature, ShoppingBag, Store, Award, Mic
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -70,7 +71,7 @@ function App() {
   
   // Dashboard UI State
   // Extended types to include management tabs
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'global_settings'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -720,6 +721,18 @@ function App() {
                                     Contratos
                                 </button>
                                 <button
+                                    onClick={() => setDashboardTab('events')}
+                                    className={clsx(
+                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                        dashboardTab === 'events' 
+                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
+                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    )}
+                                >
+                                    <Mic size={18} />
+                                    Eventos
+                                </button>
+                                <button
                                     onClick={() => setDashboardTab('students')}
                                     className={clsx(
                                         "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
@@ -1019,6 +1032,7 @@ function App() {
                         {dashboardTab === 'certificates' && <CertificatesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'products' && <ProductsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'students' && <StudentsManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'events' && <EventsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} />}
                         {dashboardTab === 'analysis' && <SalesAnalysis />}
 

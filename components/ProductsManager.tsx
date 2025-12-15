@@ -2,23 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, Plus, Search, MoreVertical, Edit2, Trash2, 
   ExternalLink, ArrowLeft, Save, X, Tag, MonitorPlay, 
-  DollarSign, Globe, Loader2, CheckCircle2, AlertCircle
+  DollarSign, Globe, Loader2, CheckCircle2, AlertCircle, Award
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
-
-// --- Types ---
-export interface Product {
-  id: string;
-  name: string;
-  category: string; // E-book, Curso Online, Mentoria, etc.
-  platform: string; // Hotmart, Eduzz, Própria
-  price: number;
-  url: string; // Link de Venda
-  status: 'active' | 'inactive';
-  description: string;
-  createdAt: string;
-}
+import { Product, CertificateModel } from '../types';
 
 interface ProductsManagerProps {
   onBack: () => void;
@@ -29,6 +17,7 @@ const PLATFORMS = ['Hotmart', 'Eduzz', 'Monetizze', 'Kiwify', 'Plataforma Própr
 
 export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [certificates, setCertificates] = useState<CertificateModel[]>([]); // New: Certificates List
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,6 +36,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       url: '',
       status: 'active',
       description: '',
+      certificateTemplateId: '', // New field
       createdAt: ''
   };
   const [formData, setFormData] = useState<Product>(initialFormState);
@@ -54,6 +44,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   // --- Effects ---
   useEffect(() => {
       fetchProducts();
+      fetchCertificates();
   }, []);
 
   // Click outside to close menu
@@ -87,6 +78,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
               url: p.url,
               status: p.status,
               description: p.description,
+              certificateTemplateId: p.certificate_template_id, // Map new field
               createdAt: p.created_at
           }));
           setProducts(mapped);
@@ -97,6 +89,15 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           }
       } finally {
           setIsLoading(false);
+      }
+  };
+
+  const fetchCertificates = async () => {
+      try {
+          const data = await appBackend.getCertificates();
+          setCertificates(data);
+      } catch (e) {
+          console.error("Erro ao buscar certificados", e);
       }
   };
 
@@ -114,7 +115,8 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           price: formData.price,
           url: formData.url,
           status: formData.status,
-          description: formData.description
+          description: formData.description,
+          certificate_template_id: formData.certificateTemplateId || null // Save template ID
       };
 
       try {
@@ -259,6 +261,15 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                 <span>{product.platform}</span>
                             </div>
 
+                            {/* Certificate Badge */}
+                            {product.certificateTemplateId && (
+                                <div className="mb-3">
+                                    <span className="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-100 font-medium">
+                                        <Award size={10} /> Com Certificado
+                                    </span>
+                                </div>
+                            )}
+
                             <p className="text-sm text-slate-600 line-clamp-2 h-10 mb-2">
                                 {product.description || 'Sem descrição.'}
                             </p>
@@ -349,6 +360,23 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                     <option value="active">Ativo (À Venda)</option>
                                     <option value="inactive">Inativo (Encerrado)</option>
                                 </select>
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-bold text-slate-600 mb-1 flex items-center gap-1">
+                                    <Award size={12} className="text-amber-500" /> Modelo de Certificado
+                                </label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.certificateTemplateId || ''}
+                                    onChange={e => setFormData({ ...formData, certificateTemplateId: e.target.value })}
+                                >
+                                    <option value="">Sem Certificado</option>
+                                    {certificates.map(cert => (
+                                        <option key={cert.id} value={cert.id}>{cert.title}</option>
+                                    ))}
+                                </select>
+                                <p className="text-[10px] text-slate-400 mt-1">O aluno receberá este modelo ao completar o curso.</p>
                             </div>
 
                             <div className="md:col-span-2">

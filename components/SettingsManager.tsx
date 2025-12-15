@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS public.crm_products (
   status text,
   description text
 );
+ALTER TABLE public.crm_products ADD COLUMN IF NOT EXISTS certificate_template_id uuid; -- NOVO
 
 -- 4. TABELA FRANQUIAS
 CREATE TABLE IF NOT EXISTS public.crm_franchises (
@@ -128,7 +129,30 @@ CREATE POLICY "Acesso total attendance" ON public.crm_attendance FOR ALL USING (
 CREATE TABLE IF NOT EXISTS public.crm_deals (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now());
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS product_type text, ADD COLUMN IF NOT EXISTS product_name text;
 
--- 7. LIMPEZA DE CACHE
+-- 7. TABELA CERTIFICADOS (NOVO)
+CREATE TABLE IF NOT EXISTS public.crm_certificates (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  title text,
+  background_base64 text,
+  body_text text
+);
+ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total certificates" ON public.crm_certificates FOR ALL USING (true) WITH CHECK (true);
+
+-- 8. TABELA ALUNOS_CERTIFICADOS (NOVO - EMITIDOS)
+CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  student_deal_id uuid,
+  certificate_template_id uuid,
+  hash text, -- Código unico para URL publica
+  issued_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.crm_student_certificates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total student_certificates" ON public.crm_student_certificates FOR ALL USING (true) WITH CHECK (true);
+
+-- 9. LIMPEZA DE CACHE
 NOTIFY pgrst, 'reload config';
   `;
 

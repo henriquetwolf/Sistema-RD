@@ -19,6 +19,8 @@ import { ContractSigning } from './components/ContractSigning';
 import { ProductsManager } from './components/ProductsManager';
 import { InstructorArea } from './components/InstructorArea';
 import { FranchisesManager } from './components/FranchisesManager';
+import { CertificatesManager } from './components/CertificatesManager';
+import { CertificateViewer } from './components/CertificateViewer'; // Imported
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -29,14 +31,15 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store
+  FileSignature, ShoppingBag, Store, Award
 } from 'lucide-react';
 import clsx from 'clsx';
 
 function App() {
-  // Public Form/Contract State (Before Auth Check)
+  // Public Form/Contract/Certificate State (Before Auth Check)
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
   const [publicContract, setPublicContract] = useState<Contract | null>(null);
+  const [publicCertificateHash, setPublicCertificateHash] = useState<string | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
 
   // App Settings State
@@ -61,7 +64,7 @@ function App() {
   
   // Dashboard UI State
   // Extended types to include management tabs
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'global_settings'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'global_settings'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -100,8 +103,9 @@ function App() {
         const params = new URLSearchParams(window.location.search);
         const publicFormId = params.get('publicFormId');
         const contractId = params.get('contractId');
+        const certificateHash = params.get('certificateHash'); // New
 
-        if (publicFormId || contractId) {
+        if (publicFormId || contractId || certificateHash) {
             setIsPublicLoading(true);
             try {
                 if (publicFormId) {
@@ -110,6 +114,8 @@ function App() {
                 } else if (contractId) {
                     const contract = await appBackend.getContractById(contractId);
                     if (contract) setPublicContract(contract);
+                } else if (certificateHash) {
+                    setPublicCertificateHash(certificateHash);
                 }
             } catch (e) {
                 console.error("Error loading public asset", e);
@@ -188,10 +194,10 @@ function App() {
 
   // --- FETCH SALES DATA (WIDGET) ---
   useEffect(() => {
-      if (dashboardTab === 'overview' && !publicForm && !publicContract && !currentInstructor) {
+      if (dashboardTab === 'overview' && !publicForm && !publicContract && !publicCertificateHash && !currentInstructor) {
           fetchSalesData();
       }
-  }, [dashboardTab, salesDateRange, publicForm, publicContract, currentInstructor]);
+  }, [dashboardTab, salesDateRange, publicForm, publicContract, publicCertificateHash, currentInstructor]);
 
   const fetchSalesData = async () => {
       setIsLoadingSales(true);
@@ -480,6 +486,7 @@ function App() {
   // 1. Check for Public Mode FIRST
   if (isPublicLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
   
+  if (publicCertificateHash) return <CertificateViewer hash={publicCertificateHash} />;
   if (publicContract) return <ContractSigning contract={publicContract} />;
   if (publicForm) return <div className="min-h-screen bg-slate-50"><FormViewer form={publicForm} isPublic={true} /></div>;
 
@@ -687,6 +694,18 @@ function App() {
                                 >
                                     <FileSignature size={18} />
                                     Contratos
+                                </button>
+                                <button
+                                    onClick={() => setDashboardTab('certificates')}
+                                    className={clsx(
+                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                        dashboardTab === 'certificates' 
+                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
+                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    )}
+                                >
+                                    <Award size={18} />
+                                    Certificados
                                 </button>
                                 <button
                                     onClick={() => setDashboardTab('products')}
@@ -961,6 +980,7 @@ function App() {
                         {dashboardTab === 'franchises' && <FranchisesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'contracts' && <ContractsManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'certificates' && <CertificatesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'products' && <ProductsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} />}
                         {dashboardTab === 'analysis' && <SalesAnalysis />}

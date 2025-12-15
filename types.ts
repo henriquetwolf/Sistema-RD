@@ -124,3 +124,36 @@ export interface Contract {
   folderId?: string | null; // Optional folder association
   createdAt: string;
 }
+
+// --- CERTIFICATES ---
+
+export interface CertificateModel {
+  id: string;
+  title: string;
+  backgroundData: string; // Base64 image string
+  bodyText: string; // The static text (e.g. "Concluiu com êxito...")
+  createdAt: string;
+}
+
+export interface StudentCertificate {
+  id: string;
+  studentDealId: string;
+  certificateTemplateId: string;
+  hash: string;
+  issuedAt: string;
+}
+
+// --- PRODUCTS ---
+
+export interface Product {
+  id: string;
+  name: string;
+  category: string; 
+  platform: string; 
+  price: number;
+  url: string;
+  status: 'active' | 'inactive';
+  description: string;
+  certificateTemplateId?: string; // New: Link to certificate model
+  createdAt: string;
+}

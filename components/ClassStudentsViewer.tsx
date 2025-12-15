@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Phone, DollarSign, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye } from 'lucide-react';
+import { X, User, Mail, Phone, DollarSign, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
 
@@ -25,7 +25,13 @@ interface StudentDeal {
   status: string;
   class_mod_1: string;
   class_mod_2: string;
-  phone?: string; 
+  phone?: string;
+  product_name?: string; // Need this to find template
+}
+
+interface StudentCertificateStatus {
+    hash: string;
+    issuedAt: string;
 }
 
 interface ClassStudentsViewerProps {
@@ -44,6 +50,8 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
     canTakeAttendance = false
 }) => {
   const [students, setStudents] = useState<StudentDeal[]>([]);
+  const [certificates, setCertificates] = useState<Record<string, StudentCertificateStatus>>({}); // Map dealId -> Cert Info
+  const [productTemplates, setProductTemplates] = useState<Record<string, string>>({}); // Map productName -> templateId
   const [isLoading, setIsLoading] = useState(true);
   
   // Attendance State
@@ -52,6 +60,8 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   // Map stores presence: key is `${studentId}_${dateString}`
   const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({}); 
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
+  const [issuingFor, setIssuingFor] = useState<string | null>(null); // dealId being processed
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStudents();
@@ -79,14 +89,47 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
 
       const orQuery = filters.join(',');
       
-      const { data, error } = await appBackend.client
+      const { data: dealsData, error } = await appBackend.client
         .from('crm_deals')
         .select('*')
         .or(orQuery)
         .order('contact_name', { ascending: true });
 
       if (error) throw error;
-      setStudents(data || []);
+      const deals = dealsData || [];
+      setStudents(deals);
+
+      // --- NEW: Fetch Certificate Info ---
+      if (deals.length > 0) {
+          // 1. Get unique product names to find templates
+          const productNames = Array.from(new Set(deals.map((d: any) => d.product_name).filter(Boolean)));
+          
+          if (productNames.length > 0) {
+              const { data: products } = await appBackend.client
+                  .from('crm_products')
+                  .select('name, certificate_template_id')
+                  .in('name', productNames);
+              
+              const templatesMap: Record<string, string> = {};
+              products?.forEach((p: any) => {
+                  if (p.certificate_template_id) templatesMap[p.name] = p.certificate_template_id;
+              });
+              setProductTemplates(templatesMap);
+          }
+
+          // 2. Get issued certificates for these students
+          const studentIds = deals.map((d: any) => d.id);
+          const { data: issuedCerts } = await appBackend.client
+              .from('crm_student_certificates')
+              .select('student_deal_id, hash, issued_at')
+              .in('student_deal_id', studentIds);
+          
+          const certMap: Record<string, StudentCertificateStatus> = {};
+          issuedCerts?.forEach((c: any) => {
+              certMap[c.student_deal_id] = { hash: c.hash, issuedAt: c.issued_at };
+          });
+          setCertificates(certMap);
+      }
 
     } catch (e) {
       console.error("Erro ao buscar alunos:", e);
@@ -182,6 +225,36 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
           ...prev,
           [key]: !prev[key]
       }));
+  };
+
+  const handleIssueCertificate = async (student: StudentDeal) => {
+      const templateId = productTemplates[student.product_name || ''];
+      if (!templateId) {
+          alert("Este produto não possui um modelo de certificado associado. Edite o Produto e selecione um modelo.");
+          return;
+      }
+
+      if (!window.confirm(`Confirma a emissão do certificado para ${student.contact_name}?`)) return;
+
+      setIssuingFor(student.id);
+      try {
+          const hash = await appBackend.issueCertificate(student.id, templateId);
+          setCertificates(prev => ({
+              ...prev,
+              [student.id]: { hash, issuedAt: new Date().toISOString() }
+          }));
+      } catch (e: any) {
+          alert(`Erro: ${e.message}`);
+      } finally {
+          setIssuingFor(null);
+      }
+  };
+
+  const copyCertLink = (hash: string) => {
+      const link = `${window.location.origin}/?certificateHash=${hash}`;
+      navigator.clipboard.writeText(link);
+      setCopiedLink(hash);
+      setTimeout(() => setCopiedLink(null), 2000);
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -377,7 +450,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
 
                             <th className="px-6 py-3 border-b border-slate-200">Status</th>
                             <th className="px-6 py-3 border-b border-slate-200">Módulo</th>
-                            {!attendanceMode && <th className="px-6 py-3 border-b border-slate-200 print:hidden">Detalhes</th>}
+                            {!attendanceMode && <th className="px-6 py-3 border-b border-slate-200 print:hidden text-center">Certificado</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -386,6 +459,9 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                             const mod2Key = `${student.id}_${classItem.dateMod2}`;
                             const isPresent1 = !!presenceMap[mod1Key];
                             const isPresent2 = !!presenceMap[mod2Key];
+                            
+                            const certInfo = certificates[student.id];
+                            const hasTemplate = !!productTemplates[student.product_name || ''];
 
                             return (
                                 <tr key={student.id} className={clsx("transition-colors hover:bg-slate-50")}>
@@ -445,10 +521,37 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                         {getModuleBadge(student)}
                                     </td>
                                     {!attendanceMode && (
-                                        <td className="px-6 py-3 print:hidden">
-                                            <div className="text-xs text-slate-400">
-                                                Ref: {student.id.substring(0,6)}
-                                            </div>
+                                        <td className="px-6 py-3 print:hidden text-center">
+                                            {certInfo ? (
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <a 
+                                                        href={`/?certificateHash=${certInfo.hash}`} 
+                                                        target="_blank" 
+                                                        rel="noreferrer"
+                                                        className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                                                        title="Visualizar Certificado"
+                                                    >
+                                                        <ExternalLink size={14} />
+                                                    </a>
+                                                    <button 
+                                                        onClick={() => copyCertLink(certInfo.hash)}
+                                                        className={clsx("p-1.5 rounded transition-colors text-xs font-bold", copiedLink === certInfo.hash ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}
+                                                    >
+                                                        {copiedLink === certInfo.hash ? "Copiado" : "Link"}
+                                                    </button>
+                                                </div>
+                                            ) : hasTemplate ? (
+                                                <button 
+                                                    onClick={() => handleIssueCertificate(student)}
+                                                    disabled={issuingFor === student.id}
+                                                    className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded hover:bg-amber-200 border border-amber-200 disabled:opacity-50 flex items-center gap-1 mx-auto"
+                                                >
+                                                    {issuingFor === student.id ? <Loader2 size={12} className="animate-spin" /> : <Award size={12} />}
+                                                    Liberar
+                                                </button>
+                                            ) : (
+                                                <span className="text-[10px] text-slate-400 block w-full text-center">N/A</span>
+                                            )}
                                         </td>
                                     )}
                                 </tr>

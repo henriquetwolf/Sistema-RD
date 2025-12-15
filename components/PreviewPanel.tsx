@@ -3,7 +3,8 @@ import { FileData, SupabaseConfig } from '../types';
 import { 
     Table, FileText, Code, Copy, Check, Trash2, ShieldAlert, Loader2, 
     Edit2, X, MoreVertical, ArrowUp, Filter, Replace, Type, 
-    Calendar, Hash, AlignLeft, Braces, ToggleLeft, GripHorizontal
+    Calendar, Hash, AlignLeft, Braces, ToggleLeft, GripHorizontal,
+    ChevronDown, Layers
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -36,6 +37,9 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
 }) => {
   const [showSql, setShowSql] = useState(false);
   const [copied, setCopied] = useState(false);
+  
+  // File Navigation
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
   
   // Admin states
   const [isClearing, setIsClearing] = useState(false);
@@ -70,9 +74,12 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   }, []);
 
   // --- DERIVED DATA ---
+  const activeFile = files[activeFileIndex] || files[0];
   const totalRows = files.reduce((acc, f) => acc + f.rowCount, 0);
-  const previewColumns = files[0]?.headers || [];
-  const previewRows = files[0]?.data.slice(0, 15) || []; // Show 15 rows
+  
+  // We use headers from the active file for preview, assuming validation ensured they match
+  const previewColumns = activeFile?.headers || [];
+  const previewRows = activeFile?.data.slice(0, 15) || []; // Show 15 rows of ACTIVE file
 
   // --- SQL GENERATION ---
   const sqlCode = useMemo(() => {
@@ -132,23 +139,17 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   };
 
   // 2. Delete Row
-  const deleteRow = (fileIndex: number, rowIndex: number) => {
-      // Note: This deletes visual row. 
-      // Since we map all files, we need to find which file owns this row if we were rendering all.
-      // But here we usually preview mostly file[0]. 
-      // Implementation: We will just delete from file[0] for the preview if index matches.
-      // For a robust implementation, we'd need to know source file.
-      // Assuming previewRows comes from file[0]:
-      
+  const deleteRow = (rowIndex: number) => {
+      // Deletes row from the ACTIVE file
       const newFiles = [...files];
-      const targetFile = newFiles[0]; // Currently editing first file in preview
+      const targetFile = { ...newFiles[activeFileIndex] }; 
       
       const newData = [...targetFile.data];
       newData.splice(rowIndex, 1);
       
       targetFile.data = newData;
       targetFile.rowCount = newData.length;
-      newFiles[0] = targetFile;
+      newFiles[activeFileIndex] = targetFile;
       
       onUpdateFiles(newFiles);
   };
@@ -207,8 +208,6 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
               if (val === findValue) {
                   return { ...row, [col]: replaceValue };
               }
-              // Basic substring replace if intended? Let's do exact match for CSV safety, 
-              // or simple string replace for flexibility. Let's do string replace.
               if (val.includes(findValue) && findValue !== '') {
                    return { ...row, [col]: val.split(findValue).join(replaceValue) };
               }
@@ -304,6 +303,26 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
             </div>
         </div>
 
+        {/* FILE SELECTOR (Only if > 1 file) */}
+        {files.length > 1 && (
+            <div className="relative">
+                <select 
+                    className="appearance-none bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-medium py-2 pl-3 pr-8 rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm transition-colors"
+                    value={activeFileIndex}
+                    onChange={(e) => setActiveFileIndex(Number(e.target.value))}
+                >
+                    {files.map((f, idx) => (
+                        <option key={idx} value={idx}>
+                            {idx + 1}. {f.fileName.length > 20 ? f.fileName.substring(0, 18) + '...' : f.fileName} ({f.rowCount})
+                        </option>
+                    ))}
+                </select>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <ChevronDown size={14} />
+                </div>
+            </div>
+        )}
+
         <button 
             onClick={promoteHeaders}
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
@@ -311,8 +330,9 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
             <ArrowUp size={16} /> Usar 1ª linha como cabeçalho
         </button>
 
-        <div className="flex-1 text-right text-xs text-slate-400">
-            {files.length} arquivo{files.length !== 1 && 's'} • {totalRows} linhas carregadas
+        <div className="flex-1 text-right text-xs text-slate-400 flex flex-col items-end">
+            <span className="font-bold text-slate-600">{files.length} arquivo{files.length !== 1 && 's'}</span>
+            <span>{totalRows} linhas totais</span>
         </div>
       </div>
 
@@ -321,8 +341,14 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <FileText className="text-indigo-600" size={20} />
-              Pré-visualização
+              Pré-visualização: <span className="text-slate-500 font-normal text-sm ml-1">{activeFile?.fileName}</span>
             </h2>
+            {files.length > 1 && (
+                <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
+                    <Layers size={12} />
+                    Vendo arquivo {activeFileIndex + 1} de {files.length}
+                </div>
+            )}
         </div>
 
         <div className="overflow-x-auto pb-24"> {/* Extra padding for dropdowns */}
@@ -378,7 +404,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                     <td className="w-8 border-r border-slate-100 text-center relative">
                         <span className="text-[10px] text-slate-300 group-hover:hidden">{idx + 1}</span>
                         <button 
-                            onClick={() => deleteRow(0, idx)}
+                            onClick={() => deleteRow(idx)}
                             className="hidden group-hover:flex absolute inset-0 items-center justify-center text-red-500 hover:bg-red-50 transition-colors"
                             title="Remover linha"
                         >
@@ -396,7 +422,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
             </table>
         </div>
         <div className="p-2 bg-slate-50 text-center text-xs text-slate-400 border-t border-slate-200 absolute bottom-0 w-full">
-            Mostrando as primeiras 15 linhas. As transformações serão aplicadas em todo o conjunto de dados.
+            Mostrando as primeiras 15 linhas do arquivo selecionado. As transformações (como renomear colunas) aplicam-se a <strong>todos</strong> os arquivos.
         </div>
       </div>
 

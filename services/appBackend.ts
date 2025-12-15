@@ -1,5 +1,5 @@
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder } from '../types';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -456,5 +456,125 @@ export const appBackend = {
 
       // 4. Save Updates
       await appBackend.saveContract(contract);
+  },
+
+  // --- CERTIFICATES ---
+
+  getCertificates: async (): Promise<CertificateModel[]> => {
+    if (!isConfigured) return JSON.parse(localStorage.getItem('app_certificates') || '[]');
+
+    const { data, error } = await supabase
+      .from('crm_certificates')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching certificates:", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      title: d.title,
+      backgroundData: d.background_base64,
+      bodyText: d.body_text,
+      createdAt: d.created_at
+    }));
+  },
+
+  saveCertificate: async (cert: CertificateModel): Promise<void> => {
+    if (!isConfigured) {
+      const certs = JSON.parse(localStorage.getItem('app_certificates') || '[]');
+      const idx = certs.findIndex((c: CertificateModel) => c.id === cert.id);
+      if (idx >= 0) certs[idx] = cert;
+      else certs.push(cert);
+      localStorage.setItem('app_certificates', JSON.stringify(certs));
+      return;
+    }
+
+    const payload = {
+      id: cert.id,
+      title: cert.title,
+      background_base64: cert.backgroundData,
+      body_text: cert.bodyText
+    };
+
+    const { error } = await supabase.from('crm_certificates').upsert(payload);
+    if (error) throw error;
+  },
+
+  deleteCertificate: async (id: string): Promise<void> => {
+    if (!isConfigured) {
+      const certs = JSON.parse(localStorage.getItem('app_certificates') || '[]');
+      const filtered = certs.filter((c: CertificateModel) => c.id !== id);
+      localStorage.setItem('app_certificates', JSON.stringify(filtered));
+      return;
+    }
+
+    const { error } = await supabase.from('crm_certificates').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  issueCertificate: async (studentDealId: string, certificateTemplateId: string): Promise<string> => {
+    if (!isConfigured) throw new Error("Backend not configured for certificates.");
+
+    const hash = crypto.randomUUID();
+    const payload = {
+      student_deal_id: studentDealId,
+      certificate_template_id: certificateTemplateId,
+      hash: hash,
+      issued_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase.from('crm_student_certificates').insert([payload]);
+    if (error) throw error;
+    
+    return hash;
+  },
+
+  getStudentCertificate: async (hash: string): Promise<StudentCertificate & { studentName: string, studentCity: string, template: CertificateModel } | null> => {
+    if (!isConfigured) return null;
+
+    // Fetch the certificate record
+    const { data: certData, error: certError } = await supabase
+      .from('crm_student_certificates')
+      .select('*')
+      .eq('hash', hash)
+      .single();
+
+    if (certError || !certData) return null;
+
+    // Fetch Student Info (Deal)
+    const { data: dealData } = await supabase
+      .from('crm_deals')
+      .select('contact_name, course_city')
+      .eq('id', certData.student_deal_id)
+      .single();
+
+    // Fetch Template
+    const { data: templateData } = await supabase
+      .from('crm_certificates')
+      .select('*')
+      .eq('id', certData.certificate_template_id)
+      .single();
+
+    if (!dealData || !templateData) return null;
+
+    return {
+      id: certData.id,
+      studentDealId: certData.student_deal_id,
+      certificateTemplateId: certData.certificate_template_id,
+      hash: certData.hash,
+      issuedAt: certData.issued_at,
+      studentName: dealData.contact_name,
+      studentCity: dealData.course_city || 'Local',
+      template: {
+        id: templateData.id,
+        title: templateData.title,
+        backgroundData: templateData.background_base64,
+        bodyText: templateData.body_text,
+        createdAt: templateData.created_at
+      }
+    };
   }
 };

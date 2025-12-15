@@ -211,53 +211,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
       }
   };
 
-  const saveAttendance = async () => {
-      if (isReadOnly) return;
-      setIsSavingAttendance(true);
-      try {
-          const updates: any[] = [];
-          
-          if (courseDates.allActiveDates.length === 0) {
-              alert("Esta turma não possui datas configuradas para Módulo 1 ou 2.");
-              setIsSavingAttendance(false);
-              return;
-          }
-
-          students.forEach(student => {
-              courseDates.allActiveDates.forEach(dateStr => {
-                  const key = `${student.id}_${dateStr}`;
-                  // If key exists in map, save it. Default to false if not checked but tracking
-                  const isPresent = !!presenceMap[key];
-                  
-                  updates.push({
-                      class_id: classItem.id,
-                      student_id: student.id,
-                      date: dateStr,
-                      present: isPresent
-                  });
-              });
-          });
-
-          const { error } = await appBackend.client
-              .from('crm_attendance')
-              .upsert(updates, { onConflict: 'class_id,student_id,date' });
-
-          if (error) throw error;
-          
-          alert("Chamada salva com sucesso!");
-          setAttendanceMode(false);
-      } catch(e: any) {
-          console.error(e);
-          if (e.message?.includes('does not exist')) {
-              alert("Erro: Tabela de chamada não criada. Vá em Configurações > Diagnóstico e atualize o banco.");
-          } else {
-              alert("Erro ao salvar chamada.");
-          }
-      } finally {
-          setIsSavingAttendance(false);
-      }
-  };
-
   // --- AUTOMATIC CERTIFICATE ISSUANCE LOGIC ---
   const handleAutoIssueCertificates = async () => {
       if (!courseDates.mod2Day2) {
@@ -266,9 +219,11 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
       }
 
       // 1. Check Date Condition (Must be past last day)
-      const lastDay = new Date(courseDates.mod2Day2);
-      lastDay.setHours(23, 59, 59); // End of that day
+      // Parse dates explicitly to avoid timezone issues when comparing "today" vs "course end date"
       const now = new Date();
+      const [y, m, d] = courseDates.mod2Day2.split('-').map(Number);
+      const lastDay = new Date(y, m - 1, d);
+      lastDay.setHours(23, 59, 59, 999); // End of the course day
 
       if (now <= lastDay) {
           alert(`Ainda não é possível emitir automaticamente.\nO curso termina em ${lastDay.toLocaleDateString()}.`);
@@ -337,6 +292,53 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
           alert(`Erro no processo automático: ${e.message}`);
       } finally {
           setIsAutoIssuing(false);
+      }
+  };
+
+  const saveAttendance = async () => {
+      if (isReadOnly) return;
+      setIsSavingAttendance(true);
+      try {
+          const updates: any[] = [];
+          
+          if (courseDates.allActiveDates.length === 0) {
+              alert("Esta turma não possui datas configuradas para Módulo 1 ou 2.");
+              setIsSavingAttendance(false);
+              return;
+          }
+
+          students.forEach(student => {
+              courseDates.allActiveDates.forEach(dateStr => {
+                  const key = `${student.id}_${dateStr}`;
+                  // If key exists in map, save it. Default to false if not checked but tracking
+                  const isPresent = !!presenceMap[key];
+                  
+                  updates.push({
+                      class_id: classItem.id,
+                      student_id: student.id,
+                      date: dateStr,
+                      present: isPresent
+                  });
+              });
+          });
+
+          const { error } = await appBackend.client
+              .from('crm_attendance')
+              .upsert(updates, { onConflict: 'class_id,student_id,date' });
+
+          if (error) throw error;
+          
+          alert("Chamada salva com sucesso!");
+          setAttendanceMode(false);
+      } catch(e: any) {
+          console.error(e);
+          if (e.message?.includes('does not exist')) {
+              alert("Erro: Tabela de chamada não criada. Vá em Configurações > Diagnóstico e atualize o banco.");
+          } else {
+              alert("Erro ao salvar chamada.");
+          }
+      } finally {
+          setIsSavingAttendance(false);
       }
   };
 
@@ -741,3 +743,4 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
     </div>
   );
 };
+    

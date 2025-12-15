@@ -169,8 +169,14 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
           await appBackend.saveCertificate(certToSave);
           await fetchCertificates();
           setView('list');
-      } catch (e) {
-          alert("Erro ao salvar.");
+      } catch (e: any) {
+          console.error(e);
+          // Check for column errors
+          if (e.message?.includes('column') || e.message?.includes('does not exist') || e.message?.includes('layout_config')) {
+             alert("Erro de Banco de Dados: O sistema tentou salvar informações em colunas que não existem (layout_config).\n\nVá em 'Configurações' > 'Diagnóstico de Banco de Dados' e copie/execute o Script SQL de Correção.");
+          } else {
+             alert(`Erro ao salvar: ${e.message}`);
+          }
       } finally {
           setIsSaving(false);
       }

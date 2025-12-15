@@ -130,6 +130,8 @@ CREATE POLICY "Acesso total attendance" ON public.crm_attendance FOR ALL USING (
 CREATE TABLE IF NOT EXISTS public.crm_deals (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now());
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS product_type text, ADD COLUMN IF NOT EXISTS product_name text;
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS student_access_enabled boolean DEFAULT true; -- CONTROLE DE ACESSO ALUNO
+ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS email text; -- CONTATO EMAIL
+ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS phone text; -- CONTATO TELEFONE
 
 -- 7. TABELA CERTIFICADOS (ATUALIZAÇÃO LAYOUT)
 CREATE TABLE IF NOT EXISTS public.crm_certificates (

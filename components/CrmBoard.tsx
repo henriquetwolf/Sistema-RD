@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
@@ -32,6 +33,10 @@ interface Deal {
   // Product Logic
   productType?: 'Digital' | 'Presencial';
   productName?: string;
+
+  // Contact Info
+  email?: string;
+  phone?: string;
 
   cpf?: string;
   firstDueDate?: string; // Dia do primeiro Vencimento
@@ -127,7 +132,7 @@ const handleDbError = (e: any) => {
     if (msg.includes('relation "crm_deals" does not exist')) {
        alert("Erro Crítico: A tabela 'crm_deals' não existe no banco de dados.");
     } else if (msg.includes('column') && msg.includes('does not exist')) {
-       alert(`Erro de Schema: Uma coluna nova (ex: cpf, product_type) não existe no banco de dados.\n\nDetalhe: ${msg}\n\nVá em Configurações > Diagnóstico e execute o SQL.`);
+       alert(`Erro de Schema: Uma coluna nova (ex: cpf, email) não existe no banco de dados.\n\nDetalhe: ${msg}\n\nVá em Configurações > Diagnóstico e execute o SQL.`);
     } else {
        alert(`Erro ao salvar: ${msg}`);
     }
@@ -137,7 +142,7 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
     title: '', companyName: '', contactName: '', value: 0, 
     paymentMethod: '', status: 'warm', stage: 'new', nextTask: '', owner: '',
     source: '', campaign: '', entryValue: 0, installments: 1, installmentValue: 0,
-    cpf: '', firstDueDate: '', receiptLink: '', transactionCode: '',
+    cpf: '', email: '', phone: '', firstDueDate: '', receiptLink: '', transactionCode: '',
     zipCode: '', address: '', addressNumber: '',
     registrationData: '', observation: '', courseState: '', courseCity: '', classMod1: '', classMod2: '',
     pipeline: 'Padrão',
@@ -211,6 +216,8 @@ export const CrmBoard: React.FC = () => {
               installmentValue: Number(d.installment_value || 0),
               productType: d.product_type,
               productName: d.product_name,
+              email: d.email, // Mapped
+              phone: d.phone, // Mapped
               cpf: d.cpf,
               firstDueDate: d.first_due_date,
               receiptLink: d.receipt_link,
@@ -520,6 +527,10 @@ export const CrmBoard: React.FC = () => {
           installment_value: Number(dealFormData.installmentValue) || 0,
           product_type: dealFormData.productType,
           product_name: dealFormData.productName,
+          
+          email: dealFormData.email,
+          phone: dealFormData.phone,
+          
           cpf: dealFormData.cpf,
           first_due_date: dealFormData.firstDueDate,
           receipt_link: dealFormData.receiptLink,
@@ -840,9 +851,31 @@ export const CrmBoard: React.FC = () => {
                       {/* Section 3: Pessoal e Endereço */}
                       <div>
                           <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
-                              <MapPin size={16} /> Dados Pessoais e Endereço
+                              <MapPin size={16} /> Dados de Contato e Pessoais
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                              {/* NEW CONTACT FIELDS */}
+                              <div className="md:col-span-2">
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Email</label>
+                                  <input 
+                                    type="email" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" 
+                                    value={dealFormData.email} 
+                                    onChange={e => setDealFormData({...dealFormData, email: e.target.value})} 
+                                    placeholder="exemplo@email.com"
+                                  />
+                              </div>
+                              <div className="md:col-span-2">
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Telefone / WhatsApp</label>
+                                  <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" 
+                                    value={dealFormData.phone} 
+                                    onChange={e => setDealFormData({...dealFormData, phone: e.target.value})} 
+                                    placeholder="(00) 00000-0000"
+                                  />
+                              </div>
+
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">CPF</label>
                                   <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.cpf} onChange={e => setDealFormData({...dealFormData, cpf: formatCPF(e.target.value)})} maxLength={14} />

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, User, Mail, Phone, DollarSign, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -43,6 +43,14 @@ interface ClassStudentsViewerProps {
   canTakeAttendance?: boolean;
 }
 
+// Helper to add days to a date string "YYYY-MM-DD"
+const addDays = (dateStr: string, days: number): string => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr + 'T12:00:00'); // Add time to avoid timezone issues
+    date.setDate(date.getDate() + days);
+    return date.toISOString().split('T')[0];
+};
+
 export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({ 
     classItem, 
     onClose, 
@@ -63,6 +71,23 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
   const [issuingFor, setIssuingFor] = useState<string | null>(null); // dealId being processed
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  // Derived Dates for 4 days
+  const courseDates = useMemo(() => {
+      const dates = {
+          mod1Day1: classItem.dateMod1 || '',
+          mod1Day2: classItem.dateMod1 ? addDays(classItem.dateMod1, 1) : '',
+          mod2Day1: classItem.dateMod2 || '',
+          mod2Day2: classItem.dateMod2 ? addDays(classItem.dateMod2, 1) : '',
+      };
+      
+      const allActiveDates = [
+          dates.mod1Day1, dates.mod1Day2, 
+          dates.mod2Day1, dates.mod2Day2
+      ].filter(Boolean);
+
+      return { ...dates, allActiveDates };
+  }, [classItem.dateMod1, classItem.dateMod2]);
 
   useEffect(() => {
     fetchStudents();
@@ -156,18 +181,14 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
 
   const fetchAttendance = async () => {
       try {
-          const datesToFetch = [];
-          if (classItem.dateMod1) datesToFetch.push(classItem.dateMod1);
-          if (classItem.dateMod2) datesToFetch.push(classItem.dateMod2);
+          if (courseDates.allActiveDates.length === 0) return;
 
-          if (datesToFetch.length === 0) return;
-
-          // Build query manually or use .in()
+          // Query using the 4 calculated dates
           const { data, error } = await appBackend.client
               .from('crm_attendance')
               .select('student_id, date, present')
               .eq('class_id', classItem.id)
-              .in('date', datesToFetch);
+              .in('date', courseDates.allActiveDates);
           
           if (error) throw error;
 
@@ -189,18 +210,15 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
       setIsSavingAttendance(true);
       try {
           const updates: any[] = [];
-          const datesToSave = [];
-          if (classItem.dateMod1) datesToSave.push(classItem.dateMod1);
-          if (classItem.dateMod2) datesToSave.push(classItem.dateMod2);
-
-          if (datesToSave.length === 0) {
+          
+          if (courseDates.allActiveDates.length === 0) {
               alert("Esta turma não possui datas configuradas para Módulo 1 ou 2.");
               setIsSavingAttendance(false);
               return;
           }
 
           students.forEach(student => {
-              datesToSave.forEach(dateStr => {
+              courseDates.allActiveDates.forEach(dateStr => {
                   const key = `${student.id}_${dateStr}`;
                   // If key exists in map, save it. Default to false if not checked but tracking
                   const isPresent = !!presenceMap[key];
@@ -405,7 +423,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                     <span className="text-sm font-bold">{isReadOnly ? "Modo Visualização:" : "Modo Chamada:"}</span>
                 </div>
                 <div className={clsx("flex-1 text-xs", isReadOnly ? "text-blue-700" : "text-orange-700")}>
-                    {isReadOnly ? "Visualizando lista de presença (Somente Leitura)." : "Marque a presença nos dias correspondentes aos módulos."}
+                    {isReadOnly ? "Visualizando lista de presença (Somente Leitura)." : "Marque a presença nos 4 dias de curso (Módulo 1 e Módulo 2)."}
                 </div>
             </div>
         )}
@@ -452,15 +470,26 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                             <th className="px-6 py-3 border-b border-slate-200 w-12 text-center">#</th>
                             <th className="px-6 py-3 border-b border-slate-200">Nome do Aluno</th>
                             
-                            {/* DYNAMIC DATE HEADERS */}
-                            {attendanceMode && classItem.dateMod1 && (
-                                <th className="px-4 py-3 border-b border-slate-200 text-center bg-purple-50 text-purple-800 border-l border-r border-purple-100 w-32">
-                                    Módulo 1 <br/> <span className="text-[10px] font-normal">{formatDateSimple(classItem.dateMod1)}</span>
+                            {/* DYNAMIC DATE HEADERS (4 DAYS) */}
+                            {attendanceMode && courseDates.mod1Day1 && (
+                                <th className="px-2 py-3 border-b border-slate-200 text-center bg-purple-50 text-purple-800 border-l border-r border-purple-100 w-24">
+                                    M1 Dia 1 <br/> <span className="text-[10px] font-normal">{formatDateSimple(courseDates.mod1Day1)}</span>
                                 </th>
                             )}
-                            {attendanceMode && classItem.dateMod2 && (
-                                <th className="px-4 py-3 border-b border-slate-200 text-center bg-orange-50 text-orange-800 border-r border-orange-100 w-32">
-                                    Módulo 2 <br/> <span className="text-[10px] font-normal">{formatDateSimple(classItem.dateMod2)}</span>
+                            {attendanceMode && courseDates.mod1Day2 && (
+                                <th className="px-2 py-3 border-b border-slate-200 text-center bg-purple-50 text-purple-800 border-r border-purple-100 w-24">
+                                    M1 Dia 2 <br/> <span className="text-[10px] font-normal">{formatDateSimple(courseDates.mod1Day2)}</span>
+                                </th>
+                            )}
+
+                            {attendanceMode && courseDates.mod2Day1 && (
+                                <th className="px-2 py-3 border-b border-slate-200 text-center bg-orange-50 text-orange-800 border-r border-orange-100 w-24">
+                                    M2 Dia 1 <br/> <span className="text-[10px] font-normal">{formatDateSimple(courseDates.mod2Day1)}</span>
+                                </th>
+                            )}
+                            {attendanceMode && courseDates.mod2Day2 && (
+                                <th className="px-2 py-3 border-b border-slate-200 text-center bg-orange-50 text-orange-800 border-r border-orange-100 w-24">
+                                    M2 Dia 2 <br/> <span className="text-[10px] font-normal">{formatDateSimple(courseDates.mod2Day2)}</span>
                                 </th>
                             )}
 
@@ -471,11 +500,26 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {students.map((student, idx) => {
-                            const mod1Key = `${student.id}_${classItem.dateMod1}`;
-                            const mod2Key = `${student.id}_${classItem.dateMod2}`;
-                            const isPresent1 = !!presenceMap[mod1Key];
-                            const isPresent2 = !!presenceMap[mod2Key];
-                            
+                            // Helper to render a checkbox cell
+                            const renderCheckCell = (dateStr: string, colorClass: string) => {
+                                const key = `${student.id}_${dateStr}`;
+                                const isPresent = !!presenceMap[key];
+                                return (
+                                    <td className={clsx("px-2 py-3 text-center border-r border-slate-100", isPresent ? colorClass : "")}>
+                                        <input 
+                                            type="checkbox" 
+                                            className={clsx(
+                                                "w-5 h-5 rounded border-slate-300 focus:ring-opacity-50",
+                                                isReadOnly ? "text-slate-400 cursor-not-allowed bg-slate-100" : "cursor-pointer"
+                                            )}
+                                            checked={isPresent}
+                                            onChange={() => !isReadOnly && togglePresence(student.id, dateStr)}
+                                            disabled={isReadOnly}
+                                        />
+                                    </td>
+                                );
+                            };
+
                             const certInfo = certificates[student.id];
                             const hasTemplate = !!productTemplates[student.product_name || ''];
 
@@ -489,37 +533,15 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                         </div>
                                     </td>
 
-                                    {/* MÓDULO 1 CHECKBOX */}
-                                    {attendanceMode && classItem.dateMod1 && (
-                                        <td className={clsx("px-4 py-3 text-center border-l border-r", isPresent1 ? "bg-purple-50 border-purple-100" : "border-slate-100")}>
-                                            <input 
-                                                type="checkbox" 
-                                                className={clsx(
-                                                    "w-5 h-5 rounded border-slate-300 focus:ring-purple-500",
-                                                    isReadOnly ? "text-slate-400 cursor-not-allowed bg-slate-100" : "text-purple-600 cursor-pointer"
-                                                )}
-                                                checked={isPresent1}
-                                                onChange={() => !isReadOnly && togglePresence(student.id, classItem.dateMod1)}
-                                                disabled={isReadOnly}
-                                            />
-                                        </td>
-                                    )}
-
-                                    {/* MÓDULO 2 CHECKBOX */}
-                                    {attendanceMode && classItem.dateMod2 && (
-                                        <td className={clsx("px-4 py-3 text-center border-r", isPresent2 ? "bg-orange-50 border-orange-100" : "border-slate-100")}>
-                                            <input 
-                                                type="checkbox" 
-                                                className={clsx(
-                                                    "w-5 h-5 rounded border-slate-300 focus:ring-orange-500",
-                                                    isReadOnly ? "text-slate-400 cursor-not-allowed bg-slate-100" : "text-orange-600 cursor-pointer"
-                                                )}
-                                                checked={isPresent2}
-                                                onChange={() => !isReadOnly && togglePresence(student.id, classItem.dateMod2)}
-                                                disabled={isReadOnly}
-                                            />
-                                        </td>
-                                    )}
+                                    {/* M1 D1 */}
+                                    {attendanceMode && courseDates.mod1Day1 && renderCheckCell(courseDates.mod1Day1, "bg-purple-50")}
+                                    {/* M1 D2 */}
+                                    {attendanceMode && courseDates.mod1Day2 && renderCheckCell(courseDates.mod1Day2, "bg-purple-50")}
+                                    
+                                    {/* M2 D1 */}
+                                    {attendanceMode && courseDates.mod2Day1 && renderCheckCell(courseDates.mod2Day1, "bg-orange-50")}
+                                    {/* M2 D2 */}
+                                    {attendanceMode && courseDates.mod2Day2 && renderCheckCell(courseDates.mod2Day2, "bg-orange-50")}
 
                                     <td className="px-6 py-3">
                                         <div className="flex flex-col gap-1 items-start">

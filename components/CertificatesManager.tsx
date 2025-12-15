@@ -277,7 +277,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
                             {editorSide === 'front' ? 'Imagem de Fundo (Frente)' : 'Imagem de Fundo (Verso)'}
                         </label>
-                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer">
+                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer aspect-video flex flex-col justify-center">
                             <input 
                                 type="file" 
                                 accept="image/*" 
@@ -324,7 +324,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                             // A4 Landscape Dimensions
                             width: '297mm', 
                             height: '210mm', 
-                            transform: 'scale(0.7)', // Visual scaling for editor
+                            transform: 'scale(0.6)', // Reduced visual scaling for standard screens
                             transformOrigin: 'center center'
                         }}
                     >

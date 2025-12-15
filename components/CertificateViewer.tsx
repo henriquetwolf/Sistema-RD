@@ -91,68 +91,73 @@ export const CertificateViewer: React.FC<CertificateViewerProps> = ({ hash }) =>
                 </div>
             </div>
 
-            {/* PAGE 1: FRONT */}
-            <div 
-                className="bg-white shadow-2xl relative overflow-hidden print-page mb-8 print:mb-0 print:shadow-none"
-                style={{ 
-                    width: '297mm', 
-                    height: '210mm',
-                    // Responsive scaling for screen only (handled by CSS transform in parent if needed, but fixed mm works for print)
-                }}
-            >
-                {/* Background */}
-                {template.backgroundData && (
-                    <img 
-                        src={template.backgroundData} 
-                        alt="bg" 
-                        className="absolute inset-0 w-full h-full object-cover z-0" 
-                        style={{ printColorAdjust: 'exact' }} 
-                    />
-                )}
-
-                {/* Content Overlay */}
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-20">
-                    {/* Body Text */}
-                    <div className="text-2xl text-slate-800 max-w-5xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
-                        {finalBodyText}
-                    </div>
-
-                    {/* Name Overlay */}
-                    <div className="my-10">
-                        <h1 className="text-7xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
-                            {studentName}
-                        </h1>
-                    </div>
+            {/* Content Container with Responsive Scale for Screen */}
+            <div className="flex flex-col gap-8 items-center w-full overflow-auto">
+                <div className="origin-top scale-[0.45] md:scale-[0.6] lg:scale-[0.8] xl:scale-100 print:scale-100 print:origin-top-left transition-transform flex flex-col gap-8 print:block">
                     
-                    {/* Footer */}
-                    <div className="mt-auto pt-10 text-xl text-slate-600 font-serif">
-                        {studentCity}, {formattedDate}
+                    {/* PAGE 1: FRONT */}
+                    <div 
+                        className="bg-white shadow-2xl relative overflow-hidden print-page print:shadow-none"
+                        style={{ 
+                            width: '297mm', 
+                            height: '210mm',
+                        }}
+                    >
+                        {/* Background */}
+                        {template.backgroundData && (
+                            <img 
+                                src={template.backgroundData} 
+                                alt="bg" 
+                                className="absolute inset-0 w-full h-full object-cover z-0" 
+                                style={{ printColorAdjust: 'exact' }} 
+                            />
+                        )}
+
+                        {/* Content Overlay */}
+                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-20">
+                            {/* Body Text */}
+                            <div className="text-2xl text-slate-800 max-w-5xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
+                                {finalBodyText}
+                            </div>
+
+                            {/* Name Overlay */}
+                            <div className="my-10">
+                                <h1 className="text-7xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
+                                    {studentName}
+                                </h1>
+                            </div>
+                            
+                            {/* Footer */}
+                            <div className="mt-auto pt-10 text-xl text-slate-600 font-serif">
+                                {studentCity}, {formattedDate}
+                            </div>
+                        </div>
                     </div>
+
+                    {/* PAGE 2: BACK */}
+                    {template.backBackgroundData && (
+                        <div 
+                            className="bg-white shadow-2xl relative overflow-hidden print-page print:shadow-none"
+                            style={{ 
+                                width: '297mm', 
+                                height: '210mm',
+                            }}
+                        >
+                            <img 
+                                src={template.backBackgroundData} 
+                                alt="bg-back" 
+                                className="absolute inset-0 w-full h-full object-cover z-0" 
+                                style={{ printColorAdjust: 'exact' }} 
+                            />
+                            
+                            {/* Unique ID / Hash - Bottom Right */}
+                            <div className="absolute bottom-12 right-16 z-10 text-slate-600 font-mono text-sm bg-white/80 px-3 py-1 rounded border border-slate-300">
+                                ID: {hash}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
-
-            {/* PAGE 2: BACK */}
-            {template.backBackgroundData && (
-                <div 
-                    className="bg-white shadow-2xl relative overflow-hidden print-page print:shadow-none"
-                    style={{ 
-                        width: '297mm', 
-                        height: '210mm',
-                    }}
-                >
-                    <img 
-                        src={template.backBackgroundData} 
-                        alt="bg-back" 
-                        className="absolute inset-0 w-full h-full object-cover z-0" 
-                        style={{ printColorAdjust: 'exact' }} 
-                    />
-                    
-                    {/* Unique ID / Hash - Bottom Right */}
-                    <div className="absolute bottom-12 right-16 z-10 text-slate-600 font-mono text-sm bg-white/80 px-3 py-1 rounded border border-slate-300">
-                        ID: {hash}
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

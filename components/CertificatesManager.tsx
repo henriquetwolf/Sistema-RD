@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Award, Plus, Search, MoreVertical, Edit2, Trash2, 
+  Award, Plus, Search, Edit2, Trash2, 
   ArrowLeft, Save, X, Printer, Image as ImageIcon, Loader2,
-  Calendar, MapPin, User, FileText
+  Calendar, MapPin, User, FlipHorizontal, Book
 } from 'lucide-react';
-import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { CertificateModel } from '../types';
+import clsx from 'clsx';
 
 interface CertificatesManagerProps {
   onBack: () => void;
@@ -16,6 +16,8 @@ const INITIAL_CERT: CertificateModel = {
     id: '',
     title: 'Novo Modelo',
     backgroundData: '',
+    backBackgroundData: '',
+    linkedProductId: '',
     bodyText: 'Certificamos que [NOME ALUNO] concluiu com êxito o curso, realizado em [CIDADE], na data de [DATA].',
     createdAt: ''
 };
@@ -23,8 +25,12 @@ const INITIAL_CERT: CertificateModel = {
 export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack }) => {
   const [view, setView] = useState<'list' | 'editor' | 'generator'>('list');
   const [certificates, setCertificates] = useState<CertificateModel[]>([]);
+  const [products, setProducts] = useState<{id: string, name: string}[]>([]);
   const [currentCert, setCurrentCert] = useState<CertificateModel>(INITIAL_CERT);
   
+  // Editor State
+  const [editorSide, setEditorSide] = useState<'front' | 'back'>('front');
+
   // Generator State
   const [genName, setGenName] = useState('');
   const [genCity, setGenCity] = useState('');
@@ -36,6 +42,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
 
   useEffect(() => {
     fetchCertificates();
+    fetchProducts();
   }, []);
 
   const fetchCertificates = async () => {
@@ -50,9 +57,19 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       }
   };
 
+  const fetchProducts = async () => {
+      try {
+          const { data } = await appBackend.client.from('crm_products').select('id, name');
+          if (data) setProducts(data);
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
   const handleEdit = (cert: CertificateModel) => {
       setCurrentCert(cert);
       setView('editor');
+      setEditorSide('front');
   };
 
   const handleGenerate = (cert: CertificateModel) => {
@@ -70,7 +87,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
 
   const handleSave = async () => {
       if(!currentCert.title || !currentCert.backgroundData) {
-          alert("Título e Imagem de Fundo são obrigatórios.");
+          alert("Título e Imagem de Frente são obrigatórios.");
           return;
       }
       setIsSaving(true);
@@ -90,12 +107,17 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
       if (e.target.files && e.target.files[0]) {
           const file = e.target.files[0];
           const reader = new FileReader();
           reader.onloadend = () => {
-              setCurrentCert({ ...currentCert, backgroundData: reader.result as string });
+              const result = reader.result as string;
+              if (side === 'front') {
+                  setCurrentCert({ ...currentCert, backgroundData: result });
+              } else {
+                  setCurrentCert({ ...currentCert, backBackgroundData: result });
+              }
           };
           reader.readAsDataURL(file);
       }
@@ -124,7 +146,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                     </div>
                 </div>
                 <button 
-                    onClick={() => { setCurrentCert(INITIAL_CERT); setView('editor'); }}
+                    onClick={() => { setCurrentCert(INITIAL_CERT); setView('editor'); setEditorSide('front'); }}
                     className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
                 >
                     <Plus size={18} /> Novo Modelo
@@ -160,7 +182,15 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                             
                             <div className="p-5 flex-1 flex flex-col">
                                 <h3 className="font-bold text-slate-800 text-lg mb-1">{cert.title}</h3>
-                                <p className="text-xs text-slate-400 mb-4">Criado em {new Date(cert.createdAt).toLocaleDateString()}</p>
+                                <div className="text-xs text-slate-500 mb-4 flex flex-col gap-1">
+                                    <span>Criado em {new Date(cert.createdAt).toLocaleDateString()}</span>
+                                    {cert.linkedProductId && (
+                                        <span className="flex items-center gap-1 text-teal-600 font-medium">
+                                            <Book size={10} /> 
+                                            {products.find(p => p.id === cert.linkedProductId)?.name || 'Produto Vinculado'}
+                                        </span>
+                                    )}
+                                </div>
                                 <button 
                                     onClick={() => handleGenerate(cert)}
                                     className="mt-auto w-full py-2 bg-slate-50 hover:bg-amber-50 text-slate-600 hover:text-amber-700 border border-slate-200 hover:border-amber-200 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors"
@@ -186,19 +216,37 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                     <button onClick={() => setView('list')} className="text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100"><ArrowLeft size={20} /></button>
                     <h2 className="text-lg font-bold text-slate-800">Editor de Modelo</h2>
                 </div>
-                <button 
-                    onClick={handleSave} 
-                    disabled={isSaving}
-                    className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm"
-                >
-                    {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                    Salvar Modelo
-                </button>
+                <div className="flex items-center gap-2">
+                    {/* View Switcher */}
+                    <div className="bg-slate-100 rounded-lg p-1 flex mr-4">
+                        <button 
+                            onClick={() => setEditorSide('front')}
+                            className={clsx("px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-2", editorSide === 'front' ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700")}
+                        >
+                            Frente
+                        </button>
+                        <button 
+                            onClick={() => setEditorSide('back')}
+                            className={clsx("px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-2", editorSide === 'back' ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700")}
+                        >
+                            <FlipHorizontal size={14} /> Verso
+                        </button>
+                    </div>
+
+                    <button 
+                        onClick={handleSave} 
+                        disabled={isSaving}
+                        className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm"
+                    >
+                        {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                        Salvar Modelo
+                    </button>
+                </div>
             </div>
 
             <div className="flex-1 flex overflow-hidden">
                 {/* Sidebar Configuration */}
-                <div className="w-96 bg-white border-r border-slate-200 overflow-y-auto p-6 space-y-6 shadow-sm z-10">
+                <div className="w-96 bg-white border-r border-slate-200 overflow-y-auto p-6 space-y-6 shadow-sm z-10 shrink-0">
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Título do Modelo</label>
                         <input 
@@ -211,68 +259,115 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Imagem de Fundo (A4 Paisagem)</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Associar ao Curso</label>
+                        <select
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                            value={currentCert.linkedProductId || ''}
+                            onChange={e => setCurrentCert({...currentCert, linkedProductId: e.target.value})}
+                        >
+                            <option value="">-- Selecione um curso --</option>
+                            {products.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                        <p className="text-[10px] text-slate-400 mt-1">Isso permite emissão direta na lista de alunos.</p>
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-4">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                            {editorSide === 'front' ? 'Imagem de Fundo (Frente)' : 'Imagem de Fundo (Verso)'}
+                        </label>
                         <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer">
-                            <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                onChange={(e) => handleImageUpload(e, editorSide)} 
+                                className="absolute inset-0 opacity-0 cursor-pointer" 
+                            />
                             <ImageIcon className="mx-auto text-slate-300 mb-2" size={32} />
-                            <p className="text-xs text-slate-500">Clique para enviar imagem</p>
+                            <p className="text-xs text-slate-500">Clique para enviar (A4 Paisagem)</p>
                         </div>
-                        {currentCert.backgroundData && (
+                        {((editorSide === 'front' && currentCert.backgroundData) || (editorSide === 'back' && currentCert.backBackgroundData)) && (
                             <div className="mt-2 text-xs text-green-600 font-medium flex items-center gap-1">
                                 <div className="w-2 h-2 bg-green-500 rounded-full"></div> Imagem carregada
                             </div>
                         )}
                     </div>
 
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Texto do Certificado</label>
-                        <textarea 
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-32 resize-none"
-                            value={currentCert.bodyText}
-                            onChange={e => setCurrentCert({...currentCert, bodyText: e.target.value})}
-                            placeholder="Digite o texto..."
-                        ></textarea>
-                        <p className="text-xs text-slate-400 mt-2">
-                            O sistema irá posicionar automaticamente: Nome (centro), Cidade e Data (rodapé).
-                        </p>
-                    </div>
+                    {editorSide === 'front' && (
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Texto do Certificado (Frente)</label>
+                            <textarea 
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-32 resize-none"
+                                value={currentCert.bodyText}
+                                onChange={e => setCurrentCert({...currentCert, bodyText: e.target.value})}
+                                placeholder="Digite o texto..."
+                            ></textarea>
+                            <p className="text-xs text-slate-400 mt-2">
+                                Variáveis: [NOME ALUNO], [CIDADE], [DATA].
+                            </p>
+                        </div>
+                    )}
+                    
+                    {editorSide === 'back' && (
+                        <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-xs border border-blue-100">
+                            <strong>Nota:</strong> O código de autenticação (Hash) do certificado será inserido automaticamente no canto inferior direito do verso.
+                        </div>
+                    )}
                 </div>
 
                 {/* Preview Canvas */}
                 <div className="flex-1 bg-slate-200 p-8 overflow-auto flex items-center justify-center">
                     <div 
-                        className="bg-white shadow-2xl relative overflow-hidden" 
+                        className="bg-white shadow-2xl relative overflow-hidden transition-all duration-300" 
                         style={{ 
+                            // A4 Landscape Dimensions
                             width: '297mm', 
                             height: '210mm', 
                             transform: 'scale(0.7)', // Visual scaling for editor
                             transformOrigin: 'center center'
                         }}
                     >
-                        {/* Background */}
-                        {currentCert.backgroundData && (
-                            <img src={currentCert.backgroundData} alt="bg" className="absolute inset-0 w-full h-full object-cover z-0" />
+                        {/* Render Based on Active Side */}
+                        {editorSide === 'front' ? (
+                            <>
+                                {/* Background Front */}
+                                {currentCert.backgroundData && (
+                                    <img src={currentCert.backgroundData} alt="bg" className="absolute inset-0 w-full h-full object-cover z-0" />
+                                )}
+
+                                {/* Content Overlay Front */}
+                                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-20">
+                                    <div className="text-xl text-slate-800 max-w-4xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
+                                        {currentCert.bodyText || "Texto do certificado..."}
+                                    </div>
+                                    <div className="my-10">
+                                        <h1 className="text-6xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
+                                            Nome do Aluno
+                                        </h1>
+                                    </div>
+                                    <div className="mt-auto pt-10 text-lg text-slate-600 font-serif">
+                                        Cidade Exemplo, {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                {/* Background Back */}
+                                {currentCert.backBackgroundData ? (
+                                    <img src={currentCert.backBackgroundData} alt="bg-back" className="absolute inset-0 w-full h-full object-cover z-0" />
+                                ) : (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-slate-50 text-slate-300">
+                                        <span className="text-2xl font-bold uppercase tracking-widest">Verso em Branco</span>
+                                    </div>
+                                )}
+                                
+                                {/* Hash Placeholder */}
+                                <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-xs z-10 bg-white/80 px-2 py-1 rounded border border-slate-200">
+                                    ID: 8f4b2c-example-hash-code
+                                </div>
+                            </>
                         )}
-
-                        {/* Content Overlay */}
-                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-20">
-                            {/* Body Text */}
-                            <div className="text-xl text-slate-800 max-w-4xl mx-auto leading-relaxed mt-20 font-serif">
-                                {currentCert.bodyText || "Texto do certificado..."}
-                            </div>
-
-                            {/* Name Placeholder */}
-                            <div className="my-10">
-                                <h1 className="text-6xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
-                                    Nome do Aluno
-                                </h1>
-                            </div>
-
-                            {/* Footer Date/City */}
-                            <div className="mt-auto pt-10 text-lg text-slate-600 font-serif">
-                                Cidade Exemplo, {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -280,7 +375,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       );
   }
 
-  // 3. GENERATOR VIEW
+  // 3. GENERATOR VIEW (Preview before print)
   if (view === 'generator') {
       return (
         <div className="h-full flex flex-col bg-slate-50">
@@ -300,7 +395,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
 
             <div className="flex-1 flex overflow-hidden">
                 {/* Input Sidebar (Hidden on Print) */}
-                <div className="w-80 bg-white border-r border-slate-200 overflow-y-auto p-6 space-y-6 shadow-sm z-10 print:hidden">
+                <div className="w-80 bg-white border-r border-slate-200 overflow-y-auto p-6 space-y-6 shadow-sm z-10 print:hidden shrink-0">
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2"><User size={14}/> Nome do Aluno</label>
                         <input 
@@ -343,14 +438,16 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                     </div>
                 </div>
 
-                {/* Final Preview (Printable Area) */}
-                <div className="flex-1 bg-slate-200 p-8 overflow-auto flex items-center justify-center print:p-0 print:bg-white print:block print:overflow-visible">
+                {/* Final Preview (Printable Area) - SCROLLABLE FOR TWO PAGES */}
+                <div className="flex-1 bg-slate-200 p-8 overflow-auto flex flex-col items-center gap-8 print:p-0 print:bg-white print:block print:overflow-visible">
+                    
+                    {/* PAGE 1: FRONT */}
                     <div 
-                        className="bg-white shadow-2xl relative overflow-hidden print:shadow-none print:w-full print:h-full print:absolute print:inset-0" 
+                        className="bg-white shadow-2xl relative overflow-hidden print:shadow-none print:w-full print:h-full print:absolute print:inset-0 page-break" 
                         style={{ 
                             width: '297mm', 
                             height: '210mm', 
-                            // Scale down only on screen, not print
+                            pageBreakAfter: 'always'
                         }}
                     >
                         {/* Background */}
@@ -361,7 +458,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                         {/* Content Overlay */}
                         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-20">
                             {/* Body Text */}
-                            <div className="text-xl text-slate-800 max-w-4xl mx-auto leading-relaxed mt-20 font-serif">
+                            <div className="text-xl text-slate-800 max-w-4xl mx-auto leading-relaxed mt-20 font-serif whitespace-pre-wrap">
                                 {currentCert.bodyText}
                             </div>
 
@@ -378,6 +475,24 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                             </div>
                         </div>
                     </div>
+
+                    {/* PAGE 2: BACK (Only if image exists) */}
+                    {currentCert.backBackgroundData && (
+                        <div 
+                            className="bg-white shadow-2xl relative overflow-hidden print:shadow-none print:w-full print:h-full print:absolute print:m-0" 
+                            style={{ 
+                                width: '297mm', 
+                                height: '210mm',
+                            }}
+                        >
+                            <img src={currentCert.backBackgroundData} alt="bg-back" className="absolute inset-0 w-full h-full object-cover z-0" style={{printColorAdjust: 'exact'}} />
+                            
+                            {/* Hash Placeholder */}
+                            <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-sm z-10 bg-white/80 px-2 py-1 rounded border border-slate-200">
+                                ID: PREVIEW-HASH-CODE
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

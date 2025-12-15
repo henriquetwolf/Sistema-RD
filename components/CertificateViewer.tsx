@@ -57,9 +57,29 @@ export const CertificateViewer: React.FC<CertificateViewerProps> = ({ hash }) =>
         .replace('[DATA]', formattedDate);
 
     return (
-        <div className="min-h-screen bg-slate-900 flex flex-col items-center py-8 print:p-0 print:bg-white">
+        <div className="min-h-screen bg-slate-900 flex flex-col items-center py-8 print:p-0 print:bg-white print:block">
+            
+            {/* Styles for Printing */}
+            <style>
+                {`
+                    @media print {
+                        @page { size: landscape; margin: 0; }
+                        body { background: white; }
+                        .no-print { display: none !important; }
+                        .print-page { 
+                            width: 297mm; 
+                            height: 210mm; 
+                            page-break-after: always; 
+                            position: relative; 
+                            overflow: hidden;
+                        }
+                        .print-page:last-child { page-break-after: auto; }
+                    }
+                `}
+            </style>
+
             {/* Toolbar (Hidden on Print) */}
-            <div className="w-full max-w-5xl flex justify-between items-center px-4 mb-6 print:hidden">
+            <div className="w-full max-w-5xl flex justify-between items-center px-4 mb-6 no-print">
                 <div className="text-white">
                     <h1 className="font-bold text-lg">Visualizador de Certificado</h1>
                     <p className="text-xs text-slate-400">Autenticidade Verificada</p>
@@ -71,15 +91,13 @@ export const CertificateViewer: React.FC<CertificateViewerProps> = ({ hash }) =>
                 </div>
             </div>
 
-            {/* Certificate Area */}
+            {/* PAGE 1: FRONT */}
             <div 
-                className="bg-white shadow-2xl relative overflow-hidden print:shadow-none print:w-full print:h-full print:absolute print:inset-0 print:m-0"
+                className="bg-white shadow-2xl relative overflow-hidden print-page mb-8 print:mb-0 print:shadow-none"
                 style={{ 
                     width: '297mm', 
                     height: '210mm',
-                    // Responsive scaling for screen
-                    transform: 'scale(0.9)', 
-                    transformOrigin: 'top center'
+                    // Responsive scaling for screen only (handled by CSS transform in parent if needed, but fixed mm works for print)
                 }}
             >
                 {/* Background */}
@@ -99,18 +117,42 @@ export const CertificateViewer: React.FC<CertificateViewerProps> = ({ hash }) =>
                         {finalBodyText}
                     </div>
 
-                    {/* Name Overlay (If template expects simple centering, usually bodyText handles it, but we can enhance) 
-                        Note: The replacement logic above puts the name INTO the text. 
-                        If the user designed the template with just the name in big letters, we might need a different approach.
-                        For now, assuming the text replacement handles the name. 
-                    */}
+                    {/* Name Overlay */}
+                    <div className="my-10">
+                        <h1 className="text-7xl text-slate-900" style={{ fontFamily: "'Great Vibes', cursive" }}>
+                            {studentName}
+                        </h1>
+                    </div>
                     
-                    {/* Footer Hash for Verification */}
-                    <div className="absolute bottom-4 right-6 text-[10px] text-slate-400 font-mono">
-                        Hash: {hash}
+                    {/* Footer */}
+                    <div className="mt-auto pt-10 text-xl text-slate-600 font-serif">
+                        {studentCity}, {formattedDate}
                     </div>
                 </div>
             </div>
+
+            {/* PAGE 2: BACK */}
+            {template.backBackgroundData && (
+                <div 
+                    className="bg-white shadow-2xl relative overflow-hidden print-page print:shadow-none"
+                    style={{ 
+                        width: '297mm', 
+                        height: '210mm',
+                    }}
+                >
+                    <img 
+                        src={template.backBackgroundData} 
+                        alt="bg-back" 
+                        className="absolute inset-0 w-full h-full object-cover z-0" 
+                        style={{ printColorAdjust: 'exact' }} 
+                    />
+                    
+                    {/* Unique ID / Hash - Bottom Right */}
+                    <div className="absolute bottom-12 right-16 z-10 text-slate-600 font-mono text-sm bg-white/80 px-3 py-1 rounded border border-slate-300">
+                        ID: {hash}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -130,7 +130,9 @@ export interface Contract {
 export interface CertificateModel {
   id: string;
   title: string;
-  backgroundData: string; // Base64 image string
+  backgroundData: string; // Base64 image string (Front)
+  backBackgroundData?: string; // Base64 image string (Back) - NEW
+  linkedProductId?: string; // ID of the course/product - NEW
   bodyText: string; // The static text (e.g. "Concluiu com êxito...")
   createdAt: string;
 }

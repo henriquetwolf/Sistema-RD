@@ -477,6 +477,8 @@ export const appBackend = {
       id: d.id,
       title: d.title,
       backgroundData: d.background_base64,
+      backBackgroundData: d.back_background_base64, // NEW
+      linkedProductId: d.linked_product_id, // NEW
       bodyText: d.body_text,
       createdAt: d.created_at
     }));
@@ -496,6 +498,8 @@ export const appBackend = {
       id: cert.id,
       title: cert.title,
       background_base64: cert.backgroundData,
+      back_background_base64: cert.backBackgroundData, // NEW
+      linked_product_id: cert.linkedProductId || null, // NEW
       body_text: cert.bodyText
     };
 
@@ -572,6 +576,8 @@ export const appBackend = {
         id: templateData.id,
         title: templateData.title,
         backgroundData: templateData.background_base64,
+        backBackgroundData: templateData.back_background_base64, // NEW
+        linkedProductId: templateData.linked_product_id, // NEW
         bodyText: templateData.body_text,
         createdAt: templateData.created_at
       }

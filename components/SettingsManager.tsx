@@ -135,6 +135,8 @@ CREATE TABLE IF NOT EXISTS public.crm_certificates (
   created_at timestamptz DEFAULT now(),
   title text,
   background_base64 text,
+  back_background_base64 text, -- VERSO (NOVO)
+  linked_product_id uuid, -- CURSO ASSOCIADO (NOVO)
   body_text text
 );
 ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;

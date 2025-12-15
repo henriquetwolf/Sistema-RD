@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
-  Award, Eye, Download, ExternalLink, CheckCircle, Trash2
+  Award, Eye, Download, ExternalLink, CheckCircle, Trash2, Wand2
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -21,6 +21,8 @@ interface StudentDeal {
     product_name: string;
     status: string;
     student_access_enabled: boolean;
+    class_mod_1?: string;
+    class_mod_2?: string;
 }
 
 interface CertStatus {
@@ -35,6 +37,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const [productTemplates, setProductTemplates] = useState<Record<string, string>>({});
   
   const [isLoading, setIsLoading] = useState(false);
+  const [isAutoIssuing, setIsAutoIssuing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [issuingId, setIssuingId] = useState<string | null>(null);
@@ -50,7 +53,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
     try {
         const { data, error } = await appBackend.client
             .from('crm_deals')
-            .select('id, contact_name, company_name, cpf, email, phone, product_name, status, student_access_enabled')
+            .select('id, contact_name, company_name, cpf, email, phone, product_name, status, student_access_enabled, class_mod_1, class_mod_2')
             .order('contact_name', { ascending: true });
         
         if (error) throw error;
@@ -164,6 +167,115 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       }
   };
 
+  const handleAutoIssueBatch = async () => {
+      if (!window.confirm("Deseja iniciar a emissão automática para TODOS os alunos listados?\n\nO sistema verificará:\n1. Se a turma do aluno já terminou (Data passada)\n2. Se o aluno tem >= 70% de presença\n3. Se ainda não possui certificado\n\nIsso pode levar alguns instantes.")) return;
+
+      setIsAutoIssuing(true);
+      let issuedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+
+      try {
+          // 1. Fetch ALL Classes to have date reference
+          const { data: classesData } = await appBackend.client
+              .from('crm_classes')
+              .select('id, mod_1_code, mod_2_code, date_mod_2');
+          
+          if (!classesData) throw new Error("Não foi possível carregar os dados das turmas.");
+
+          // 2. Iterate filtered students
+          // Use 'filtered' list so user can search/filter first if they want, or use full list
+          const targetStudents = filtered.length > 0 ? filtered : students;
+
+          for (const student of targetStudents) {
+              // Check eligibility basics
+              if (certificates[student.id]) {
+                  skippedCount++; // Already issued
+                  continue;
+              }
+              const templateId = productTemplates[student.product_name || ''];
+              if (!templateId) {
+                  skippedCount++; // No template
+                  continue;
+              }
+
+              // Find Class
+              // Use Class Mod 2 code preferably as it determines end date
+              const classCode = student.class_mod_2 || student.class_mod_1;
+              if (!classCode) {
+                  skippedCount++;
+                  continue;
+              }
+
+              const classInfo = classesData.find((c: any) => c.mod_2_code === classCode || c.mod_1_code === classCode);
+              
+              if (!classInfo || !classInfo.date_mod_2) {
+                  skippedCount++;
+                  continue;
+              }
+
+              // Check Date
+              const now = new Date();
+              const endDate = new Date(classInfo.date_mod_2);
+              endDate.setHours(23, 59, 59); // End of day
+              
+              if (now <= endDate) {
+                  skippedCount++; // Course not finished
+                  continue;
+              }
+
+              // Check Attendance (Database Query per student - batched would be better but complex for this scope)
+              // We assume 70% presence is required.
+              const { data: attendance } = await appBackend.client
+                  .from('crm_attendance')
+                  .select('present')
+                  .eq('class_id', classInfo.id)
+                  .eq('student_id', student.id);
+              
+              const totalDaysRecorded = attendance?.length || 0;
+              
+              // Only process if there is attendance data. 
+              // If attendance is empty, we assume they didn't go or teacher didn't record -> No certificate
+              if (totalDaysRecorded === 0) {
+                  skippedCount++;
+                  continue;
+              }
+
+              const presentCount = attendance?.filter((a: any) => a.present).length || 0;
+              const percent = (presentCount / totalDaysRecorded) * 100;
+
+              if (percent < 70) {
+                  skippedCount++; // Not enough attendance
+                  continue;
+              }
+
+              // Issue Certificate
+              try {
+                  const hash = await appBackend.issueCertificate(student.id, templateId);
+                  
+                  // Update local state optimistic
+                  setCertificates(prev => ({
+                      ...prev,
+                      [student.id]: { id: 'temp-id', hash: hash, issuedAt: new Date().toISOString() }
+                  }));
+                  issuedCount++;
+              } catch (err) {
+                  console.error(err);
+                  errorCount++;
+              }
+          }
+
+          alert(`Processo Finalizado!\n\nCertificados Emitidos: ${issuedCount}\nIgnorados (Já possui/Não elegível): ${skippedCount}\nErros: ${errorCount}`);
+
+      } catch (e: any) {
+          alert(`Erro no processo: ${e.message}`);
+      } finally {
+          setIsAutoIssuing(false);
+          // Optionally reload to get real IDs
+          fetchStudents();
+      }
+  };
+
   const handleDeleteCertificate = async (studentId: string, certId: string) => {
       if(!window.confirm("ATENÇÃO: Deseja realmente excluir este certificado emitido? O link deixará de funcionar.")) return;
       
@@ -210,9 +322,22 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                     <p className="text-slate-500 text-sm">Controle de acesso e certificados dos alunos.</p>
                 </div>
             </div>
-            <button onClick={fetchStudents} className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors">
-                <RefreshCw size={20} className={clsx(isLoading && "animate-spin")} />
-            </button>
+            
+            <div className="flex items-center gap-3">
+                <button 
+                    onClick={handleAutoIssueBatch}
+                    disabled={isAutoIssuing || isLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-sm transition-all disabled:opacity-50"
+                    title="Emitir certificados para alunos concluintes com >70% de presença"
+                >
+                    {isAutoIssuing ? <Loader2 size={18} className="animate-spin" /> : <Wand2 size={18} />}
+                    Emissão Automática
+                </button>
+                
+                <button onClick={fetchStudents} className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors">
+                    <RefreshCw size={20} className={clsx(isLoading && "animate-spin")} />
+                </button>
+            </div>
         </div>
 
         {/* Toolbar */}

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, User, Mail, Phone, DollarSign, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle } from 'lucide-react';
+import { X, User, Mail, Phone, DollarSign, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle, Wand2 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
 
@@ -77,6 +77,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   // Map stores presence: key is `${studentId}_${dateString}`
   const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({}); 
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
+  const [isAutoIssuing, setIsAutoIssuing] = useState(false);
   const [issuingFor, setIssuingFor] = useState<string | null>(null); // dealId being processed
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
@@ -254,6 +255,88 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
           }
       } finally {
           setIsSavingAttendance(false);
+      }
+  };
+
+  // --- AUTOMATIC CERTIFICATE ISSUANCE LOGIC ---
+  const handleAutoIssueCertificates = async () => {
+      if (!courseDates.mod2Day2) {
+          alert("A data final do curso (Módulo 2 Dia 2) não está definida.");
+          return;
+      }
+
+      // 1. Check Date Condition (Must be past last day)
+      const lastDay = new Date(courseDates.mod2Day2);
+      lastDay.setHours(23, 59, 59); // End of that day
+      const now = new Date();
+
+      if (now <= lastDay) {
+          alert(`Ainda não é possível emitir automaticamente.\nO curso termina em ${lastDay.toLocaleDateString()}.`);
+          return;
+      }
+
+      // Confirm Action
+      if (!window.confirm("O sistema verificará a presença de todos os alunos.\n\nRegras:\n1. Presença >= 70%\n2. Data do curso finalizada\n3. Ainda não possui certificado\n\nDeseja continuar?")) return;
+
+      setIsAutoIssuing(true);
+      let issuedCount = 0;
+      let errorCount = 0;
+
+      // 2. Iterate Students
+      try {
+          const updates: Record<string, StudentCertificateStatus> = {};
+
+          for (const student of students) {
+              // Skip if already has cert
+              if (certificates[student.id]) continue;
+
+              // Find Template
+              const templateId = productTemplates[student.product_name || ''];
+              if (!templateId) {
+                  console.warn(`Aluno ${student.contact_name} ignorado: Produto sem modelo de certificado.`);
+                  continue;
+              }
+
+              // Calculate Attendance %
+              const totalDays = courseDates.allActiveDates.length;
+              if (totalDays === 0) continue;
+
+              let presentCount = 0;
+              courseDates.allActiveDates.forEach(dateStr => {
+                  const key = `${student.id}_${dateStr}`;
+                  if (presenceMap[key]) presentCount++;
+              });
+
+              const percentage = (presentCount / totalDays) * 100;
+
+              // Check 70% Rule
+              if (percentage >= 70) {
+                  try {
+                      // Issue Certificate
+                      const hash = await appBackend.issueCertificate(student.id, templateId);
+                      updates[student.id] = { hash, issuedAt: new Date().toISOString() };
+                      issuedCount++;
+                  } catch (err) {
+                      console.error(`Falha ao emitir para ${student.contact_name}`, err);
+                      errorCount++;
+                  }
+              }
+          }
+
+          // Update Local State
+          if (issuedCount > 0) {
+              setCertificates(prev => ({ ...prev, ...updates }));
+              alert(`${issuedCount} certificados emitidos com sucesso!`);
+          } else if (errorCount > 0) {
+              alert(`Nenhum certificado emitido. Houve ${errorCount} erros.`);
+          } else {
+              alert("Nenhum aluno elegível encontrado (Verifique presença < 70% ou se já possuem certificado).");
+          }
+
+      } catch (e: any) {
+          alert(`Erro no processo automático: ${e.message}`);
+      } finally {
+          setIsAutoIssuing(false);
       }
   };
 
@@ -628,14 +711,25 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
         {variant === 'modal' && (
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 print:hidden">
                 {attendanceMode && !isReadOnly ? (
-                    <button 
-                        onClick={saveAttendance} 
-                        disabled={isSavingAttendance}
-                        className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors flex items-center gap-2"
-                    >
-                        {isSavingAttendance ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                        Salvar Chamada
-                    </button>
+                    <>
+                        <button 
+                            onClick={handleAutoIssueCertificates}
+                            disabled={isAutoIssuing}
+                            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition-colors flex items-center gap-2"
+                            title="Emite certificados para quem tem >= 70% de presença e curso concluído"
+                        >
+                            {isAutoIssuing ? <Loader2 size={18} className="animate-spin" /> : <Wand2 size={18} />}
+                            Emissão Automática
+                        </button>
+                        <button 
+                            onClick={saveAttendance} 
+                            disabled={isSavingAttendance}
+                            className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors flex items-center gap-2"
+                        >
+                            {isSavingAttendance ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                            Salvar Chamada
+                        </button>
+                    </>
                 ) : (
                     <button onClick={onClose} className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold transition-colors">
                         Fechar

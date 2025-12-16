@@ -39,13 +39,17 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStu
             // COLLABORATOR LOGIN (Custom Table)
             const { data, error } = await appBackend.client
                 .from('crm_collaborators')
-                .select('id, full_name, email, password, photo_url, role_id')
+                .select('id, full_name, email, password, photo_url, role_id, status')
                 .eq('email', email.trim())
                 .eq('password', password.trim())
                 .single();
 
             if (error || !data) {
                 throw new Error('Credenciais inválidas ou colaborador não encontrado.');
+            }
+
+            if (data.status !== 'active') {
+                throw new Error('Acesso bloqueado pelo administrador. Contate o suporte.');
             }
 
             if (!data.role_id) {

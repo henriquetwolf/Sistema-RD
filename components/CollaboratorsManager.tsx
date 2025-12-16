@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, Plus, Search, MoreVertical, User, 
   Mail, ArrowLeft, Save, Briefcase, Edit2, Trash2,
-  MapPin, FileText, DollarSign, Heart, Bus, AlertCircle, Phone, Loader2, X, Shield, Lock
+  MapPin, FileText, DollarSign, Heart, Bus, AlertCircle, Phone, Loader2, X, Shield, Lock, Unlock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
@@ -145,6 +145,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
   
   // Actions State
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   
   // Empty State Generator
   const getEmptyCollaborator = (): Collaborator => ({
@@ -382,7 +383,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
         docs_folder_link: formData.docsFolderLink,
         legal_auth: formData.legalAuth,
         bank_account_info: formData.bankAccountInfo,
-        has_insalubrity: formData.hasInsalubrity,
+        has_insalubrity: formData.has_insalubrity,
         insalubrity_percent: formData.insalubrityPercent,
         has_danger_pay: formData.hasDangerPay,
         transport_voucher_info: formData.transportVoucherInfo,
@@ -465,6 +466,25 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
       setActiveMenuId(null);
   };
 
+  const toggleStatus = async (collab: Collaborator) => {
+      setUpdatingId(collab.id);
+      const newStatus = collab.status === 'active' ? 'inactive' : 'active';
+      try {
+          const { error } = await appBackend.client
+              .from('crm_collaborators')
+              .update({ status: newStatus })
+              .eq('id', collab.id);
+          
+          if (error) throw error;
+          
+          setCollaborators(prev => prev.map(c => c.id === collab.id ? { ...c, status: newStatus } : c));
+      } catch (e: any) {
+          alert(`Erro ao atualizar status: ${e.message}`);
+      } finally {
+          setUpdatingId(null);
+      }
+  };
+
   const openNewModal = () => {
       setFormData(getEmptyCollaborator());
       setShowModal(true);
@@ -532,7 +552,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                     <th className="px-6 py-4">Setor</th>
                     <th className="px-6 py-4">Tipo de Acesso</th>
                     <th className="px-6 py-4">Contato</th>
-                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Status / Acesso</th>
                     <th className="px-6 py-4 text-right">Ações</th>
                 </tr>
             </thead>
@@ -544,6 +564,8 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                 )}
                 {filtered.map(c => {
                     const roleName = userRoles.find(r => r.id === c.roleId)?.name;
+                    const isActive = c.status === 'active';
+                    
                     return (
                     <tr key={c.id} className="hover:bg-slate-50 transition-colors relative">
                         <td className="px-6 py-4">
@@ -579,12 +601,25 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                             </div>
                         </td>
                         <td className="px-6 py-4">
-                            <span className={clsx(
-                                "px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap",
-                                c.status === 'active' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-500"
-                            )}>
-                                {c.status === 'active' ? 'Ativo' : 'Desligado'}
-                            </span>
+                            <button 
+                                onClick={() => toggleStatus(c)}
+                                disabled={updatingId === c.id}
+                                className={clsx(
+                                    "px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all border w-fit",
+                                    isActive 
+                                        ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-200" 
+                                        : "bg-red-100 text-red-700 border-red-200 hover:bg-red-200"
+                                )}
+                            >
+                                {updatingId === c.id ? (
+                                    <Loader2 size={12} className="animate-spin" />
+                                ) : isActive ? (
+                                    <Unlock size={12} />
+                                ) : (
+                                    <Lock size={12} />
+                                )}
+                                {isActive ? 'Ativo' : 'Bloqueado'}
+                            </button>
                         </td>
                         <td className="px-6 py-4 text-right relative">
                             <button 

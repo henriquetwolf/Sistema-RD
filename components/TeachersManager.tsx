@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   School, Plus, Search, MoreVertical, Phone, Mail, 
   ArrowLeft, Save, X, Book, User, MapPin, DollarSign, 
   Briefcase, Truck, Calendar, FileText, CheckSquare, Image as ImageIcon,
-  Loader2, Trash2, Edit2, KeyRound, Lock
+  Loader2, Trash2, Edit2, KeyRound, Lock, Unlock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
@@ -98,6 +99,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
   
   // Menu
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   // Initial Form State
   const initialFormState: Teacher = {
@@ -345,6 +347,25 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
       setShowModal(true);
   };
 
+  const toggleStatus = async (teacher: Teacher) => {
+      setUpdatingId(teacher.id);
+      const newStatus = !teacher.isActive;
+      try {
+          const { error } = await appBackend.client
+              .from('crm_teachers')
+              .update({ is_active: newStatus })
+              .eq('id', teacher.id);
+          
+          if (error) throw error;
+          
+          setTeachers(prev => prev.map(t => t.id === teacher.id ? { ...t, isActive: newStatus } : t));
+      } catch (e: any) {
+          alert(`Erro ao atualizar status: ${e.message}`);
+      } finally {
+          setUpdatingId(null);
+      }
+  };
+
   const filtered = teachers.filter(t => t.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
@@ -419,9 +440,25 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                     </div>
 
                     <div className="flex items-center gap-3 relative">
-                        <span className={clsx("px-2 py-1 rounded-full text-xs font-bold", t.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
-                            {t.isActive ? 'Ativo' : 'Inativo'}
-                        </span>
+                        <button 
+                            onClick={() => toggleStatus(t)}
+                            disabled={updatingId === t.id}
+                            className={clsx(
+                                "px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all border w-fit",
+                                t.isActive 
+                                    ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-200" 
+                                    : "bg-red-100 text-red-700 border-red-200 hover:bg-red-200"
+                            )}
+                        >
+                            {updatingId === t.id ? (
+                                <Loader2 size={12} className="animate-spin" />
+                            ) : t.isActive ? (
+                                <Unlock size={12} />
+                            ) : (
+                                <Lock size={12} />
+                            )}
+                            {t.isActive ? 'Ativo' : 'Bloqueado'}
+                        </button>
                         
                         <button 
                             onClick={(e) => {

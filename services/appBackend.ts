@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role } from '../types';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -244,6 +244,63 @@ export const appBackend = {
       if (!isConfigured) return;
       const { error } = await supabase.from('crm_roles').delete().eq('id', id);
       if (error) throw error;
+  },
+
+  // --- BANNERS ---
+
+  getBanners: async (audience?: 'student' | 'instructor'): Promise<Banner[]> => {
+    if (!isConfigured) return [];
+    
+    let query = supabase
+      .from('app_banners')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (audience) {
+      query = query.eq('target_audience', audience);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.warn("Error fetching banners:", error);
+        return [];
+    }
+
+    return data.map((b: any) => ({
+      id: b.id,
+      title: b.title,
+      imageUrl: b.image_url,
+      linkUrl: b.link_url,
+      targetAudience: b.target_audience,
+      active: b.active
+    }));
+  },
+
+  saveBanner: async (banner: Banner): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    const payload = {
+      title: banner.title,
+      image_url: banner.imageUrl,
+      link_url: banner.linkUrl,
+      target_audience: banner.targetAudience,
+      active: banner.active
+    };
+
+    if (banner.id) {
+      const { error } = await supabase.from('app_banners').update(payload).eq('id', banner.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('app_banners').insert([payload]);
+      if (error) throw error;
+    }
+  },
+
+  deleteBanner: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('app_banners').delete().eq('id', id);
+    if (error) throw error;
   },
 
   // --- FORMS & CRM LOGIC (MOCKED BACKEND FOR FORMS, REAL FOR CRM) ---

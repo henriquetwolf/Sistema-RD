@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock } from '../types';
+import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock, Banner } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, BookOpen, Award, ExternalLink, Calendar, MapPin, 
@@ -26,6 +26,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [certificates, setCertificates] = useState<any[]>([]);
     const [events, setEvents] = useState<EventModel[]>([]);
     const [myRegistrations, setMyRegistrations] = useState<EventRegistration[]>([]);
+    const [banners, setBanners] = useState<Banner[]>([]);
     
     const [isLoading, setIsLoading] = useState(false);
     
@@ -42,6 +43,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
     useEffect(() => {
         loadStudentData();
+        loadBanners();
     }, [student]);
 
     useEffect(() => {
@@ -49,6 +51,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             loadEventsData();
         }
     }, [activeTab]);
+
+    const loadBanners = async () => {
+        try {
+            const data = await appBackend.getBanners('student');
+            setBanners(data);
+        } catch (e) {
+            console.error("Failed to load banners", e);
+        }
+    };
 
     const loadStudentData = async () => {
         setIsLoading(true);
@@ -298,6 +309,26 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             <main className="flex-1 max-w-5xl mx-auto w-full p-4 md:p-6 space-y-6">
                 
+                {/* BANNERS SECTION */}
+                {banners.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-4">
+                        {banners.map(banner => (
+                            <a 
+                                key={banner.id}
+                                href={banner.linkUrl || '#'}
+                                target={banner.linkUrl ? "_blank" : "_self"}
+                                rel="noreferrer"
+                                className={clsx(
+                                    "block rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all",
+                                    !banner.linkUrl && "cursor-default"
+                                )}
+                            >
+                                <img src={banner.imageUrl} alt={banner.title} className="w-full h-auto object-cover max-h-40" />
+                            </a>
+                        ))}
+                    </div>
+                )}
+
                 {/* Tabs */}
                 <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
                     <button 

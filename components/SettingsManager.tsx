@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck } from 'lucide-react';
+import { Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, Layout, ExternalLink, Trash2 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { Role } from '../types';
+import { Role, Banner } from '../types';
 import clsx from 'clsx';
 
 interface SettingsManagerProps {
@@ -31,7 +31,7 @@ const MODULES = [
 ];
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, currentLogo }) => {
-  const [activeTab, setActiveTab] = useState<'visual' | 'roles' | 'database'>('visual');
+  const [activeTab, setActiveTab] = useState<'visual' | 'roles' | 'database' | 'banners'>('visual');
   const [preview, setPreview] = useState<string | null>(currentLogo);
   const [isSaved, setIsSaved] = useState(false);
   const [showSql, setShowSql] = useState(false);
@@ -42,9 +42,23 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
 
+  // Banner Management State
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
+  const [newBanner, setNewBanner] = useState<Partial<Banner>>({
+      title: '',
+      linkUrl: '',
+      targetAudience: 'student',
+      active: true,
+      imageUrl: ''
+  });
+  const [isLoadingBanners, setIsLoadingBanners] = useState(false);
+
   useEffect(() => {
       if (activeTab === 'roles') {
           fetchRoles();
+      } else if (activeTab === 'banners') {
+          fetchBanners();
       }
   }, [activeTab]);
 
@@ -60,6 +74,18 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
       }
   };
 
+  const fetchBanners = async () => {
+      setIsLoadingBanners(true);
+      try {
+          const data = await appBackend.getBanners();
+          setBanners(data);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsLoadingBanners(false);
+      }
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -70,6 +96,17 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleBannerImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setNewBanner(prev => ({ ...prev, imageUrl: reader.result as string }));
+          };
+          reader.readAsDataURL(file);
+      }
   };
 
   const handleSaveLogo = () => {
@@ -107,6 +144,33 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
               fetchRoles();
           } catch (e: any) {
               alert(`Erro: ${e.message}`);
+          }
+      }
+  };
+
+  const handleSaveBanner = async () => {
+      if (!newBanner.title || !newBanner.imageUrl) {
+          alert("Título e Imagem são obrigatórios.");
+          return;
+      }
+
+      try {
+          await appBackend.saveBanner(newBanner as Banner);
+          await fetchBanners();
+          setIsBannerModalOpen(false);
+          setNewBanner({ title: '', linkUrl: '', targetAudience: 'student', active: true, imageUrl: '' });
+      } catch (e: any) {
+          alert(`Erro ao salvar banner: ${e.message}`);
+      }
+  };
+
+  const handleDeleteBanner = async (id: string) => {
+      if (window.confirm("Excluir este banner?")) {
+          try {
+              await appBackend.deleteBanner(id);
+              fetchBanners();
+          } catch (e: any) {
+              alert(`Erro ao excluir: ${e.message}`);
           }
       }
   };
@@ -174,7 +238,21 @@ ALTER TABLE public.crm_teachers ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total teachers" ON public.crm_teachers;
 CREATE POLICY "Acesso total teachers" ON public.crm_teachers FOR ALL USING (true) WITH CHECK (true);
 
--- 4. DADOS INICIAIS (SEED)
+-- 4. TABELA DE BANNERS
+CREATE TABLE IF NOT EXISTS public.app_banners (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    created_at timestamptz DEFAULT now(),
+    title text,
+    image_url text,
+    link_url text,
+    target_audience text CHECK (target_audience IN ('student', 'instructor')),
+    active boolean DEFAULT true
+);
+ALTER TABLE public.app_banners ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total banners" ON public.app_banners;
+CREATE POLICY "Acesso total banners" ON public.app_banners FOR ALL USING (true) WITH CHECK (true);
+
+-- 5. DADOS INICIAIS (SEED)
 INSERT INTO public.crm_roles (name, permissions)
 VALUES 
 ('Super Admin', '{"overview": true, "crm": true, "whatsapp": true, "analysis": true, "collaborators": true, "classes": true, "teachers": true, "franchises": true, "forms": true, "contracts": true, "products": true, "events": true, "students": true, "certificates": true, "tables": true, "settings": true, "global_settings": true}'::jsonb),
@@ -182,7 +260,7 @@ VALUES
 ('Secretaria', '{"overview": true, "classes": true, "students": true, "certificates": true, "contracts": true, "teachers": true}'::jsonb)
 ON CONFLICT DO NOTHING;
 
--- 5. OUTRAS TABELAS (Eventos, Alunos, etc)
+-- 6. OUTRAS TABELAS (Eventos, Alunos, etc)
 CREATE TABLE IF NOT EXISTS public.crm_events (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text, dates text[], registration_open boolean, created_at timestamptz default now());
 ALTER TABLE public.crm_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso eventos" ON public.crm_events;
@@ -206,22 +284,28 @@ NOTIFY pgrst, 'reload config';
         </div>
         
         {/* Tab Switcher */}
-        <div className="flex bg-slate-100 p-1 rounded-lg">
+        <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto">
             <button 
                 onClick={() => setActiveTab('visual')}
-                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
             >
                 <ImageIcon size={16} /> Identidade
             </button>
             <button 
                 onClick={() => setActiveTab('roles')}
-                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2", activeTab === 'roles' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'roles' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
             >
                 <ShieldCheck size={16} /> Tipos de Usuário
             </button>
             <button 
+                onClick={() => setActiveTab('banners')}
+                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'banners' ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+                <Layout size={16} /> Banners
+            </button>
+            <button 
                 onClick={() => setActiveTab('database')}
-                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2", activeTab === 'database' ? "bg-white text-amber-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'database' ? "bg-white text-amber-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
             >
                 <Database size={16} /> Banco de Dados
             </button>
@@ -287,6 +371,155 @@ NOTIFY pgrst, 'reload config';
                         </button>
                     </div>
                 </div>
+            </div>
+        )}
+
+        {/* TAB: BANNERS */}
+        {activeTab === 'banners' && (
+            <div className="space-y-6 animate-in fade-in">
+                {/* List */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-800 mb-1">Banners Publicitários</h3>
+                            <p className="text-sm text-slate-500">Gerencie os banners exibidos nas áreas de aluno e instrutor.</p>
+                        </div>
+                        <button 
+                            onClick={() => setIsBannerModalOpen(true)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
+                        >
+                            <Upload size={16} /> Novo Banner
+                        </button>
+                    </div>
+                    
+                    <div className="p-6">
+                        {isLoadingBanners ? (
+                            <div className="text-center py-10 text-slate-400">Carregando...</div>
+                        ) : banners.length === 0 ? (
+                            <div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-100 rounded-lg">
+                                <Layout size={32} className="mx-auto mb-2 opacity-50" />
+                                <p>Nenhum banner cadastrado.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {banners.map(banner => (
+                                    <div key={banner.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden group hover:shadow-md transition-all">
+                                        <div className="h-40 bg-slate-100 relative">
+                                            <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button 
+                                                    onClick={() => handleDeleteBanner(banner.id)} 
+                                                    className="bg-white text-red-600 p-2 rounded-full hover:bg-red-50"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                            <div className="absolute top-2 left-2">
+                                                <span className={clsx("text-[10px] font-bold px-2 py-1 rounded shadow-sm border", banner.targetAudience === 'student' ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-orange-100 text-orange-700 border-orange-200")}>
+                                                    {banner.targetAudience === 'student' ? 'Área do Aluno' : 'Área do Instrutor'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="p-4">
+                                            <h4 className="font-bold text-slate-800 text-sm mb-1">{banner.title}</h4>
+                                            {banner.linkUrl && (
+                                                <a href={banner.linkUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                                                    <ExternalLink size={10} /> {banner.linkUrl}
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Modal Create Banner */}
+                {isBannerModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                        <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
+                            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                                <h3 className="font-bold text-slate-800">Novo Banner</h3>
+                                <button onClick={() => setIsBannerModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                            </div>
+                            
+                            <div className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">Título do Banner</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" 
+                                        value={newBanner.title}
+                                        onChange={e => setNewBanner({...newBanner, title: e.target.value})}
+                                        placeholder="Ex: Promoção de Verão"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">Público Alvo</label>
+                                    <div className="flex gap-4">
+                                        <label className="flex items-center gap-2 cursor-pointer border p-3 rounded-lg flex-1 hover:bg-slate-50">
+                                            <input 
+                                                type="radio" 
+                                                name="audience" 
+                                                checked={newBanner.targetAudience === 'student'} 
+                                                onChange={() => setNewBanner({...newBanner, targetAudience: 'student'})}
+                                                className="text-purple-600 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm font-medium">Área do Aluno</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer border p-3 rounded-lg flex-1 hover:bg-slate-50">
+                                            <input 
+                                                type="radio" 
+                                                name="audience" 
+                                                checked={newBanner.targetAudience === 'instructor'} 
+                                                onChange={() => setNewBanner({...newBanner, targetAudience: 'instructor'})}
+                                                className="text-orange-600 focus:ring-orange-500"
+                                            />
+                                            <span className="text-sm font-medium">Área do Instrutor</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">Imagem do Banner</label>
+                                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50 transition-colors relative">
+                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleBannerImageUpload} />
+                                        {newBanner.imageUrl ? (
+                                            <img src={newBanner.imageUrl} alt="Preview" className="max-h-32 mx-auto rounded shadow-sm" />
+                                        ) : (
+                                            <div className="text-slate-400">
+                                                <Upload className="mx-auto mb-2" size={24} />
+                                                <p className="text-xs">Clique para fazer upload</p>
+                                                <p className="text-[10px] mt-1">Recomendado: 1200x300px (Desktop)</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">Link de Redirecionamento</label>
+                                    <div className="relative">
+                                        <ExternalLink size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input 
+                                            type="text" 
+                                            className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm" 
+                                            value={newBanner.linkUrl}
+                                            onChange={e => setNewBanner({...newBanner, linkUrl: e.target.value})}
+                                            placeholder="https://..."
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                                <button onClick={() => setIsBannerModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                                <button onClick={handleSaveBanner} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm">Salvar Banner</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
 

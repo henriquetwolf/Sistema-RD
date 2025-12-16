@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   LogOut, Calendar, MapPin, Loader2, BookOpen, User, 
@@ -6,6 +7,7 @@ import {
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
 import { Teacher } from './TeachersManager';
+import { Banner } from '../types';
 import clsx from 'clsx';
 
 interface InstructorAreaProps {
@@ -15,12 +17,23 @@ interface InstructorAreaProps {
 
 export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLogout }) => {
   const [classes, setClasses] = useState<any[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedClass, setSelectedClass] = useState<any | null>(null);
 
   useEffect(() => {
     fetchMyClasses();
+    fetchBanners();
   }, [instructor]);
+
+  const fetchBanners = async () => {
+      try {
+          const data = await appBackend.getBanners('instructor');
+          setBanners(data);
+      } catch (e) {
+          console.error("Failed to load banners", e);
+      }
+  };
 
   const fetchMyClasses = async () => {
     setIsLoading(true);
@@ -75,6 +88,26 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
       {/* Content */}
       <main className="flex-1 max-w-5xl mx-auto w-full p-4 md:p-6">
         
+        {/* BANNERS SECTION */}
+        {banners.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 animate-in fade-in slide-in-from-top-4">
+                {banners.map(banner => (
+                    <a 
+                        key={banner.id}
+                        href={banner.linkUrl || '#'}
+                        target={banner.linkUrl ? "_blank" : "_self"}
+                        rel="noreferrer"
+                        className={clsx(
+                            "block rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all",
+                            !banner.linkUrl && "cursor-default"
+                        )}
+                    >
+                        <img src={banner.imageUrl} alt={banner.title} className="w-full h-auto object-cover max-h-40" />
+                    </a>
+                ))}
+            </div>
+        )}
+
         <div className="mb-6">
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <GraduationCap className="text-purple-600" /> Minhas Turmas

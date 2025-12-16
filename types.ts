@@ -69,6 +69,18 @@ export interface CollaboratorSession {
   photoUrl?: string;
 }
 
+// --- BANNERS ---
+
+export interface Banner {
+  id: string;
+  title: string;
+  imageUrl: string;
+  linkUrl: string;
+  targetAudience: 'student' | 'instructor';
+  active: boolean;
+  createdAt?: string;
+}
+
 // --- FORMS & LEADS ---
 
 export type QuestionType = 'text' | 'paragraph' | 'email' | 'phone' | 'number' | 'date';

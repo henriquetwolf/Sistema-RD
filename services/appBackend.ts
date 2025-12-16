@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner } from '../types';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -300,6 +300,123 @@ export const appBackend = {
   deleteBanner: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('app_banners').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // --- PARTNER STUDIOS ---
+
+  getPartnerStudios: async (): Promise<PartnerStudio[]> => {
+    if (!isConfigured) return [];
+    
+    const { data, error } = await supabase
+      .from('crm_partner_studios')
+      .select('*')
+      .order('fantasy_name', { ascending: true });
+
+    if (error) {
+      console.warn("Table crm_partner_studios might not exist", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      status: d.status || 'active',
+      responsibleName: d.responsible_name,
+      cpf: d.cpf,
+      phone: d.phone,
+      email: d.email,
+      secondContactName: d.second_contact_name,
+      secondContactPhone: d.second_contact_phone,
+      fantasyName: d.fantasy_name,
+      legalName: d.legal_name,
+      cnpj: d.cnpj,
+      studioPhone: d.studio_phone,
+      address: d.address,
+      city: d.city,
+      state: d.state,
+      country: d.country,
+      sizeM2: d.size_m2,
+      studentCapacity: d.student_capacity,
+      rentValue: d.rent_value,
+      methodology: d.methodology,
+      studioType: d.studio_type,
+      nameOnSite: d.name_on_site,
+      bank: d.bank,
+      agency: d.agency,
+      account: d.account,
+      beneficiary: d.beneficiary,
+      pixKey: d.pix_key,
+      hasReformer: d.has_reformer,
+      qtyReformer: d.qty_reformer,
+      hasLadderBarrel: d.has_ladder_barrel,
+      qtyLadderBarrel: d.qty_ladder_barrel,
+      hasChair: d.has_chair,
+      qtyChair: d.qty_chair,
+      hasCadillac: d.has_cadillac,
+      qtyCadillac: d.qty_cadillac,
+      hasChairsForCourse: d.has_chairs_for_course,
+      hasTv: d.has_tv,
+      maxKitsCapacity: d.max_kits_capacity,
+      attachments: d.attachments
+    }));
+  },
+
+  savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    const payload = {
+      status: studio.status,
+      responsible_name: studio.responsibleName,
+      cpf: studio.cpf,
+      phone: studio.phone,
+      email: studio.email,
+      second_contact_name: studio.secondContactName,
+      second_contact_phone: studio.secondContactPhone,
+      fantasy_name: studio.fantasyName,
+      legal_name: studio.legalName,
+      cnpj: studio.cnpj,
+      studio_phone: studio.studioPhone,
+      address: studio.address,
+      city: studio.city,
+      state: studio.state,
+      country: studio.country,
+      size_m2: studio.sizeM2,
+      student_capacity: studio.studentCapacity,
+      rent_value: studio.rentValue,
+      methodology: studio.methodology,
+      studio_type: studio.studioType,
+      name_on_site: studio.nameOnSite,
+      bank: studio.bank,
+      agency: studio.agency,
+      account: studio.account,
+      beneficiary: studio.beneficiary,
+      pix_key: studio.pixKey,
+      has_reformer: studio.hasReformer,
+      qty_reformer: studio.qtyReformer,
+      has_ladder_barrel: studio.hasLadderBarrel,
+      qty_ladder_barrel: studio.qtyLadderBarrel,
+      has_chair: studio.hasChair,
+      qty_chair: studio.qtyChair,
+      has_cadillac: studio.hasCadillac,
+      qty_cadillac: studio.qtyCadillac,
+      has_chairs_for_course: studio.hasChairsForCourse,
+      has_tv: studio.hasTv,
+      max_kits_capacity: studio.maxKitsCapacity,
+      attachments: studio.attachments
+    };
+
+    if (studio.id) {
+      const { error } = await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('crm_partner_studios').insert([payload]);
+      if (error) throw error;
+    }
+  },
+
+  deletePartnerStudio: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_partner_studios').delete().eq('id', id);
     if (error) throw error;
   },
 
@@ -605,7 +722,7 @@ export const appBackend = {
       background_base64: cert.backgroundData,
       back_background_base64: cert.backBackgroundData,
       linked_product_id: cert.linkedProductId || null,
-      body_text: cert.bodyText,
+      body_text: cert.bodyText, // Fixed property mapping
       layout_config: cert.layoutConfig // Save layout config
     };
 

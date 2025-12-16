@@ -692,16 +692,74 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.socialName} onChange={e => handleInputChange('socialName', e.target.value)} />
                             </div>
                             
-                            {/* ... (Existing personal fields retained) ... */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Data de Nascimento</label>
                                 <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.birthDate} onChange={e => handleInputChange('birthDate', e.target.value)} />
                             </div>
-                            {/* ... more fields ... */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Estado Civil</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.maritalStatus} onChange={e => handleInputChange('maritalStatus', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Solteiro(a)">Solteiro(a)</option>
+                                    <option value="Casado(a)">Casado(a)</option>
+                                    <option value="Divorciado(a)">Divorciado(a)</option>
+                                    <option value="Viúvo(a)">Viúvo(a)</option>
+                                    <option value="União Estável">União Estável</option>
+                                </select>
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cônjuge</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.spouseName} onChange={e => handleInputChange('spouseName', e.target.value)} />
+                            </div>
+
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Nome do Pai</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.fatherName} onChange={e => handleInputChange('fatherName', e.target.value)} />
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Nome da Mãe</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.motherName} onChange={e => handleInputChange('motherName', e.target.value)} />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Identidade de Gênero</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.genderIdentity} onChange={e => handleInputChange('genderIdentity', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Cisgênero">Cisgênero</option>
+                                    <option value="Transgênero">Transgênero</option>
+                                    <option value="Não-binário">Não-binário</option>
+                                    <option value="Prefiro não informar">Prefiro não informar</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Identidade Racial</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.racialIdentity} onChange={e => handleInputChange('racialIdentity', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Branca">Branca</option>
+                                    <option value="Preta">Preta</option>
+                                    <option value="Parda">Parda</option>
+                                    <option value="Amarela">Amarela</option>
+                                    <option value="Indígena">Indígena</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Escolaridade</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.educationLevel} onChange={e => handleInputChange('educationLevel', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Médio Completo">Médio Completo</option>
+                                    <option value="Superior Incompleto">Superior Incompleto</option>
+                                    <option value="Superior Completo">Superior Completo</option>
+                                    <option value="Pós-Graduação">Pós-Graduação</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Foto (URL)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.photoUrl} onChange={e => handleInputChange('photoUrl', e.target.value)} placeholder="http://..." />
+                            </div>
                         </div>
                     </div>
 
-                    {/* SECTION: ACESSO AO SISTEMA (NEW) */}
+                    {/* SECTION: ACESSO AO SISTEMA */}
                     <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100">
                         <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 flex items-center gap-2">
                             <Shield size={16} /> Acesso ao Sistema
@@ -752,16 +810,93 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                             <MapPin size={16} /> Endereço e Contato
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {/* ... (Existing address fields retained) ... */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">CEP</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cep} onChange={e => handleInputChange('cep', e.target.value)} />
+                            </div>
                             <div className="md:col-span-2">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Endereço Completo</label>
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.address} onChange={e => handleInputChange('address', e.target.value)} />
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">CEP</label>
-                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cep} onChange={e => handleInputChange('cep', e.target.value)} />
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Complemento</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.complement} onChange={e => handleInputChange('complement', e.target.value)} />
                             </div>
-                            {/* ... */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Estado</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.state}
+                                    onChange={e => {
+                                        handleInputChange('state', e.target.value);
+                                        handleInputChange('currentCity', '');
+                                    }}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {states.map(s => <option key={s.id} value={s.sigla}>{s.sigla}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade Atual</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.currentCity}
+                                    onChange={e => handleInputChange('currentCity', e.target.value)}
+                                    disabled={!formData.state}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {currentCities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="h-px bg-slate-100 md:col-span-3 my-2"></div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Celular (Pessoal)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cellphone} onChange={e => handleInputChange('cellphone', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Celular (Corporativo)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.corporatePhone} onChange={e => handleInputChange('corporatePhone', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Operadora</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.operator} onChange={e => handleInputChange('operator', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Estado Natal</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.birthState}
+                                    onChange={e => {
+                                        handleInputChange('birthState', e.target.value);
+                                        handleInputChange('birthCity', '');
+                                    }}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {states.map(s => <option key={s.id} value={s.sigla}>{s.sigla}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade Natal</label>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    value={formData.birthCity}
+                                    onChange={e => handleInputChange('birthCity', e.target.value)}
+                                    disabled={!formData.birthState}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {birthCities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Contato de Emergência</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.emergencyName} onChange={e => handleInputChange('emergencyName', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Telefone Emergência</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.emergencyPhone} onChange={e => handleInputChange('emergencyPhone', e.target.value)} />
+                            </div>
                         </div>
                     </div>
 
@@ -776,14 +911,334 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                                 <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.admissionDate} onChange={e => handleInputChange('admissionDate', e.target.value)} />
                             </div>
                             <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Admissão Anterior</label>
+                                <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.previousAdmissionDate} onChange={e => handleInputChange('previousAdmissionDate', e.target.value)} />
+                            </div>
+                            <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Cargo (RH)</label>
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.role} onChange={e => handleInputChange('role', e.target.value)} />
                             </div>
-                            {/* ... */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Sede</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.headquarters} onChange={e => handleInputChange('headquarters', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    {HEADQUARTERS.map(h => <option key={h} value={h}>{h}</option>)}
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Setor</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.department} onChange={e => handleInputChange('department', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Salário (R$)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.salary} onChange={e => handleInputChange('salary', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Modalidade</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hiringMode} onChange={e => handleInputChange('hiringMode', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="CLT">CLT</option>
+                                    <option value="PJ">PJ</option>
+                                    <option value="Estágio">Estágio</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Empresa Contratante</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hiringCompany} onChange={e => handleInputChange('hiringCompany', e.target.value)} />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Horário de Trabalho</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.workHours} onChange={e => handleInputChange('workHours', e.target.value)} placeholder="08:00 às 18:00" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Intervalo</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.breakTime} onChange={e => handleInputChange('breakTime', e.target.value)} placeholder="1h" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Dias de Trabalho</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.workDays} onChange={e => handleInputChange('workDays', e.target.value)} placeholder="Seg a Sex" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Dias Presenciais</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.presentialDays} onChange={e => handleInputChange('presentialDays', e.target.value)} />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Superior Imediato</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.superiorId} onChange={e => handleInputChange('superiorId', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Período de Experiência</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.experiencePeriod} onChange={e => handleInputChange('experiencePeriod', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Outro Vínculo?</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hasOtherJob} onChange={e => handleInputChange('hasOtherJob', e.target.value)} placeholder="Sim/Não" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Tipo de Contrato</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.contractType} onChange={e => handleInputChange('contractType', e.target.value)} placeholder="Mensalista/Horista" />
+                            </div>
                         </div>
                     </div>
 
-                    {/* ... (Rest of sections 5, 6, 7 retained) ... */}
+                    {/* SECTION 5: DOCUMENTAÇÃO */}
+                    <div>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <FileText size={16} /> Documentação
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">CPF</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cpf} onChange={e => handleInputChange('cpf', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">RG</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.rg} onChange={e => handleInputChange('rg', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Órgão Emissor</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.rgIssuer} onChange={e => handleInputChange('rgIssuer', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data Emissão RG</label>
+                                <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.rgIssueDate} onChange={e => handleInputChange('rgIssueDate', e.target.value)} />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">CTPS (Número)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.ctpsNumber} onChange={e => handleInputChange('ctpsNumber', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Série CTPS</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.ctpsSeries} onChange={e => handleInputChange('ctpsSeries', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">UF CTPS</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.ctpsState} onChange={e => handleInputChange('ctpsState', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data Emissão CTPS</label>
+                                <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.ctpsIssueDate} onChange={e => handleInputChange('ctpsIssueDate', e.target.value)} />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">PIS</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.pisNumber} onChange={e => handleInputChange('pisNumber', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Certificado Reservista</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.reservistNumber} onChange={e => handleInputChange('reservistNumber', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Link Pasta de Documentos</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-blue-600 underline" value={formData.docsFolderLink} onChange={e => handleInputChange('docsFolderLink', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-4 pt-2">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" className="rounded text-blue-600" checked={formData.legalAuth} onChange={e => handleInputChange('legalAuth', e.target.checked)} />
+                                    <span className="text-sm text-slate-700">Autorizo o arquivamento dos meus documentos pessoais e profissionais.</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* SECTION 6: FINANCEIRO & BENEFÍCIOS */}
+                    <div>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <DollarSign size={16} /> Financeiro e Benefícios
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="md:col-span-3">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Dados Bancários (Banco, Agência, Conta, PIX)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.bankAccountInfo} onChange={e => handleInputChange('bankAccountInfo', e.target.value)} />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Insalubridade?</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hasInsalubrity} onChange={e => handleInputChange('hasInsalubrity', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Não">Não</option>
+                                    <option value="Sim">Sim</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">% Insalubridade</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.insalubrityPercent} onChange={e => handleInputChange('insalubrityPercent', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Periculosidade?</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hasDangerPay} onChange={e => handleInputChange('hasDangerPay', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Não">Não</option>
+                                    <option value="Sim">Sim</option>
+                                </select>
+                            </div>
+
+                            <div className="md:col-span-3 h-px bg-slate-100 my-2"></div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Vale Transporte/Combustível</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.transportVoucherInfo} onChange={e => handleInputChange('transportVoucherInfo', e.target.value)} placeholder="Optante?" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Linha (Casa - Trabalho)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.busLineHomeWork} onChange={e => handleInputChange('busLineHomeWork', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Qtd (Casa - Trabalho)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.busQtyHomeWork} onChange={e => handleInputChange('busQtyHomeWork', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Linha (Trabalho - Casa)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.busLineWorkHome} onChange={e => handleInputChange('busLineWorkHome', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Qtd (Trabalho - Casa)</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.busQtyWorkHome} onChange={e => handleInputChange('busQtyWorkHome', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Valor Passagem</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.ticketValue} onChange={e => handleInputChange('ticketValue', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Valor Aux. Combustível</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.fuelVoucherValue} onChange={e => handleInputChange('fuelVoucherValue', e.target.value)} />
+                            </div>
+
+                            <div className="md:col-span-3 h-px bg-slate-100 my-2"></div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Vale Refeição?</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hasMealVoucher} onChange={e => handleInputChange('hasMealVoucher', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Sim">Sim</option>
+                                    <option value="Não">Não</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Vale Alimentação?</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hasFoodVoucher} onChange={e => handleInputChange('hasFoodVoucher', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Sim">Sim</option>
+                                    <option value="Não">Não</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Auxílio Home Office?</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hasHomeOfficeAid} onChange={e => handleInputChange('hasHomeOfficeAid', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Sim">Sim</option>
+                                    <option value="Não">Não</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Plano de Saúde?</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hasHealthPlan} onChange={e => handleInputChange('hasHealthPlan', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Sim">Sim</option>
+                                    <option value="Não">Não</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Plano Odontológico?</label>
+                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.hasDentalPlan} onChange={e => handleInputChange('hasDentalPlan', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    <option value="Sim">Sim</option>
+                                    <option value="Não">Não</option>
+                                </select>
+                            </div>
+
+                            <div className="md:col-span-3 h-px bg-slate-100 my-2"></div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Regra de Bônus</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.bonusInfo} onChange={e => handleInputChange('bonusInfo', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Valor Bônus</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.bonusValue} onChange={e => handleInputChange('bonusValue', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Regra Comissão</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.commissionInfo} onChange={e => handleInputChange('commissionInfo', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">% Comissão</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.commissionPercent} onChange={e => handleInputChange('commissionPercent', e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* SECTION 7: DEPENDENTES */}
+                    <div>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <Heart size={16} /> Dependentes
+                        </h4>
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <div className="mb-4">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" className="rounded text-blue-600" checked={formData.hasDependents === 'Sim'} onChange={e => handleInputChange('hasDependents', e.target.checked ? 'Sim' : 'Não')} />
+                                    <span className="text-sm text-slate-700 font-bold">Possui Dependentes?</span>
+                                </label>
+                            </div>
+                            
+                            {formData.hasDependents === 'Sim' && (
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-2">
+                                    <div className="md:col-span-2">
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Nome Dependente</label>
+                                        <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.dependentName} onChange={e => handleInputChange('dependentName', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Data Nascimento</label>
+                                        <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.dependentDob} onChange={e => handleInputChange('dependentDob', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Parentesco</label>
+                                        <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.dependentKinship} onChange={e => handleInputChange('dependentKinship', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">CPF Dependente</label>
+                                        <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.dependentCpf} onChange={e => handleInputChange('dependentCpf', e.target.value)} />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* SECTION 8: DESLIGAMENTO & OUTROS */}
+                    <div>
+                        <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <AlertCircle size={16} /> Desligamento e Observações
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Data de Desligamento</label>
+                                <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.resignationDate} onChange={e => handleInputChange('resignationDate', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Motivo</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.demissionReason} onChange={e => handleInputChange('demissionReason', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Link Docs Demissionais</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-blue-600 underline" value={formData.demissionDocs} onChange={e => handleInputChange('demissionDocs', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Períodos de Férias</label>
+                                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-20 resize-none" value={formData.vacationPeriods} onChange={e => handleInputChange('vacationPeriods', e.target.value)} placeholder="Registre os períodos gozados..."></textarea>
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Observações Gerais</label>
+                                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-24 resize-none" value={formData.observations} onChange={e => handleInputChange('observations', e.target.value)}></textarea>
+                            </div>
+                        </div>
+                    </div>
 
                 </div>
                 

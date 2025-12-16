@@ -26,6 +26,7 @@ import { StudentArea } from './components/StudentArea';
 import { CertificateViewer } from './components/CertificateViewer'; 
 import { EventsManager } from './components/EventsManager';
 import { WhatsAppInbox } from './components/WhatsAppInbox'; 
+import { PartnerStudiosManager } from './components/PartnerStudiosManager'; // New Import
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -36,7 +37,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase
+  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -74,7 +75,7 @@ function App() {
   const jobsRef = useRef<SyncJob[]>([]); // Ref to access latest jobs inside interval without resetting it
   
   // Dashboard UI State
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -864,6 +865,18 @@ function App() {
                                         Professores
                                     </button>
                                 )}
+                                {canAccess('franchises') && (
+                                    <button
+                                        onClick={() => setDashboardTab('partner_studios')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'partner_studios' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <Building2 size={18} />
+                                        Studios Parceiros
+                                    </button>
+                                )}
                                 {canAccess('tables') && (
                                     <button
                                         onClick={() => setDashboardTab('tables')}
@@ -1133,6 +1146,7 @@ function App() {
                         {dashboardTab === 'classes' && <ClassesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'franchises' && <FranchisesManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'partner_studios' && <PartnerStudiosManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'contracts' && <ContractsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'certificates' && <CertificatesManager onBack={() => setDashboardTab('overview')} />}

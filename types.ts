@@ -257,3 +257,64 @@ export interface EventRegistration {
   studentEmail: string;
   registeredAt: string;
 }
+
+// --- PARTNER STUDIOS ---
+
+export interface PartnerStudio {
+  id: string;
+  status: 'active' | 'inactive';
+  
+  // Responsible
+  responsibleName: string;
+  cpf: string;
+  phone: string;
+  email: string;
+  
+  // Second Contact
+  secondContactName: string;
+  secondContactPhone: string;
+  
+  // Business Info
+  fantasyName: string;
+  legalName: string; // Razão Social
+  cnpj: string;
+  studioPhone: string;
+  
+  // Location
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  
+  // Studio Details
+  sizeM2: string;
+  studentCapacity: string;
+  rentValue: string;
+  methodology: string; // Classic / Contemporary
+  studioType: string; // Tipo de atuação
+  nameOnSite: string; // Nome conforme site
+  
+  // Financials
+  bank: string;
+  agency: string;
+  account: string;
+  beneficiary: string;
+  pixKey: string;
+  
+  // Equipment & Infra
+  hasReformer: boolean;
+  qtyReformer: number;
+  hasLadderBarrel: boolean;
+  qtyLadderBarrel: number;
+  hasChair: boolean;
+  qtyChair: number;
+  hasCadillac: boolean;
+  qtyCadillac: number;
+  
+  hasChairsForCourse: boolean;
+  hasTv: boolean;
+  maxKitsCapacity: string;
+  
+  // Other
+  attachments: string; // Link or JSON
+}

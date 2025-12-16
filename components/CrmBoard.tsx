@@ -5,7 +5,7 @@ import {
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
-  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic
+  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -13,6 +13,14 @@ import { appBackend } from '../services/appBackend';
 
 // --- Types ---
 type DealStage = 'new' | 'contacted' | 'proposal' | 'negotiation' | 'closed';
+
+interface DealTask {
+    id: string;
+    description: string;
+    dueDate: string;
+    isDone: boolean;
+    type: 'call' | 'email' | 'meeting' | 'todo';
+}
 
 interface Deal {
   id: string;
@@ -62,6 +70,7 @@ interface Deal {
   closedAt?: Date;
   status: 'hot' | 'warm' | 'cold';
   nextTask?: string;
+  tasks: DealTask[]; // Array de tarefas
 }
 
 interface Column {
@@ -132,7 +141,7 @@ const handleDbError = (e: any) => {
     if (msg.includes('relation "crm_deals" does not exist')) {
        alert("Erro Crítico: A tabela 'crm_deals' não existe no banco de dados.");
     } else if (msg.includes('column') && msg.includes('does not exist')) {
-       alert(`Erro de Schema: Uma coluna nova (ex: cpf, email) não existe no banco de dados.\n\nDetalhe: ${msg}\n\nVá em Configurações > Diagnóstico e execute o SQL.`);
+       alert(`Erro de Schema: Uma coluna nova (ex: tasks) não existe no banco de dados.\n\nDetalhe: ${msg}\n\nVá em Configurações > Diagnóstico e execute o SQL.`);
     } else {
        alert(`Erro ao salvar: ${msg}`);
     }
@@ -146,7 +155,8 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
     zipCode: '', address: '', addressNumber: '',
     registrationData: '', observation: '', courseState: '', courseCity: '', classMod1: '', classMod2: '',
     pipeline: 'Padrão',
-    productType: 'Presencial', productName: ''
+    productType: 'Presencial', productName: '',
+    tasks: []
 };
 
 export const CrmBoard: React.FC = () => {
@@ -178,6 +188,11 @@ export const CrmBoard: React.FC = () => {
   const [showDealModal, setShowDealModal] = useState(false);
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormData, setDealFormData] = useState<Partial<Deal>>(INITIAL_FORM_STATE);
+  
+  // Task Creation State inside Deal Modal
+  const [newTaskDesc, setNewTaskDesc] = useState('');
+  const [newTaskDate, setNewTaskDate] = useState('');
+  const [newTaskType, setNewTaskType] = useState<'call' | 'email' | 'meeting' | 'todo'>('todo');
 
   // --- INITIAL LOAD (FROM DB) ---
   useEffect(() => {
@@ -226,14 +241,15 @@ export const CrmBoard: React.FC = () => {
               transactionCode: d.transaction_code,
               zipCode: d.zip_code,
               address: d.address,
-              addressNumber: d.address_number,
+              address_number: d.address_number,
               registrationData: d.registration_data,
               observation: d.observation,
               courseState: d.course_state, // NEW
               courseCity: d.course_city,
               classMod1: d.class_mod_1,
               classMod2: d.class_mod_2,
-              pipeline: d.pipeline || 'Padrão'
+              pipeline: d.pipeline || 'Padrão',
+              tasks: d.tasks || [] // JSONB column
           }));
           setDeals(mappedDeals);
 
@@ -500,6 +516,41 @@ export const CrmBoard: React.FC = () => {
       setShowDealModal(true);
   };
 
+  // --- Task Handlers ---
+  const handleAddTask = () => {
+      if(!newTaskDesc) return;
+      
+      const newTask: DealTask = {
+          id: crypto.randomUUID(),
+          description: newTaskDesc,
+          dueDate: newTaskDate,
+          type: newTaskType,
+          isDone: false
+      };
+
+      setDealFormData(prev => ({
+          ...prev,
+          tasks: [newTask, ...(prev.tasks || [])]
+      }));
+
+      setNewTaskDesc('');
+      setNewTaskDate('');
+  };
+
+  const handleToggleTask = (taskId: string) => {
+      setDealFormData(prev => ({
+          ...prev,
+          tasks: prev.tasks?.map(t => t.id === taskId ? { ...t, isDone: !t.isDone } : t)
+      }));
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+      setDealFormData(prev => ({
+          ...prev,
+          tasks: prev.tasks?.filter(t => t.id !== taskId)
+      }));
+  };
+
   const handleSaveDeal = async () => {
       // Validate Client Name (companyName) since title is auto-generated from it now
       if (!dealFormData.companyName) {
@@ -558,7 +609,8 @@ export const CrmBoard: React.FC = () => {
           course_city: dealFormData.courseCity,
           class_mod_1: dealFormData.classMod1,
           class_mod_2: dealFormData.classMod2,
-          pipeline: dealFormData.pipeline || 'Padrão'
+          pipeline: dealFormData.pipeline || 'Padrão',
+          tasks: dealFormData.tasks // Save tasks JSON
       };
 
       try {
@@ -598,6 +650,7 @@ export const CrmBoard: React.FC = () => {
                   closedAt: data.closed_at ? new Date(data.closed_at) : undefined,
                   source: data.source,
                   campaign: data.campaign,
+                  tasks: data.tasks || []
               };
               setDeals(prev => [newDeal, ...prev]);
           }
@@ -812,7 +865,95 @@ export const CrmBoard: React.FC = () => {
                           </div>
                       </div>
 
-                      {/* Section 2: Financeiro */}
+                      {/* Section 2: Tarefas e Agendamentos (NOVA SEÇÃO) */}
+                      <div>
+                          <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                              <ListTodo size={16} /> Tarefas & Agendamentos
+                          </h4>
+                          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                              {/* Add Task Input */}
+                              <div className="flex gap-2 items-end mb-4">
+                                  <div className="flex-1">
+                                      <label className="block text-xs font-bold text-slate-500 mb-1">Nova Tarefa</label>
+                                      <input 
+                                          type="text" 
+                                          placeholder="Ex: Ligar para confirmar pagamento..." 
+                                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                          value={newTaskDesc}
+                                          onChange={e => setNewTaskDesc(e.target.value)}
+                                          onKeyDown={e => e.key === 'Enter' && handleAddTask()}
+                                      />
+                                  </div>
+                                  <div className="w-32">
+                                      <label className="block text-xs font-bold text-slate-500 mb-1">Data</label>
+                                      <input 
+                                          type="date" 
+                                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                          value={newTaskDate}
+                                          onChange={e => setNewTaskDate(e.target.value)}
+                                      />
+                                  </div>
+                                  <div className="w-28">
+                                      <label className="block text-xs font-bold text-slate-500 mb-1">Tipo</label>
+                                      <select 
+                                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                          value={newTaskType}
+                                          onChange={e => setNewTaskType(e.target.value as any)}
+                                      >
+                                          <option value="todo">Tarefa</option>
+                                          <option value="call">Ligação</option>
+                                          <option value="email">Email</option>
+                                          <option value="meeting">Reunião</option>
+                                      </select>
+                                  </div>
+                                  <button 
+                                      onClick={handleAddTask}
+                                      className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors h-[38px] w-[38px] flex items-center justify-center"
+                                      title="Adicionar Tarefa"
+                                  >
+                                      <Plus size={20} />
+                                  </button>
+                              </div>
+
+                              {/* Task List */}
+                              <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                  {dealFormData.tasks && dealFormData.tasks.length > 0 ? (
+                                      dealFormData.tasks.map(task => (
+                                          <div key={task.id} className={clsx("flex items-center gap-3 p-2 bg-white rounded border transition-all", task.isDone ? "border-green-200 bg-green-50" : "border-slate-200")}>
+                                              <button 
+                                                  onClick={() => handleToggleTask(task.id)}
+                                                  className={clsx(
+                                                      "w-5 h-5 rounded border flex items-center justify-center transition-colors",
+                                                      task.isDone ? "bg-green-500 border-green-500 text-white" : "border-slate-300 hover:border-indigo-400"
+                                                  )}
+                                              >
+                                                  {task.isDone && <CheckCircle2 size={14} />}
+                                              </button>
+                                              
+                                              <div className={clsx("flex-1 text-sm", task.isDone ? "text-slate-400 line-through" : "text-slate-700")}>
+                                                  {task.description}
+                                              </div>
+                                              
+                                              {task.dueDate && (
+                                                  <div className={clsx("text-xs px-2 py-0.5 rounded flex items-center gap-1", task.isDone ? "bg-slate-100 text-slate-400" : "bg-red-50 text-red-600 border border-red-100")}>
+                                                      <Clock size={10} />
+                                                      {new Date(task.dueDate).toLocaleDateString()}
+                                                  </div>
+                                              )}
+
+                                              <button onClick={() => handleDeleteTask(task.id)} className="text-slate-400 hover:text-red-500 p-1">
+                                                  <Trash2 size={14} />
+                                              </button>
+                                          </div>
+                                      ))
+                                  ) : (
+                                      <p className="text-xs text-slate-400 text-center py-2 italic">Nenhuma tarefa registrada.</p>
+                                  )}
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Section 3: Financeiro */}
                       <div>
                           <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                               <DollarSign size={16} /> Dados Financeiros
@@ -865,7 +1006,7 @@ export const CrmBoard: React.FC = () => {
                           </div>
                       </div>
 
-                      {/* Section 3: Pessoal e Endereço */}
+                      {/* Section 4: Pessoal e Endereço */}
                       <div>
                           <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                               <MapPin size={16} /> Dados de Contato e Pessoais
@@ -912,7 +1053,7 @@ export const CrmBoard: React.FC = () => {
                           </div>
                       </div>
 
-                      {/* Section 4: Logística / Turmas */}
+                      {/* Section 5: Logística / Turmas */}
                       {dealFormData.productType === 'Presencial' && (
                           <div className="animate-in fade-in slide-in-from-top-2">
                               <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
@@ -984,7 +1125,7 @@ export const CrmBoard: React.FC = () => {
                           </div>
                       )}
 
-                      {/* Section 5: Outros */}
+                      {/* Section 6: Outros */}
                       <div>
                           <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                               <FileText size={16} /> Detalhes Finais

@@ -131,6 +131,7 @@ ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS product_type text, ADD COL
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS student_access_enabled boolean DEFAULT true;
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS email text;
 ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE public.crm_deals ADD COLUMN IF NOT EXISTS tasks jsonb DEFAULT '[]'::jsonb;
 
 -- 7. TABELA CERTIFICADOS
 CREATE TABLE IF NOT EXISTS public.crm_certificates (

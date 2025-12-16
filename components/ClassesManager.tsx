@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   GraduationCap, Plus, Search, Calendar as CalendarIcon, Clock, MapPin, 
   ArrowLeft, Save, X, MoreHorizontal, BookOpen, CheckSquare, 
@@ -10,6 +11,7 @@ import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
+import { PartnerStudio } from '../types';
 
 // --- Types ---
 interface ClassItem {
@@ -62,8 +64,6 @@ interface ClassItem {
 
 // --- Dropdown Options Mock ---
 const COURSES = ['Formação Completa em Pilates', 'Pilates Clínico', 'Pilates Suspenso', 'Gestão de Studios', 'MIT Movimento Inteligente'];
-// INSTRUCTORS removed - fetched dynamically
-const STUDIOS = ['Studio Central', 'Espaço Vida', 'Pilates Zone', 'Clinica Integrada', 'Box Cross Pilates'];
 
 interface ClassesManagerProps {
   onBack: () => void;
@@ -93,8 +93,9 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [cities, setCities] = useState<IBGECity[]>([]);
   const [isLoadingCities, setIsLoadingCities] = useState(false);
 
-  // Instructors State
+  // External Data States
   const [instructorsList, setInstructorsList] = useState<string[]>([]);
+  const [partnerStudios, setPartnerStudios] = useState<PartnerStudio[]>([]);
 
   // Click outside to close menu
   useEffect(() => {
@@ -151,6 +152,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   useEffect(() => {
       fetchClasses();
       fetchInstructors();
+      fetchPartnerStudios();
       ibgeService.getStates().then(setStates);
   }, []);
 
@@ -225,6 +227,15 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           }
       } catch (e) {
           console.error("Erro ao buscar instrutores:", e);
+      }
+  };
+
+  const fetchPartnerStudios = async () => {
+      try {
+          const data = await appBackend.getPartnerStudios();
+          setPartnerStudios(data);
+      } catch (e) {
+          console.error("Erro ao buscar studios parceiros:", e);
       }
   };
 
@@ -377,6 +388,20 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   });
 
   const selectedClass = classes.find(c => c.id === selectedClassId);
+
+  // --- DERIVED STUDIOS ---
+  // Filter studios that match the selected city. If no city is selected, show empty (or all, depending on UX). 
+  // Let's enforce city selection for clarity.
+  const filteredStudios = useMemo(() => {
+      if (!formData.city) return [];
+      return partnerStudios.filter(s => s.city === formData.city && s.status === 'active');
+  }, [partnerStudios, formData.city]);
+
+  // Find address of selected studio
+  const selectedStudioAddress = useMemo(() => {
+      const studio = partnerStudios.find(s => s.fantasyName === formData.studioMod1);
+      return studio ? studio.address : '';
+  }, [partnerStudios, formData.studioMod1]);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 h-full flex flex-col pb-20">
@@ -718,6 +743,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                     onChange={e => {
                                         handleInputChange('state', e.target.value);
                                         handleInputChange('city', ''); // Reset city on state change
+                                        handleInputChange('studioMod1', ''); // Reset studio on state change
                                     }}
                                 >
                                     <option value="">Selecione...</option>
@@ -729,7 +755,10 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                 <select 
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100"
                                     value={formData.city}
-                                    onChange={e => handleInputChange('city', e.target.value)}
+                                    onChange={e => {
+                                      handleInputChange('city', e.target.value);
+                                      handleInputChange('studioMod1', ''); // Reset studio on city change
+                                    }}
                                     disabled={!formData.state || isLoadingCities}
                                 >
                                     <option value="">{isLoadingCities ? 'Carregando...' : 'Selecione...'}</option>
@@ -806,17 +835,31 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                     onChange={e => handleInputChange('dateMod1', e.target.value)}
                                 />
                             </div>
+                            
+                            {/* STUDIO SELECTION FILTERED BY CITY */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Studio MOD I</label>
                                 <select 
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-50"
                                     value={formData.studioMod1}
                                     onChange={e => handleInputChange('studioMod1', e.target.value)}
+                                    disabled={!formData.city}
                                 >
-                                    <option value="">Selecione...</option>
-                                    {STUDIOS.map(s => <option key={s} value={s}>{s}</option>)}
+                                    <option value="">{formData.city ? 'Selecione o Studio...' : 'Selecione a cidade primeiro'}</option>
+                                    {filteredStudios.map(s => <option key={s.id} value={s.fantasyName}>{s.fantasyName}</option>)}
                                 </select>
                             </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Endereço do Studio</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500"
+                                    value={selectedStudioAddress}
+                                    readOnly
+                                    placeholder="Endereço aparecerá aqui..."
+                                />
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Instrutor Módulo 1</label>
                                 <select 

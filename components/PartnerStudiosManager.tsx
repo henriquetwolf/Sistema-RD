@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Building2, Plus, Search, MoreVertical, MapPin, Phone, Mail, 
   ArrowLeft, Save, X, Edit2, Trash2, Loader2, DollarSign, User, 
-  Dumbbell, CheckSquare, Paperclip, Monitor
+  Dumbbell, CheckSquare, Paperclip, Filter, RefreshCw
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -62,20 +62,30 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  
+  // Filters State
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterState, setFilterState] = useState('');
+  const [filterCity, setFilterCity] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterMethodology, setFilterMethodology] = useState('');
+  
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-  // IBGE State
+  // IBGE State (Form)
   const [states, setStates] = useState<IBGEUF[]>([]);
   const [cities, setCities] = useState<IBGECity[]>([]);
   const [isLoadingCities, setIsLoadingCities] = useState(false);
+
+  // IBGE State (Filters)
+  const [filterCities, setFilterCities] = useState<IBGECity[]>([]);
 
   useEffect(() => {
       fetchStudios();
       ibgeService.getStates().then(setStates);
   }, []);
 
-  // Fetch Cities when State changes
+  // Fetch Cities when Form State changes
   useEffect(() => {
       if (formData.state) {
           setIsLoadingCities(true);
@@ -87,6 +97,17 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
           setCities([]);
       }
   }, [formData.state]);
+
+  // Fetch Cities when Filter State changes
+  useEffect(() => {
+      if (filterState) {
+          ibgeService.getCities(filterState).then(setFilterCities);
+          setFilterCity(''); // Reset city on state change
+      } else {
+          setFilterCities([]);
+          setFilterCity('');
+      }
+  }, [filterState]);
 
   // Click outside to close menu
   useEffect(() => {
@@ -150,10 +171,29 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
       setActiveMenuId(null);
   };
 
-  const filtered = studios.filter(s => 
-      s.fantasyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      s.city.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const clearFilters = () => {
+      setSearchTerm('');
+      setFilterState('');
+      setFilterCity('');
+      setFilterStatus('');
+      setFilterMethodology('');
+  };
+
+  const filtered = studios.filter(s => {
+      const matchesSearch = 
+          (s.fantasyName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+          (s.responsibleName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (s.city || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesState = !filterState || s.state === filterState;
+      const matchesCity = !filterCity || s.city === filterCity;
+      const matchesStatus = !filterStatus || s.status === filterStatus;
+      const matchesMethod = !filterMethodology || s.methodology === filterMethodology;
+
+      return matchesSearch && matchesState && matchesCity && matchesStatus && matchesMethod;
+  });
+
+  const hasActiveFilters = searchTerm || filterState || filterCity || filterStatus || filterMethodology;
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
@@ -179,17 +219,80 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
         </button>
       </div>
 
-      {/* Toolbar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      {/* Toolbar & Filters */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+         {/* Search Bar */}
          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
                 type="text" 
-                placeholder="Buscar por nome ou cidade..." 
+                placeholder="Buscar por nome, responsável ou cidade..." 
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
             />
+         </div>
+
+         {/* Filter Row */}
+         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center text-slate-400 mr-2">
+                <Filter size={16} />
+                <span className="text-xs font-bold uppercase ml-1">Filtros:</span>
+            </div>
+
+            {/* Filter: UF */}
+            <select 
+                value={filterState} 
+                onChange={e => setFilterState(e.target.value)}
+                className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-2 outline-none focus:border-teal-500 w-32"
+            >
+                <option value="">Todos Estados</option>
+                {states.map(s => <option key={s.id} value={s.sigla}>{s.sigla}</option>)}
+            </select>
+
+            {/* Filter: City */}
+            <select 
+                value={filterCity} 
+                onChange={e => setFilterCity(e.target.value)}
+                disabled={!filterState}
+                className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-2 outline-none focus:border-teal-500 w-40 disabled:bg-slate-50 disabled:text-slate-300"
+            >
+                <option value="">Todas Cidades</option>
+                {filterCities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+            </select>
+
+            {/* Filter: Status */}
+            <select 
+                value={filterStatus} 
+                onChange={e => setFilterStatus(e.target.value)}
+                className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-2 outline-none focus:border-teal-500"
+            >
+                <option value="">Todos Status</option>
+                <option value="active">Ativo</option>
+                <option value="inactive">Inativo</option>
+            </select>
+
+            {/* Filter: Methodology */}
+            <select 
+                value={filterMethodology} 
+                onChange={e => setFilterMethodology(e.target.value)}
+                className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-2 outline-none focus:border-teal-500"
+            >
+                <option value="">Todas Metodologias</option>
+                <option value="Clássico">Clássico</option>
+                <option value="Contemporâneo">Contemporâneo</option>
+                <option value="Misto">Misto</option>
+            </select>
+
+            {/* Clear Button */}
+            {hasActiveFilters && (
+                <button 
+                    onClick={clearFilters}
+                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-2 rounded-lg transition-colors ml-auto"
+                >
+                    <X size={14} /> Limpar
+                </button>
+            )}
          </div>
       </div>
 
@@ -198,7 +301,13 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
           {isLoading ? (
               <div className="col-span-full flex justify-center py-12"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
           ) : filtered.length === 0 ? (
-              <div className="col-span-full text-center py-12 text-slate-400">Nenhum studio encontrado.</div>
+              <div className="col-span-full text-center py-12 text-slate-400 flex flex-col items-center">
+                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                      <Building2 size={32} className="text-slate-300" />
+                  </div>
+                  <p>Nenhum studio encontrado.</p>
+                  {hasActiveFilters && <button onClick={clearFilters} className="text-teal-600 text-sm mt-1 hover:underline">Limpar filtros</button>}
+              </div>
           ) : (
               filtered.map(studio => (
                   <div key={studio.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col overflow-hidden">
@@ -227,7 +336,7 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
                               </div>
                           </div>
 
-                          <h3 className="font-bold text-slate-800 text-lg mb-1">{studio.fantasyName}</h3>
+                          <h3 className="font-bold text-slate-800 text-lg mb-1 truncate" title={studio.fantasyName}>{studio.fantasyName}</h3>
                           <div className="flex items-center gap-1 text-sm text-slate-500 mb-4">
                               <MapPin size={14} /> {studio.city}/{studio.state}
                           </div>

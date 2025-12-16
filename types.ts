@@ -52,6 +52,23 @@ export interface SyncJob {
   intervalMinutes: number; // Required for the job logic
 }
 
+// --- ACCESS CONTROL ---
+
+export interface Role {
+  id: string;
+  name: string;
+  permissions: Record<string, boolean>; // e.g., { 'crm': true, 'financial': false }
+  created_at?: string;
+}
+
+export interface CollaboratorSession {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  photoUrl?: string;
+}
+
 // --- FORMS & LEADS ---
 
 export type QuestionType = 'text' | 'paragraph' | 'email' | 'phone' | 'number' | 'date';

@@ -1,18 +1,19 @@
 
 import React, { useState } from 'react';
-import { Loader2, AlertCircle, School, ShieldCheck, GraduationCap } from 'lucide-react';
+import { Loader2, AlertCircle, School, ShieldCheck, GraduationCap, Briefcase } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { Teacher } from './TeachersManager';
-import { StudentSession } from '../types';
+import { StudentSession, CollaboratorSession } from '../types';
 import clsx from 'clsx';
 
 interface LoginPanelProps {
     onInstructorLogin?: (teacher: Teacher) => void;
     onStudentLogin?: (student: StudentSession) => void;
+    onCollaboratorLogin?: (collab: CollaboratorSession) => void; // New callback
 }
 
-export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStudentLogin }) => {
-  const [activeTab, setActiveTab] = useState<'admin' | 'instructor' | 'student'>('admin');
+export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStudentLogin, onCollaboratorLogin }) => {
+  const [activeTab, setActiveTab] = useState<'admin' | 'collaborator' | 'instructor' | 'student'>('admin');
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,8 +33,50 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStu
 
     try {
         if (activeTab === 'admin') {
-            // ADMIN LOGIN (Supabase Auth)
+            // ADMIN LOGIN (Supabase Auth - Superuser)
             await appBackend.auth.signIn(email, password);
+        } else if (activeTab === 'collaborator') {
+            // COLLABORATOR LOGIN (Custom Table)
+            const { data, error } = await appBackend.client
+                .from('crm_collaborators')
+                .select('id, full_name, email, password, photo_url, role_id')
+                .eq('email', email.trim())
+                .eq('password', password.trim())
+                .single();
+
+            if (error || !data) {
+                throw new Error('Credenciais inválidas ou colaborador não encontrado.');
+            }
+
+            if (!data.role_id) {
+                throw new Error('Este usuário não tem permissão de acesso configurada.');
+            }
+
+            // Fetch Role Permissions
+            const { data: roleData, error: roleError } = await appBackend.client
+                .from('crm_roles')
+                .select('*')
+                .eq('id', data.role_id)
+                .single();
+
+            if (roleError || !roleData) {
+                throw new Error('Erro ao carregar permissões do usuário.');
+            }
+
+            const session: CollaboratorSession = {
+                id: data.id,
+                name: data.full_name,
+                email: data.email,
+                photoUrl: data.photo_url,
+                role: {
+                    id: roleData.id,
+                    name: roleData.name,
+                    permissions: roleData.permissions || {}
+                }
+            };
+
+            if (onCollaboratorLogin) onCollaboratorLogin(session);
+
         } else if (activeTab === 'instructor') {
             // INSTRUCTOR LOGIN (Custom Table Query)
             const { data, error } = await appBackend.client
@@ -73,23 +116,18 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStu
 
             if (onInstructorLogin) onInstructorLogin(teacher);
         } else {
-            // STUDENT LOGIN (CRM Deals Table)
-            // Needs email and CPF (password)
-            // Normalize CPF: remove non-digits
+            // STUDENT LOGIN
             const cleanCpf = password.replace(/\D/g, '');
             
-            // Fetch deals for this student. We fetch ALL deals to check if any has access enabled.
-            // Note: In a real world scenario, you'd want a separate Users table. Here we use deals.
             const { data: deals, error } = await appBackend.client
                 .from('crm_deals')
                 .select('*')
-                .eq('email', email.trim()); // First match by email
+                .eq('email', email.trim()); 
 
             if (error || !deals || deals.length === 0) {
                 throw new Error('Aluno não encontrado com este e-mail.');
             }
 
-            // Verify CPF matches at least one record AND access is enabled on at least one
             const studentDeals = deals.filter((d: any) => {
                 const dbCpf = d.cpf ? d.cpf.replace(/\D/g, '') : '';
                 return dbCpf === cleanCpf;
@@ -99,15 +137,12 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStu
                 throw new Error('CPF incorreto.');
             }
 
-            // Check if blocked
-            // Logic: If user has at least one deal with access_enabled = true (or null which defaults to true in logic), they can enter.
             const hasAccess = studentDeals.some((d: any) => d.student_access_enabled !== false);
 
             if (!hasAccess) {
                 throw new Error('Acesso à área do aluno está bloqueado. Contate o suporte.');
             }
 
-            // Login Success
             const studentInfo: StudentSession = {
                 email: studentDeals[0].email,
                 cpf: studentDeals[0].cpf,
@@ -144,29 +179,35 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStu
           </div>
           
           {/* Tabs */}
-          <div className="flex bg-slate-100 p-1 rounded-lg mb-6">
+          <div className="flex bg-slate-100 p-1 rounded-lg mb-6 overflow-x-auto">
               <button 
                 onClick={() => { setActiveTab('admin'); setError(null); }}
-                className={clsx("flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1", activeTab === 'admin' ? "bg-white shadow text-teal-700" : "text-slate-500 hover:text-slate-700")}
+                className={clsx("flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 whitespace-nowrap px-2", activeTab === 'admin' ? "bg-white shadow text-teal-700" : "text-slate-500 hover:text-slate-700")}
               >
                   <ShieldCheck size={14} /> Admin
               </button>
               <button 
+                onClick={() => { setActiveTab('collaborator'); setError(null); }}
+                className={clsx("flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 whitespace-nowrap px-2", activeTab === 'collaborator' ? "bg-white shadow text-blue-700" : "text-slate-500 hover:text-slate-700")}
+              >
+                  <Briefcase size={14} /> Equipe
+              </button>
+              <button 
                 onClick={() => { setActiveTab('instructor'); setError(null); }}
-                className={clsx("flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1", activeTab === 'instructor' ? "bg-white shadow text-orange-600" : "text-slate-500 hover:text-slate-700")}
+                className={clsx("flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 whitespace-nowrap px-2", activeTab === 'instructor' ? "bg-white shadow text-orange-600" : "text-slate-500 hover:text-slate-700")}
               >
                   <School size={14} /> Instrutor
               </button>
               <button 
                 onClick={() => { setActiveTab('student'); setError(null); }}
-                className={clsx("flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1", activeTab === 'student' ? "bg-white shadow text-purple-600" : "text-slate-500 hover:text-slate-700")}
+                className={clsx("flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 whitespace-nowrap px-2", activeTab === 'student' ? "bg-white shadow text-purple-600" : "text-slate-500 hover:text-slate-700")}
               >
                   <GraduationCap size={14} /> Aluno
               </button>
           </div>
 
           <h1 className="text-xl font-bold text-slate-800">
-            {activeTab === 'admin' ? 'Acesso Administrativo' : activeTab === 'instructor' ? 'Portal do Instrutor' : 'Área do Aluno'}
+            {activeTab === 'admin' ? 'Super Admin' : activeTab === 'collaborator' ? 'Acesso Equipe' : activeTab === 'instructor' ? 'Portal do Instrutor' : 'Área do Aluno'}
           </h1>
           <p className="text-slate-500 mt-1 text-sm">
             {activeTab === 'student' ? 'Entre com seu Email e CPF (somente números)' : 'Entre com suas credenciais para continuar'}
@@ -190,7 +231,7 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStu
                 onChange={(e) => setEmail(e.target.value)}
                 className={clsx(
                     "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none transition-all focus:ring-2",
-                    activeTab === 'admin' ? "focus:ring-teal-500 focus:border-teal-500" : activeTab === 'instructor' ? "focus:ring-orange-500 focus:border-orange-500" : "focus:ring-purple-500 focus:border-purple-500"
+                    activeTab === 'admin' ? "focus:ring-teal-500 focus:border-teal-500" : activeTab === 'collaborator' ? "focus:ring-blue-500 focus:border-blue-500" : activeTab === 'instructor' ? "focus:ring-orange-500 focus:border-orange-500" : "focus:ring-purple-500 focus:border-purple-500"
                 )}
                 placeholder="seu.email@exemplo.com"
                 disabled={isLoading}
@@ -205,7 +246,7 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStu
                 onChange={(e) => setPassword(e.target.value)}
                 className={clsx(
                     "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none transition-all focus:ring-2",
-                    activeTab === 'admin' ? "focus:ring-teal-500 focus:border-teal-500" : activeTab === 'instructor' ? "focus:ring-orange-500 focus:border-orange-500" : "focus:ring-purple-500 focus:border-purple-500"
+                    activeTab === 'admin' ? "focus:ring-teal-500 focus:border-teal-500" : activeTab === 'collaborator' ? "focus:ring-blue-500 focus:border-blue-500" : activeTab === 'instructor' ? "focus:ring-orange-500 focus:border-orange-500" : "focus:ring-purple-500 focus:border-purple-500"
                 )}
                 placeholder={activeTab === 'student' ? "Apenas números" : "••••••••"}
                 disabled={isLoading}
@@ -217,7 +258,7 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStu
               disabled={isLoading}
               className={clsx(
                   "w-full text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 mt-4 shadow-lg disabled:opacity-70",
-                  activeTab === 'admin' ? "bg-teal-600 hover:bg-teal-700 shadow-teal-600/20" : activeTab === 'instructor' ? "bg-orange-600 hover:bg-orange-700 shadow-orange-600/20" : "bg-purple-600 hover:bg-purple-700 shadow-purple-600/20"
+                  activeTab === 'admin' ? "bg-teal-600 hover:bg-teal-700 shadow-teal-600/20" : activeTab === 'collaborator' ? "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20" : activeTab === 'instructor' ? "bg-orange-600 hover:bg-orange-700 shadow-orange-600/20" : "bg-purple-600 hover:bg-purple-700 shadow-purple-600/20"
               )}
             >
               {isLoading ? (

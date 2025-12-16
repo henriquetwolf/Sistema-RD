@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock } from '../types';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -198,6 +198,52 @@ export const appBackend = {
 
   saveAppLogo: (url: string) => {
       localStorage.setItem('app_logo_url', url);
+  },
+
+  // --- ROLES & PERMISSIONS ---
+
+  getRoles: async (): Promise<Role[]> => {
+    if (!isConfigured) return [];
+    
+    const { data, error } = await supabase
+      .from('crm_roles')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+        console.warn("Table crm_roles might not exist.", error);
+        return [];
+    }
+
+    return data.map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      permissions: r.permissions || {},
+      created_at: r.created_at
+    }));
+  },
+
+  saveRole: async (role: Role): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    const payload = {
+        name: role.name,
+        permissions: role.permissions
+    };
+
+    if (role.id) {
+        const { error } = await supabase.from('crm_roles').update(payload).eq('id', role.id);
+        if (error) throw error;
+    } else {
+        const { error } = await supabase.from('crm_roles').insert([payload]);
+        if (error) throw error;
+    }
+  },
+
+  deleteRole: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_roles').delete().eq('id', id);
+      if (error) throw error;
   },
 
   // --- FORMS & CRM LOGIC (MOCKED BACKEND FOR FORMS, REAL FOR CRM) ---

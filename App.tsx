@@ -25,8 +25,8 @@ import { StudentsManager } from './components/StudentsManager';
 import { StudentArea } from './components/StudentArea';
 import { CertificateViewer } from './components/CertificateViewer'; 
 import { EventsManager } from './components/EventsManager';
-import { WhatsAppInbox } from './components/WhatsAppInbox'; // NEW IMPORT
-import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession } from './types';
+import { WhatsAppInbox } from './components/WhatsAppInbox'; 
+import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
@@ -36,7 +36,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle
+  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -56,7 +56,7 @@ function App() {
       setAppLogo(newLogo || DEFAULT_LOGO);
   };
 
-  // Auth State
+  // Auth State (Admin / Superuser)
   const [session, setSession] = useState<any>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   
@@ -66,12 +66,14 @@ function App() {
   // Student Auth State
   const [currentStudent, setCurrentStudent] = useState<StudentSession | null>(null);
 
+  // Collaborator Auth State (RBAC)
+  const [currentCollaborator, setCurrentCollaborator] = useState<CollaboratorSession | null>(null);
+
   // Dashboard State (Persisted Jobs)
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const jobsRef = useRef<SyncJob[]>([]); // Ref to access latest jobs inside interval without resetting it
   
   // Dashboard UI State
-  // Extended types to include management tabs
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp'>('overview');
 
   // Sales Widget State
@@ -171,6 +173,14 @@ function App() {
                 setCurrentStudent(JSON.parse(savedStudent));
             } catch (e) {}
         }
+
+        // 6. Check Auth (Collaborator)
+        const savedCollaborator = sessionStorage.getItem('collaborator_session');
+        if (savedCollaborator) {
+            try {
+                setCurrentCollaborator(JSON.parse(savedCollaborator));
+            } catch (e) {}
+        }
     };
 
     initApp();
@@ -228,8 +238,8 @@ function App() {
               .order('closed_at', { ascending: false });
 
           if (error) {
+              // Fallback logic kept from original file
               if (error.code === '42703') {
-                  // Fallback
                   const { data: fallbackData } = await appBackend.client
                       .from('crm_deals')
                       .select('*')
@@ -277,6 +287,9 @@ function App() {
   };
 
   const performJobSync = async (job: SyncJob) => {
+    // ... (Existing sync logic kept identical)
+    // For brevity in this response, omitting detailed sync logic unless it changed
+    // Assuming same implementation as original file
     if (!job.sheetUrl) return;
 
     setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'syncing', lastMessage: 'Iniciando ciclo...' } : j));
@@ -410,6 +423,7 @@ function App() {
   };
 
   const handleCreateConnection = async () => {
+      // ... (Existing implementation)
       const isAutoSync = !!tempSheetUrl;
 
       if (!isAutoSync) {
@@ -479,6 +493,9 @@ function App() {
     } else if (currentStudent) {
         setCurrentStudent(null);
         sessionStorage.removeItem('student_session');
+    } else if (currentCollaborator) {
+        setCurrentCollaborator(null);
+        sessionStorage.removeItem('collaborator_session');
     } else {
         await appBackend.auth.signOut();
     }
@@ -494,6 +511,11 @@ function App() {
       sessionStorage.setItem('student_session', JSON.stringify(student));
   };
 
+  const handleCollaboratorLogin = (collab: CollaboratorSession) => {
+      setCurrentCollaborator(collab);
+      sessionStorage.setItem('collaborator_session', JSON.stringify(collab));
+  };
+
   const getIntervalLabel = (minutes: number) => {
       if (minutes >= 1440) return '24h';
       if (minutes >= 60) return `${Math.floor(minutes / 60)}h`;
@@ -501,6 +523,16 @@ function App() {
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+  // --- ACCESS CONTROL CHECKER ---
+  const canAccess = (module: string): boolean => {
+      if (session) return true; // Super Admin has access to everything
+      if (currentCollaborator) {
+          // Check permissions JSON in role
+          return !!currentCollaborator.role.permissions[module];
+      }
+      return false;
+  };
 
   // --- RENDER ---
   
@@ -514,8 +546,16 @@ function App() {
   // 2. Check for Auth Loading
   if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
   
-  // 3. Check for Session (Either Admin, Instructor or Student)
-  if (!session && !currentInstructor && !currentStudent) return <LoginPanel onInstructorLogin={handleInstructorLogin} onStudentLogin={handleStudentLogin} />;
+  // 3. Check for Session (Either Admin, Instructor, Student or Collaborator)
+  if (!session && !currentInstructor && !currentStudent && !currentCollaborator) {
+      return (
+        <LoginPanel 
+            onInstructorLogin={handleInstructorLogin} 
+            onStudentLogin={handleStudentLogin}
+            onCollaboratorLogin={handleCollaboratorLogin}
+        />
+      );
+  }
 
   // 4. INSTRUCTOR AREA
   if (currentInstructor) {
@@ -527,17 +567,9 @@ function App() {
       return <StudentArea student={currentStudent} onLogout={handleLogout} />;
   }
 
-  // 6. ADMIN AREA
+  // 6. ADMIN / COLLABORATOR AREA
   const isLocalMode = session?.user?.id === 'local-user';
-
-  // Stats Calculation
-  const totalJobs = jobs.length;
-  const activeJobs = jobs.filter(j => j.active && j.sheetUrl).length;
-  const errorJobs = jobs.filter(j => j.status === 'error').length;
-  const lastSyncDate = jobs
-    .map(j => j.lastSync)
-    .filter(d => d !== null)
-    .sort((a, b) => b!.getTime() - a!.getTime())[0];
+  const currentUserTitle = currentCollaborator ? currentCollaborator.role.name : 'Super Admin';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
@@ -547,6 +579,7 @@ function App() {
       {/* RENDER STEP CONTENT (WIZARD) OR DASHBOARD */}
       {step !== AppStep.DASHBOARD ? (
         <div className="max-w-4xl mx-auto py-8 px-4">
+             {/* ... (Wizard code same as before) ... */}
              <div className="flex items-center justify-between mb-8">
                 <button onClick={() => setStep(AppStep.DASHBOARD)} className="text-slate-500 hover:text-teal-600 flex items-center gap-2 font-medium">
                     <ArrowLeft size={20} /> Cancelar e Voltar
@@ -608,7 +641,6 @@ function App() {
                 )}
              </div>
 
-             {/* Wizard Footer Actions (if in Preview) */}
              {step === AppStep.PREVIEW && (
                  <div className="mt-6 flex justify-end">
                      <button
@@ -629,6 +661,9 @@ function App() {
                 <div className="container mx-auto px-4 flex items-center justify-between">
                 <div className="flex items-center gap-3 cursor-pointer" onClick={() => setStep(AppStep.DASHBOARD)}>
                     <img src={appLogo} alt="Logo" className="h-10 w-auto max-w-[180px] object-contain" />
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded border border-blue-100 uppercase tracking-wide">
+                        {currentUserTitle}
+                    </span>
                     {isLocalMode && (
                         <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-mono rounded border border-slate-200 flex items-center gap-1">
                             <HardDrive size={10} /> LOCAL
@@ -659,180 +694,216 @@ function App() {
                     
                     {/* SIDEBAR NAVIGATION */}
                     <aside className={clsx("w-full md:w-64 flex-shrink-0", (dashboardTab === 'whatsapp') ? "hidden md:block" : "")}>
-                        <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto">
+                        <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
                             <nav className="space-y-1">
-                                <button
-                                    onClick={() => setDashboardTab('overview')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        (dashboardTab === 'overview' || ['collaborators', 'classes', 'teachers', 'franchises'].includes(dashboardTab))
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <LayoutDashboard size={18} />
-                                    Visão Geral
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('crm')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'crm' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <Kanban size={18} />
-                                    CRM Comercial
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('whatsapp')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'whatsapp' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <MessageCircle size={18} />
-                                    Atendimento
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('analysis')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'analysis' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <PieChart size={18} />
-                                    Análise de Vendas
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('forms')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'forms' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <FileText size={18} />
-                                    Formulários
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('contracts')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'contracts' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <FileSignature size={18} />
-                                    Contratos
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('events')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'events' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <Mic size={18} />
-                                    Eventos
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('students')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'students' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <Users size={18} />
-                                    Alunos
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('certificates')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'certificates' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <Award size={18} />
-                                    Certificados
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('products')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'products' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <ShoppingBag size={18} />
-                                    Produtos Digitais
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('franchises')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'franchises' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <Store size={18} />
-                                    Franquias
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('tables')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'tables' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <Table size={18} />
-                                    Dados Brutos
-                                </button>
-                                <button
-                                    onClick={() => setDashboardTab('settings')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'settings' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <Database size={18} />
-                                    Conexões
-                                </button>
+                                {canAccess('overview') && (
+                                    <button
+                                        onClick={() => setDashboardTab('overview')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            (dashboardTab === 'overview') ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <LayoutDashboard size={18} />
+                                        Visão Geral
+                                    </button>
+                                )}
+                                {canAccess('crm') && (
+                                    <button
+                                        onClick={() => setDashboardTab('crm')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <Kanban size={18} />
+                                        CRM Comercial
+                                    </button>
+                                )}
+                                {canAccess('whatsapp') && (
+                                    <button
+                                        onClick={() => setDashboardTab('whatsapp')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'whatsapp' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <MessageCircle size={18} />
+                                        Atendimento
+                                    </button>
+                                )}
+                                {canAccess('analysis') && (
+                                    <button
+                                        onClick={() => setDashboardTab('analysis')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'analysis' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <PieChart size={18} />
+                                        Análise de Vendas
+                                    </button>
+                                )}
+                                {canAccess('forms') && (
+                                    <button
+                                        onClick={() => setDashboardTab('forms')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'forms' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <FileText size={18} />
+                                        Formulários
+                                    </button>
+                                )}
+                                {canAccess('contracts') && (
+                                    <button
+                                        onClick={() => setDashboardTab('contracts')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'contracts' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <FileSignature size={18} />
+                                        Contratos
+                                    </button>
+                                )}
+                                {canAccess('events') && (
+                                    <button
+                                        onClick={() => setDashboardTab('events')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'events' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <Mic size={18} />
+                                        Eventos
+                                    </button>
+                                )}
+                                {canAccess('students') && (
+                                    <button
+                                        onClick={() => setDashboardTab('students')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'students' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <Users size={18} />
+                                        Alunos
+                                    </button>
+                                )}
+                                {canAccess('certificates') && (
+                                    <button
+                                        onClick={() => setDashboardTab('certificates')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'certificates' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <Award size={18} />
+                                        Certificados
+                                    </button>
+                                )}
+                                {canAccess('products') && (
+                                    <button
+                                        onClick={() => setDashboardTab('products')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'products' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <ShoppingBag size={18} />
+                                        Produtos Digitais
+                                    </button>
+                                )}
+                                {canAccess('franchises') && (
+                                    <button
+                                        onClick={() => setDashboardTab('franchises')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'franchises' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <Store size={18} />
+                                        Franquias
+                                    </button>
+                                )}
+                                {canAccess('collaborators') && (
+                                    <button
+                                        onClick={() => setDashboardTab('collaborators')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'collaborators' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <Briefcase size={18} />
+                                        Colaboradores
+                                    </button>
+                                )}
+                                {canAccess('classes') && (
+                                    <button
+                                        onClick={() => setDashboardTab('classes')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'classes' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <GraduationCap size={18} />
+                                        Turmas
+                                    </button>
+                                )}
+                                {canAccess('teachers') && (
+                                    <button
+                                        onClick={() => setDashboardTab('teachers')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'teachers' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <School size={18} />
+                                        Professores
+                                    </button>
+                                )}
+                                {canAccess('tables') && (
+                                    <button
+                                        onClick={() => setDashboardTab('tables')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'tables' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <Table size={18} />
+                                        Dados Brutos
+                                    </button>
+                                )}
+                                {canAccess('settings') && (
+                                    <button
+                                        onClick={() => setDashboardTab('settings')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <Database size={18} />
+                                        Conexões
+                                    </button>
+                                )}
                             </nav>
                             
-                            <div className="mt-4 pt-4 border-t border-slate-100">
-                                <button
-                                    onClick={() => setDashboardTab('global_settings')}
-                                    className={clsx(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                        dashboardTab === 'global_settings' 
-                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
-                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                    )}
-                                >
-                                    <Cog size={18} />
-                                    Configurações
-                                </button>
-                            </div>
+                            {canAccess('global_settings') && (
+                                <div className="mt-4 pt-4 border-t border-slate-100">
+                                    <button
+                                        onClick={() => setDashboardTab('global_settings')}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                            dashboardTab === 'global_settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        )}
+                                    >
+                                        <Cog size={18} />
+                                        Configurações
+                                    </button>
+                                </div>
+                            )}
 
                             <div className="mt-2 pt-4 border-t border-slate-100 px-3">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Status do Sistema</p>
@@ -852,170 +923,180 @@ function App() {
                             <div className="space-y-6 animate-in fade-in duration-300">
                                 <div>
                                     <h2 className="text-2xl font-bold text-slate-800">Painel de Controle</h2>
-                                    <p className="text-slate-500 text-sm">Bem-vindo ao sistema de gestão.</p>
+                                    <p className="text-slate-500 text-sm">Bem-vindo, {currentUserTitle}.</p>
                                 </div>
 
                                 {/* --- WIDGET: VENDAS REALIZADAS --- */}
-                                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                    <div className="p-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
-                                                <TrendingUp size={20} />
-                                            </div>
-                                            <div>
-                                                <h3 className="text-lg font-bold text-slate-800">Performance Comercial</h3>
-                                                <p className="text-xs text-slate-500">Vendas fechadas no período.</p>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                                            <div className="flex items-center gap-2 px-2 py-1 bg-white border border-slate-200 rounded text-xs text-slate-600">
-                                                <Calendar size={14} className="text-slate-400" />
-                                                <input 
-                                                    type="date" 
-                                                    value={salesDateRange.start}
-                                                    onChange={e => setSalesDateRange({...salesDateRange, start: e.target.value})}
-                                                    className="outline-none text-slate-700 bg-transparent w-24"
-                                                />
-                                            </div>
-                                            <span className="text-slate-300">-</span>
-                                            <div className="flex items-center gap-2 px-2 py-1 bg-white border border-slate-200 rounded text-xs text-slate-600">
-                                                <Calendar size={14} className="text-slate-400" />
-                                                <input 
-                                                    type="date" 
-                                                    value={salesDateRange.end}
-                                                    onChange={e => setSalesDateRange({...salesDateRange, end: e.target.value})}
-                                                    className="outline-none text-slate-700 bg-transparent w-24"
-                                                />
-                                            </div>
-                                            <button 
-                                                onClick={fetchSalesData}
-                                                className="p-1.5 hover:bg-teal-50 text-teal-600 rounded"
-                                                title="Filtrar"
-                                            >
-                                                <Filter size={14} />
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-6">
-                                        {isLoadingSales ? (
-                                            <div className="flex justify-center py-8">
-                                                <Loader2 size={32} className="animate-spin text-teal-600" />
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex items-center justify-between">
-                                                        <div>
-                                                            <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Total em Vendas</p>
-                                                            <p className="text-2xl font-bold text-emerald-900">{formatCurrency(salesStats.totalValue)}</p>
-                                                        </div>
-                                                        <DollarSign size={32} className="text-emerald-200" />
-                                                    </div>
-                                                    <div className="bg-sky-50 p-4 rounded-xl border border-sky-100 flex items-center justify-between">
-                                                        <div>
-                                                            <p className="text-xs font-bold text-sky-600 uppercase tracking-wider">Quantidade de Negócios</p>
-                                                            <p className="text-2xl font-bold text-sky-900">{salesStats.count}</p>
-                                                        </div>
-                                                        <CheckCircle size={32} className="text-sky-200" />
-                                                    </div>
+                                {(canAccess('crm') || canAccess('analysis')) && (
+                                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                        <div className="p-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                                                    <TrendingUp size={20} />
                                                 </div>
+                                                <div>
+                                                    <h3 className="text-lg font-bold text-slate-800">Performance Comercial</h3>
+                                                    <p className="text-xs text-slate-500">Vendas fechadas no período.</p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                                                <div className="flex items-center gap-2 px-2 py-1 bg-white border border-slate-200 rounded text-xs text-slate-600">
+                                                    <Calendar size={14} className="text-slate-400" />
+                                                    <input 
+                                                        type="date" 
+                                                        value={salesDateRange.start}
+                                                        onChange={e => setSalesDateRange({...salesDateRange, start: e.target.value})}
+                                                        className="outline-none text-slate-700 bg-transparent w-24"
+                                                    />
+                                                </div>
+                                                <span className="text-slate-300">-</span>
+                                                <div className="flex items-center gap-2 px-2 py-1 bg-white border border-slate-200 rounded text-xs text-slate-600">
+                                                    <Calendar size={14} className="text-slate-400" />
+                                                    <input 
+                                                        type="date" 
+                                                        value={salesDateRange.end}
+                                                        onChange={e => setSalesDateRange({...salesDateRange, end: e.target.value})}
+                                                        className="outline-none text-slate-700 bg-transparent w-24"
+                                                    />
+                                                </div>
+                                                <button 
+                                                    onClick={fetchSalesData}
+                                                    className="p-1.5 hover:bg-teal-50 text-teal-600 rounded"
+                                                    title="Filtrar"
+                                                >
+                                                    <Filter size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
 
-                                                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                                                    <table className="w-full text-sm text-left">
-                                                        <thead className="bg-slate-50 text-xs text-slate-500 uppercase font-semibold">
-                                                            <tr>
-                                                                <th className="px-4 py-3">Data</th>
-                                                                <th className="px-4 py-3">Cliente</th>
-                                                                <th className="px-4 py-3">Oportunidade</th>
-                                                                <th className="px-4 py-3 text-right">Valor</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y divide-slate-100">
-                                                            {salesStats.deals.length === 0 ? (
+                                        <div className="p-6">
+                                            {isLoadingSales ? (
+                                                <div className="flex justify-center py-8">
+                                                    <Loader2 size={32} className="animate-spin text-teal-600" />
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                                        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Total em Vendas</p>
+                                                                <p className="text-2xl font-bold text-emerald-900">{formatCurrency(salesStats.totalValue)}</p>
+                                                            </div>
+                                                            <DollarSign size={32} className="text-emerald-200" />
+                                                        </div>
+                                                        <div className="bg-sky-50 p-4 rounded-xl border border-sky-100 flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-xs font-bold text-sky-600 uppercase tracking-wider">Quantidade de Negócios</p>
+                                                                <p className="text-2xl font-bold text-sky-900">{salesStats.count}</p>
+                                                            </div>
+                                                            <CheckCircle size={32} className="text-sky-200" />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                                        <table className="w-full text-sm text-left">
+                                                            <thead className="bg-slate-50 text-xs text-slate-500 uppercase font-semibold">
                                                                 <tr>
-                                                                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic">
-                                                                        Nenhuma venda encontrada neste período.
-                                                                    </td>
+                                                                    <th className="px-4 py-3">Data</th>
+                                                                    <th className="px-4 py-3">Cliente</th>
+                                                                    <th className="px-4 py-3">Oportunidade</th>
+                                                                    <th className="px-4 py-3 text-right">Valor</th>
                                                                 </tr>
-                                                            ) : (
-                                                                salesStats.deals.map((deal, idx) => (
-                                                                    <tr key={idx} className="hover:bg-slate-50">
-                                                                        <td className="px-4 py-3 text-slate-500 font-mono text-xs">
-                                                                            {deal.closed_at ? new Date(deal.closed_at).toLocaleDateString() : new Date(deal.created_at).toLocaleDateString()}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 font-medium text-slate-700">
-                                                                            {deal.company_name}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-slate-600 truncate max-w-[200px]" title={deal.title}>
-                                                                            {deal.title}
-                                                                        </td>
-                                                                        <td className="px-4 py-3 text-right font-bold text-emerald-600">
-                                                                            {formatCurrency(Number(deal.value))}
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-100">
+                                                                {salesStats.deals.length === 0 ? (
+                                                                    <tr>
+                                                                        <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic">
+                                                                            Nenhuma venda encontrada neste período.
                                                                         </td>
                                                                     </tr>
-                                                                ))
-                                                            )}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </>
-                                        )}
+                                                                ) : (
+                                                                    salesStats.deals.map((deal, idx) => (
+                                                                        <tr key={idx} className="hover:bg-slate-50">
+                                                                            <td className="px-4 py-3 text-slate-500 font-mono text-xs">
+                                                                                {deal.closed_at ? new Date(deal.closed_at).toLocaleDateString() : new Date(deal.created_at).toLocaleDateString()}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 font-medium text-slate-700">
+                                                                                {deal.company_name}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-slate-600 truncate max-w-[200px]" title={deal.title}>
+                                                                                {deal.title}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right font-bold text-emerald-600">
+                                                                                {formatCurrency(Number(deal.value))}
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))
+                                                                )}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
-                                {/* --- SECTION: CADASTROS --- */}
+                                {/* --- SECTION: CADASTROS (Filter based on permission) --- */}
                                 <div className="pt-2">
                                     <h3 className="text-lg font-bold text-slate-800 mb-4">Módulos Administrativos</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         {/* Card Colaboradores */}
-                                        <div 
-                                            onClick={() => setDashboardTab('collaborators')}
-                                            className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"
-                                        >
-                                            <div className="w-12 h-12 bg-sky-50 text-sky-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-sky-600 group-hover:text-white transition-colors">
-                                                <Users size={24} />
+                                        {canAccess('collaborators') && (
+                                            <div 
+                                                onClick={() => setDashboardTab('collaborators')}
+                                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"
+                                            >
+                                                <div className="w-12 h-12 bg-sky-50 text-sky-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-sky-600 group-hover:text-white transition-colors">
+                                                    <Users size={24} />
+                                                </div>
+                                                <h4 className="font-bold text-slate-800 mb-1 group-hover:text-sky-700">Colaboradores</h4>
+                                                <p className="text-xs text-slate-500">Gestão de equipe e acessos.</p>
                                             </div>
-                                            <h4 className="font-bold text-slate-800 mb-1 group-hover:text-sky-700">Colaboradores</h4>
-                                            <p className="text-xs text-slate-500">Gestão de equipe e acessos.</p>
-                                        </div>
+                                        )}
 
                                         {/* Card Turmas */}
-                                        <div 
-                                            onClick={() => setDashboardTab('classes')}
-                                            className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"
-                                        >
-                                            <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                                                <GraduationCap size={24} />
+                                        {canAccess('classes') && (
+                                            <div 
+                                                onClick={() => setDashboardTab('classes')}
+                                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"
+                                            >
+                                                <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                                                    <GraduationCap size={24} />
+                                                </div>
+                                                <h4 className="font-bold text-slate-800 mb-1 group-hover:text-purple-700">Turmas</h4>
+                                                <p className="text-xs text-slate-500">Gestão de cronogramas e alunos.</p>
                                             </div>
-                                            <h4 className="font-bold text-slate-800 mb-1 group-hover:text-purple-700">Turmas</h4>
-                                            <p className="text-xs text-slate-500">Gestão de cronogramas e alunos.</p>
-                                        </div>
+                                        )}
 
                                         {/* Card Professores */}
-                                        <div 
-                                            onClick={() => setDashboardTab('teachers')}
-                                            className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"
-                                        >
-                                            <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-colors">
-                                                <School size={24} />
+                                        {canAccess('teachers') && (
+                                            <div 
+                                                onClick={() => setDashboardTab('teachers')}
+                                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"
+                                            >
+                                                <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                                                    <School size={24} />
+                                                </div>
+                                                <h4 className="font-bold text-slate-800 mb-1 group-hover:text-orange-700">Professores</h4>
+                                                <p className="text-xs text-slate-500">Gestão do corpo docente.</p>
                                             </div>
-                                            <h4 className="font-bold text-slate-800 mb-1 group-hover:text-orange-700">Professores</h4>
-                                            <p className="text-xs text-slate-500">Gestão do corpo docente.</p>
-                                        </div>
+                                        )}
 
                                         {/* Card Franquias */}
-                                        <div 
-                                            onClick={() => setDashboardTab('franchises')}
-                                            className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"
-                                        >
-                                            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                                                <Store size={24} />
+                                        {canAccess('franchises') && (
+                                            <div 
+                                                onClick={() => setDashboardTab('franchises')}
+                                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"
+                                            >
+                                                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                                                    <Store size={24} />
+                                                </div>
+                                                <h4 className="font-bold text-slate-800 mb-1 group-hover:text-emerald-700">Franquias</h4>
+                                                <p className="text-xs text-slate-500">Gestão de unidades e implantação.</p>
                                             </div>
-                                            <h4 className="font-bold text-slate-800 mb-1 group-hover:text-emerald-700">Franquias</h4>
-                                            <p className="text-xs text-slate-500">Gestão de unidades e implantação.</p>
-                                        </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -1026,18 +1107,22 @@ function App() {
                                         <p className="text-teal-100 text-sm max-w-md">Gerencie oportunidades e funil de vendas em um só lugar.</p>
                                     </div>
                                     <div className="flex gap-2">
-                                        <button 
-                                            onClick={() => setDashboardTab('whatsapp')}
-                                            className="bg-teal-700 hover:bg-teal-600 px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 border border-teal-500"
-                                        >
-                                            <MessageCircle size={16} /> Atendimento
-                                        </button>
-                                        <button 
-                                            onClick={() => setDashboardTab('crm')}
-                                            className="bg-white text-teal-700 hover:bg-teal-50 px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
-                                        >
-                                            Acessar CRM <ArrowRight size={16} />
-                                        </button>
+                                        {canAccess('whatsapp') && (
+                                            <button 
+                                                onClick={() => setDashboardTab('whatsapp')}
+                                                className="bg-teal-700 hover:bg-teal-600 px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 border border-teal-500"
+                                            >
+                                                <MessageCircle size={16} /> Atendimento
+                                            </button>
+                                        )}
+                                        {canAccess('crm') && (
+                                            <button 
+                                                onClick={() => setDashboardTab('crm')}
+                                                className="bg-white text-teal-700 hover:bg-teal-50 px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
+                                            >
+                                                Acessar CRM <ArrowRight size={16} />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>

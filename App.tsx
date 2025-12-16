@@ -24,7 +24,8 @@ import { CertificatesManager } from './components/CertificatesManager';
 import { StudentsManager } from './components/StudentsManager';
 import { StudentArea } from './components/StudentArea';
 import { CertificateViewer } from './components/CertificateViewer'; 
-import { EventsManager } from './components/EventsManager'; // NEW IMPORT
+import { EventsManager } from './components/EventsManager';
+import { WhatsAppInbox } from './components/WhatsAppInbox'; // NEW IMPORT
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -35,7 +36,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award, Mic
+  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -71,7 +72,7 @@ function App() {
   
   // Dashboard UI State
   // Extended types to include management tabs
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -651,13 +652,13 @@ function App() {
                 </div>
             </header>
 
-            <main className={clsx("container mx-auto px-4", dashboardTab === 'crm' ? "max-w-full py-4" : "py-8")}>
+            <main className={clsx("container mx-auto px-4", (dashboardTab === 'crm' || dashboardTab === 'whatsapp') ? "max-w-full py-4" : "py-8")}>
                 
                 {/* DASHBOARD LAYOUT */}
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                     
                     {/* SIDEBAR NAVIGATION */}
-                    <aside className="w-full md:w-64 flex-shrink-0">
+                    <aside className={clsx("w-full md:w-64 flex-shrink-0", (dashboardTab === 'whatsapp') ? "hidden md:block" : "")}>
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto">
                             <nav className="space-y-1">
                                 <button
@@ -683,6 +684,18 @@ function App() {
                                 >
                                     <Kanban size={18} />
                                     CRM Comercial
+                                </button>
+                                <button
+                                    onClick={() => setDashboardTab('whatsapp')}
+                                    className={clsx(
+                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                                        dashboardTab === 'whatsapp' 
+                                            ? "bg-teal-50 text-teal-700 shadow-sm" 
+                                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    )}
+                                >
+                                    <MessageCircle size={18} />
+                                    Atendimento
                                 </button>
                                 <button
                                     onClick={() => setDashboardTab('analysis')}
@@ -1012,12 +1025,20 @@ function App() {
                                         <h3 className="text-lg font-bold mb-1">CRM VOLL</h3>
                                         <p className="text-teal-100 text-sm max-w-md">Gerencie oportunidades e funil de vendas em um só lugar.</p>
                                     </div>
-                                    <button 
-                                        onClick={() => setDashboardTab('crm')}
-                                        className="bg-white text-teal-700 hover:bg-teal-50 px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
-                                    >
-                                        Acessar CRM <ArrowRight size={16} />
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => setDashboardTab('whatsapp')}
+                                            className="bg-teal-700 hover:bg-teal-600 px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 border border-teal-500"
+                                        >
+                                            <MessageCircle size={16} /> Atendimento
+                                        </button>
+                                        <button 
+                                            onClick={() => setDashboardTab('crm')}
+                                            className="bg-white text-teal-700 hover:bg-teal-50 px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
+                                        >
+                                            Acessar CRM <ArrowRight size={16} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -1035,6 +1056,7 @@ function App() {
                         {dashboardTab === 'events' && <EventsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} />}
                         {dashboardTab === 'analysis' && <SalesAnalysis />}
+                        {dashboardTab === 'whatsapp' && <WhatsAppInbox />}
 
                         {/* TAB: CRM */}
                         {dashboardTab === 'crm' && (

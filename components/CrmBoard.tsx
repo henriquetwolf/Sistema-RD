@@ -129,10 +129,10 @@ const handleDbError = (e: any) => {
     const msg = e.message || "Erro desconhecido";
     if (msg.includes('relation "crm_deals" does not exist')) {
        alert("Erro Crítico: A tabela 'crm_deals' não existe no banco de dados.");
-    } else if (msg.includes('column') && msg.includes('does not exist')) {
-       alert(`Erro de Schema: Uma coluna nova não existe no banco de dados.\n\nDetalhe: ${msg}\n\nVá em Configurações > Diagnóstico e execute o SQL.`);
+    } else if (msg.includes('column') && (msg.includes('does not exist') || msg.includes('cache'))) {
+       alert(`Erro de Schema: O banco de dados está desatualizado ou em cache.\n\nVá em Configurações > Diagnóstico e execute o SQL de reparo.\n\nDetalhe: ${msg}`);
     } else {
-       alert(`Erro ao salvar: ${msg}`);
+       alert(`Erro: ${msg}`);
     }
 };
 
@@ -364,22 +364,22 @@ export const CrmBoard: React.FC = () => {
             members: selectedMembers || []
         };
         
-        let error;
+        let response;
         if (editingTeam) {
-            const result = await appBackend.client.from('crm_teams').update(payload).eq('id', editingTeam.id);
-            error = result.error;
+            response = await appBackend.client.from('crm_teams').update(payload).eq('id', editingTeam.id);
         } else {
-            const result = await appBackend.client.from('crm_teams').insert([payload]);
-            error = result.error;
+            response = await appBackend.client.from('crm_teams').insert([payload]);
         }
 
-        if (error) throw error;
+        if (response.error) {
+            throw response.error;
+        }
 
         await fetchData();
         setShowTeamModal(false);
     } catch (e: any) {
         console.error("Erro ao salvar equipe:", e);
-        alert(`Erro ao salvar equipe: ${e.message || "A tabela crm_teams pode não existir. Verifique o SQL Editor."}`);
+        handleDbError(e);
     } finally {
         setIsSavingTeam(false);
     }
@@ -429,7 +429,7 @@ export const CrmBoard: React.FC = () => {
           installments: Number(dealFormData.installments) || 1, 
           installment_value: Number(dealFormData.installmentValue || 0),
           product_type: dealFormData.productType, 
-          product_name: dealFormData.productName, // Corrigido de product_name para productName
+          product_name: dealFormData.productName,
           email: dealFormData.email, 
           phone: dealFormData.phone,
           cpf: dealFormData.cpf, 
@@ -663,7 +663,7 @@ export const CrmBoard: React.FC = () => {
                       <button 
                         onClick={handleSaveTeam} 
                         disabled={isSavingTeam || !teamName.trim()}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2 disabled:opacity-50"
                       >
                           {isSavingTeam ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                           Salvar Equipe
@@ -705,6 +705,7 @@ export const CrmBoard: React.FC = () => {
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Tipo de Produto</label>
+                                  {/* Fix: changed formData.productType to dealFormData.productType */}
                                   <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.productType} onChange={e => setDealFormData({...dealFormData, productType: e.target.value as any, productName: ''})}>
                                       <option value="Presencial">Curso Presencial</option>
                                       <option value="Digital">Produto Digital</option>

@@ -5,7 +5,6 @@ import { ConfigPanel } from './components/ConfigPanel';
 import { UploadPanel } from './components/UploadPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { LoginPanel } from './components/LoginPanel';
-import { IntegrationHelp } from './components/IntegrationHelp';
 import { TableViewer } from './components/TableViewer';
 import { CrmBoard } from './components/CrmBoard'; 
 import { CollaboratorsManager } from './components/CollaboratorsManager';
@@ -34,7 +33,7 @@ import { createSupabaseClient, batchUploadData, clearTableData } from './service
 import { appBackend } from './services/appBackend';
 import { 
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
-  Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
+  Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2
@@ -92,9 +91,6 @@ function App() {
   const [tempSheetUrl, setTempSheetUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // UI State
-  const [showHelp, setShowHelp] = useState(false);
 
   // Sync Timer Ref
   const intervalRef = useRef<number | null>(null);
@@ -575,8 +571,6 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       
-      <IntegrationHelp isOpen={showHelp} onClose={() => setShowHelp(false)} config={config} />
-
       {/* RENDER STEP CONTENT (WIZARD) OR DASHBOARD */}
       {step !== AppStep.DASHBOARD ? (
         <div className="max-w-4xl mx-auto py-8 px-4">
@@ -672,15 +666,6 @@ function App() {
                     )}
                 </div>
                 <div className="flex items-center gap-4">
-                    <button 
-                        onClick={() => setShowHelp(true)}
-                        className="text-sm font-medium text-slate-500 hover:text-teal-600 flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-full hover:bg-teal-50 transition-colors"
-                    >
-                        <HelpCircle size={16} /> <span className="hidden sm:inline">Guia Power BI</span>
-                    </button>
-
-                    <div className="h-6 w-px bg-slate-200"></div>
-                    
                     <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600 flex items-center gap-1.5 font-medium transition-colors">
                         <LogOut size={16} /> <span className="hidden sm:inline">Sair</span>
                     </button>

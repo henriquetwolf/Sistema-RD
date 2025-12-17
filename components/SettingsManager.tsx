@@ -7,7 +7,7 @@ import {
     Monitor, Globe, Target, Info, Shield
 } from 'lucide-react';
 import { appBackend, CompanySetting } from '../services/appBackend';
-import { Role, Banner } from '../types';
+import { Role, Role as UserRole, Banner } from '../types';
 import clsx from 'clsx';
 
 interface SettingsManagerProps {
@@ -46,8 +46,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
   const [sqlCopied, setSqlCopied] = useState(false);
 
   // Role Management State
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [roles, setRoles] = useState<UserRole[]>([]);
+  const [editingRole, setEditingRole] = useState<UserRole | null>(null);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
 
   // Banner Management State
@@ -290,10 +290,20 @@ ALTER TABLE public.crm_companies ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total companies" ON public.crm_companies;
 CREATE POLICY "Acesso total companies" ON public.crm_companies FOR ALL USING (true) WITH CHECK (true);
 
+-- TABELA DE EQUIPES COMERCIAIS
+CREATE TABLE IF NOT EXISTS public.crm_teams (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    created_at timestamptz DEFAULT now(),
+    name text NOT NULL,
+    members jsonb DEFAULT '[]'::jsonb
+);
+ALTER TABLE public.crm_teams ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total teams" ON public.crm_teams;
+CREATE POLICY "Acesso total teams" ON public.crm_teams FOR ALL USING (true) WITH CHECK (true);
+
 NOTIFY pgrst, 'reload config';
   `;
 
-  // Fix: Add the missing copySql function to handle SQL clipboard copying
   const copySql = () => {
     const sql = generateRepairSQL();
     navigator.clipboard.writeText(sql);

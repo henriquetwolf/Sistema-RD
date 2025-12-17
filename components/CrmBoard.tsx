@@ -5,7 +5,7 @@ import {
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
-  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock
+  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend, CompanySetting } from '../services/appBackend';
@@ -40,7 +40,6 @@ interface Deal {
   productType?: 'Digital' | 'Presencial' | 'Evento';
   productName?: string;
   
-  // Novos campos de faturamento automático
   billingCnpj?: string;
   billingCompanyName?: string;
 
@@ -174,9 +173,20 @@ export const CrmBoard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
+  
+  // Modals
   const [showDealModal, setShowDealModal] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormData, setDealFormData] = useState<Partial<Deal>>(INITIAL_FORM_STATE);
+  
+  // Team form
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [teamName, setTeamName] = useState('');
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [isSavingTeam, setIsSavingTeam] = useState(false);
+
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskDate, setNewTaskDate] = useState('');
   const [newTaskType, setNewTaskType] = useState<'call' | 'email' | 'meeting' | 'todo'>('todo');
@@ -185,7 +195,6 @@ export const CrmBoard: React.FC = () => {
     fetchData();
   }, []);
 
-  // --- AUTO-FILL BILLING CNPJ EFFECT ---
   useEffect(() => {
       if (dealFormData.productType && companies.length > 0) {
           const matched = companies.find(c => c.productTypes && c.productTypes.includes(dealFormData.productType!));
@@ -210,7 +219,7 @@ export const CrmBoard: React.FC = () => {
       try {
           const [dealsResult, teamsResult, classesResult, productsResult, eventsResult, collabResult, companiesResult] = await Promise.all([
               appBackend.client.from('crm_deals').select('*').order('created_at', { ascending: false }),
-              appBackend.client.from('crm_teams').select('*'),
+              appBackend.client.from('crm_teams').select('*').order('name', { ascending: true }),
               appBackend.client.from('crm_classes').select('id, course, state, city, mod_1_code, mod_2_code'),
               appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
               appBackend.client.from('crm_events').select('id, name').order('created_at', { ascending: false }),
@@ -314,6 +323,58 @@ export const CrmBoard: React.FC = () => {
   const openNewDealModal = () => { setEditingDealId(null); setDealFormData({ ...INITIAL_FORM_STATE, owner: collaborators.filter(c => c.department === 'Comercial')[0]?.id || '' }); setShowDealModal(true); };
   const openEditDealModal = (deal: Deal) => { setEditingDealId(deal.id); setDealFormData({ ...deal }); setShowDealModal(true); };
 
+  // --- TEAM ACTIONS ---
+  const openNewTeamModal = () => {
+    setEditingTeam(null);
+    setTeamName('');
+    setSelectedMembers([]);
+    setShowTeamModal(true);
+  };
+
+  const openEditTeamModal = (team: Team) => {
+    setEditingTeam(team);
+    setTeamName(team.name);
+    setSelectedMembers(team.members || []);
+    setShowTeamModal(true);
+  };
+
+  const handleSaveTeam = async () => {
+    if (!teamName.trim()) return;
+    setIsSavingTeam(true);
+    try {
+        const payload = {
+            name: teamName,
+            members: selectedMembers
+        };
+        if (editingTeam) {
+            await appBackend.client.from('crm_teams').update(payload).eq('id', editingTeam.id);
+        } else {
+            await appBackend.client.from('crm_teams').insert([payload]);
+        }
+        await fetchData();
+        setShowTeamModal(false);
+    } catch (e) {
+        console.error(e);
+        alert("Erro ao salvar equipe.");
+    } finally {
+        setIsSavingTeam(false);
+    }
+  };
+
+  const handleDeleteTeam = async (id: string) => {
+      if (!window.confirm("Excluir esta equipe?")) return;
+      try {
+          await appBackend.client.from('crm_teams').delete().eq('id', id);
+          await fetchData();
+      } catch (e) {
+          alert("Erro ao excluir equipe.");
+      }
+  };
+
+  const toggleMember = (id: string) => {
+      setSelectedMembers(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]);
+  };
+
   const handleAddTask = () => {
       if(!newTaskDesc) return;
       const newTask: DealTask = { id: crypto.randomUUID(), description: newTaskDesc, dueDate: newTaskDate, type: newTaskType, isDone: false };
@@ -328,8 +389,8 @@ export const CrmBoard: React.FC = () => {
           title: dealTitle, company_name: dealFormData.companyName, contact_name: dealFormData.contactName, value: Number(dealFormData.value) || 0,
           payment_method: dealFormData.paymentMethod, stage: dealFormData.stage || 'new', owner_id: dealFormData.owner, status: dealFormData.status || 'warm',
           next_task: dealFormData.nextTask, source: dealFormData.source, campaign: dealFormData.campaign, entry_value: Number(dealFormData.entryValue) || 0,
-          installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installmentValue) || 0,
-          product_type: dealFormData.productType, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
+          installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installment_value || 0),
+          product_type: dealFormData.productType, product_name: dealFormData.product_name, email: dealFormData.email, phone: dealFormData.phone,
           cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate, receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode,
           zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber,
           registration_data: dealFormData.registrationData, observation: dealFormData.observation, course_state: dealFormData.courseState,
@@ -370,15 +431,20 @@ export const CrmBoard: React.FC = () => {
             </div>
             <button onClick={fetchData} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"><RefreshCw size={18} className={clsx(isLoading && "animate-spin")} /></button>
         </div>
-        {activeView === 'pipeline' && (
-            <div className="flex items-center gap-4 flex-1 justify-end">
-                <div className="relative max-w-xs w-full hidden md:block">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input type="text" placeholder="Buscar oportunidade ou Nº..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border-transparent focus:bg-white focus:border-indigo-300 border rounded-full text-sm outline-none"/>
-                </div>
-                <button onClick={openNewDealModal} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-all"><Plus size={18} /> Novo Negócio</button>
-            </div>
-        )}
+        
+        <div className="flex items-center gap-4 flex-1 justify-end">
+            {activeView === 'pipeline' ? (
+                <>
+                    <div className="relative max-w-xs w-full hidden md:block">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input type="text" placeholder="Buscar oportunidade ou Nº..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border-transparent focus:bg-white focus:border-indigo-300 border rounded-full text-sm outline-none"/>
+                    </div>
+                    <button onClick={openNewDealModal} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-all"><Plus size={18} /> Novo Negócio</button>
+                </>
+            ) : (
+                <button onClick={openNewTeamModal} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-all"><Plus size={18} /> Nova Equipe</button>
+            )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-x-auto bg-slate-100/50 p-6 relative">
@@ -438,15 +504,125 @@ export const CrmBoard: React.FC = () => {
                 })}
                 </div>
             )}
-            {activeView === 'teams' && <div className="max-w-6xl mx-auto p-4 text-center text-slate-500">Módulo de Equipes (Visualização)</div>}
+            
+            {activeView === 'teams' && (
+                <div className="max-w-6xl mx-auto animate-in fade-in duration-300">
+                    <div className="mb-6">
+                        <h2 className="text-xl font-bold text-slate-800">Equipes Comerciais</h2>
+                        <p className="text-sm text-slate-500">Agrupe seus vendedores para análise de performance.</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {teams.map(team => (
+                            <div key={team.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow flex flex-col group">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="bg-indigo-100 text-indigo-700 p-2 rounded-lg">
+                                        <Users size={24} />
+                                    </div>
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => openEditTeamModal(team)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
+                                        <button onClick={() => handleDeleteTeam(team.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                                    </div>
+                                </div>
+                                <h3 className="font-bold text-slate-800 text-lg mb-1">{team.name}</h3>
+                                <p className="text-xs text-slate-400 mb-4">{team.members?.length || 0} membros ativos</p>
+                                
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                    {(team.members || []).map(memberId => {
+                                        const col = collaborators.find(c => c.id === memberId);
+                                        if (!col) return null;
+                                        return (
+                                            <div key={memberId} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-600 shadow-sm" title={col.fullName}>
+                                                {col.fullName.charAt(0)}
+                                            </div>
+                                        );
+                                    })}
+                                    {(team.members || []).length === 0 && <span className="text-xs text-slate-400 italic">Sem membros</span>}
+                                </div>
+                            </div>
+                        ))}
+                        
+                        <button 
+                            onClick={openNewTeamModal}
+                            className="bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 hover:bg-slate-50 hover:border-indigo-300 transition-all group"
+                        >
+                            <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-indigo-500 mb-2">
+                                <Plus size={24} />
+                            </div>
+                            <span className="font-bold text-slate-600 group-hover:text-indigo-600">Nova Equipe</span>
+                        </button>
+                    </div>
+                </div>
+            )}
         </>
         )}
       </div>
 
-      {showDealModal && (
+      {/* --- TEAM MODAL --- */}
+      {showTeamModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
                   <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2"><Users size={20} className="text-indigo-600" /> {editingTeam ? 'Editar Equipe' : 'Criar Nova Equipe'}</h3>
+                      <button onClick={() => setShowTeamModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  </div>
+                  
+                  <div className="p-6 space-y-6">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Nome da Equipe</label>
+                          <input 
+                            type="text" 
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" 
+                            placeholder="Ex: Time Vendas Sul, Inside Sales..." 
+                            value={teamName}
+                            onChange={e => setTeamName(e.target.value)}
+                          />
+                      </div>
+                      
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-3 uppercase tracking-wider">Membros do Comercial</label>
+                          <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                              {collaborators.filter(c => c.department === 'Comercial').length === 0 ? (
+                                  <p className="text-sm text-slate-400 italic">Nenhum colaborador do Comercial encontrado.</p>
+                              ) : (
+                                  collaborators.filter(c => c.department === 'Comercial').map(col => (
+                                      <label key={col.id} className={clsx("flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all", selectedMembers.includes(col.id) ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-100 hover:bg-slate-50")}>
+                                          <div className="flex items-center gap-3">
+                                              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">{col.fullName.charAt(0)}</div>
+                                              <span className="text-sm font-medium text-slate-700">{col.fullName}</span>
+                                          </div>
+                                          <input 
+                                            type="checkbox" 
+                                            className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
+                                            checked={selectedMembers.includes(col.id)}
+                                            onChange={() => toggleMember(col.id)}
+                                          />
+                                      </label>
+                                  ))
+                              )}
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                      <button onClick={() => setShowTeamModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                      <button 
+                        onClick={handleSaveTeam} 
+                        disabled={isSavingTeam || !teamName.trim()}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                          {isSavingTeam ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                          Salvar Equipe
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {showDealModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                       <div className="flex flex-col">
                           <h3 className="font-bold text-slate-800 flex items-center gap-2"><Briefcase size={20} className="text-indigo-600" /> {editingDealId ? 'Editar Negociação' : 'Nova Oportunidade'}</h3>
                           {editingDealId && dealFormData.dealNumber && <span className="text-xs text-slate-500 font-mono ml-7">Protocolo #{dealFormData.dealNumber}</span>}
@@ -489,7 +665,6 @@ export const CrmBoard: React.FC = () => {
                                   </select>
                               </div>
 
-                              {/* CNPJ DE VENDA AUTOMÁTICO */}
                               <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50 border border-indigo-100 rounded-lg p-4 animate-in fade-in slide-in-from-top-1">
                                   <div>
                                       <label className="block text-[10px] font-bold text-indigo-500 uppercase mb-1">Empresa de Faturamento (Auto)</label>
@@ -611,7 +786,7 @@ export const CrmBoard: React.FC = () => {
                       </div>
                   </div>
 
-                  <div className="px-6 py-4 bg-slate-50 flex justify-between gap-3 border-t border-slate-200">
+                  <div className="px-6 py-4 bg-slate-50 flex justify-between gap-3 border-t border-slate-200 shrink-0">
                         {editingDealId ? <button onClick={handleDeleteDeal} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm flex items-center gap-2"><Trash2 size={16} /> Excluir</button> : <div></div>}
                         <div className="flex gap-2">
                             <button onClick={() => setShowDealModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>

@@ -705,7 +705,6 @@ export const CrmBoard: React.FC = () => {
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Tipo de Produto</label>
-                                  {/* Fix: changed formData.productType to dealFormData.productType */}
                                   <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.productType} onChange={e => setDealFormData({...dealFormData, productType: e.target.value as any, productName: ''})}>
                                       <option value="Presencial">Curso Presencial</option>
                                       <option value="Digital">Produto Digital</option>
@@ -742,11 +741,11 @@ export const CrmBoard: React.FC = () => {
 
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Fonte</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Instagram, Indicação" value={dealFormData.source} onChange={e => setDealFormData({...dealFormData, source: e.target.value})} />
+                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed" placeholder="Instagram, Indicação" value={dealFormData.source} readOnly />
                               </div>
                               <div className="md:col-span-2">
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Campanha</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Black Friday 2024" value={dealFormData.campaign} onChange={e => setDealFormData({...dealFormData, campaign: e.target.value})} />
+                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed" placeholder="Black Friday 2024" value={dealFormData.campaign} readOnly />
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Funil de Vendas</label>

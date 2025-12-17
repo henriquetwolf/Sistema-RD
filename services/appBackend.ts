@@ -458,7 +458,8 @@ export const appBackend = {
       rent_value: studio.rentValue,
       methodology: studio.methodology,
       studio_type: studio.studioType,
-      name_on_site: studio.name_on_site,
+      // Fix: Property 'name_on_site' does not exist on type 'PartnerStudio'. Did you mean 'nameOnSite'?
+      name_on_site: studio.nameOnSite,
       bank: studio.bank,
       agency: studio.agency,
       account: studio.account,
@@ -575,7 +576,7 @@ export const appBackend = {
           questions: data.questions || [],
           style: data.style || {},
           createdAt: data.created_at,
-          submissionsCount: data.submissions_count || 0
+          submissionsCount: d.submissions_count || 0
       };
   },
 
@@ -774,7 +775,8 @@ export const appBackend = {
           contractDate: data.contract_date,
           status: data.status,
           folderId: data.folder_id,
-          signers: d.signers || [],
+          // Fix: Cannot find name 'd'.
+          signers: data.signers || [],
           createdAt: data.created_at
       };
   },
@@ -879,9 +881,10 @@ export const appBackend = {
     const payload = {
       id: cert.id,
       title: cert.title,
-      background_base64: cert.backgroundData,
-      back_background_base64: cert.backBackgroundData,
-      linked_product_id: cert.linked_product_id || null,
+      background_base_64: cert.backgroundData,
+      back_background_base_64: cert.backBackgroundData,
+      // Fix: Property 'linked_product_id' does not exist on type 'CertificateModel'. Did you mean 'linkedProductId'?
+      linked_product_id: cert.linkedProductId || null,
       body_text: cert.bodyText, 
       layout_config: cert.layoutConfig 
     };
@@ -964,8 +967,8 @@ export const appBackend = {
       template: {
         id: templateData.id,
         title: templateData.title,
-        backgroundData: templateData.background_base64,
-        backBackgroundData: templateData.back_background_base64,
+        backgroundData: templateData.background_base_64,
+        backBackgroundData: templateData.back_background_base_64,
         linkedProductId: templateData.linked_product_id,
         bodyText: templateData.body_text,
         layoutConfig: templateData.layout_config, 
@@ -1058,7 +1061,7 @@ export const appBackend = {
         eventId: d.event_id,
         date: d.date,
         title: d.title,
-        max_selections: d.max_selections
+        maxSelections: d.max_selections
     }));
   },
 
@@ -1130,7 +1133,8 @@ export const appBackend = {
     const payload = {
       id: workshop.id,
       event_id: workshop.eventId,
-      block_id: workshop.block_id || null, 
+      // Fix: Property 'block_id' does not exist on type 'Workshop'. Did you mean 'blockId'?
+      block_id: workshop.blockId || null, 
       title: workshop.title,
       description: workshop.description, 
       speaker: workshop.speaker,

@@ -1,152 +1,634 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { 
-  SavedPreset, FormModel, FormAnswer, Contract, ContractFolder, 
-  ContractSigner, Banner, EventModel, Workshop, EventBlock, 
-  EventRegistration, Role, CertificateModel, PartnerStudio, StockMovement 
-} from '../types';
 
-// Safely access environment variables to prevent runtime errors if env is missing
-const env = (import.meta as any).env || {};
-const supabaseUrl = env.VITE_APP_SUPABASE_URL;
-const supabaseKey = env.VITE_APP_SUPABASE_ANON_KEY;
+import { createClient, Session } from '@supabase/supabase-js';
+import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio } from '../types';
 
-const isConfigured = !!(supabaseUrl && supabaseKey);
+// Credentials for the App's backend (where presets are stored)
+// We rely on Environment Variables.
+const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
+const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
 
-const supabase = isConfigured 
-  ? createClient(supabaseUrl, supabaseKey) 
-  : {
-      from: () => ({ 
-        select: () => ({ 
-            eq: () => ({ single: () => Promise.resolve({}) }),
-            order: () => Promise.resolve({ data: [], error: null }),
-            in: () => Promise.resolve({ data: [], error: null }),
-            or: () => Promise.resolve({ data: [], error: null })
-        }),
-        insert: () => Promise.resolve({ error: null, data: [] }),
-        update: () => ({ eq: () => Promise.resolve({ error: null }) }),
-        delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
-        upsert: () => ({ select: () => ({ single: () => Promise.resolve({ data: {}, error: null }) }) })
-      }),
-      auth: { 
-          getSession: () => Promise.resolve({ data: { session: null } }), 
-          onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }), 
-          signInWithPassword: () => Promise.resolve({}), 
-          signOut: () => Promise.resolve({}) 
-      },
-      storage: { from: () => ({ upload: () => Promise.resolve({}), getPublicUrl: () => ({ data: { publicUrl: '' } }) }) }
-    } as unknown as SupabaseClient;
+const isConfigured = !!APP_URL && !!APP_KEY;
+
+// Prevent crash if env vars are missing, but requests will fail if used.
+const supabase = createClient(
+  APP_URL || 'https://placeholder.supabase.co', 
+  APP_KEY || 'placeholder'
+);
+
+const TABLE_NAME = 'app_presets';
+
+// MOCK SESSION FOR LOCAL MODE
+const MOCK_SESSION = {
+  access_token: 'mock-token',
+  refresh_token: 'mock-refresh-token',
+  expires_in: 3600,
+  token_type: 'bearer',
+  user: {
+    id: 'local-user',
+    aud: 'authenticated',
+    role: 'authenticated',
+    email: 'local@admin.com',
+    app_metadata: { provider: 'email' },
+    user_metadata: {},
+    created_at: new Date().toISOString(),
+  }
+};
 
 export const appBackend = {
+  // Public flag to check if we are in local mode
+  isLocalMode: !isConfigured,
+  
+  // Expose the raw client for custom tables (like CRM)
   client: supabase,
-  auth: supabase.auth,
 
-  getAppLogo: () => {
-      return localStorage.getItem('app_logo');
-  },
-
-  // PRESETS
-  getPresets: async (): Promise<SavedPreset[]> => {
-      if (!isConfigured) return [];
-      const { data } = await supabase.from('app_presets').select('*');
-      return data || [];
-  },
-  savePreset: async (preset: SavedPreset) => {
-      const { data, error } = await supabase.from('app_presets').insert([preset]).select().single();
+  auth: {
+    signIn: async (email: string, password: string) => {
+      if (!isConfigured) {
+        // In local mode, we accept any login or simply rely on getSession returning true
+        return { data: { user: MOCK_SESSION.user, session: MOCK_SESSION }, error: null };
+      }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
       if (error) throw error;
       return data;
+    },
+    signUp: async (email: string, password: string) => {
+      if (!isConfigured) throw new Error("Backend not configured.");
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (error) throw error;
+      return data;
+    },
+    signOut: async () => {
+      if (!isConfigured) {
+        // In local mode, just reload to 'reset' state, although we will auto-login again.
+        window.location.reload(); 
+        return;
+      }
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    },
+    getSession: async () => {
+      if (!isConfigured) {
+          return MOCK_SESSION as unknown as Session;
+      }
+      const { data } = await supabase.auth.getSession();
+      return data.session;
+    },
+    onAuthStateChange: (callback: (session: Session | null) => void) => {
+      if (!isConfigured) {
+          callback(MOCK_SESSION as unknown as Session);
+          return { data: { subscription: { unsubscribe: () => {} } } };
+      }
+      return supabase.auth.onAuthStateChange((_event, session) => {
+        callback(session);
+      });
+    }
   },
-  deletePreset: async (id: string) => {
-      const { error } = await supabase.from('app_presets').delete().eq('id', id);
+
+  /**
+   * Fetch all saved presets from Supabase or LocalStorage
+   */
+  getPresets: async (): Promise<SavedPreset[]> => {
+    if (!isConfigured) {
+        const local = localStorage.getItem('csv_syncer_presets');
+        return local ? JSON.parse(local) : [];
+    }
+    
+    const { data, error } = await supabase
+      .from(TABLE_NAME)
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching presets:', error);
+      throw error;
+    }
+
+    // Map database snake_case to app camelCase
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      url: row.project_url,
+      key: row.api_key,
+      tableName: row.target_table_name,
+      primaryKey: row.target_primary_key || '',
+      intervalMinutes: row.interval_minutes || 5, // Map from DB
+    }));
+  },
+
+  /**
+   * Save a new preset to Supabase or LocalStorage
+   */
+  savePreset: async (preset: Omit<SavedPreset, 'id'>): Promise<SavedPreset> => {
+    if (!isConfigured) {
+        const local = JSON.parse(localStorage.getItem('csv_syncer_presets') || '[]');
+        const newPreset = { ...preset, id: crypto.randomUUID() };
+        // Add to beginning
+        const updated = [newPreset, ...local];
+        localStorage.setItem('csv_syncer_presets', JSON.stringify(updated));
+        return newPreset as SavedPreset;
+    }
+    
+    // Get current user to ensure user_id is set for RLS policies
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const payload = {
+      user_id: user?.id, // Explicitly adding user_id
+      name: preset.name,
+      project_url: preset.url,
+      api_key: preset.key,
+      target_table_name: preset.tableName,
+      target_primary_key: preset.primaryKey || null,
+      interval_minutes: preset.intervalMinutes || 5, // Save to DB
+    };
+
+    const { data, error } = await supabase
+      .from(TABLE_NAME)
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error saving preset:', error);
+      throw error;
+    }
+
+    return {
+      id: data.id,
+      name: data.name,
+      url: data.project_url,
+      key: data.api_key,
+      tableName: data.target_table_name,
+      primaryKey: data.target_primary_key || '',
+      intervalMinutes: data.interval_minutes || 5,
+    };
+  },
+
+  /**
+   * Delete a preset by ID
+   */
+  deletePreset: async (id: string): Promise<void> => {
+    if (!isConfigured) {
+        const local = JSON.parse(localStorage.getItem('csv_syncer_presets') || '[]');
+        const updated = local.filter((p: any) => p.id !== id);
+        localStorage.setItem('csv_syncer_presets', JSON.stringify(updated));
+        return;
+    }
+
+    const { error } = await supabase
+      .from(TABLE_NAME)
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting preset:', error);
+      throw error;
+    }
+  },
+
+  // --- APP SETTINGS (LOGO) ---
+  getAppLogo: (): string | null => {
+      return localStorage.getItem('app_logo_url');
+  },
+
+  saveAppLogo: (url: string) => {
+      localStorage.setItem('app_logo_url', url);
+  },
+
+  // --- ROLES & PERMISSIONS ---
+
+  getRoles: async (): Promise<Role[]> => {
+    if (!isConfigured) return [];
+    
+    const { data, error } = await supabase
+      .from('crm_roles')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+        console.warn("Table crm_roles might not exist.", error);
+        return [];
+    }
+
+    return data.map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      permissions: r.permissions || {},
+      created_at: r.created_at
+    }));
+  },
+
+  saveRole: async (role: Role): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    const payload = {
+        name: role.name,
+        permissions: role.permissions
+    };
+
+    if (role.id) {
+        const { error } = await supabase.from('crm_roles').update(payload).eq('id', role.id);
+        if (error) throw error;
+    } else {
+        const { error } = await supabase.from('crm_roles').insert([payload]);
+        if (error) throw error;
+    }
+  },
+
+  deleteRole: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_roles').delete().eq('id', id);
       if (error) throw error;
   },
 
-  // FORMS
-  getForms: async (): Promise<FormModel[]> => {
-      if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
-      return (data || []).map((f: any) => ({
-          ...f,
-          questions: f.questions || [],
-          style: f.style || { backgroundType: 'color', backgroundColor: '#f1f5f9' },
-          submissionsCount: 0 // Mock for now or fetch count
-      }));
+  // --- BANNERS ---
+
+  getBanners: async (audience?: 'student' | 'instructor'): Promise<Banner[]> => {
+    if (!isConfigured) return [];
+    
+    let query = supabase
+      .from('app_banners')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (audience) {
+      query = query.eq('target_audience', audience);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.warn("Error fetching banners:", error);
+        return [];
+    }
+
+    return data.map((b: any) => ({
+      id: b.id,
+      title: b.title,
+      imageUrl: b.image_url,
+      linkUrl: b.link_url,
+      targetAudience: b.target_audience,
+      active: b.active
+    }));
   },
-  getFormById: async (id: string): Promise<FormModel | null> => {
-      const { data, error } = await supabase.from('crm_forms').select('*').eq('id', id).single();
-      if (error || !data) return null;
-      return { ...data, questions: data.questions || [] };
+
+  saveBanner: async (banner: Banner): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    const payload = {
+      title: banner.title,
+      image_url: banner.imageUrl,
+      link_url: banner.linkUrl,
+      target_audience: banner.targetAudience,
+      active: banner.active
+    };
+
+    if (banner.id) {
+      const { error } = await supabase.from('app_banners').update(payload).eq('id', banner.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('app_banners').insert([payload]);
+      if (error) throw error;
+    }
   },
-  saveForm: async (form: FormModel) => {
-      if (form.id && form.id.length > 10) { // Check if UUID-ish
-          // Check if exists first to decide insert/update, or use upsert
-          const { error } = await supabase.from('crm_forms').upsert({
-              id: form.id,
-              title: form.title,
-              description: form.description,
-              is_lead_capture: form.isLeadCapture,
-              questions: form.questions,
-              style: form.style,
-              created_at: form.createdAt
-          });
-          if (error) throw error;
+
+  deleteBanner: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('app_banners').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // --- PARTNER STUDIOS ---
+
+  getPartnerStudios: async (): Promise<PartnerStudio[]> => {
+    if (!isConfigured) return [];
+    
+    const { data, error } = await supabase
+      .from('crm_partner_studios')
+      .select('*')
+      .order('fantasy_name', { ascending: true });
+
+    if (error) {
+      console.warn("Table crm_partner_studios might not exist", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      status: d.status || 'active',
+      responsibleName: d.responsible_name,
+      cpf: d.cpf,
+      phone: d.phone,
+      email: d.email,
+      secondContactName: d.second_contact_name,
+      secondContactPhone: d.second_contact_phone,
+      fantasyName: d.fantasy_name,
+      legalName: d.legal_name,
+      cnpj: d.cnpj,
+      studioPhone: d.studio_phone,
+      address: d.address,
+      city: d.city,
+      state: d.state,
+      country: d.country,
+      sizeM2: d.size_m2,
+      studentCapacity: d.student_capacity,
+      rentValue: d.rent_value,
+      methodology: d.methodology,
+      studioType: d.studio_type,
+      nameOnSite: d.name_on_site,
+      bank: d.bank,
+      agency: d.agency,
+      account: d.account,
+      beneficiary: d.beneficiary,
+      pixKey: d.pix_key,
+      hasReformer: d.has_reformer,
+      qtyReformer: d.qty_reformer,
+      hasLadderBarrel: d.has_ladder_barrel,
+      qtyLadderBarrel: d.qty_ladder_barrel,
+      hasChair: d.has_chair,
+      qtyChair: d.qty_chair,
+      hasCadillac: d.has_cadillac,
+      qtyCadillac: d.qty_cadillac,
+      hasChairsForCourse: d.has_chairs_for_course,
+      hasTv: d.has_tv,
+      maxKitsCapacity: d.max_kits_capacity,
+      attachments: d.attachments
+    }));
+  },
+
+  savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    const payload = {
+      status: studio.status,
+      responsible_name: studio.responsibleName,
+      cpf: studio.cpf,
+      phone: studio.phone,
+      email: studio.email,
+      second_contact_name: studio.secondContactName,
+      second_contact_phone: studio.secondContactPhone,
+      fantasy_name: studio.fantasyName,
+      legal_name: studio.legalName,
+      cnpj: studio.cnpj,
+      studio_phone: studio.studioPhone,
+      address: studio.address,
+      city: studio.city,
+      state: studio.state,
+      country: studio.country,
+      size_m2: studio.sizeM2,
+      student_capacity: studio.studentCapacity,
+      rent_value: studio.rentValue,
+      methodology: studio.methodology,
+      studio_type: studio.studioType,
+      name_on_site: studio.nameOnSite,
+      bank: studio.bank,
+      agency: studio.agency,
+      account: studio.account,
+      beneficiary: studio.beneficiary,
+      pix_key: studio.pixKey,
+      has_reformer: studio.hasReformer,
+      qty_reformer: studio.qtyReformer,
+      has_ladder_barrel: studio.hasLadderBarrel,
+      qty_ladder_barrel: studio.qtyLadderBarrel,
+      has_chair: studio.hasChair,
+      qty_chair: studio.qtyChair,
+      has_cadillac: studio.hasCadillac,
+      qty_cadillac: studio.qtyCadillac,
+      has_chairs_for_course: studio.hasChairsForCourse,
+      has_tv: studio.hasTv,
+      max_kits_capacity: studio.maxKitsCapacity,
+      attachments: studio.attachments
+    };
+
+    if (studio.id) {
+      const { error } = await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('crm_partner_studios').insert([payload]);
+      if (error) throw error;
+    }
+  },
+
+  deletePartnerStudio: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_partner_studios').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // --- FORMS & CRM LOGIC (MOCKED BACKEND FOR FORMS, REAL FOR CRM) ---
+  
+  saveForm: async (form: FormModel): Promise<void> => {
+      // Simulating DB save in localStorage for forms
+      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+      const existingIdx = forms.findIndex((f: FormModel) => f.id === form.id);
+      
+      if (existingIdx >= 0) {
+          forms[existingIdx] = form;
+      } else {
+          forms.push(form);
       }
+      
+      localStorage.setItem('app_forms', JSON.stringify(forms));
   },
-  deleteForm: async (id: string) => {
-      await supabase.from('crm_forms').delete().eq('id', id);
+
+  getForms: async (): Promise<FormModel[]> => {
+      return JSON.parse(localStorage.getItem('app_forms') || '[]');
   },
-  submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean) => {
-      // Save submission
-      await supabase.from('crm_form_submissions').insert({
-          form_id: formId,
-          answers: answers
-      });
 
-      if (isLeadCapture) {
-          // Extract contact info
-          const nameQ = answers.find(a => a.questionTitle.toLowerCase().includes('nome'))?.value;
-          const emailQ = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value;
-          const phoneQ = answers.find(a => a.questionTitle.toLowerCase().includes('telefone') || a.questionTitle.toLowerCase().includes('whatsapp'))?.value;
-          const companyQ = answers.find(a => a.questionTitle.toLowerCase().includes('empresa'))?.value;
+  // New method to fetch a single form
+  getFormById: async (id: string): Promise<FormModel | null> => {
+      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+      return forms.find((f: FormModel) => f.id === id) || null;
+  },
 
-          if (nameQ) {
-              await supabase.from('crm_deals').insert({
-                  title: nameQ,
-                  contact_name: nameQ,
-                  company_name: companyQ || nameQ,
-                  email: emailQ,
-                  phone: phoneQ,
+  deleteForm: async (id: string): Promise<void> => {
+      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+      const filtered = forms.filter((f: FormModel) => f.id !== id);
+      localStorage.setItem('app_forms', JSON.stringify(filtered));
+  },
+
+  submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean): Promise<void> => {
+      // 1. Save submission locally
+      const submission: FormSubmission = {
+          id: crypto.randomUUID(),
+          formId,
+          answers,
+          submittedAt: new Date().toISOString()
+      };
+
+      const submissionsKey = `app_forms_subs_${formId}`;
+      const subs = JSON.parse(localStorage.getItem(submissionsKey) || '[]');
+      subs.push(submission);
+      localStorage.setItem(submissionsKey, JSON.stringify(subs));
+
+      // Update form count
+      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+      const formIdx = forms.findIndex((f: FormModel) => f.id === formId);
+      if (formIdx >= 0) {
+          forms[formIdx].submissionsCount = (forms[formIdx].submissionsCount || 0) + 1;
+          localStorage.setItem('app_forms', JSON.stringify(forms));
+      }
+
+      // 2. LEAD CAPTURE TO CRM
+      if (isLeadCapture && isConfigured) {
+          // Heuristic to find relevant fields
+          const findValue = (keywords: string[]) => {
+              const answer = answers.find(a => 
+                  keywords.some(k => a.questionTitle.toLowerCase().includes(k))
+              );
+              return answer ? answer.value : '';
+          };
+
+          const name = findValue(['nome', 'name', 'completo']);
+          const email = findValue(['email', 'e-mail', 'correio']);
+          const phone = findValue(['telefone', 'celular', 'whatsapp', 'fone']);
+          const company = findValue(['empresa', 'organização', 'companhia', 'loja']);
+          
+          if (name) {
+              const payload = {
+                  title: `Lead: ${name}`,
+                  contact_name: name,
+                  company_name: company || 'Particular',
+                  value: 0,
+                  status: 'warm',
                   stage: 'new',
-                  source: 'Formulário',
-                  value: 0
-              });
+                  next_task: `Entrar em contato (${email || phone || 'sem dados'})`,
+                  created_at: new Date().toISOString()
+              };
+
+              // Insert directly into CRM table
+              const { error } = await supabase.from('crm_deals').insert([payload]);
+              if (error) {
+                  console.error("Failed to create lead in CRM:", error);
+                  // We don't throw here to avoid blocking the user form success message
+              }
           }
       }
   },
 
-  // CONTRACTS
-  getContracts: async (): Promise<Contract[]> => {
-      if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
-      return (data || []).map((c: any) => ({
-          ...c,
-          contractDate: c.contract_date,
-          folderId: c.folder_id,
-          createdAt: c.created_at,
-          signers: c.signers || []
+  // --- CONTRACTS & FOLDERS (SUPABASE INTEGRATION) ---
+  
+  getFolders: async (): Promise<ContractFolder[]> => {
+      if (!isConfigured) return JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
+
+      const { data, error } = await supabase
+          .from('app_contract_folders')
+          .select('*')
+          .order('created_at', { ascending: false });
+      
+      if (error) {
+          console.error("Error fetching folders:", error);
+          return [];
+      }
+
+      return data.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          createdAt: d.created_at
       }));
   },
+
+  saveFolder: async (folder: ContractFolder): Promise<void> => {
+      if (!isConfigured) {
+          const folders = JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
+          folders.push(folder);
+          localStorage.setItem('app_contract_folders', JSON.stringify(folders));
+          return;
+      }
+
+      const payload = {
+          id: folder.id, // Ensure ID is passed if it's an update, or random UUID from frontend
+          name: folder.name
+      };
+
+      const { error } = await supabase.from('app_contract_folders').upsert(payload);
+      if (error) throw error;
+  },
+
+  deleteFolder: async (id: string): Promise<void> => {
+      if (!isConfigured) {
+          const folders = JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
+          const filtered = folders.filter((f: ContractFolder) => f.id !== id);
+          localStorage.setItem('app_contract_folders', JSON.stringify(filtered));
+          // Move contracts
+          const contracts = await appBackend.getContracts();
+          const updatedContracts = contracts.map(c => c.folderId === id ? { ...c, folderId: null } : c);
+          localStorage.setItem('app_contracts', JSON.stringify(updatedContracts));
+          return;
+      }
+
+      const { error } = await supabase.from('app_contract_folders').delete().eq('id', id);
+      if (error) throw error;
+  },
+
+  getContracts: async (): Promise<Contract[]> => {
+      if (!isConfigured) return JSON.parse(localStorage.getItem('app_contracts') || '[]');
+
+      const { data, error } = await supabase
+          .from('app_contracts')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+      if (error) {
+          console.error("Error fetching contracts:", error);
+          return [];
+      }
+
+      return data.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          content: d.content,
+          city: d.city,
+          contractDate: d.contract_date,
+          status: d.status,
+          folderId: d.folder_id,
+          signers: d.signers || [], // JSONB array
+          createdAt: d.created_at
+      }));
+  },
+
   getContractById: async (id: string): Promise<Contract | null> => {
-      const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).single();
-      if (!data) return null;
+      if (!isConfigured) {
+          const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
+          return contracts.find((c: Contract) => c.id === id) || null;
+      }
+
+      const { data, error } = await supabase
+          .from('app_contracts')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+      if (error || !data) return null;
+
       return {
-          ...data,
+          id: data.id,
+          title: data.title,
+          content: data.content,
+          city: data.city,
           contractDate: data.contract_date,
+          status: data.status,
           folderId: data.folder_id,
-          createdAt: data.created_at,
-          signers: data.signers || []
+          signers: data.signers || [],
+          createdAt: data.created_at
       };
   },
-  saveContract: async (contract: Contract) => {
+
+  saveContract: async (contract: Contract): Promise<void> => {
+      if (!isConfigured) {
+          const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
+          const idx = contracts.findIndex((c: Contract) => c.id === contract.id);
+          if (idx >= 0) contracts[idx] = contract;
+          else contracts.push(contract);
+          localStorage.setItem('app_contracts', JSON.stringify(contracts));
+          return;
+      }
+
       const payload = {
           id: contract.id,
           title: contract.title,
@@ -154,169 +636,292 @@ export const appBackend = {
           city: contract.city,
           contract_date: contract.contractDate,
           status: contract.status,
-          signers: contract.signers,
-          folder_id: contract.folderId,
-          created_at: contract.createdAt
+          folder_id: contract.folderId || null,
+          signers: contract.signers // Will be converted to JSONB automatically
       };
-      const { error } = await supabase.from('crm_contracts').upsert(payload);
+
+      const { error } = await supabase.from('app_contracts').upsert(payload);
       if (error) throw error;
   },
-  deleteContract: async (id: string) => {
-      await supabase.from('crm_contracts').delete().eq('id', id);
-  },
-  signContract: async (contractId: string, signerId: string, signatureData: string) => {
-      // 1. Get contract
-      const { data } = await supabase.from('crm_contracts').select('signers').eq('id', contractId).single();
-      if (!data) throw new Error("Contract not found");
-      
-      const signers = data.signers as ContractSigner[];
-      const updatedSigners = signers.map(s => {
-          if (s.id === signerId) {
-              return { ...s, status: 'signed', signatureData, signedAt: new Date().toISOString() };
-          }
-          return s;
-      });
 
-      const allSigned = updatedSigners.every((s: any) => s.status === 'signed');
-      const status = allSigned ? 'signed' : 'sent';
+  deleteContract: async (id: string): Promise<void> => {
+      if (!isConfigured) {
+          const contracts = JSON.parse(localStorage.getItem('app_contracts') || '[]');
+          const filtered = contracts.filter((c: Contract) => c.id !== id);
+          localStorage.setItem('app_contracts', JSON.stringify(filtered));
+          return;
+      }
 
-      await supabase.from('crm_contracts').update({ signers: updatedSigners, status }).eq('id', contractId);
+      const { error } = await supabase.from('app_contracts').delete().eq('id', id);
+      if (error) throw error;
   },
 
-  // FOLDERS
-  getFolders: async (): Promise<ContractFolder[]> => {
-      if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_contract_folders').select('*');
-      return (data || []).map((f: any) => ({
-          id: f.id,
-          name: f.name,
-          createdAt: f.created_at
-      }));
-  },
-  saveFolder: async (folder: ContractFolder) => {
-      await supabase.from('crm_contract_folders').insert({
-          id: folder.id,
-          name: folder.name,
-          created_at: folder.createdAt
-      });
-  },
-  deleteFolder: async (id: string) => {
-      await supabase.from('crm_contract_folders').delete().eq('id', id);
+  signContract: async (contractId: string, signerId: string, signatureBase64: string): Promise<void> => {
+      // 1. Get Current Contract State
+      const contract = await appBackend.getContractById(contractId);
+      if (!contract) throw new Error("Contrato não encontrado.");
+
+      // 2. Find and Update Signer
+      const signerIdx = contract.signers.findIndex(s => s.id === signerId);
+      if (signerIdx === -1) throw new Error("Signatário não encontrado.");
+
+      contract.signers[signerIdx].status = 'signed';
+      contract.signers[signerIdx].signatureData = signatureBase64;
+      contract.signers[signerIdx].signedAt = new Date().toISOString();
+
+      // 3. Check Overall Status
+      const allSigned = contract.signers.every(s => s.status === 'signed');
+      if (allSigned) {
+          contract.status = 'signed';
+      }
+
+      // 4. Save Updates
+      await appBackend.saveContract(contract);
   },
 
-  // ROLES
-  getRoles: async (): Promise<Role[]> => {
-      if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_roles').select('*');
-      return data || [];
+  // --- CERTIFICATES ---
+
+  getCertificates: async (): Promise<CertificateModel[]> => {
+    if (!isConfigured) return JSON.parse(localStorage.getItem('app_certificates') || '[]');
+
+    const { data, error } = await supabase
+      .from('crm_certificates')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching certificates:", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      title: d.title,
+      backgroundData: d.background_base64,
+      backBackgroundData: d.back_background_base64,
+      linkedProductId: d.linked_product_id,
+      bodyText: d.body_text,
+      layoutConfig: d.layout_config, // Map layout config
+      createdAt: d.created_at
+    }));
   },
 
-  // EVENTS
+  saveCertificate: async (cert: CertificateModel): Promise<void> => {
+    if (!isConfigured) {
+      const certs = JSON.parse(localStorage.getItem('app_certificates') || '[]');
+      const idx = certs.findIndex((c: CertificateModel) => c.id === cert.id);
+      if (idx >= 0) certs[idx] = cert;
+      else certs.push(cert);
+      localStorage.setItem('app_certificates', JSON.stringify(certs));
+      return;
+    }
+
+    const payload = {
+      id: cert.id,
+      title: cert.title,
+      background_base64: cert.backgroundData,
+      back_background_base64: cert.backBackgroundData,
+      linked_product_id: cert.linkedProductId || null,
+      body_text: cert.bodyText, // Fixed property mapping
+      layout_config: cert.layoutConfig // Save layout config
+    };
+
+    const { error } = await supabase.from('crm_certificates').upsert(payload);
+    if (error) throw error;
+  },
+
+  deleteCertificate: async (id: string): Promise<void> => {
+    if (!isConfigured) {
+      const certs = JSON.parse(localStorage.getItem('app_certificates') || '[]');
+      const filtered = certs.filter((c: CertificateModel) => c.id !== id);
+      localStorage.setItem('app_certificates', JSON.stringify(filtered));
+      return;
+    }
+
+    const { error } = await supabase.from('crm_certificates').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  issueCertificate: async (studentDealId: string, certificateTemplateId: string): Promise<string> => {
+    if (!isConfigured) throw new Error("Backend not configured for certificates.");
+
+    const hash = crypto.randomUUID();
+    const payload = {
+      student_deal_id: studentDealId,
+      certificate_template_id: certificateTemplateId,
+      hash: hash,
+      issued_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase.from('crm_student_certificates').insert([payload]);
+    if (error) throw error;
+    
+    return hash;
+  },
+
+  deleteStudentCertificate: async (id: string): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured.");
+    const { error } = await supabase.from('crm_student_certificates').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  getStudentCertificate: async (hash: string): Promise<StudentCertificate & { studentName: string, studentCity: string, template: CertificateModel } | null> => {
+    if (!isConfigured) return null;
+
+    // Fetch the certificate record
+    const { data: certData, error: certError } = await supabase
+      .from('crm_student_certificates')
+      .select('*')
+      .eq('hash', hash)
+      .single();
+
+    if (certError || !certData) return null;
+
+    // Fetch Student Info (Deal)
+    // NOTE: 'company_name' is mapped to "Nome Completo do Cliente" in the CRM
+    const { data: dealData } = await supabase
+      .from('crm_deals')
+      .select('contact_name, company_name, course_city')
+      .eq('id', certData.student_deal_id)
+      .single();
+
+    // Fetch Template
+    const { data: templateData } = await supabase
+      .from('crm_certificates')
+      .select('*')
+      .eq('id', certData.certificate_template_id)
+      .single();
+
+    if (!dealData || !templateData) return null;
+
+    return {
+      id: certData.id,
+      studentDealId: certData.student_deal_id,
+      certificateTemplateId: certData.certificate_template_id,
+      hash: certData.hash,
+      issuedAt: certData.issued_at,
+      studentName: dealData.company_name || dealData.contact_name, // Prefer Full Name (Company Name in CRM logic)
+      studentCity: dealData.course_city || 'Local',
+      template: {
+        id: templateData.id,
+        title: templateData.title,
+        backgroundData: templateData.background_base64,
+        backBackgroundData: templateData.back_background_base64,
+        linkedProductId: templateData.linked_product_id,
+        bodyText: templateData.body_text,
+        layoutConfig: templateData.layout_config, // Map Layout
+        createdAt: templateData.created_at
+      }
+    };
+  },
+
+  // --- EVENTS & WORKSHOPS ---
+
   getEvents: async (): Promise<EventModel[]> => {
-      if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
-      return (data || []).map((e: any) => ({
-          id: e.id,
-          name: e.name,
-          description: e.description,
-          location: e.location,
-          dates: e.dates || [],
-          registrationOpen: e.registration_open,
-          createdAt: e.created_at
-      }));
-  },
-  saveEvent: async (event: EventModel) => {
-      const payload = {
-          id: event.id,
-          name: event.name,
-          description: event.description,
-          location: event.location,
-          dates: event.dates,
-          registration_open: event.registrationOpen,
-          created_at: event.createdAt
-      };
-      const { data, error } = await supabase.from('crm_events').upsert(payload).select().single();
-      if (error) throw error;
-      return {
-          id: data.id,
-          name: data.name,
-          description: data.description,
-          location: data.location,
-          dates: data.dates || [],
-          registrationOpen: data.registration_open,
-          createdAt: data.created_at
-      };
-  },
-  deleteEvent: async (id: string) => {
-      await supabase.from('crm_events').delete().eq('id', id);
+    if (!isConfigured) return [];
+    
+    const { data, error } = await supabase
+      .from('crm_events')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching events:", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      name: d.name,
+      description: d.description, // Map description
+      location: d.location,
+      dates: d.dates || [],
+      createdAt: d.created_at,
+      registrationOpen: d.registration_open || false
+    }));
   },
 
-  // WORKSHOPS
-  getWorkshops: async (eventId: string): Promise<Workshop[]> => {
-      const { data } = await supabase.from('crm_workshops').select('*').eq('event_id', eventId);
-      return (data || []).map((w: any) => ({
-          id: w.id,
-          eventId: w.event_id,
-          blockId: w.block_id,
-          title: w.title,
-          description: w.description,
-          speaker: w.speaker,
-          date: w.date,
-          time: w.time,
-          spots: w.spots
-      }));
-  },
-  saveWorkshop: async (w: Workshop) => {
-      const payload = {
-          id: w.id,
-          event_id: w.eventId,
-          block_id: w.blockId,
-          title: w.title,
-          description: w.description,
-          speaker: w.speaker,
-          date: w.date,
-          time: w.time,
-          spots: w.spots
-      };
-      const { data, error } = await supabase.from('crm_workshops').upsert(payload).select().single();
-      if (error) throw error;
-      return {
-          id: data.id,
-          eventId: data.event_id,
-          blockId: data.block_id,
-          title: data.title,
-          description: data.description,
-          speaker: data.speaker,
-          date: data.date,
-          time: data.time,
-          spots: data.spots
-      };
-  },
-  deleteWorkshop: async (id: string) => {
-      await supabase.from('crm_workshops').delete().eq('id', id);
+  saveEvent: async (event: EventModel): Promise<EventModel> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    const payload = {
+      id: event.id,
+      name: event.name,
+      description: event.description, // Save description
+      location: event.location,
+      dates: event.dates,
+      registration_open: event.registrationOpen 
+    };
+
+    const { data, error } = await supabase
+      .from('crm_events')
+      .upsert(payload)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      location: data.location,
+      dates: data.dates || [],
+      createdAt: data.created_at,
+      registrationOpen: data.registration_open || false
+    };
   },
 
-  // BLOCKS
+  deleteEvent: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_events').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // --- BLOCKS ---
+  
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
-      const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId);
-      return (data || []).map((b: any) => ({
-          id: b.id,
-          eventId: b.event_id,
-          date: b.date,
-          title: b.title,
-          maxSelections: b.max_selections
-      }));
+    if (!isConfigured) return [];
+    
+    const { data, error } = await supabase
+        .from('crm_event_blocks')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('title', { ascending: true });
+
+    if (error) {
+        console.warn(error); 
+        return [];
+    }
+
+    return data.map((d: any) => ({
+        id: d.id,
+        eventId: d.event_id,
+        date: d.date,
+        title: d.title,
+        maxSelections: d.max_selections
+    }));
   },
-  saveBlock: async (b: EventBlock) => {
+
+  saveBlock: async (block: EventBlock): Promise<EventBlock> => {
+      if (!isConfigured) throw new Error("Backend not configured");
+      
       const payload = {
-          id: b.id,
-          event_id: b.eventId,
-          date: b.date,
-          title: b.title,
-          max_selections: b.maxSelections
+          id: block.id,
+          event_id: block.eventId,
+          date: block.date,
+          title: block.title,
+          max_selections: block.maxSelections
       };
-      const { data, error } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
+
+      const { data, error } = await supabase
+          .from('crm_event_blocks')
+          .upsert(payload)
+          .select()
+          .single();
+      
       if (error) throw error;
+
       return {
           id: data.id,
           eventId: data.event_id,
@@ -325,287 +930,136 @@ export const appBackend = {
           maxSelections: data.max_selections
       };
   },
-  deleteBlock: async (id: string) => {
-      await supabase.from('crm_event_blocks').delete().eq('id', id);
-  },
 
-  // REGISTRATIONS
-  getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
-      const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId);
-      return (data || []).map((r: any) => ({
-          id: r.id,
-          eventId: r.event_id,
-          workshopId: r.workshop_id,
-          studentId: r.student_id,
-          studentName: r.student_name,
-          studentEmail: r.student_email,
-          registeredAt: r.created_at
-      }));
-  },
-  saveEventRegistrations: async (eventId: string, studentId: string, studentName: string, studentEmail: string, workshopIds: string[]) => {
-      // 1. Delete existing for this student in this event
-      await supabase.from('crm_event_registrations').delete().eq('event_id', eventId).eq('student_id', studentId);
-      
-      // 2. Insert new
-      const rows = workshopIds.map(wid => ({
-          event_id: eventId,
-          workshop_id: wid,
-          student_id: studentId,
-          student_name: studentName,
-          student_email: studentEmail
-      }));
-      if (rows.length > 0) {
-          const { error } = await supabase.from('crm_event_registrations').insert(rows);
-          if (error) throw error;
-      }
-  },
-
-  // CERTIFICATES
-  getCertificates: async (): Promise<CertificateModel[]> => {
-      if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_certificates').select('*');
-      return (data || []).map((c: any) => ({
-          id: c.id,
-          title: c.title,
-          backgroundData: c.background_data,
-          backBackgroundData: c.back_background_data,
-          linkedProductId: c.linked_product_id,
-          bodyText: c.body_text,
-          layoutConfig: c.layout_config,
-          createdAt: c.created_at
-      }));
-  },
-  saveCertificate: async (cert: CertificateModel) => {
-      const payload = {
-          id: cert.id,
-          title: cert.title,
-          background_data: cert.backgroundData,
-          back_background_data: cert.backBackgroundData,
-          linked_product_id: cert.linkedProductId,
-          body_text: cert.bodyText,
-          layout_config: cert.layoutConfig,
-          created_at: cert.createdAt
-      };
-      const { error } = await supabase.from('crm_certificates').upsert(payload);
+  deleteBlock: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_event_blocks').delete().eq('id', id);
       if (error) throw error;
   },
-  deleteCertificate: async (id: string) => {
-      await supabase.from('crm_certificates').delete().eq('id', id);
-  },
-  issueCertificate: async (studentDealId: string, templateId: string): Promise<string> => {
-      const hash = crypto.randomUUID().substring(0, 8).toUpperCase();
-      const { error } = await supabase.from('crm_student_certificates').insert({
-          student_deal_id: studentDealId,
-          certificate_template_id: templateId,
-          hash: hash,
-          issued_at: new Date().toISOString()
-      });
-      if (error) throw error;
-      return hash;
-  },
-  getStudentCertificate: async (hash: string) => {
-      const { data: cert, error } = await supabase
-          .from('crm_student_certificates')
-          .select('*, crm_deals(contact_name, class_mod_1, class_mod_2), crm_certificates(*)')
-          .eq('hash', hash)
-          .single();
-      
-      if (error || !cert) return null;
 
-      // Fetch class info to get City if needed
-      // Logic simplified: assume student has city in deal or class
-      
-      return {
-          studentName: cert.crm_deals?.contact_name || 'Aluno',
-          studentCity: 'Cidade do Curso', // Placeholder, ideally fetch from Class linked to Deal
-          template: {
-              id: cert.crm_certificates.id,
-              title: cert.crm_certificates.title,
-              backgroundData: cert.crm_certificates.background_data,
-              backBackgroundData: cert.crm_certificates.back_background_data,
-              bodyText: cert.crm_certificates.body_text,
-              layoutConfig: cert.crm_certificates.layout_config,
-              linkedProductId: cert.crm_certificates.linked_product_id,
-              createdAt: cert.crm_certificates.created_at
-          } as CertificateModel,
-          issuedAt: cert.issued_at
-      };
-  },
-  deleteStudentCertificate: async (id: string) => {
-      await supabase.from('crm_student_certificates').delete().eq('id', id);
-  },
-
-  // BANNERS
-  getBanners: async (target: string): Promise<Banner[]> => {
-      if (!isConfigured) return [];
-      const { data } = await supabase
-          .from('app_banners')
-          .select('*')
-          .eq('active', true)
-          .eq('target_audience', target)
-          .order('created_at', { ascending: false });
-      return (data || []).map((b: any) => ({
-          id: b.id,
-          title: b.title,
-          imageUrl: b.image_url,
-          linkUrl: b.link_url,
-          targetAudience: b.target_audience,
-          active: b.active,
-          createdAt: b.created_at
-      }));
-  },
-
-  // PARTNER STUDIOS
-  getPartnerStudios: async (): Promise<PartnerStudio[]> => {
-      if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-      return (data || []).map((s: any) => ({
-          id: s.id,
-          status: s.status,
-          responsibleName: s.responsible_name,
-          cpf: s.cpf,
-          phone: s.phone,
-          email: s.email,
-          secondContactName: s.second_contact_name,
-          secondContactPhone: s.second_contact_phone,
-          fantasyName: s.fantasy_name,
-          legalName: s.legal_name,
-          cnpj: s.cnpj,
-          studioPhone: s.studio_phone,
-          address: s.address,
-          city: s.city,
-          state: s.state,
-          country: s.country,
-          sizeM2: s.size_m2,
-          studentCapacity: s.student_capacity,
-          rentValue: s.rent_value,
-          methodology: s.methodology,
-          studioType: s.studio_type,
-          nameOnSite: s.name_on_site,
-          bank: s.bank,
-          agency: s.agency,
-          account: s.account,
-          beneficiary: s.beneficiary,
-          pixKey: s.pix_key,
-          hasReformer: s.has_reformer,
-          qtyReformer: s.qty_reformer,
-          hasLadderBarrel: s.has_ladder_barrel,
-          qtyLadderBarrel: s.qty_ladder_barrel,
-          hasChair: s.has_chair,
-          qtyChair: s.qty_chair,
-          hasCadillac: s.has_cadillac,
-          qtyCadillac: s.qty_cadillac,
-          hasChairsForCourse: s.has_chairs_for_course,
-          hasTv: s.has_tv,
-          maxKitsCapacity: s.max_kits_capacity,
-          attachments: s.attachments
-      }));
-  },
-  savePartnerStudio: async (s: PartnerStudio) => {
-      const payload = {
-          id: s.id || crypto.randomUUID(),
-          status: s.status,
-          responsible_name: s.responsibleName,
-          cpf: s.cpf,
-          phone: s.phone,
-          email: s.email,
-          second_contact_name: s.secondContactName,
-          second_contact_phone: s.secondContactPhone,
-          fantasy_name: s.fantasyName,
-          legal_name: s.legalName,
-          cnpj: s.cnpj,
-          studio_phone: s.studioPhone,
-          address: s.address,
-          city: s.city,
-          state: s.state,
-          country: s.country,
-          size_m2: s.sizeM2,
-          student_capacity: s.studentCapacity,
-          rent_value: s.rentValue,
-          methodology: s.methodology,
-          studio_type: s.studioType,
-          name_on_site: s.nameOnSite,
-          bank: s.bank,
-          agency: s.agency,
-          account: s.account,
-          beneficiary: s.beneficiary,
-          pix_key: s.pixKey,
-          has_reformer: s.hasReformer,
-          qty_reformer: s.qtyReformer,
-          has_ladder_barrel: s.hasLadderBarrel,
-          qty_ladder_barrel: s.qtyLadderBarrel,
-          has_chair: s.hasChair,
-          qty_chair: s.qtyChair,
-          has_cadillac: s.hasCadillac,
-          qty_cadillac: s.qtyCadillac,
-          has_chairs_for_course: s.hasChairsForCourse,
-          has_tv: s.hasTv,
-          max_kits_capacity: s.maxKitsCapacity,
-          attachments: s.attachments
-      };
-      const { error } = await supabase.from('crm_partner_studios').upsert(payload);
-      if (error) throw error;
-  },
-  deletePartnerStudio: async (id: string) => {
-      await supabase.from('crm_partner_studios').delete().eq('id', id);
-  },
-
-  // STOCK
-  getStockMovements: async (): Promise<StockMovement[]> => {
+  getWorkshops: async (eventId: string): Promise<Workshop[]> => {
     if (!isConfigured) return [];
-    
+
     const { data, error } = await supabase
-      .from('crm_stock_movements')
+      .from('crm_workshops')
       .select('*')
-      .order('date', { ascending: false });
+      .eq('event_id', eventId)
+      .order('date', { ascending: true })
+      .order('time', { ascending: true });
 
     if (error) {
-      console.error("Error fetching stock:", error);
+      console.error("Error fetching workshops:", error);
       return [];
     }
 
     return data.map((d: any) => ({
       id: d.id,
-      type: d.type,
+      eventId: d.event_id,
+      blockId: d.block_id, 
+      title: d.title,
+      description: d.description, // Map description
+      speaker: d.speaker,
       date: d.date,
-      conferenceDate: d.conference_date,
-      items: d.items, // JSONB
-      partnerStudioId: d.partner_studio_id,
-      partnerStudioName: d.partner_studio_name,
-      trackingCode: d.tracking_code,
-      observations: d.observations,
-      attachments: d.attachments,
-      createdAt: d.created_at
+      time: d.time,
+      spots: d.spots
     }));
   },
 
-  saveStockMovement: async (movement: StockMovement): Promise<void> => {
+  saveWorkshop: async (workshop: Workshop): Promise<Workshop> => {
     if (!isConfigured) throw new Error("Backend not configured");
 
     const payload = {
-      type: movement.type,
-      date: movement.date,
-      conference_date: movement.conferenceDate || null,
-      items: movement.items, // JSONB
-      partner_studio_id: movement.partnerStudioId || null,
-      partner_studio_name: movement.partnerStudioName || null,
-      tracking_code: movement.trackingCode,
-      observations: movement.observations,
-      attachments: movement.attachments
+      id: workshop.id,
+      event_id: workshop.eventId,
+      block_id: workshop.blockId || null, 
+      title: workshop.title,
+      description: workshop.description, // Save description
+      speaker: workshop.speaker,
+      date: workshop.date,
+      time: workshop.time,
+      spots: workshop.spots
     };
 
-    if (movement.id) {
-        const { error } = await supabase.from('crm_stock_movements').update(payload).eq('id', movement.id);
-        if (error) throw error;
-    } else {
-        const { error } = await supabase.from('crm_stock_movements').insert([payload]);
-        if (error) throw error;
-    }
+    const { data, error } = await supabase
+      .from('crm_workshops')
+      .upsert(payload)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      eventId: data.event_id,
+      blockId: data.block_id,
+      title: data.title,
+      description: data.description,
+      speaker: data.speaker,
+      date: data.date,
+      time: data.time,
+      spots: data.spots
+    };
   },
 
-  deleteStockMovement: async (id: string): Promise<void> => {
+  deleteWorkshop: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_stock_movements').delete().eq('id', id);
+    const { error } = await supabase.from('crm_workshops').delete().eq('id', id);
     if (error) throw error;
+  },
+
+  // --- EVENT REGISTRATIONS ---
+
+  getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
+    if (!isConfigured) return [];
+
+    const { data, error } = await supabase
+      .from('crm_event_registrations')
+      .select('*')
+      .eq('event_id', eventId);
+
+    if (error) {
+      console.error("Error fetching event registrations:", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      eventId: d.event_id,
+      workshopId: d.workshop_id,
+      studentId: d.student_id,
+      studentName: d.student_name,
+      studentEmail: d.student_email,
+      registeredAt: d.created_at
+    }));
+  },
+
+  saveEventRegistrations: async (eventId: string, studentId: string, studentName: string, studentEmail: string, workshopIds: string[]): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    // 1. Delete existing registrations for this student in this event
+    const { error: deleteError } = await supabase
+      .from('crm_event_registrations')
+      .delete()
+      .eq('event_id', eventId)
+      .eq('student_id', studentId);
+
+    if (deleteError) throw deleteError;
+
+    // 2. Insert new registrations
+    if (workshopIds.length > 0) {
+      const payload = workshopIds.map(wId => ({
+        event_id: eventId,
+        workshop_id: wId,
+        student_id: studentId,
+        student_name: studentName,
+        student_email: studentEmail
+      }));
+
+      const { error: insertError } = await supabase
+        .from('crm_event_registrations')
+        .insert(payload);
+
+      if (insertError) throw insertError;
+    }
   }
 };

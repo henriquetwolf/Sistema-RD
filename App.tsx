@@ -26,8 +26,7 @@ import { StudentArea } from './components/StudentArea';
 import { CertificateViewer } from './components/CertificateViewer'; 
 import { EventsManager } from './components/EventsManager';
 import { WhatsAppInbox } from './components/WhatsAppInbox'; 
-import { PartnerStudiosManager } from './components/PartnerStudiosManager';
-import { StockManager } from './components/StockManager'; // New Import
+import { PartnerStudiosManager } from './components/PartnerStudiosManager'; // New Import
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -38,7 +37,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HelpCircle, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package
+  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -76,7 +75,7 @@ function App() {
   const jobsRef = useRef<SyncJob[]>([]); // Ref to access latest jobs inside interval without resetting it
   
   // Dashboard UI State
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios' | 'stock'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios'>('overview');
 
   // Sales Widget State
   const [salesDateRange, setSalesDateRange] = useState({
@@ -866,7 +865,7 @@ function App() {
                                         Professores
                                     </button>
                                 )}
-                                {canAccess('partner_studios') && (
+                                {canAccess('franchises') && (
                                     <button
                                         onClick={() => setDashboardTab('partner_studios')}
                                         className={clsx(
@@ -876,18 +875,6 @@ function App() {
                                     >
                                         <Building2 size={18} />
                                         Studios Parceiros
-                                    </button>
-                                )}
-                                {canAccess('stock') && (
-                                    <button
-                                        onClick={() => setDashboardTab('stock')}
-                                        className={clsx(
-                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                            dashboardTab === 'stock' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                        )}
-                                    >
-                                        <Package size={18} />
-                                        Estoque
                                     </button>
                                 )}
                                 {canAccess('tables') && (
@@ -952,11 +939,9 @@ function App() {
                                     <p className="text-slate-500 text-sm">Bem-vindo, {currentUserTitle}.</p>
                                 </div>
 
-                                {/* ... (rest of overview dashboard) ... */}
                                 {/* --- WIDGET: VENDAS REALIZADAS --- */}
                                 {(canAccess('crm') || canAccess('analysis')) && (
                                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                        {/* ... (existing sales widget content) ... */}
                                         <div className="p-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
@@ -1162,7 +1147,6 @@ function App() {
                         {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'franchises' && <FranchisesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'partner_studios' && <PartnerStudiosManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'stock' && <StockManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'contracts' && <ContractsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'certificates' && <CertificatesManager onBack={() => setDashboardTab('overview')} />}
@@ -1194,7 +1178,6 @@ function App() {
                         {/* TAB: CONFIGURAÇÕES (JOBS LIST) */}
                         {dashboardTab === 'settings' && (
                             <div className="space-y-6 animate-in fade-in duration-300">
-                                {/* ... (existing settings content) ... */}
                                 <div className="flex justify-between items-end">
                                     <div>
                                         <h2 className="text-2xl font-bold text-slate-800">Conexões de Dados</h2>

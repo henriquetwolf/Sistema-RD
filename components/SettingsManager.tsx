@@ -1,28 +1,191 @@
-import React, { useState } from 'react';
-import { Cog, Check, AlertTriangle, Database, Image as ImageIcon } from 'lucide-react';
+
+import React, { useState, useEffect } from 'react';
+import { Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, Layout, ExternalLink, Trash2 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
+import { Role, Banner } from '../types';
+import clsx from 'clsx';
 
 interface SettingsManagerProps {
-    onLogoChange: (logo: string | null) => void;
-    currentLogo: string;
+  onLogoChange: (newLogo: string | null) => void;
+  currentLogo: string | null;
 }
 
+const MODULES = [
+    { id: 'overview', label: 'Visão Geral' },
+    { id: 'crm', label: 'CRM Comercial' },
+    { id: 'whatsapp', label: 'Atendimento (WhatsApp)' },
+    { id: 'analysis', label: 'Análise de Vendas' },
+    { id: 'collaborators', label: 'Colaboradores' },
+    { id: 'classes', label: 'Turmas' },
+    { id: 'teachers', label: 'Professores' },
+    { id: 'franchises', label: 'Franquias' },
+    { id: 'partner_studios', label: 'Studios Parceiros' }, // Added
+    { id: 'forms', label: 'Formulários' },
+    { id: 'contracts', label: 'Contratos' },
+    { id: 'products', label: 'Produtos Digitais' },
+    { id: 'events', label: 'Eventos' },
+    { id: 'students', label: 'Alunos' },
+    { id: 'certificates', label: 'Certificados' },
+    { id: 'tables', label: 'Dados Brutos' },
+    { id: 'settings', label: 'Conexões' },
+    { id: 'global_settings', label: 'Configurações' },
+];
+
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, currentLogo }) => {
-  const [logoUrl, setLogoUrl] = useState(currentLogo);
-  const [sqlStatus, setSqlStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [sqlError, setSqlError] = useState('');
+  const [activeTab, setActiveTab] = useState<'visual' | 'roles' | 'database' | 'banners'>('visual');
+  const [preview, setPreview] = useState<string | null>(currentLogo);
+  const [isSaved, setIsSaved] = useState(false);
+  const [showSql, setShowSql] = useState(false);
+  const [sqlCopied, setSqlCopied] = useState(false);
+
+  // Role Management State
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [isLoadingRoles, setIsLoadingRoles] = useState(false);
+
+  // Banner Management State
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
+  const [newBanner, setNewBanner] = useState<Partial<Banner>>({
+      title: '',
+      linkUrl: '',
+      targetAudience: 'student',
+      active: true,
+      imageUrl: ''
+  });
+  const [isLoadingBanners, setIsLoadingBanners] = useState(false);
+
+  useEffect(() => {
+      if (activeTab === 'roles') {
+          fetchRoles();
+      } else if (activeTab === 'banners') {
+          fetchBanners();
+      }
+  }, [activeTab]);
+
+  const fetchRoles = async () => {
+      setIsLoadingRoles(true);
+      try {
+          const data = await appBackend.getRoles();
+          setRoles(data);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsLoadingRoles(false);
+      }
+  };
+
+  const fetchBanners = async () => {
+      setIsLoadingBanners(true);
+      try {
+          const data = await appBackend.getBanners();
+          setBanners(data);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsLoadingBanners(false);
+      }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreview(reader.result as string);
+        setIsSaved(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleBannerImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setNewBanner(prev => ({ ...prev, imageUrl: reader.result as string }));
+          };
+          reader.readAsDataURL(file);
+      }
+  };
 
   const handleSaveLogo = () => {
-      localStorage.setItem('app_logo', logoUrl);
-      onLogoChange(logoUrl);
-      alert('Logo atualizado!');
+    if (preview) {
+      appBackend.saveAppLogo(preview);
+      onLogoChange(preview);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    }
   };
 
   const handleResetLogo = () => {
-      localStorage.removeItem('app_logo');
       const defaultLogo = "https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png";
-      setLogoUrl(defaultLogo);
+      setPreview(defaultLogo);
+      appBackend.saveAppLogo(defaultLogo);
       onLogoChange(defaultLogo);
+  };
+
+  const handleSaveRole = async () => {
+      if (!editingRole || !editingRole.name) return;
+      
+      try {
+          await appBackend.saveRole(editingRole);
+          await fetchRoles();
+          setEditingRole(null);
+      } catch (e: any) {
+          alert(`Erro ao salvar perfil: ${e.message}`);
+      }
+  };
+
+  const handleDeleteRole = async (id: string) => {
+      if (window.confirm("Excluir este tipo de usuário?")) {
+          try {
+              await appBackend.deleteRole(id);
+              fetchRoles();
+          } catch (e: any) {
+              alert(`Erro: ${e.message}`);
+          }
+      }
+  };
+
+  const handleSaveBanner = async () => {
+      if (!newBanner.title || !newBanner.imageUrl) {
+          alert("Título e Imagem são obrigatórios.");
+          return;
+      }
+
+      try {
+          await appBackend.saveBanner(newBanner as Banner);
+          await fetchBanners();
+          setIsBannerModalOpen(false);
+          setNewBanner({ title: '', linkUrl: '', targetAudience: 'student', active: true, imageUrl: '' });
+      } catch (e: any) {
+          alert(`Erro ao salvar banner: ${e.message}`);
+      }
+  };
+
+  const handleDeleteBanner = async (id: string) => {
+      if (window.confirm("Excluir este banner?")) {
+          try {
+              await appBackend.deleteBanner(id);
+              fetchBanners();
+          } catch (e: any) {
+              alert(`Erro ao excluir: ${e.message}`);
+          }
+      }
+  };
+
+  const togglePermission = (moduleId: string) => {
+      if (!editingRole) return;
+      const currentPerms = editingRole.permissions || {};
+      setEditingRole({
+          ...editingRole,
+          permissions: {
+              ...currentPerms,
+              [moduleId]: !currentPerms[moduleId]
+          }
+      });
   };
 
   const generateRepairSQL = () => `
@@ -137,33 +300,15 @@ ALTER TABLE public.crm_partner_studios ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total parceiros" ON public.crm_partner_studios;
 CREATE POLICY "Acesso total parceiros" ON public.crm_partner_studios FOR ALL USING (true) WITH CHECK (true);
 
--- 6. CONTROLE DE ESTOQUE
-CREATE TABLE IF NOT EXISTS public.crm_stock_movements (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    created_at timestamptz DEFAULT now(),
-    type text CHECK (type IN ('in', 'out')),
-    date date,
-    conference_date date,
-    items jsonb DEFAULT '{}'::jsonb,
-    partner_studio_id uuid,
-    partner_studio_name text,
-    tracking_code text,
-    observations text,
-    attachments text
-);
-ALTER TABLE public.crm_stock_movements ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Acesso total estoque" ON public.crm_stock_movements;
-CREATE POLICY "Acesso total estoque" ON public.crm_stock_movements FOR ALL USING (true) WITH CHECK (true);
-
--- 7. DADOS INICIAIS (SEED)
+-- 6. DADOS INICIAIS (SEED)
 INSERT INTO public.crm_roles (name, permissions)
 VALUES 
-('Super Admin', '{"overview": true, "crm": true, "whatsapp": true, "analysis": true, "collaborators": true, "classes": true, "teachers": true, "franchises": true, "partner_studios": true, "stock": true, "forms": true, "contracts": true, "products": true, "events": true, "students": true, "certificates": true, "tables": true, "settings": true, "global_settings": true}'::jsonb),
+('Super Admin', '{"overview": true, "crm": true, "whatsapp": true, "analysis": true, "collaborators": true, "classes": true, "teachers": true, "franchises": true, "partner_studios": true, "forms": true, "contracts": true, "products": true, "events": true, "students": true, "certificates": true, "tables": true, "settings": true, "global_settings": true}'::jsonb),
 ('Comercial', '{"overview": true, "crm": true, "whatsapp": true, "analysis": true, "forms": true, "products": true, "events": true}'::jsonb),
-('Secretaria', '{"overview": true, "classes": true, "students": true, "certificates": true, "contracts": true, "teachers": true, "partner_studios": true, "stock": true}'::jsonb)
+('Secretaria', '{"overview": true, "classes": true, "students": true, "certificates": true, "contracts": true, "teachers": true, "partner_studios": true}'::jsonb)
 ON CONFLICT DO NOTHING;
 
--- 8. OUTRAS TABELAS (Eventos, Alunos, etc)
+-- 7. OUTRAS TABELAS (Eventos, Alunos, etc)
 CREATE TABLE IF NOT EXISTS public.crm_events (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text, dates text[], registration_open boolean, created_at timestamptz default now());
 ALTER TABLE public.crm_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso eventos" ON public.crm_events;
@@ -172,81 +317,433 @@ CREATE POLICY "Acesso eventos" ON public.crm_events FOR ALL USING (true) WITH CH
 NOTIFY pgrst, 'reload config';
   `;
 
-  const copySQL = () => {
+  const copySql = () => {
       navigator.clipboard.writeText(generateRepairSQL());
-      setSqlStatus('success');
-      setTimeout(() => setSqlStatus('idle'), 3000);
+      setSqlCopied(true);
+      setTimeout(() => setSqlCopied(false), 3000);
   };
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
-        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Cog className="text-slate-600" /> Configurações Gerais
-        </h2>
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
+      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 className="text-2xl font-bold text-slate-800">Configurações do Sistema</h2>
+            <p className="text-slate-500 text-sm">Personalize a aparência, acessos e banco de dados.</p>
+        </div>
+        
+        {/* Tab Switcher */}
+        <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto">
+            <button 
+                onClick={() => setActiveTab('visual')}
+                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+                <ImageIcon size={16} /> Identidade
+            </button>
+            <button 
+                onClick={() => setActiveTab('roles')}
+                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'roles' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+                <ShieldCheck size={16} /> Tipos de Usuário
+            </button>
+            <button 
+                onClick={() => setActiveTab('banners')}
+                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'banners' ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+                <Layout size={16} /> Banners
+            </button>
+            <button 
+                onClick={() => setActiveTab('database')}
+                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'database' ? "bg-white text-amber-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+                <Database size={16} /> Banco de Dados
+            </button>
+        </div>
+      </div>
 
-        {/* LOGO SETTINGS */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-            <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
-                <ImageIcon size={18} /> Personalização
-            </h3>
-            <div className="flex flex-col md:flex-row gap-6 items-start">
-                <div className="w-full md:w-1/2 space-y-4">
-                    <label className="block text-sm font-semibold text-slate-600">URL do Logo</label>
-                    <input 
-                        type="text" 
-                        value={logoUrl} 
-                        onChange={(e) => setLogoUrl(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                        placeholder="https://..."
-                    />
-                    <div className="flex gap-2">
-                        <button onClick={handleSaveLogo} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-900 transition-colors">
-                            Salvar Logo
+      <div className="max-w-4xl space-y-8">
+        
+        {/* TAB: VISUAL */}
+        {activeTab === 'visual' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
+                <div className="p-6 border-b border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800 mb-1">Identidade Visual</h3>
+                    <p className="text-sm text-slate-500">Altere a logomarca exibida no canto superior esquerdo.</p>
+                </div>
+
+                <div className="p-8 space-y-6">
+                    <div className="flex flex-col sm:flex-row items-center gap-8">
+                        <div className="flex flex-col items-center gap-2">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">Pré-visualização</span>
+                            <div className="w-64 h-32 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center p-4 relative overflow-hidden">
+                                {preview ? (
+                                    <img src={preview} alt="Logo Preview" className="max-w-full max-h-full object-contain" />
+                                ) : (
+                                    <ImageIcon className="text-slate-300" size={48} />
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex-1 w-full">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Upload Nova Logo</label>
+                            <div className="flex items-center gap-4">
+                                <label className="flex-1 cursor-pointer">
+                                    <div className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
+                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                            <Upload className="w-8 h-8 mb-3 text-slate-400" />
+                                            <p className="text-sm text-slate-500"><span className="font-semibold">Clique para enviar</span></p>
+                                            <p className="text-xs text-slate-500">PNG, JPG ou GIF (Max. 2MB)</p>
+                                        </div>
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                        <button 
+                            onClick={handleResetLogo}
+                            className="px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium flex items-center gap-2"
+                        >
+                            <RotateCcw size={16} /> Restaurar Padrão
                         </button>
-                        <button onClick={handleResetLogo} className="text-slate-500 px-4 py-2 rounded-lg text-sm hover:bg-slate-100 transition-colors">
-                            Resetar Padrão
+                        <button 
+                            onClick={handleSaveLogo}
+                            disabled={!preview || preview === currentLogo}
+                            className={isSaved 
+                                ? "bg-green-600 text-white px-6 py-2 rounded-lg font-bold shadow-sm flex items-center gap-2 pointer-events-none"
+                                : "bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-bold shadow-sm transition-all flex items-center gap-2"
+                            }
+                        >
+                            {isSaved ? <><CheckCircle size={18} /> Salvo!</> : <><Save size={18} /> Salvar Alterações</>}
                         </button>
                     </div>
                 </div>
-                <div className="w-full md:w-1/2 flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-200 border-dashed rounded-lg">
-                    <p className="text-xs text-slate-400 mb-2 uppercase font-bold">Preview</p>
-                    <img src={logoUrl} alt="Logo Preview" className="h-12 object-contain" />
+            </div>
+        )}
+
+        {/* TAB: BANNERS */}
+        {activeTab === 'banners' && (
+            <div className="space-y-6 animate-in fade-in">
+                {/* List */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-800 mb-1">Banners Publicitários</h3>
+                            <p className="text-sm text-slate-500">Gerencie os banners exibidos nas áreas de aluno e instrutor.</p>
+                        </div>
+                        <button 
+                            onClick={() => setIsBannerModalOpen(true)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
+                        >
+                            <Upload size={16} /> Novo Banner
+                        </button>
+                    </div>
+                    
+                    <div className="p-6">
+                        {isLoadingBanners ? (
+                            <div className="text-center py-10 text-slate-400">Carregando...</div>
+                        ) : banners.length === 0 ? (
+                            <div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-100 rounded-lg">
+                                <Layout size={32} className="mx-auto mb-2 opacity-50" />
+                                <p>Nenhum banner cadastrado.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {banners.map(banner => (
+                                    <div key={banner.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden group hover:shadow-md transition-all">
+                                        <div className="h-40 bg-slate-100 relative">
+                                            <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button 
+                                                    onClick={() => handleDeleteBanner(banner.id)} 
+                                                    className="bg-white text-red-600 p-2 rounded-full hover:bg-red-50"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                            <div className="absolute top-2 left-2">
+                                                <span className={clsx("text-[10px] font-bold px-2 py-1 rounded shadow-sm border", banner.targetAudience === 'student' ? "bg-purple-100 text-purple-700 border-purple-200" : "bg-orange-100 text-orange-700 border-orange-200")}>
+                                                    {banner.targetAudience === 'student' ? 'Área do Aluno' : 'Área do Instrutor'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="p-4">
+                                            <h4 className="font-bold text-slate-800 text-sm mb-1">{banner.title}</h4>
+                                            {banner.linkUrl && (
+                                                <a href={banner.linkUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                                                    <ExternalLink size={10} /> {banner.linkUrl}
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Modal Create Banner */}
+                {isBannerModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                        <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
+                            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                                <h3 className="font-bold text-slate-800">Novo Banner</h3>
+                                <button onClick={() => setIsBannerModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                            </div>
+                            
+                            <div className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">Título do Banner</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" 
+                                        value={newBanner.title}
+                                        onChange={e => setNewBanner({...newBanner, title: e.target.value})}
+                                        placeholder="Ex: Promoção de Verão"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">Público Alvo</label>
+                                    <div className="flex gap-4">
+                                        <label className="flex items-center gap-2 cursor-pointer border p-3 rounded-lg flex-1 hover:bg-slate-50">
+                                            <input 
+                                                type="radio" 
+                                                name="audience" 
+                                                checked={newBanner.targetAudience === 'student'} 
+                                                onChange={() => setNewBanner({...newBanner, targetAudience: 'student'})}
+                                                className="text-purple-600 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm font-medium">Área do Aluno</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer border p-3 rounded-lg flex-1 hover:bg-slate-50">
+                                            <input 
+                                                type="radio" 
+                                                name="audience" 
+                                                checked={newBanner.targetAudience === 'instructor'} 
+                                                onChange={() => setNewBanner({...newBanner, targetAudience: 'instructor'})}
+                                                className="text-orange-600 focus:ring-orange-500"
+                                            />
+                                            <span className="text-sm font-medium">Área do Instrutor</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">Imagem do Banner</label>
+                                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50 transition-colors relative">
+                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleBannerImageUpload} />
+                                        {newBanner.imageUrl ? (
+                                            <img src={newBanner.imageUrl} alt="Preview" className="max-h-32 mx-auto rounded shadow-sm" />
+                                        ) : (
+                                            <div className="text-slate-400">
+                                                <Upload className="mx-auto mb-2" size={24} />
+                                                <p className="text-xs">Clique para fazer upload</p>
+                                                <p className="text-[10px] mt-1">Recomendado: 1200x300px (Desktop)</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">Link de Redirecionamento</label>
+                                    <div className="relative">
+                                        <ExternalLink size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input 
+                                            type="text" 
+                                            className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm" 
+                                            value={newBanner.linkUrl}
+                                            onChange={e => setNewBanner({...newBanner, linkUrl: e.target.value})}
+                                            placeholder="https://..."
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                                <button onClick={() => setIsBannerModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                                <button onClick={handleSaveBanner} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm">Salvar Banner</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* TAB: ROLES */}
+        {activeTab === 'roles' && (
+            <div className="space-y-6 animate-in fade-in">
+                {!editingRole ? (
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800 mb-1">Tipos de Usuário</h3>
+                                <p className="text-sm text-slate-500">Gerencie os perfis de acesso ao painel administrativo.</p>
+                            </div>
+                            <button 
+                                onClick={() => setEditingRole({ id: '', name: '', permissions: {} })}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
+                            >
+                                <Users size={16} /> Novo Tipo
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            {isLoadingRoles ? (
+                                <div className="text-center py-10 text-slate-400">Carregando...</div>
+                            ) : roles.length === 0 ? (
+                                <div className="text-center py-10 text-slate-400">Nenhum tipo de usuário criado.</div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-4">
+                                    {roles.map(role => (
+                                        <div key={role.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-indigo-200 transition-colors">
+                                            <div>
+                                                <h4 className="font-bold text-slate-800">{role.name}</h4>
+                                                <p className="text-xs text-slate-500">
+                                                    {Object.values(role.permissions).filter(Boolean).length} módulos permitidos
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setEditingRole(role)} className="px-3 py-1.5 bg-white border border-slate-300 rounded text-xs font-bold text-slate-600 hover:bg-slate-50">Editar</button>
+                                                <button onClick={() => handleDeleteRole(role.id)} className="px-3 py-1.5 bg-white border border-red-200 rounded text-xs font-bold text-red-600 hover:bg-red-50">Excluir</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    // EDIT MODE
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+                            <h3 className="text-lg font-bold text-indigo-900">
+                                {editingRole.id ? `Editar: ${editingRole.name}` : 'Criar Novo Tipo de Usuário'}
+                            </h3>
+                            <button onClick={() => setEditingRole(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        
+                        <div className="p-6 space-y-6">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Nome do Tipo (Cargo/Departamento)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    placeholder="Ex: Vendas, Marketing, Financeiro..."
+                                    value={editingRole.name}
+                                    onChange={(e) => setEditingRole({...editingRole, name: e.target.value})}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-3">Permissões de Acesso</label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {MODULES.map(module => {
+                                        const isAllowed = !!editingRole.permissions[module.id];
+                                        return (
+                                            <div 
+                                                key={module.id}
+                                                onClick={() => togglePermission(module.id)}
+                                                className={clsx(
+                                                    "flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all",
+                                                    isAllowed 
+                                                        ? "bg-green-50 border-green-200 shadow-sm" 
+                                                        : "bg-slate-50 border-slate-200 opacity-70 hover:opacity-100"
+                                                )}
+                                            >
+                                                <span className={clsx("text-sm font-medium", isAllowed ? "text-green-800" : "text-slate-500")}>
+                                                    {module.label}
+                                                </span>
+                                                {isAllowed ? <Check size={18} className="text-green-600" /> : <Lock size={16} className="text-slate-400" />}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                            <button onClick={() => setEditingRole(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                            <button onClick={handleSaveRole} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm">
+                                Salvar Permissões
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* TAB: DATABASE */}
+        {activeTab === 'database' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800 mb-1 flex items-center gap-2">
+                            <Database size={20} className="text-amber-600" /> Diagnóstico de Banco de Dados
+                        </h3>
+                        <p className="text-sm text-slate-500">Use esta ferramenta se estiver vendo erros de "Coluna Faltante" ou de unicidade.</p>
+                    </div>
+                </div>
+                
+                <div className="p-6 bg-slate-50">
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 flex items-start gap-3">
+                        <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={20} />
+                        <div>
+                            <h4 className="text-sm font-bold text-amber-800">Correção de Tabelas</h4>
+                            <p className="text-xs text-amber-700 mt-1">
+                                Este script cria tabelas faltantes e corrige erros comuns, como <strong>emails duplicados</strong> impedindo login.
+                            </p>
+                        </div>
+                    </div>
+
+                    {!showSql ? (
+                        <button 
+                            onClick={() => setShowSql(true)}
+                            className="w-full py-3 bg-white border border-slate-300 hover:border-amber-500 hover:text-amber-600 text-slate-600 font-medium rounded-lg transition-all shadow-sm"
+                        >
+                            Mostrar Script SQL de Correção
+                        </button>
+                    ) : (
+                        <div className="animate-in fade-in slide-in-from-top-2">
+                            <div className="relative">
+                                <pre className="bg-slate-900 text-slate-300 p-4 rounded-lg text-xs font-mono overflow-x-auto max-h-[300px] border border-slate-800">
+                                    {generateRepairSQL()}
+                                </pre>
+                                <button 
+                                    onClick={copySql}
+                                    className={sqlCopied 
+                                        ? "absolute top-2 right-2 bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1"
+                                        : "absolute top-2 right-2 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 backdrop-blur-sm transition-colors"
+                                    }
+                                >
+                                    {sqlCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                                    {sqlCopied ? 'Copiado!' : 'Copiar SQL'}
+                                </button>
+                            </div>
+                            
+                            <div className="mt-4 flex flex-col gap-2 text-sm text-slate-600">
+                                <p><strong>Instruções:</strong></p>
+                                <ol className="list-decimal list-inside space-y-1 ml-1">
+                                    <li>Clique em <strong>Copiar SQL</strong> acima.</li>
+                                    <li>Vá para o painel do seu projeto no <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="text-indigo-600 underline">Supabase</a>.</li>
+                                    <li>No menu lateral, clique em <strong>SQL Editor</strong>.</li>
+                                    <li>Cole o código e clique em <strong>RUN</strong>.</li>
+                                </ol>
+                            </div>
+                            
+                            <button 
+                                onClick={() => setShowSql(false)}
+                                className="mt-4 text-xs text-slate-400 hover:text-slate-600 underline"
+                            >
+                                Ocultar script
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
-        </div>
+        )}
 
-        {/* DATABASE DIAGNOSIS */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-            <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2">
-                <Database size={18} /> Diagnóstico de Banco de Dados
-            </h3>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800 mb-4">
-                <div className="flex items-start gap-2">
-                    <AlertTriangle size={18} className="shrink-0 mt-0.5" />
-                    <p>
-                        Se você está vendo erros como <strong>"relation does not exist"</strong> ou <strong>"column does not exist"</strong>, 
-                        significa que a estrutura do banco de dados no Supabase está desatualizada.
-                    </p>
-                </div>
-            </div>
-            
-            <p className="text-sm text-slate-600 mb-3">
-                Copie o script SQL abaixo e execute no <strong>SQL Editor</strong> do painel do Supabase para corrigir todas as tabelas.
-            </p>
-
-            <div className="bg-slate-900 rounded-lg p-4 relative group">
-                <pre className="text-xs text-slate-300 font-mono overflow-x-auto h-32 custom-scrollbar">
-                    {generateRepairSQL()}
-                </pre>
-                <button 
-                    onClick={copySQL}
-                    className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1 backdrop-blur-sm"
-                >
-                    {sqlStatus === 'success' ? <Check size={14} /> : <Database size={14} />}
-                    {sqlStatus === 'success' ? 'Copiado!' : 'Copiar SQL'}
-                </button>
-            </div>
-        </div>
+      </div>
     </div>
   );
 };

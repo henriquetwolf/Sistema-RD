@@ -8,7 +8,7 @@ import {
   MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock
 } from 'lucide-react';
 import clsx from 'clsx';
-import { appBackend } from '../services/appBackend';
+import { appBackend, CompanySetting } from '../services/appBackend';
 // Removed ibgeService import as we rely on registered classes now
 
 // --- Types ---
@@ -188,6 +188,9 @@ export const CrmBoard: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [collaborators, setCollaborators] = useState<CollaboratorSimple[]>([]); // New state for fetched collaborators
   
+  // Configuration Data
+  const [companies, setCompanies] = useState<CompanySetting[]>([]);
+
   // Real Classes Data for Dropdowns
   const [registeredClasses, setRegisteredClasses] = useState<RegisteredClass[]>([]);
   // Digital Products Data
@@ -334,6 +337,10 @@ export const CrmBoard: React.FC = () => {
               setCollaborators(mappedCollabs);
           }
 
+          // 7. Fetch Companies (For invoicing logic)
+          const companiesData = await appBackend.getCompanies();
+          setCompanies(companiesData);
+
       } catch (e: any) {
           console.error("Erro ao carregar dados do CRM:", e);
       } finally {
@@ -387,6 +394,13 @@ export const CrmBoard: React.FC = () => {
           return Array.from(new Set(courseNames)).sort();
       }
   }, [dealFormData.productType, digitalProducts, registeredClasses, eventsList]);
+
+  // 6. Determined Billing Company
+  const billingCompany = useMemo(() => {
+      if (!dealFormData.productType) return null;
+      // Find a company that lists the selected product type in its productTypes array
+      return companies.find(c => c.productTypes && c.productTypes.includes(dealFormData.productType!));
+  }, [dealFormData.productType, companies]);
 
 
   // --- Helpers & Logic ---
@@ -891,6 +905,17 @@ export const CrmBoard: React.FC = () => {
                                       {productOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                   </select>
                               </div>
+
+                              {/* COMPANY BADGE */}
+                              {billingCompany && (
+                                  <div className="md:col-span-3 bg-indigo-50 border border-indigo-100 rounded-lg p-3 flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                                      <Building size={16} className="text-indigo-600" />
+                                      <div className="text-xs text-indigo-900">
+                                          <span className="font-bold block">Faturamento: {billingCompany.legalName}</span>
+                                          <span className="font-mono text-[10px]">{billingCompany.cnpj}</span>
+                                      </div>
+                                  </div>
+                              )}
 
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Fonte</label>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, Layout, ExternalLink, Trash2, BarChart3 } from 'lucide-react';
-import { appBackend } from '../services/appBackend';
+import { Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2 } from 'lucide-react';
+import { appBackend, CompanySetting } from '../services/appBackend';
 import { Role, Banner } from '../types';
 import clsx from 'clsx';
 
@@ -18,7 +18,7 @@ const MODULES = [
     { id: 'classes', label: 'Turmas' },
     { id: 'teachers', label: 'Professores' },
     { id: 'franchises', label: 'Franquias' },
-    { id: 'partner_studios', label: 'Studios Parceiros' }, // Added
+    { id: 'partner_studios', label: 'Studios Parceiros' },
     { id: 'forms', label: 'Formulários' },
     { id: 'contracts', label: 'Contratos' },
     { id: 'products', label: 'Produtos Digitais' },
@@ -30,8 +30,10 @@ const MODULES = [
     { id: 'global_settings', label: 'Configurações' },
 ];
 
+const PRODUCT_TYPES = ['Presencial', 'Digital', 'Evento'];
+
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, currentLogo }) => {
-  const [activeTab, setActiveTab] = useState<'visual' | 'roles' | 'database' | 'banners' | 'powerbi'>('visual');
+  const [activeTab, setActiveTab] = useState<'visual' | 'company' | 'roles' | 'database' | 'banners' | 'powerbi'>('visual');
   const [preview, setPreview] = useState<string | null>(currentLogo);
   const [isSaved, setIsSaved] = useState(false);
   const [showSql, setShowSql] = useState(false);
@@ -54,6 +56,11 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
   });
   const [isLoadingBanners, setIsLoadingBanners] = useState(false);
 
+  // Company Settings State (Multi-Company)
+  const [companies, setCompanies] = useState<CompanySetting[]>([]);
+  const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<Partial<CompanySetting> | null>(null);
+
   // Power BI Helper State
   const [pbiConfig, setPbiConfig] = useState({ url: '', tableName: '', key: '' });
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -63,6 +70,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
           fetchRoles();
       } else if (activeTab === 'banners') {
           fetchBanners();
+      } else if (activeTab === 'company') {
+          fetchCompanies();
       }
   }, [activeTab]);
 
@@ -87,6 +96,18 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
           console.error(e);
       } finally {
           setIsLoadingBanners(false);
+      }
+  };
+
+  const fetchCompanies = async () => {
+      setIsLoadingCompanies(true);
+      try {
+          const data = await appBackend.getCompanies();
+          setCompanies(data);
+      } catch(e) {
+          console.error(e);
+      } finally {
+          setIsLoadingCompanies(false);
       }
   };
 
@@ -176,6 +197,59 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
           } catch (e: any) {
               alert(`Erro ao excluir: ${e.message}`);
           }
+      }
+  };
+
+  // Company Logic
+  const handleSaveCompany = async () => {
+      if (!editingCompany?.legalName || !editingCompany?.cnpj) {
+          alert("Razão Social e CNPJ são obrigatórios.");
+          return;
+      }
+
+      try {
+          await appBackend.saveCompany(editingCompany as CompanySetting);
+          await fetchCompanies();
+          setEditingCompany(null);
+      } catch(e: any) {
+          alert(`Erro ao salvar empresa: ${e.message}`);
+      }
+  };
+
+  const handleDeleteCompany = async (id: string) => {
+      if (window.confirm("Excluir esta empresa?")) {
+          try {
+              await appBackend.deleteCompany(id);
+              await fetchCompanies();
+          } catch(e: any) {
+              alert(`Erro ao excluir: ${e.message}`);
+          }
+      }
+  };
+
+  const handleCnpjChange = (value: string) => {
+      // Remove everything that is not a digit
+      let val = value.replace(/\D/g, '');
+      
+      // Limit to 14 digits
+      val = val.substring(0, 14);
+
+      // Apply mask: XX.XXX.XXX/XXXX-XX
+      val = val.replace(/^(\d{2})(\d)/, '$1.$2');
+      val = val.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+      val = val.replace(/\.(\d{3})(\d)/, '.$1/$2');
+      val = val.replace(/(\d{4})(\d)/, '$1-$2');
+
+      setEditingCompany(prev => ({ ...prev, cnpj: val }));
+  };
+
+  const toggleProductType = (type: string) => {
+      if (!editingCompany) return;
+      const types = editingCompany.productTypes || [];
+      if (types.includes(type)) {
+          setEditingCompany({ ...editingCompany, productTypes: types.filter(t => t !== type) });
+      } else {
+          setEditingCompany({ ...editingCompany, productTypes: [...types, type] });
       }
   };
 
@@ -353,6 +427,18 @@ ALTER TABLE public.crm_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso eventos" ON public.crm_events;
 CREATE POLICY "Acesso eventos" ON public.crm_events FOR ALL USING (true) WITH CHECK (true);
 
+-- 9. CONFIGURAÇÕES DAS EMPRESAS (MULTI-CNPJ)
+CREATE TABLE IF NOT EXISTS public.crm_companies (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    legal_name text,
+    cnpj text,
+    product_types jsonb DEFAULT '[]'::jsonb,
+    created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.crm_companies ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total companies" ON public.crm_companies;
+CREATE POLICY "Acesso total companies" ON public.crm_companies FOR ALL USING (true) WITH CHECK (true);
+
 NOTIFY pgrst, 'reload config';
   `;
 
@@ -377,6 +463,12 @@ NOTIFY pgrst, 'reload config';
                 className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
             >
                 <ImageIcon size={16} /> Identidade
+            </button>
+            <button 
+                onClick={() => setActiveTab('company')}
+                className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'company' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+                <Building2 size={16} /> Empresas
             </button>
             <button 
                 onClick={() => setActiveTab('roles')}
@@ -464,6 +556,156 @@ NOTIFY pgrst, 'reload config';
                         </button>
                     </div>
                 </div>
+            </div>
+        )}
+
+        {/* TAB: COMPANIES (Multi-CNPJ) */}
+        {activeTab === 'company' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
+                
+                {editingCompany ? (
+                    // FORM VIEW
+                    <div className="animate-in fade-in">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800">{editingCompany.id ? 'Editar Empresa' : 'Nova Empresa'}</h3>
+                                <p className="text-sm text-slate-500">Cadastro de CNPJ e associação de produtos.</p>
+                            </div>
+                            <button onClick={() => setEditingCompany(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div className="grid grid-cols-1 gap-6 max-w-2xl">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Razão Social</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+                                        placeholder="Ex: Minha Empresa LTDA"
+                                        value={editingCompany.legalName || ''}
+                                        onChange={(e) => setEditingCompany({...editingCompany, legalName: e.target.value})}
+                                    />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">CNPJ</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+                                        placeholder="00.000.000/0000-00"
+                                        value={editingCompany.cnpj || ''}
+                                        onChange={(e) => handleCnpjChange(e.target.value)}
+                                        maxLength={18}
+                                    />
+                                </div>
+
+                                <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Tipos de Produtos Associados</label>
+                                    <p className="text-xs text-slate-500 mb-3">Selecione quais tipos de venda são faturados por este CNPJ.</p>
+                                    <div className="flex flex-wrap gap-3">
+                                        {PRODUCT_TYPES.map(type => {
+                                            const isSelected = editingCompany.productTypes?.includes(type);
+                                            return (
+                                                <button
+                                                    key={type}
+                                                    onClick={() => toggleProductType(type)}
+                                                    className={clsx(
+                                                        "px-3 py-1.5 rounded-full text-xs font-bold border transition-all flex items-center gap-1",
+                                                        isSelected 
+                                                            ? "bg-teal-100 text-teal-700 border-teal-200" 
+                                                            : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                                                    )}
+                                                >
+                                                    {isSelected && <Check size={12} />}
+                                                    {type}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end pt-4 gap-2">
+                                    <button 
+                                        onClick={() => setEditingCompany(null)}
+                                        className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button 
+                                        onClick={handleSaveCompany}
+                                        className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg font-bold shadow-sm transition-all flex items-center gap-2"
+                                    >
+                                        <Save size={18} /> Salvar Empresa
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    // LIST VIEW
+                    <div>
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800 mb-1">Empresas e CNPJs</h3>
+                                <p className="text-sm text-slate-500">Gerencie múltiplas empresas para emissão de contratos/notas.</p>
+                            </div>
+                            <button 
+                                onClick={() => setEditingCompany({ productTypes: [] })}
+                                className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-all"
+                            >
+                                <Plus size={16} /> Nova Empresa
+                            </button>
+                        </div>
+
+                        <div className="p-6">
+                            {isLoadingCompanies ? (
+                                <div className="text-center py-10 text-slate-400">Carregando dados...</div>
+                            ) : companies.length === 0 ? (
+                                <div className="text-center py-10 text-slate-400 border-2 border-dashed border-slate-100 rounded-lg">
+                                    <Building2 size={32} className="mx-auto mb-2 opacity-50" />
+                                    <p>Nenhuma empresa cadastrada.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-4">
+                                    {companies.map(company => (
+                                        <div key={company.id} className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-sm transition-shadow">
+                                            <div>
+                                                <h4 className="font-bold text-slate-800 text-lg">{company.legalName}</h4>
+                                                <p className="text-sm text-slate-500 font-mono mb-2">{company.cnpj}</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {company.productTypes.length > 0 ? (
+                                                        company.productTypes.map(pt => (
+                                                            <span key={pt} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 uppercase font-bold">
+                                                                {pt}
+                                                            </span>
+                                                        ))
+                                                    ) : (
+                                                        <span className="text-[10px] text-slate-400 italic">Nenhum produto associado</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 self-start sm:self-center">
+                                                <button 
+                                                    onClick={() => setEditingCompany(company)} 
+                                                    className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                                    title="Editar"
+                                                >
+                                                    <Edit2 size={18} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteCompany(company.id)} 
+                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Excluir"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         )}
 

@@ -34,6 +34,13 @@ const MOCK_SESSION = {
   }
 };
 
+export interface CompanySetting {
+    id: string;
+    legalName: string;
+    cnpj: string;
+    productTypes: string[]; // Array of types linked to this CNPJ
+}
+
 export const appBackend = {
   // Public flag to check if we are in local mode
   isLocalMode: !isConfigured,
@@ -191,13 +198,67 @@ export const appBackend = {
     }
   },
 
-  // --- APP SETTINGS (LOGO) ---
+  // --- APP SETTINGS (LOGO & COMPANY) ---
   getAppLogo: (): string | null => {
       return localStorage.getItem('app_logo_url');
   },
 
   saveAppLogo: (url: string) => {
       localStorage.setItem('app_logo_url', url);
+  },
+
+  // Company Settings (Multi-Company)
+  getCompanies: async (): Promise<CompanySetting[]> => {
+      if (!isConfigured) {
+          const data = localStorage.getItem('app_companies_list');
+          return data ? JSON.parse(data) : [];
+      }
+
+      const { data, error } = await supabase
+          .from('crm_companies')
+          .select('*')
+          .order('created_at', { ascending: true });
+      
+      if (error || !data) return JSON.parse(localStorage.getItem('app_companies_list') || '[]');
+
+      return data.map((c: any) => ({
+          id: c.id,
+          legalName: c.legal_name,
+          cnpj: c.cnpj,
+          productTypes: c.product_types || []
+      }));
+  },
+
+  saveCompany: async (company: CompanySetting): Promise<void> => {
+      if (!isConfigured) {
+          const companies = JSON.parse(localStorage.getItem('app_companies_list') || '[]');
+          const idx = companies.findIndex((c: CompanySetting) => c.id === company.id);
+          if (idx >= 0) companies[idx] = company;
+          else companies.push({ ...company, id: company.id || crypto.randomUUID() });
+          localStorage.setItem('app_companies_list', JSON.stringify(companies));
+          return;
+      }
+
+      const payload = {
+          id: company.id || undefined, // undefined to let DB generate UUID if new
+          legal_name: company.legalName,
+          cnpj: company.cnpj,
+          product_types: company.productTypes
+      };
+
+      const { error } = await supabase.from('crm_companies').upsert(payload);
+      if (error) throw error;
+  },
+
+  deleteCompany: async (id: string): Promise<void> => {
+      if (!isConfigured) {
+          const companies = JSON.parse(localStorage.getItem('app_companies_list') || '[]');
+          const filtered = companies.filter((c: CompanySetting) => c.id !== id);
+          localStorage.setItem('app_companies_list', JSON.stringify(filtered));
+          return;
+      }
+      const { error } = await supabase.from('crm_companies').delete().eq('id', id);
+      if (error) throw error;
   },
 
   // --- ROLES & PERMISSIONS ---

@@ -410,7 +410,7 @@ export const appBackend = {
       hasReformer: d.has_reformer,
       qtyReformer: d.qty_reformer,
       hasLadderBarrel: d.has_ladder_barrel,
-      qtyLadderBarrel: d.qty_ladder_barrel,
+      qtyLadder_barrel: d.qty_ladder_barrel,
       hasChair: d.has_chair,
       qtyChair: d.qty_chair,
       hasCadillac: d.has_cadillac,
@@ -481,59 +481,103 @@ export const appBackend = {
     if (error) throw error;
   },
 
-  // --- FORMS & CRM LOGIC (MOCKED BACKEND FOR FORMS, REAL FOR CRM) ---
+  // --- FORMS & CRM LOGIC (SUPABASE INTEGRATION) ---
   
   saveForm: async (form: FormModel): Promise<void> => {
-      // Simulating DB save in localStorage for forms
-      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
-      const existingIdx = forms.findIndex((f: FormModel) => f.id === form.id);
-      
-      if (existingIdx >= 0) {
-          forms[existingIdx] = form;
-      } else {
-          forms.push(form);
+      if (!isConfigured) {
+          const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+          const existingIdx = forms.findIndex((f: FormModel) => f.id === form.id);
+          if (existingIdx >= 0) forms[existingIdx] = form;
+          else forms.push(form);
+          localStorage.setItem('app_forms', JSON.stringify(forms));
+          return;
       }
-      
-      localStorage.setItem('app_forms', JSON.stringify(forms));
+
+      const payload = {
+          id: form.id || undefined,
+          title: form.title,
+          description: form.description,
+          is_lead_capture: form.isLeadCapture,
+          questions: form.questions,
+          style: form.style,
+          team_id: form.teamId || null,
+          distribution_mode: form.distributionMode || 'fixed',
+          fixed_owner_id: form.fixedOwnerId || null,
+          submissions_count: form.submissionsCount || 0
+      };
+
+      const { error } = await supabase.from('crm_forms').upsert(payload);
+      if (error) throw error;
   },
 
   getForms: async (): Promise<FormModel[]> => {
-      return JSON.parse(localStorage.getItem('app_forms') || '[]');
+      if (!isConfigured) return JSON.parse(localStorage.getItem('app_forms') || '[]');
+
+      const { data, error } = await supabase
+          .from('crm_forms')
+          .select('*')
+          .order('created_at', { ascending: false });
+      
+      if (error) return JSON.parse(localStorage.getItem('app_forms') || '[]');
+
+      return data.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          description: d.description,
+          isLeadCapture: d.is_lead_capture,
+          teamId: d.team_id,
+          distributionMode: d.distribution_mode,
+          fixedOwnerId: d.fixed_owner_id,
+          questions: d.questions || [],
+          style: d.style || {},
+          createdAt: d.created_at,
+          submissionsCount: d.submissions_count || 0
+      }));
   },
 
-  // New method to fetch a single form
   getFormById: async (id: string): Promise<FormModel | null> => {
-      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
-      return forms.find((f: FormModel) => f.id === id) || null;
+      if (!isConfigured) {
+          const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+          return forms.find((f: FormModel) => f.id === id) || null;
+      }
+
+      const { data, error } = await supabase
+          .from('crm_forms')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+      if (error || !data) return null;
+
+      return {
+          id: data.id,
+          title: data.title,
+          description: data.description,
+          isLeadCapture: data.is_lead_capture,
+          teamId: data.team_id,
+          distributionMode: data.distribution_mode,
+          fixedOwnerId: data.fixed_owner_id,
+          questions: data.questions || [],
+          style: data.style || {},
+          createdAt: data.created_at,
+          submissionsCount: data.submissions_count || 0
+      };
   },
 
   deleteForm: async (id: string): Promise<void> => {
-      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
-      const filtered = forms.filter((f: FormModel) => f.id !== id);
-      localStorage.setItem('app_forms', JSON.stringify(filtered));
+      if (!isConfigured) {
+          const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
+          const filtered = forms.filter((f: FormModel) => f.id !== id);
+          localStorage.setItem('app_forms', JSON.stringify(filtered));
+          return;
+      }
+      await supabase.from('crm_forms').delete().eq('id', id);
   },
 
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean): Promise<void> => {
-      // 1. Save submission locally
-      const submission: FormSubmission = {
-          id: crypto.randomUUID(),
-          formId,
-          answers,
-          submittedAt: new Date().toISOString()
-      };
-
-      const submissionsKey = `app_forms_subs_${formId}`;
-      const subs = JSON.parse(localStorage.getItem(submissionsKey) || '[]');
-      subs.push(submission);
-      localStorage.setItem(submissionsKey, JSON.stringify(subs));
-
-      // Update form count
-      const forms = JSON.parse(localStorage.getItem('app_forms') || '[]');
-      const formIdx = forms.findIndex((f: FormModel) => f.id === formId);
-      if (formIdx >= 0) {
-          forms[formIdx].submissionsCount = (forms[formIdx].submissionsCount || 0) + 1;
-          localStorage.setItem('app_forms', JSON.stringify(forms));
-      }
+      // 1. Get Form config
+      const form = await appBackend.getFormById(formId);
+      if (!form) throw new Error("Form not found");
 
       // 2. LEAD CAPTURE TO CRM
       if (isLeadCapture && isConfigured) {
@@ -551,6 +595,39 @@ export const appBackend = {
           const company = findValue(['empresa', 'organização', 'companhia', 'loja']);
           
           if (name) {
+              let assignedOwnerId = form.fixedOwnerId || null;
+
+              // --- LOGICA DE DISTRIBUICAO ROUND ROBIN ---
+              if (form.distributionMode === 'round-robin' && form.teamId) {
+                  // A. Fetch Team Members
+                  const { data: teamData } = await supabase
+                      .from('crm_teams')
+                      .select('members')
+                      .eq('id', form.teamId)
+                      .single();
+                  
+                  const members = teamData?.members || [];
+                  
+                  if (members.length > 0) {
+                      // B. Get/Init Counter for this form
+                      const { data: counterData } = await supabase
+                          .from('crm_form_counters')
+                          .select('last_index')
+                          .eq('form_id', formId)
+                          .single();
+                      
+                      const lastIndex = counterData ? counterData.last_index : -1;
+                      const nextIndex = (lastIndex + 1) % members.length;
+                      
+                      assignedOwnerId = members[nextIndex];
+
+                      // C. Update Counter
+                      await supabase
+                          .from('crm_form_counters')
+                          .upsert({ form_id: formId, last_index: nextIndex, updated_at: new Date().toISOString() });
+                  }
+              }
+
               const payload = {
                   title: `Lead: ${name}`,
                   contact_name: name,
@@ -558,21 +635,24 @@ export const appBackend = {
                   value: 0,
                   status: 'warm',
                   stage: 'new',
+                  owner_id: assignedOwnerId,
                   next_task: `Entrar em contato (${email || phone || 'sem dados'})`,
                   created_at: new Date().toISOString()
               };
 
-              // Insert directly into CRM table
-              const { error } = await supabase.from('crm_deals').insert([payload]);
-              if (error) {
-                  console.error("Failed to create lead in CRM:", error);
-                  // We don't throw here to avoid blocking the user form success message
-              }
+              await supabase.from('crm_deals').insert([payload]);
           }
+      }
+
+      // Update submission count
+      if (isConfigured) {
+          await supabase.rpc('increment_form_submissions', { form_id: formId });
+          // Fallback if RPC fails:
+          await supabase.from('crm_forms').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
       }
   },
 
-  // --- CONTRACTS & FOLDERS (SUPABASE INTEGRATION) ---
+  // --- CONTRACTS & FOLDERS ---
   
   getFolders: async (): Promise<ContractFolder[]> => {
       if (!isConfigured) return JSON.parse(localStorage.getItem('app_contract_folders') || '[]');
@@ -762,7 +842,7 @@ export const appBackend = {
       backBackgroundData: d.back_background_base64,
       linkedProductId: d.linked_product_id,
       bodyText: d.body_text,
-      layoutConfig: d.layout_config, // Map layout config
+      layoutConfig: d.layout_config, 
       createdAt: d.created_at
     }));
   },
@@ -783,8 +863,8 @@ export const appBackend = {
       background_base64: cert.backgroundData,
       back_background_base64: cert.backBackgroundData,
       linked_product_id: cert.linkedProductId || null,
-      body_text: cert.bodyText, // Fixed property mapping
-      layout_config: cert.layoutConfig // Save layout config
+      body_text: cert.bodyText, 
+      layout_config: cert.layoutConfig 
     };
 
     const { error } = await supabase.from('crm_certificates').upsert(payload);
@@ -839,7 +919,6 @@ export const appBackend = {
     if (certError || !certData) return null;
 
     // Fetch Student Info (Deal)
-    // NOTE: 'company_name' is mapped to "Nome Completo do Cliente" in the CRM
     const { data: dealData } = await supabase
       .from('crm_deals')
       .select('contact_name, company_name, course_city')
@@ -861,7 +940,7 @@ export const appBackend = {
       certificateTemplateId: certData.certificate_template_id,
       hash: certData.hash,
       issuedAt: certData.issued_at,
-      studentName: dealData.company_name || dealData.contact_name, // Prefer Full Name (Company Name in CRM logic)
+      studentName: dealData.company_name || dealData.contact_name, 
       studentCity: dealData.course_city || 'Local',
       template: {
         id: templateData.id,
@@ -870,7 +949,7 @@ export const appBackend = {
         backBackgroundData: templateData.back_background_base64,
         linkedProductId: templateData.linked_product_id,
         bodyText: templateData.body_text,
-        layoutConfig: templateData.layout_config, // Map Layout
+        layoutConfig: templateData.layout_config, 
         createdAt: templateData.created_at
       }
     };
@@ -894,7 +973,7 @@ export const appBackend = {
     return data.map((d: any) => ({
       id: d.id,
       name: d.name,
-      description: d.description, // Map description
+      description: d.description, 
       location: d.location,
       dates: d.dates || [],
       createdAt: d.created_at,
@@ -908,7 +987,7 @@ export const appBackend = {
     const payload = {
       id: event.id,
       name: event.name,
-      description: event.description, // Save description
+      description: event.description, 
       location: event.location,
       dates: event.dates,
       registration_open: event.registrationOpen 
@@ -1018,7 +1097,7 @@ export const appBackend = {
       eventId: d.event_id,
       blockId: d.block_id, 
       title: d.title,
-      description: d.description, // Map description
+      description: d.description, 
       speaker: d.speaker,
       date: d.date,
       time: d.time,
@@ -1034,7 +1113,7 @@ export const appBackend = {
       event_id: workshop.eventId,
       block_id: workshop.blockId || null, 
       title: workshop.title,
-      description: workshop.description, // Save description
+      description: workshop.description, 
       speaker: workshop.speaker,
       date: workshop.date,
       time: workshop.time,

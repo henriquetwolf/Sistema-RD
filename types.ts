@@ -106,8 +106,14 @@ export interface FormModel {
   title: string;
   description: string;
   isLeadCapture: boolean;
+  
+  // Lead Routing
+  teamId?: string;
+  distributionMode?: 'fixed' | 'round-robin';
+  fixedOwnerId?: string;
+
   questions: FormQuestion[];
-  style?: FormStyle; // New style property
+  style?: FormStyle; 
   createdAt: string;
   submissionsCount: number;
 }

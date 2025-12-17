@@ -223,7 +223,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
           try {
               await appBackend.deleteCompany(id);
               await fetchCompanies();
-          } catch(e: any) {
+          } catch (e: any) {
               alert(`Erro ao excluir: ${e.message}`);
           }
       }
@@ -291,15 +291,22 @@ DROP POLICY IF EXISTS "Acesso total companies" ON public.crm_companies;
 CREATE POLICY "Acesso total companies" ON public.crm_companies FOR ALL USING (true) WITH CHECK (true);
 
 -- TABELA DE EQUIPES COMERCIAIS
-CREATE TABLE IF NOT EXISTS public.crm_teams (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    created_at timestamptz DEFAULT now(),
-    name text NOT NULL,
-    members jsonb DEFAULT '[]'::jsonb
-);
+CREATE TABLE IF NOT EXISTS public.crm_teams (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), name text NOT NULL, members jsonb DEFAULT '[]'::jsonb);
 ALTER TABLE public.crm_teams ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total teams" ON public.crm_teams;
 CREATE POLICY "Acesso total teams" ON public.crm_teams FOR ALL USING (true) WITH CHECK (true);
+
+-- TABELA DE FORMULÁRIOS NO BANCO
+CREATE TABLE IF NOT EXISTS public.crm_forms (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), title text NOT NULL, description text, is_lead_capture boolean DEFAULT true, questions jsonb DEFAULT '[]'::jsonb, style jsonb DEFAULT '{}'::jsonb, team_id uuid REFERENCES public.crm_teams(id), distribution_mode text DEFAULT 'fixed', fixed_owner_id uuid REFERENCES public.crm_collaborators(id), submissions_count int DEFAULT 0);
+ALTER TABLE public.crm_forms ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total forms" ON public.crm_forms;
+CREATE POLICY "Acesso total forms" ON public.crm_forms FOR ALL USING (true) WITH CHECK (true);
+
+-- TABELA DE CONTADORES PARA ROUND ROBIN
+CREATE TABLE IF NOT EXISTS public.crm_form_counters (form_id uuid REFERENCES public.crm_forms(id) PRIMARY KEY, last_index int DEFAULT -1, updated_at timestamptz DEFAULT now());
+ALTER TABLE public.crm_form_counters ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total counters" ON public.crm_form_counters;
+CREATE POLICY "Acesso total counters" ON public.crm_form_counters FOR ALL USING (true) WITH CHECK (true);
 
 NOTIFY pgrst, 'reload config';
   `;

@@ -377,8 +377,8 @@ export const CrmBoard: React.FC = () => {
 
   const handleAddTask = () => {
       if(!newTaskDesc) return;
-      const newTask: DealTask = { id: crypto.randomUUID(), description: newTaskDesc, dueDate: newTaskDate, type: newTaskType, isDone: false };
-      setDealFormData(prev => ({ ...prev, tasks: [newTask, ...(prev.tasks || [])] }));
+      const newMessage: DealTask = { id: crypto.randomUUID(), description: newTaskDesc, dueDate: newTaskDate, type: newTaskType, isDone: false };
+      setDealFormData(prev => ({ ...prev, tasks: [newMessage, ...(prev.tasks || [])] }));
       setNewTaskDesc(''); setNewTaskDate('');
   };
 

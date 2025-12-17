@@ -6,7 +6,7 @@ import {
   FileText, Plus, MoreVertical, Trash2, Eye, Edit2, 
   ArrowLeft, Save, GripVertical, GripHorizontal, Copy, Settings,
   Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target, Share2, CheckCircle,
-  LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info
+  LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info, Code, ExternalLink
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -93,7 +93,10 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [collaborators, setCollaborators] = useState<CollaboratorSimple[]>([]);
   const [loading, setLoading] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  
+  // Share Modal State
+  const [sharingForm, setSharingForm] = useState<FormModel | null>(null);
+  const [copiedType, setCopiedType] = useState<'link' | 'embed' | null>(null);
 
   useEffect(() => {
     loadForms();
@@ -164,10 +167,13 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   };
 
   const handleShare = (form: FormModel) => {
-      const publicLink = `${window.location.origin}${window.location.pathname}?publicFormId=${form.id}`;
-      navigator.clipboard.writeText(publicLink);
-      setCopiedId(form.id);
-      setTimeout(() => setCopiedId(null), 3000);
+      setSharingForm(form);
+  };
+
+  const copyToClipboard = (text: string, type: 'link' | 'embed') => {
+      navigator.clipboard.writeText(text);
+      setCopiedType(type);
+      setTimeout(() => setCopiedType(null), 3000);
   };
 
   const updateStyle = (key: keyof FormStyle, value: any) => {
@@ -361,7 +367,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                     {currentForm.questions.length === 0 && (<div className="border-2 border-dashed border-slate-200 rounded-lg p-8 text-center"><p className="text-slate-400 text-sm">Seu formulário está vazio.</p><p className="text-slate-400 text-xs">Adicione campos usando o menu à esquerda.</p></div>)}
                                     {currentForm.questions.map((q) => (
                                         <div key={q.id} className="relative group border border-transparent hover:border-teal-200 hover:bg-teal-50/30 rounded-lg p-3 -mx-3 transition-all"><div className="absolute right-2 top-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white shadow-sm border border-slate-100 rounded p-1 z-10"><button onClick={() => removeQuestion(q.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={14} /></button><div className="w-px bg-slate-200 mx-1"></div><div className="p-1 cursor-move text-slate-400 hover:text-slate-600">
-                                        {/* Fixed missing GripHorizontal import */}
                                         <GripHorizontal size={14} /></div></div><div className="space-y-2"><input value={q.title} onChange={(e) => updateQuestion(q.id, 'title', e.target.value)} className="block w-full text-sm font-semibold text-slate-700 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none transition-all px-1" /><div className="relative pointer-events-none opacity-60">{q.type === 'paragraph' ? (<div className="h-20 w-full border border-slate-300 rounded bg-slate-50"></div>) : (<div className="h-10 w-full border border-slate-300 rounded bg-slate-50 flex items-center px-3 text-sm text-slate-400">{q.placeholder || 'Resposta...'}</div>)}</div><div className="flex items-center gap-2 mt-2"><label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer hover:text-teal-600"><input type="checkbox" checked={q.required} onChange={(e) => updateQuestion(q.id, 'required', e.target.checked)} className="rounded text-teal-600 focus:ring-teal-500 border-slate-300" />Campo Obrigatório</label></div></div></div>
                                     ))}
                                     <div className="pt-4"><button disabled className="w-full bg-slate-300 text-white font-bold py-3 rounded cursor-default opacity-50">ENVIAR</button></div>
@@ -460,7 +465,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
 
                                                     {currentForm.distributionMode === 'round-robin' && (
                                                         <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 flex gap-3">
-                                                            {/* Fixed missing Info import */}
                                                             <Info className="text-indigo-600 shrink-0" size={18} />
                                                             <div className="text-xs text-indigo-800">
                                                                 <strong>Como funciona:</strong> Os membros da equipe selecionada receberão leads um por um. <br/>
@@ -497,15 +501,91 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
               <div key={form.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col overflow-hidden group h-[240px] relative">
                   <div className="h-2 bg-slate-100 group-hover:bg-teal-500 transition-colors"></div>
                   <div className="p-5 flex-1 flex flex-col">
-                      <div className="flex justify-between items-start mb-2"><div className={clsx("p-1.5 rounded", form.isLeadCapture ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-500")}>{form.isLeadCapture ? <Target size={16} /> : <FileText size={16} />}</div><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleEdit(form)} className="p-1.5 hover:bg-slate-100 rounded text-slate-500" title="Editar"><Edit2 size={14}/></button><button onClick={() => handleShare(form)} className="p-1.5 hover:bg-slate-100 rounded text-slate-500" title="Link"><Share2 size={14}/></button><button onClick={() => handleDelete(form.id)} className="p-1.5 hover:bg-red-50 hover:text-red-600 rounded text-slate-400" title="Excluir"><Trash2 size={14}/></button></div></div>
+                      <div className="flex justify-between items-start mb-2"><div className={clsx("p-1.5 rounded", form.isLeadCapture ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-500")}>{form.isLeadCapture ? <Target size={16} /> : <FileText size={16} />}</div><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleEdit(form)} className="p-1.5 hover:bg-slate-100 rounded text-slate-500" title="Editar"><Edit2 size={14}/></button><button onClick={() => handleShare(form)} className="p-1.5 hover:bg-slate-100 rounded text-slate-500" title="Compartilhar"><Share2 size={14}/></button><button onClick={() => handleDelete(form.id)} className="p-1.5 hover:bg-red-50 hover:text-red-600 rounded text-slate-400" title="Excluir"><Trash2 size={14}/></button></div></div>
                       <h3 className="font-bold text-slate-800 mb-1 line-clamp-2 leading-tight" title={form.title}>{form.title}</h3>
                       <p className="text-xs text-slate-400 mb-4 line-clamp-2 h-8">{form.description || 'Sem descrição.'}</p>
                       <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500"><span className="flex items-center gap-1"><span className="font-bold text-slate-800 text-lg">{form.submissionsCount || 0}</span> conv.</span><span>{new Date(form.createdAt).toLocaleDateString()}</span></div>
                   </div>
-                  {copiedId === form.id && (<div className="absolute inset-0 bg-teal-600/90 flex items-center justify-center text-white font-bold animate-in fade-in duration-200"><CheckCircle size={24} className="mr-2" /> Link Copiado!</div>)}
               </div>
           ))}
       </div>
+
+      {/* SHARE MODAL */}
+      {sharingForm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <Share2 size={20} className="text-teal-600" /> Compartilhar Formulário
+                      </h3>
+                      <button onClick={() => setSharingForm(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  </div>
+                  
+                  <div className="p-6 space-y-6">
+                      {/* Public Link */}
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Link Público</label>
+                          <div className="flex gap-2">
+                              <input 
+                                  type="text" 
+                                  readOnly 
+                                  value={`${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}`}
+                                  className="flex-1 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-600 font-mono outline-none"
+                              />
+                              <button 
+                                onClick={() => copyToClipboard(`${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}`, 'link')}
+                                className={clsx("px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all", copiedType === 'link' ? "bg-green-600 text-white" : "bg-teal-600 hover:bg-teal-700 text-white")}
+                              >
+                                  {copiedType === 'link' ? <CheckCircle size={18} /> : <Copy size={18} />}
+                                  {copiedType === 'link' ? 'Copiado' : 'Link'}
+                              </button>
+                          </div>
+                      </div>
+
+                      {/* Embed Code */}
+                      <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                                <Code size={14}/> Código para Incorporar (Iframe)
+                            </label>
+                            <a 
+                                href={`${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}&embed=true`} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="text-[10px] text-teal-600 font-bold hover:underline flex items-center gap-1"
+                            >
+                                Testar Visualização <ExternalLink size={10}/>
+                            </a>
+                          </div>
+                          <div className="relative group">
+                              <textarea 
+                                  readOnly 
+                                  rows={4}
+                                  value={`<iframe src="${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}&embed=true" width="100%" height="800px" frameborder="0" style="border:none; border-radius:8px; overflow:hidden;"></iframe>`}
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-teal-400 font-mono outline-none resize-none"
+                              />
+                              <button 
+                                onClick={() => copyToClipboard(`<iframe src="${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}&embed=true" width="100%" height="800px" frameborder="0" style="border:none; border-radius:8px; overflow:hidden;"></iframe>`, 'embed')}
+                                className={clsx("absolute top-2 right-2 p-2 rounded-md transition-all", copiedType === 'embed' ? "bg-green-600 text-white" : "bg-slate-700 hover:bg-slate-600 text-slate-300")}
+                                title="Copiar código embed"
+                              >
+                                  {copiedType === 'embed' ? <CheckCircle size={16} /> : <Copy size={16} />}
+                              </button>
+                          </div>
+                          <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                              <p className="text-[10px] text-blue-700 leading-relaxed">
+                                <strong>Dica Pro:</strong> O parâmetro <code>&embed=true</code> remove as margens e o rodapé padrão, permitindo que o formulário "flutue" dentro do seu site de forma nativa.
+                              </p>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                      <button onClick={() => setSharingForm(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Fechar</button>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

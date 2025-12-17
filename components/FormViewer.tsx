@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { FormModel, FormAnswer } from '../types';
 import { CheckCircle, ArrowLeft, Loader2, Send } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
@@ -14,6 +15,15 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isEmbed, setIsEmbed] = useState(false);
+
+  useEffect(() => {
+      // Check for embed parameter in URL
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('embed') === 'true') {
+          setIsEmbed(true);
+      }
+  }, []);
 
   const handleInputChange = (questionId: string, value: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
@@ -41,7 +51,10 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
 
   // --- Style Logic ---
   const getBackgroundStyle = () => {
-      const style = form.style || { backgroundType: 'color', backgroundColor: '#f1f5f9' }; // Default slate-100
+      // If embedded, we want transparency to match the destination site's background
+      if (isEmbed) return { backgroundColor: 'transparent' };
+
+      const style = form.style || { backgroundType: 'color', backgroundColor: '#f1f5f9' };
 
       if (style.backgroundType === 'image' && style.backgroundImage) {
           return { 
@@ -57,7 +70,6 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
       }
 
       if (style.backgroundType === 'texture' && style.backgroundTexture) {
-          // Pre-defined textures mapped to CSS gradients/patterns
           switch(style.backgroundTexture) {
               case 'dots': 
                   return { 
@@ -80,7 +92,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
           }
       }
 
-      return { backgroundColor: '#ffffff' }; // None
+      return { backgroundColor: '#ffffff' }; 
   };
 
   const wrapperStyle = getBackgroundStyle();
@@ -92,7 +104,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
         className={clsx("min-h-screen w-full px-4 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4")}
         style={wrapperStyle}
       >
-        <div className={clsx("max-w-xl w-full p-8 rounded-2xl text-center", cardTransparent ? "bg-white/80 backdrop-blur-sm shadow-xl" : "bg-white shadow-xl")}>
+        <div className={clsx("max-w-xl w-full p-8 rounded-2xl text-center", cardTransparent || isEmbed ? "bg-white/80 backdrop-blur-sm shadow-xl border border-slate-100" : "bg-white shadow-xl")}>
             <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle size={40} />
             </div>
@@ -122,24 +134,24 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
 
   return (
     <div 
-        className={clsx("min-h-screen w-full flex flex-col items-center", isPublic ? "justify-center py-12" : "py-8")}
+        className={clsx("min-h-screen w-full flex flex-col items-center", (isPublic || isEmbed) ? "justify-center py-4" : "py-8")}
         style={wrapperStyle}
     >
-      <div className="w-full max-w-2xl px-4 animate-in fade-in slide-in-from-bottom-2">
-        {!isPublic && onBack && (
+      <div className={clsx("w-full px-4 animate-in fade-in slide-in-from-bottom-2", isEmbed ? "max-w-full" : "max-w-2xl")}>
+        {!isPublic && onBack && !isEmbed && (
             <button onClick={onBack} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors bg-white/50 px-3 py-1.5 rounded-lg backdrop-blur-sm shadow-sm">
                 <ArrowLeft size={16} /> Voltar
             </button>
         )}
 
-        <div className={clsx("overflow-hidden transition-all", cardTransparent ? "" : "bg-white rounded-xl shadow-xl border border-slate-100")}>
+        <div className={clsx("overflow-hidden transition-all", (cardTransparent || isEmbed) ? "" : "bg-white rounded-xl shadow-xl border border-slate-100")}>
             {/* Header Section */}
-            <div className={clsx("p-8 border-b border-slate-100", cardTransparent ? "bg-white/90 backdrop-blur-md rounded-t-xl shadow-sm" : "bg-white")}>
+            <div className={clsx("p-8 border-b border-slate-100", (cardTransparent || isEmbed) ? "bg-white/90 backdrop-blur-md rounded-t-xl shadow-sm" : "bg-white")}>
                 <h1 className="text-3xl font-bold text-slate-900 mb-2">{form.title}</h1>
                 {form.description && (
                     <p className="text-slate-600 whitespace-pre-wrap">{form.description}</p>
                 )}
-                {form.isLeadCapture && !isPublic && (
+                {form.isLeadCapture && !isPublic && !isEmbed && (
                     <span className="inline-block mt-4 bg-indigo-50 text-indigo-700 text-xs px-2 py-1 rounded font-medium border border-indigo-100">
                         Interesse Comercial
                     </span>
@@ -147,7 +159,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
             </div>
 
             {/* Questions Section */}
-            <form onSubmit={handleSubmit} className={clsx("p-8 space-y-6", cardTransparent ? "bg-white/80 backdrop-blur-sm rounded-b-xl shadow-sm mt-1" : "bg-white")}>
+            <form onSubmit={handleSubmit} className={clsx("p-8 space-y-6", (cardTransparent || isEmbed) ? "bg-white/80 backdrop-blur-sm rounded-b-xl shadow-sm mt-1" : "bg-white")}>
                 {form.questions.map(q => (
                 <div key={q.id} className="space-y-2">
                     <label className="block text-base font-semibold text-slate-700">
@@ -196,7 +208,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
             </form>
         </div>
 
-        {isPublic && (
+        {isPublic && !isEmbed && (
             <div className="text-center mt-8 text-xs text-slate-500 font-medium opacity-60 bg-white/50 inline-block px-3 py-1 rounded-full mx-auto backdrop-blur-sm">
                 Desenvolvido com Sincronizador VOLL
             </div>

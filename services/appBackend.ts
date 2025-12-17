@@ -162,7 +162,6 @@ export const appBackend = {
       api_key: preset.key,
       target_table_name: preset.tableName,
       target_primary_key: preset.primaryKey || null,
-      // Fix: Property 'interval_minutes' does not exist on type 'Omit<SavedPreset, "id">'. Using intervalMinutes from interface.
       interval_minutes: preset.intervalMinutes || 5, // Save to DB
     };
 
@@ -458,7 +457,6 @@ export const appBackend = {
       rent_value: studio.rentValue,
       methodology: studio.methodology,
       studio_type: studio.studioType,
-      // Fix: Property 'name_on_site' does not exist on type 'PartnerStudio'. Did you mean 'nameOnSite'?
       name_on_site: studio.nameOnSite,
       bank: studio.bank,
       agency: studio.agency,
@@ -576,7 +574,8 @@ export const appBackend = {
           questions: data.questions || [],
           style: data.style || {},
           createdAt: data.created_at,
-          submissionsCount: d.submissions_count || 0
+          /* Fixed: Use data instead of d */
+          submissionsCount: data.submissions_count || 0
       };
   },
 
@@ -775,7 +774,6 @@ export const appBackend = {
           contractDate: data.contract_date,
           status: data.status,
           folderId: data.folder_id,
-          // Fix: Cannot find name 'd'.
           signers: data.signers || [],
           createdAt: data.created_at
       };
@@ -883,7 +881,6 @@ export const appBackend = {
       title: cert.title,
       background_base_64: cert.backgroundData,
       back_background_base_64: cert.backBackgroundData,
-      // Fix: Property 'linked_product_id' does not exist on type 'CertificateModel'. Did you mean 'linkedProductId'?
       linked_product_id: cert.linkedProductId || null,
       body_text: cert.bodyText, 
       layout_config: cert.layoutConfig 
@@ -1133,7 +1130,6 @@ export const appBackend = {
     const payload = {
       id: workshop.id,
       event_id: workshop.eventId,
-      // Fix: Property 'block_id' does not exist on type 'Workshop'. Did you mean 'blockId'?
       block_id: workshop.blockId || null, 
       title: workshop.title,
       description: workshop.description, 

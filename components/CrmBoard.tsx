@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
@@ -37,7 +36,7 @@ interface Deal {
   installments?: number;
   installmentValue?: number;
   
-  productType?: 'Digital' | 'Presencial' | 'Evento';
+  productType?: 'Digital' | 'Presencial' | 'Evento' | '';
   productName?: string;
   
   billingCnpj?: string;
@@ -156,7 +155,8 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
     zipCode: '', address: '', addressNumber: '',
     registrationData: '', observation: '', courseState: '', courseCity: '', classMod1: '', classMod2: '',
     pipeline: 'Padrão',
-    productType: 'Presencial', productName: '',
+    productType: '', // Alterado para vazio por padrão conforme solicitação
+    productName: '',
     billingCnpj: '', billingCompanyName: '',
     tasks: []
 };
@@ -233,7 +233,7 @@ export const CrmBoard: React.FC = () => {
                   value: Number(d.value || 0), paymentMethod: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
                   nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
-                  installmentValue: Number(d.installment_value || 0), productType: d.product_type, productName: d.product_name,
+                  installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
                   email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receipt_link: d.receipt_link,
                   transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
@@ -276,7 +276,8 @@ export const CrmBoard: React.FC = () => {
   const productOptions = useMemo(() => {
       if (dealFormData.productType === 'Digital') return (digitalProducts || []).map(p => p.name).sort();
       if (dealFormData.productType === 'Evento') return (eventsList || []).map(e => e.name).sort();
-      return Array.from(new Set((registeredClasses || []).map(c => c.course).filter(Boolean))).sort();
+      if (dealFormData.productType === 'Presencial') return Array.from(new Set((registeredClasses || []).map(c => c.course).filter(Boolean))).sort();
+      return [];
   }, [dealFormData.productType, digitalProducts, registeredClasses, eventsList]);
 
   const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -428,12 +429,12 @@ export const CrmBoard: React.FC = () => {
           entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1, 
           installment_value: Number(dealFormData.installmentValue || 0),
-          product_type: dealFormData.productType, 
+          product_type: dealFormData.productType || null, 
           product_name: dealFormData.productName,
           email: dealFormData.email, 
           phone: dealFormData.phone,
           cpf: dealFormData.cpf, 
-          first_due_date: dealFormData.firstDueDate, 
+          first_due_date: dealFormData.firstDueDate || null, 
           receipt_link: dealFormData.receiptLink, 
           transaction_code: dealFormData.transactionCode,
           zip_code: dealFormData.zipCode, 
@@ -706,6 +707,7 @@ export const CrmBoard: React.FC = () => {
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Tipo de Produto</label>
                                   <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.productType} onChange={e => setDealFormData({...dealFormData, productType: e.target.value as any, productName: ''})}>
+                                      <option value="">Selecione o tipo...</option>
                                       <option value="Presencial">Curso Presencial</option>
                                       <option value="Digital">Produto Digital</option>
                                       <option value="Evento">Evento Presencial</option>
@@ -713,7 +715,7 @@ export const CrmBoard: React.FC = () => {
                               </div>
                               <div className="md:col-span-2">
                                   <label className="block text-xs font-bold text-slate-600 mb-1">{dealFormData.productType === 'Evento' ? 'Evento' : dealFormData.productType === 'Digital' ? 'Curso Online / E-book' : 'Curso Presencial'}</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.productName} onChange={e => setDealFormData({...dealFormData, productName: e.target.value})}>
+                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.productName} onChange={e => setDealFormData({...dealFormData, productName: e.target.value})} disabled={!dealFormData.productType}>
                                       <option value="">Selecione o produto...</option>
                                       {productOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                   </select>
@@ -824,7 +826,7 @@ export const CrmBoard: React.FC = () => {
                               <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><GraduationCap size={16} /> Logística do Curso</h4>
                               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                                   <div><label className="block text-xs font-bold text-slate-600 mb-1">Estado (UF)</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.courseState} onChange={e => setDealFormData({...dealFormData, courseState: e.target.value, courseCity: '', classMod1: '', classMod2: ''})}><option value="">Selecione...</option>{availableStates.map(uf => <option key={uf} value={uf}>{uf}</option>)}</select></div>
-                                  <div><label className="block text-xs font-bold text-slate-600 mb-1">Cidade do Curso</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" value={dealFormData.courseCity} onChange={e => setDealFormData({...dealFormData, courseCity: e.target.value, classMod1: '', classMod2: ''})} disabled={!dealFormData.courseState || availableCities.length === 0}><option value="">Selecione...</option>{availableCities.map(city => <option key={city} value={city}>{city}</option>)}</select></div>
+                                  <div><label className="block text-xs font-bold text-slate-600 mb-1">Cidade do Curso</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" value={dealFormData.courseCity} onChange={e => setDealFormData({ ...dealFormData, courseCity: e.target.value })} disabled={!dealFormData.courseState || availableCities.length === 0}><option value="">Selecione...</option>{availableCities.map(city => <option key={city} value={city}>{city}</option>)}</select></div>
                                   <div><label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 1</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})} disabled={!dealFormData.courseCity}><option value="">Selecione...</option>{availableMod1Codes.map(code => <option key={code} value={code}>{code}</option>)}</select></div>
                                   <div><label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 2</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.classMod2} onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})} disabled={!dealFormData.courseCity}><option value="">Selecione...</option>{availableMod2Codes.map(code => <option key={code} value={code}>{code}</option>)}</select></div>
                               </div>

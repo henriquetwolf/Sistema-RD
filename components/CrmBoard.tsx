@@ -197,7 +197,7 @@ export const CrmBoard: React.FC = () => {
 
   useEffect(() => {
       if (dealFormData.productType && companies.length > 0) {
-          const matched = companies.find(c => c.productTypes && c.productTypes.includes(dealFormData.productType!));
+          const matched = companies.find(c => (c.productTypes || []).includes(dealFormData.productType!));
           if (matched) {
               setDealFormData(prev => ({
                   ...prev,
@@ -268,19 +268,19 @@ export const CrmBoard: React.FC = () => {
       }
   };
 
-  const availableStates = useMemo(() => Array.from(new Set(registeredClasses.map(c => c.state).filter(Boolean))).sort(), [registeredClasses]);
-  const availableCities = useMemo(() => dealFormData.courseState ? Array.from(new Set(registeredClasses.filter(c => c.state === dealFormData.courseState).map(c => c.city).filter(Boolean))).sort() : [], [registeredClasses, dealFormData.courseState]);
-  const availableMod1Codes = useMemo(() => dealFormData.courseCity ? registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity && c.mod1Code).map(c => c.mod1Code) : [], [registeredClasses, dealFormData.courseState, dealFormData.courseCity]);
-  const availableMod2Codes = useMemo(() => dealFormData.courseCity ? registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity && c.mod2Code).map(c => c.mod2Code) : [], [registeredClasses, dealFormData.courseState, dealFormData.courseCity]);
+  const availableStates = useMemo(() => Array.from(new Set((registeredClasses || []).map(c => c.state).filter(Boolean))).sort(), [registeredClasses]);
+  const availableCities = useMemo(() => dealFormData.courseState ? Array.from(new Set((registeredClasses || []).filter(c => c.state === dealFormData.courseState).map(c => c.city).filter(Boolean))).sort() : [], [registeredClasses, dealFormData.courseState]);
+  const availableMod1Codes = useMemo(() => dealFormData.courseCity ? (registeredClasses || []).filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity && c.mod1Code).map(c => c.mod1Code) : [], [registeredClasses, dealFormData.courseState, dealFormData.courseCity]);
+  const availableMod2Codes = useMemo(() => dealFormData.courseCity ? (registeredClasses || []).filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity && c.mod2Code).map(c => c.mod2Code) : [], [registeredClasses, dealFormData.courseState, dealFormData.courseCity]);
 
   const productOptions = useMemo(() => {
-      if (dealFormData.productType === 'Digital') return digitalProducts.map(p => p.name).sort();
-      if (dealFormData.productType === 'Evento') return eventsList.map(e => e.name).sort();
-      return Array.from(new Set(registeredClasses.map(c => c.course).filter(Boolean))).sort();
+      if (dealFormData.productType === 'Digital') return (digitalProducts || []).map(p => p.name).sort();
+      if (dealFormData.productType === 'Evento') return (eventsList || []).map(e => e.name).sort();
+      return Array.from(new Set((registeredClasses || []).map(c => c.course).filter(Boolean))).sort();
   }, [dealFormData.productType, digitalProducts, registeredClasses, eventsList]);
 
   const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-  const getOwnerName = (id: string) => collaborators.find(c => c.id === id)?.fullName || 'Desconhecido';
+  const getOwnerName = (id: string) => (collaborators || []).find(c => c.id === id)?.fullName || 'Desconhecido';
 
   const moveDeal = async (dealId: string, currentStage: DealStage, direction: 'next' | 'prev') => {
     const stageOrder: DealStage[] = ['new', 'contacted', 'proposal', 'negotiation', 'closed'];
@@ -304,11 +304,11 @@ export const CrmBoard: React.FC = () => {
   };
 
   const getStageSummary = (stage: DealStage) => {
-    const stageDeals = deals.filter(d => d.stage === stage);
+    const stageDeals = (deals || []).filter(d => d.stage === stage);
     return { count: stageDeals.length, total: stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0) };
   };
 
-  const filteredDeals = deals.filter(d => 
+  const filteredDeals = (deals || []).filter(d => 
     (d.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (d.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (d.dealNumber && d.dealNumber.toString().includes(searchTerm))
@@ -319,7 +319,7 @@ export const CrmBoard: React.FC = () => {
   const handleDrop = async (e: React.DragEvent, targetStage: DealStage) => {
     e.preventDefault();
     if (!draggedDealId) return;
-    const currentDeal = deals.find(d => d.id === draggedDealId);
+    const currentDeal = (deals || []).find(d => d.id === draggedDealId);
     if (!currentDeal || currentDeal.stage === targetStage) { setDraggedDealId(null); return; }
     const now = new Date();
     setDeals(prev => prev.map(d => d.id === draggedDealId ? { ...d, stage: targetStage, closedAt: targetStage === 'closed' ? now : (d.stage === 'closed' ? undefined : d.closedAt) } : d));
@@ -332,7 +332,12 @@ export const CrmBoard: React.FC = () => {
     setDraggedDealId(null);
   };
 
-  const openNewDealModal = () => { setEditingDealId(null); setDealFormData({ ...INITIAL_FORM_STATE, owner: collaborators.filter(c => c.department === 'Comercial')[0]?.id || '' }); setShowDealModal(true); };
+  const openNewDealModal = () => { 
+    setEditingDealId(null); 
+    const firstComercial = (collaborators || []).find(c => c.department === 'Comercial');
+    setDealFormData({ ...INITIAL_FORM_STATE, owner: firstComercial?.id || '' }); 
+    setShowDealModal(true); 
+  };
   const openEditDealModal = (deal: Deal) => { setEditingDealId(deal.id); setDealFormData({ ...deal }); setShowDealModal(true); };
 
   // --- TEAM ACTIONS ---
@@ -358,16 +363,23 @@ export const CrmBoard: React.FC = () => {
             name: teamName,
             members: selectedMembers || []
         };
+        
+        let error;
         if (editingTeam) {
-            await appBackend.client.from('crm_teams').update(payload).eq('id', editingTeam.id);
+            const result = await appBackend.client.from('crm_teams').update(payload).eq('id', editingTeam.id);
+            error = result.error;
         } else {
-            await appBackend.client.from('crm_teams').insert([payload]);
+            const result = await appBackend.client.from('crm_teams').insert([payload]);
+            error = result.error;
         }
+
+        if (error) throw error;
+
         await fetchData();
         setShowTeamModal(false);
-    } catch (e) {
-        console.error(e);
-        alert("Erro ao salvar equipe.");
+    } catch (e: any) {
+        console.error("Erro ao salvar equipe:", e);
+        alert(`Erro ao salvar equipe: ${e.message || "A tabela crm_teams pode não existir. Verifique o SQL Editor."}`);
     } finally {
         setIsSavingTeam(false);
     }
@@ -376,15 +388,19 @@ export const CrmBoard: React.FC = () => {
   const handleDeleteTeam = async (id: string) => {
       if (!window.confirm("Excluir esta equipe?")) return;
       try {
-          await appBackend.client.from('crm_teams').delete().eq('id', id);
+          const { error } = await appBackend.client.from('crm_teams').delete().eq('id', id);
+          if (error) throw error;
           await fetchData();
-      } catch (e) {
-          alert("Erro ao excluir equipe.");
+      } catch (e: any) {
+          alert(`Erro ao excluir equipe: ${e.message}`);
       }
   };
 
   const toggleMember = (id: string) => {
-      setSelectedMembers(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]);
+      setSelectedMembers(prev => {
+          const current = prev || [];
+          return current.includes(id) ? current.filter(m => m !== id) : [...current, id];
+      });
   };
 
   const handleAddTask = () => {
@@ -398,17 +414,41 @@ export const CrmBoard: React.FC = () => {
       if (!dealFormData.companyName) { alert("Preencha o Nome Completo do Cliente."); return; }
       const dealTitle = dealFormData.companyName;
       const payload = {
-          title: dealTitle, company_name: dealFormData.companyName, contact_name: dealFormData.contactName, value: Number(dealFormData.value) || 0,
-          payment_method: dealFormData.paymentMethod, stage: dealFormData.stage || 'new', owner_id: dealFormData.owner, status: dealFormData.status || 'warm',
-          next_task: dealFormData.nextTask, source: dealFormData.source, campaign: dealFormData.campaign, entry_value: Number(dealFormData.entryValue) || 0,
-          installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installment_value || 0),
-          product_type: dealFormData.productType, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
-          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate, receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode,
-          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber,
-          registration_data: dealFormData.registrationData, observation: dealFormData.observation, course_state: dealFormData.courseState,
-          course_city: dealFormData.courseCity, class_mod_1: dealFormData.classMod1, class_mod_2: dealFormData.classMod2,
-          pipeline: dealFormData.pipeline || 'Padrão', tasks: dealFormData.tasks,
-          billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName
+          title: dealTitle, 
+          company_name: dealFormData.companyName, 
+          contact_name: dealFormData.contactName, 
+          value: Number(dealFormData.value) || 0,
+          payment_method: dealFormData.paymentMethod, 
+          stage: dealFormData.stage || 'new', 
+          owner_id: dealFormData.owner, 
+          status: dealFormData.status || 'warm',
+          next_task: dealFormData.nextTask, 
+          source: dealFormData.source, 
+          campaign: dealFormData.campaign, 
+          entry_value: Number(dealFormData.entryValue) || 0,
+          installments: Number(dealFormData.installments) || 1, 
+          installment_value: Number(dealFormData.installmentValue || 0),
+          product_type: dealFormData.productType, 
+          product_name: dealFormData.productName, // Corrigido de product_name para productName
+          email: dealFormData.email, 
+          phone: dealFormData.phone,
+          cpf: dealFormData.cpf, 
+          first_due_date: dealFormData.firstDueDate, 
+          receipt_link: dealFormData.receiptLink, 
+          transaction_code: dealFormData.transactionCode,
+          zip_code: dealFormData.zipCode, 
+          address: dealFormData.address, 
+          address_number: dealFormData.addressNumber,
+          registration_data: dealFormData.registrationData, 
+          observation: dealFormData.observation, 
+          course_state: dealFormData.courseState,
+          course_city: dealFormData.courseCity, 
+          class_mod_1: dealFormData.classMod1, 
+          class_mod_2: dealFormData.classMod2,
+          pipeline: dealFormData.pipeline || 'Padrão', 
+          tasks: dealFormData.tasks,
+          billing_cnpj: dealFormData.billingCnpj, 
+          billing_company_name: dealFormData.billingCompanyName
       };
 
       try {
@@ -525,7 +565,7 @@ export const CrmBoard: React.FC = () => {
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {teams.map(team => (
+                        {(teams || []).map(team => (
                             <div key={team.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow flex flex-col group">
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="bg-indigo-100 text-indigo-700 p-2 rounded-lg">
@@ -594,12 +634,12 @@ export const CrmBoard: React.FC = () => {
                       <div>
                           <label className="block text-xs font-bold text-slate-600 mb-3 uppercase tracking-wider">Membros do Comercial</label>
                           <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
-                              {collaborators.filter(c => c.department === 'Comercial').length === 0 ? (
+                              {(collaborators || []).filter(c => c.department === 'Comercial').length === 0 ? (
                                   <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
                                       <p className="text-sm text-slate-400 italic">Nenhum colaborador do Comercial encontrado.</p>
                                   </div>
                               ) : (
-                                  collaborators.filter(c => c.department === 'Comercial').map(col => (
+                                  (collaborators || []).filter(c => c.department === 'Comercial').map(col => (
                                       <label key={col.id} className={clsx("flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all", (selectedMembers || []).includes(col.id) ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-100 hover:bg-slate-50")}>
                                           <div className="flex items-center gap-3">
                                               <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">{(col.fullName || '?').charAt(0)}</div>
@@ -660,7 +700,7 @@ export const CrmBoard: React.FC = () => {
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Responsável</label>
                                   <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.owner} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}>
                                       <option value="">Selecione...</option>
-                                      {collaborators.filter(c => c.department === 'Comercial').map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+                                      {(collaborators || []).filter(c => c.department === 'Comercial').map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
                                   </select>
                               </div>
                               <div>
@@ -741,7 +781,7 @@ export const CrmBoard: React.FC = () => {
                                   <button onClick={handleAddTask} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg h-[38px] w-[38px] flex items-center justify-center"><Plus size={20} /></button>
                               </div>
                               <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                                  {dealFormData.tasks?.length ? dealFormData.tasks.map(task => (
+                                  {(dealFormData.tasks || []).length ? dealFormData.tasks!.map(task => (
                                       <div key={task.id} className={clsx("flex items-center gap-3 p-2 bg-white rounded border", task.isDone ? "border-green-200 bg-green-50" : "border-slate-200")}>
                                           <button onClick={() => setDealFormData(prev => ({...prev, tasks: prev.tasks?.map(t => t.id === task.id ? {...t, isDone: !t.isDone} : t)}))} className={clsx("w-5 h-5 rounded border flex items-center justify-center", task.isDone ? "bg-green-500 border-green-500 text-white" : "border-slate-300")}>{task.isDone && <CheckCircle2 size={14} />}</button>
                                           <div className={clsx("flex-1 text-sm", task.isDone ? "text-slate-400 line-through" : "text-slate-700")}>{task.description}</div>

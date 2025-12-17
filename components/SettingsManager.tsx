@@ -1,6 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2 } from 'lucide-react';
+import { 
+    Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, 
+    Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, 
+    Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2,
+    Monitor, Globe, Target, Info, Shield
+} from 'lucide-react';
 import { appBackend, CompanySetting } from '../services/appBackend';
 import { Role, Banner } from '../types';
 import clsx from 'clsx';
@@ -394,13 +399,6 @@ NOTIFY pgrst, 'reload config';
       setTimeout(() => setSqlCopied(false), 3000);
   };
 
-  const getPbiUrl = () => {
-      if (!pbiConfig.url) return 'https://[PROJECT_REF].supabase.co/rest/v1/[NOME_DA_TABELA]?select=*';
-      const baseUrl = pbiConfig.url.endsWith('/') ? pbiConfig.url.slice(0, -1) : pbiConfig.url;
-      const table = pbiConfig.tableName || '[NOME_DA_TABELA]';
-      return `${baseUrl}/rest/v1/${table}?select=*`;
-  };
-
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -421,6 +419,7 @@ NOTIFY pgrst, 'reload config';
 
       <div className="max-w-4xl space-y-8">
         
+        {/* ABA: IDENTIDADE VISUAL */}
         {activeTab === 'visual' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
                 <div className="p-6 border-b border-slate-100">
@@ -455,6 +454,7 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
+        {/* ABA: EMPRESAS */}
         {activeTab === 'company' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
                 {editingCompany ? (
@@ -513,6 +513,196 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
+        {/* ABA: TIPOS DE USUÁRIO (PERMISSÕES) */}
+        {activeTab === 'roles' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                    <div><h3 className="text-lg font-bold text-slate-800">Tipos de Usuário</h3><p className="text-sm text-slate-500">Controle o que cada cargo pode acessar no sistema.</p></div>
+                    {!editingRole && (
+                        <button onClick={() => setEditingRole({ id: '', name: '', permissions: {} })} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all"><Plus size={16} /> Novo Perfil</button>
+                    )}
+                </div>
+
+                {editingRole ? (
+                    <div className="p-8 space-y-6">
+                        <div className="max-w-xl">
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Nome do Cargo / Tipo</label>
+                            <input 
+                                type="text" 
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" 
+                                placeholder="Ex: Vendedor, Coordenador, Financeiro..." 
+                                value={editingRole.name}
+                                onChange={(e) => setEditingRole({ ...editingRole, name: e.target.value })}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-4 flex items-center gap-2"><Shield size={18} /> Módulos Habilitados</label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {MODULES.map(module => (
+                                    <label key={module.id} className={clsx("flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all", editingRole.permissions?.[module.id] ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-white border-slate-100 text-slate-600 hover:bg-slate-50")}>
+                                        <span className="text-sm font-medium">{module.label}</span>
+                                        <input 
+                                            type="checkbox" 
+                                            className="w-5 h-5 rounded text-indigo-600" 
+                                            checked={!!editingRole.permissions?.[module.id]}
+                                            onChange={() => togglePermission(module.id)}
+                                        />
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                            <button onClick={() => setEditingRole(null)} className="px-6 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancelar</button>
+                            <button onClick={handleSaveRole} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold shadow-sm transition-all flex items-center gap-2"><Save size={18} /> Salvar Acessos</button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="p-6">
+                        {isLoadingRoles ? <div className="text-center py-10">Carregando...</div> : roles.length === 0 ? <p className="text-center py-10 text-slate-400 italic">Nenhum perfil cadastrado.</p> : (
+                            <div className="space-y-4">
+                                {roles.map(role => (
+                                    <div key={role.id} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between hover:shadow-sm transition-shadow">
+                                        <div>
+                                            <h4 className="font-bold text-slate-800">{role.name}</h4>
+                                            <p className="text-xs text-slate-400 mt-1">{Object.values(role.permissions || {}).filter(v => v).length} módulos liberados</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setEditingRole(role)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit2 size={18} /></button>
+                                            <button onClick={() => handleDeleteRole(role.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* ABA: BANNERS */}
+        {activeTab === 'banners' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                    <div><h3 className="text-lg font-bold text-slate-800">Gerenciador de Banners</h3><p className="text-sm text-slate-500">Exiba avisos e promoções nas áreas do aluno e instrutor.</p></div>
+                    {!isBannerModalOpen && (
+                        <button onClick={() => setIsBannerModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2"><Plus size={16} /> Novo Banner</button>
+                    )}
+                </div>
+
+                {isBannerModalOpen ? (
+                    <div className="p-8 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Título do Banner</label><input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none" value={newBanner.title} onChange={e => setNewBanner({...newBanner, title: e.target.value})} /></div>
+                                <div><label className="block text-sm font-bold text-slate-700 mb-1">Link de Destino (URL)</label><input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none" placeholder="https://..." value={newBanner.linkUrl} onChange={e => setNewBanner({...newBanner, linkUrl: e.target.value})} /></div>
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Público Alvo</label>
+                                    <select className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white" value={newBanner.targetAudience} onChange={e => setNewBanner({...newBanner, targetAudience: e.target.value as any})}>
+                                        <option value="student">Área do Aluno</option>
+                                        <option value="instructor">Área do Instrutor</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Imagem do Banner</label>
+                                <label className="cursor-pointer block">
+                                    <div className="border-2 border-dashed border-slate-300 rounded-xl aspect-video bg-slate-50 flex flex-col items-center justify-center overflow-hidden hover:bg-slate-100 transition-colors">
+                                        {newBanner.imageUrl ? <img src={newBanner.imageUrl} className="w-full h-full object-cover" /> : <><ImageIcon size={32} className="text-slate-300 mb-2" /><span className="text-xs text-slate-500">Clique para selecionar imagem</span></>}
+                                    </div>
+                                    <input type="file" className="hidden" accept="image/*" onChange={handleBannerImageUpload} />
+                                </label>
+                                <p className="text-[10px] text-slate-400 mt-2">Recomendado: 1200x400px (Paisagem)</p>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                            <button onClick={() => setIsBannerModalOpen(false)} className="px-6 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancelar</button>
+                            <button onClick={handleSaveBanner} className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-2 rounded-lg font-bold shadow-sm transition-all"><Save size={18} className="inline mr-2" /> Ativar Banner</button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="p-6">
+                        {isLoadingBanners ? <div className="text-center py-10">Carregando...</div> : banners.length === 0 ? <p className="text-center py-10 text-slate-400 italic">Nenhum banner ativo.</p> : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {banners.map(banner => (
+                                    <div key={banner.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
+                                        <div className="h-32 bg-slate-100 relative">
+                                            <img src={banner.imageUrl} className="w-full h-full object-cover opacity-80" />
+                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <button onClick={() => handleDeleteBanner(banner.id)} className="bg-white text-red-600 p-2 rounded-full hover:bg-red-50"><Trash2 size={18} /></button>
+                                            </div>
+                                            <div className="absolute top-2 right-2">
+                                                <span className={clsx("px-2 py-0.5 rounded text-[9px] font-bold uppercase", banner.targetAudience === 'student' ? "bg-purple-600 text-white" : "bg-orange-500 text-white")}>
+                                                    {banner.targetAudience === 'student' ? 'Aluno' : 'Instrutor'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="p-3">
+                                            <h4 className="font-bold text-slate-800 text-sm truncate">{banner.title}</h4>
+                                            {banner.linkUrl && <p className="text-[10px] text-blue-500 truncate mt-1">{banner.linkUrl}</p>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* ABA: GUIA POWER BI */}
+        {activeTab === 'powerbi' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
+                <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+                    <div className="bg-yellow-100 p-2 rounded-lg text-yellow-700"><BarChart3 size={24} /></div>
+                    <div><h3 className="text-lg font-bold text-slate-800">Conexão Power BI</h3><p className="text-sm text-slate-500">Como exportar seus dados do CRM para relatórios externos.</p></div>
+                </div>
+                <div className="p-8 space-y-8">
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800">Siga as instruções técnicas abaixo para conectar o Power BI Desktop diretamente ao seu banco de dados Supabase via REST API.</div>
+                    
+                    <div className="space-y-6">
+                        <div className="flex gap-4">
+                            <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0">1</div>
+                            <div className="flex-1">
+                                <h4 className="font-bold text-slate-800 mb-1">Configurar URL base do projeto</h4>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded text-xs font-mono mb-2" placeholder="https://[REFERENCIA].supabase.co" value={pbiConfig.url} onChange={e => setPbiConfig({...pbiConfig, url: e.target.value})} />
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded text-xs font-mono" placeholder="Nome da Tabela (ex: crm_deals)" value={pbiConfig.tableName} onChange={e => setPbiConfig({...pbiConfig, tableName: e.target.value})} />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4">
+                            <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0">2</div>
+                            <div className="flex-1">
+                                <h4 className="font-bold text-slate-800 mb-1">Obter Dados Web (Avançado)</h4>
+                                <p className="text-sm text-slate-500 mb-3">No Power BI, selecione <strong>Obter Dados > Web > Avançado</strong> e use os valores abaixo:</p>
+                                
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">URL da Solicitação HTTP</label>
+                                        <div className="flex bg-slate-100 border border-slate-200 rounded p-2 items-center group">
+                                            <code className="text-[11px] text-slate-600 flex-1 truncate">{pbiConfig.url ? `${pbiConfig.url}/rest/v1/${pbiConfig.tableName}?select=*` : 'URL Pendente...'}</code>
+                                            <button onClick={() => handleCopy(`${pbiConfig.url}/rest/v1/${pbiConfig.tableName}?select=*`, 'url')} className="text-slate-400 hover:text-indigo-600 ml-2">{copiedField === 'url' ? <Check size={14}/> : <Copy size={14}/>}</button>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Header: apikey</label><div className="bg-slate-100 p-2 rounded text-[11px] text-slate-500 italic">Sua ANON KEY</div></div>
+                                        <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Header: Authorization</label><div className="bg-slate-100 p-2 rounded text-[11px] text-slate-500 italic">Bearer [SUA ANON KEY]</div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 flex gap-3">
+                        <Info className="text-amber-600 shrink-0" size={20} />
+                        <div className="text-xs text-amber-900 leading-relaxed"><strong>Dica de Segurança:</strong> Nunca compartilhe o token de serviço ou administrativo. A <code>anon key</code> do Supabase é suficiente e segura para leitura de dados públicos configurados via RLS.</div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* ABA: BANCO DE DADOS (DIAGNÓSTICO) */}
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
                 <div className="p-6 border-b border-slate-100"><h3 className="text-lg font-bold text-slate-800 mb-1 flex items-center gap-2"><Database size={20} className="text-amber-600" /> Diagnóstico de Banco de Dados</h3><p className="text-sm text-slate-500">Execute o script abaixo no Supabase para garantir que todas as colunas existem.</p></div>

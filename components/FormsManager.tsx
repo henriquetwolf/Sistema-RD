@@ -9,6 +9,7 @@ import {
   LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info, Code, ExternalLink
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
+import { Tag } from 'lucide-react';
 import clsx from 'clsx';
 
 interface Team {
@@ -30,6 +31,7 @@ const INITIAL_FORM: FormModel = {
   id: '',
   title: 'Formulário sem título',
   description: '',
+  campaign: '',
   isLeadCapture: false,
   questions: [],
   createdAt: '',
@@ -133,6 +135,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
           id: crypto.randomUUID(),
           title: template.id === 'classic' ? 'Fale Conosco' : template.title,
           description: template.description,
+          campaign: '',
           questions: template.questions.map((q: any) => ({ ...q, id: crypto.randomUUID() })),
           createdAt: new Date().toISOString(),
           isLeadCapture: true 
@@ -381,8 +384,25 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                     <div className="flex-1 bg-slate-50 p-8 overflow-y-auto">
                         <div className="max-w-4xl mx-auto space-y-6">
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                <div className="p-6 border-b border-slate-200"><h2 className="text-lg font-bold text-slate-800">Destino dos Leads</h2><p className="text-sm text-slate-500">Configure para onde os novos leads devem ser enviados.</p></div>
+                                <div className="p-6 border-b border-slate-200"><h2 className="text-lg font-bold text-slate-800">Rastreio e Destino</h2><p className="text-sm text-slate-500">Configure para onde os novos leads devem ser enviados e as tags de marketing.</p></div>
                                 <div className="p-6 space-y-8">
+                                    
+                                    {/* CAMPO CAMPANHA */}
+                                    <div className="flex items-start gap-4 pb-6 border-b border-slate-100">
+                                        <div className="p-2 bg-amber-50 rounded-lg text-amber-600 mt-1"><Tag size={24} /></div>
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-slate-800 mb-1">Campanha de Marketing</h3>
+                                            <p className="text-xs text-slate-500 mb-3">Defina o nome da campanha que será atribuído a este formulário no CRM.</p>
+                                            <input 
+                                                type="text" 
+                                                className="w-full md:w-1/2 p-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                                                placeholder="Ex: Black Friday, Lançamento Jan-2025"
+                                                value={currentForm.campaign || ''}
+                                                onChange={e => setCurrentForm({...currentForm, campaign: e.target.value})}
+                                            />
+                                        </div>
+                                    </div>
+
                                     <div className="flex items-start gap-4">
                                         <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600 mt-1"><Target size={24} /></div>
                                         <div className="flex-1">
@@ -393,7 +413,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                                     <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
                                                 </label>
                                             </div>
-                                            <p className="text-sm text-slate-600">Cria automaticamente uma oportunidade no funil de vendas.</p>
+                                            <p className="text-sm text-slate-600">Cria automaticamente uma oportunidade no funil de vendas. A <strong>Fonte</strong> será preenchida com "{currentForm.title}".</p>
                                         </div>
                                     </div>
 

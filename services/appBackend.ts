@@ -1,4 +1,3 @@
-
 import { createClient, Session } from '@supabase/supabase-js';
 import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio } from '../types';
 
@@ -40,6 +39,18 @@ export interface CompanySetting {
     cnpj: string;
     productTypes: string[]; // Array of types linked to this CNPJ
 }
+
+// Private helper to generate deal number pattern
+const generateDealNumber = () => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const random = Math.floor(1000 + Math.random() * 9000);
+    return Number(`${yyyy}${mm}${dd}${hh}${min}${random}`);
+};
 
 export const appBackend = {
   // Public flag to check if we are in local mode
@@ -151,6 +162,7 @@ export const appBackend = {
       api_key: preset.key,
       target_table_name: preset.tableName,
       target_primary_key: preset.primaryKey || null,
+      // Fix: Property 'interval_minutes' does not exist on type 'Omit<SavedPreset, "id">'. Using intervalMinutes from interface.
       interval_minutes: preset.intervalMinutes || 5, // Save to DB
     };
 
@@ -332,7 +344,7 @@ export const appBackend = {
       id: b.id,
       title: b.title,
       imageUrl: b.image_url,
-      linkUrl: b.link_url,
+      link_url: b.link_url,
       targetAudience: b.target_audience,
       active: b.active
     }));
@@ -410,7 +422,7 @@ export const appBackend = {
       hasReformer: d.has_reformer,
       qtyReformer: d.qty_reformer,
       hasLadderBarrel: d.has_ladder_barrel,
-      qtyLadder_barrel: d.qty_ladder_barrel,
+      qtyLadderBarrel: d.qty_ladder_barrel,
       hasChair: d.has_chair,
       qtyChair: d.qty_chair,
       hasCadillac: d.has_cadillac,
@@ -446,7 +458,7 @@ export const appBackend = {
       rent_value: studio.rentValue,
       methodology: studio.methodology,
       studio_type: studio.studioType,
-      name_on_site: studio.nameOnSite,
+      name_on_site: studio.name_on_site,
       bank: studio.bank,
       agency: studio.agency,
       account: studio.account,
@@ -497,6 +509,7 @@ export const appBackend = {
           id: form.id || undefined,
           title: form.title,
           description: form.description,
+          campaign: form.campaign || null,
           is_lead_capture: form.isLeadCapture,
           questions: form.questions,
           style: form.style,
@@ -524,6 +537,7 @@ export const appBackend = {
           id: d.id,
           title: d.title,
           description: d.description,
+          campaign: d.campaign,
           isLeadCapture: d.is_lead_capture,
           teamId: d.team_id,
           distributionMode: d.distribution_mode,
@@ -553,6 +567,7 @@ export const appBackend = {
           id: data.id,
           title: data.title,
           description: data.description,
+          campaign: data.campaign,
           isLeadCapture: data.is_lead_capture,
           teamId: data.team_id,
           distributionMode: data.distribution_mode,
@@ -628,6 +643,8 @@ export const appBackend = {
                   }
               }
 
+              const dealNumber = generateDealNumber(); // Standardized generation
+
               const payload = {
                   title: `Lead: ${name}`,
                   contact_name: name,
@@ -635,6 +652,9 @@ export const appBackend = {
                   value: 0,
                   status: 'warm',
                   stage: 'new',
+                  deal_number: dealNumber, // Standardized protocol
+                  source: form.title, // NEW: Automatically set Source as Form Title
+                  campaign: form.campaign || '', // NEW: Automatically set Campaign as configured
                   owner_id: assignedOwnerId,
                   next_task: `Entrar em contato (${email || phone || 'sem dados'})`,
                   created_at: new Date().toISOString()
@@ -646,8 +666,7 @@ export const appBackend = {
 
       // Update submission count
       if (isConfigured) {
-          await supabase.rpc('increment_form_submissions', { form_id: formId });
-          // Fallback if RPC fails:
+          // Increment locally or fetch latest
           await supabase.from('crm_forms').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
       }
   },
@@ -755,7 +774,7 @@ export const appBackend = {
           contractDate: data.contract_date,
           status: data.status,
           folderId: data.folder_id,
-          signers: data.signers || [],
+          signers: d.signers || [],
           createdAt: data.created_at
       };
   },
@@ -862,7 +881,7 @@ export const appBackend = {
       title: cert.title,
       background_base64: cert.backgroundData,
       back_background_base64: cert.backBackgroundData,
-      linked_product_id: cert.linkedProductId || null,
+      linked_product_id: cert.linked_product_id || null,
       body_text: cert.bodyText, 
       layout_config: cert.layoutConfig 
     };
@@ -1039,7 +1058,7 @@ export const appBackend = {
         eventId: d.event_id,
         date: d.date,
         title: d.title,
-        maxSelections: d.max_selections
+        max_selections: d.max_selections
     }));
   },
 
@@ -1111,7 +1130,7 @@ export const appBackend = {
     const payload = {
       id: workshop.id,
       event_id: workshop.eventId,
-      block_id: workshop.blockId || null, 
+      block_id: workshop.block_id || null, 
       title: workshop.title,
       description: workshop.description, 
       speaker: workshop.speaker,

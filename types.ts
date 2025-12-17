@@ -105,6 +105,7 @@ export interface FormModel {
   id: string;
   title: string;
   description: string;
+  campaign?: string; // NEW: Field for campaign tracking
   isLeadCapture: boolean;
   
   // Lead Routing

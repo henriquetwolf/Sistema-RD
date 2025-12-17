@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
@@ -155,7 +156,7 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
     zipCode: '', address: '', addressNumber: '',
     registrationData: '', observation: '', courseState: '', courseCity: '', classMod1: '', classMod2: '',
     pipeline: 'Padrão',
-    productType: '', // Alterado para vazio por padrão conforme solicitação
+    productType: '', 
     productName: '',
     billingCnpj: '', billingCompanyName: '',
     tasks: []
@@ -245,7 +246,20 @@ export const CrmBoard: React.FC = () => {
           }
 
           setTeams(teamsResult.data || []);
-          setRegisteredClasses(classesResult.data || []);
+          
+          if (classesResult.data) {
+              setRegisteredClasses(classesResult.data.map((c: any) => ({
+                  id: c.id,
+                  course: c.course,
+                  state: c.state,
+                  city: c.city,
+                  mod1Code: c.mod_1_code,
+                  mod2Code: c.mod_2_code
+              })));
+          } else {
+              setRegisteredClasses([]);
+          }
+
           setDigitalProducts(productsResult.data || []);
           setEventsList(eventsResult.data || []);
           
@@ -341,7 +355,6 @@ export const CrmBoard: React.FC = () => {
   };
   const openEditDealModal = (deal: Deal) => { setEditingDealId(deal.id); setDealFormData({ ...deal }); setShowDealModal(true); };
 
-  // --- TEAM ACTIONS ---
   const openNewTeamModal = () => {
     setEditingTeam(null);
     setTeamName('');

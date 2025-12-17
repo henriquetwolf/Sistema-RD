@@ -108,7 +108,7 @@ const COLUMNS: Column[] = [
   { id: 'closed', title: 'Fechamento', color: 'border-green-500' },
 ];
 
-const formatCPF = (value: string) => {
+const formatCPF = (value: string = '') => {
     return value
         .replace(/\D/g, '')
         .replace(/(\d{3})(\d)/, '$1.$2')
@@ -117,7 +117,7 @@ const formatCPF = (value: string) => {
         .replace(/(-\d{2})\d+?$/, '$1');
 };
 
-const formatCEP = (value: string) => {
+const formatCEP = (value: string = '') => {
     return value
         .replace(/\D/g, '')
         .replace(/(\d{5})(\d)/, '$1-$2')
@@ -229,25 +229,37 @@ export const CrmBoard: React.FC = () => {
 
           if (dealsResult.data) {
               setDeals(dealsResult.data.map((d: any) => ({
-                  id: d.id, dealNumber: d.deal_number, title: d.title, contactName: d.contact_name, companyName: d.company_name,
-                  value: Number(d.value), paymentMethod: d.payment_method, stage: d.stage, owner: d.owner_id, status: d.status,
-                  nextTask: d.next_task, createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
-                  source: d.source, campaign: d.campaign, entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
+                  id: d.id, dealNumber: d.deal_number, title: d.title || '', contactName: d.contact_name || '', companyName: d.company_name || '',
+                  value: Number(d.value || 0), paymentMethod: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
+                  nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
+                  source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type, productName: d.product_name,
-                  email: d.email, phone: d.phone, cpf: d.cpf, firstDueDate: d.first_due_date, receipt_link: d.receipt_link,
+                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receipt_link: d.receipt_link,
                   transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
                   classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
               })));
+          } else {
+              setDeals([]);
           }
 
           setTeams(teamsResult.data || []);
           setRegisteredClasses(classesResult.data || []);
           setDigitalProducts(productsResult.data || []);
           setEventsList(eventsResult.data || []);
-          setCollaborators(collabResult.data || []);
-          setCompanies(companiesResult);
+          
+          if (collabResult.data) {
+            setCollaborators(collabResult.data.map((c: any) => ({
+                id: c.id,
+                fullName: c.full_name || 'Sem Nome',
+                department: c.department || 'Geral'
+            })));
+          } else {
+            setCollaborators([]);
+          }
+
+          setCompanies(companiesResult || []);
 
       } catch (e: any) {
           console.error("Erro ao carregar dados do CRM:", e);
@@ -267,7 +279,7 @@ export const CrmBoard: React.FC = () => {
       return Array.from(new Set(registeredClasses.map(c => c.course).filter(Boolean))).sort();
   }, [dealFormData.productType, digitalProducts, registeredClasses, eventsList]);
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   const getOwnerName = (id: string) => collaborators.find(c => c.id === id)?.fullName || 'Desconhecido';
 
   const moveDeal = async (dealId: string, currentStage: DealStage, direction: 'next' | 'prev') => {
@@ -293,12 +305,12 @@ export const CrmBoard: React.FC = () => {
 
   const getStageSummary = (stage: DealStage) => {
     const stageDeals = deals.filter(d => d.stage === stage);
-    return { count: stageDeals.length, total: stageDeals.reduce((acc, curr) => acc + curr.value, 0) };
+    return { count: stageDeals.length, total: stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0) };
   };
 
   const filteredDeals = deals.filter(d => 
-    d.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    d.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (d.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (d.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (d.dealNumber && d.dealNumber.toString().includes(searchTerm))
   );
 
@@ -333,7 +345,7 @@ export const CrmBoard: React.FC = () => {
 
   const openEditTeamModal = (team: Team) => {
     setEditingTeam(team);
-    setTeamName(team.name);
+    setTeamName(team.name || '');
     setSelectedMembers(team.members || []);
     setShowTeamModal(true);
   };
@@ -344,7 +356,7 @@ export const CrmBoard: React.FC = () => {
     try {
         const payload = {
             name: teamName,
-            members: selectedMembers
+            members: selectedMembers || []
         };
         if (editingTeam) {
             await appBackend.client.from('crm_teams').update(payload).eq('id', editingTeam.id);
@@ -377,8 +389,8 @@ export const CrmBoard: React.FC = () => {
 
   const handleAddTask = () => {
       if(!newTaskDesc) return;
-      const newMessage: DealTask = { id: crypto.randomUUID(), description: newTaskDesc, dueDate: newTaskDate, type: newTaskType, isDone: false };
-      setDealFormData(prev => ({ ...prev, tasks: [newMessage, ...(prev.tasks || [])] }));
+      const newTask: DealTask = { id: crypto.randomUUID(), description: newTaskDesc, dueDate: newTaskDate, type: newTaskType, isDone: false };
+      setDealFormData(prev => ({ ...prev, tasks: [newTask, ...(prev.tasks || [])] }));
       setNewTaskDesc(''); setNewTaskDate('');
   };
 
@@ -390,7 +402,7 @@ export const CrmBoard: React.FC = () => {
           payment_method: dealFormData.paymentMethod, stage: dealFormData.stage || 'new', owner_id: dealFormData.owner, status: dealFormData.status || 'warm',
           next_task: dealFormData.nextTask, source: dealFormData.source, campaign: dealFormData.campaign, entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installment_value || 0),
-          product_type: dealFormData.productType, product_name: dealFormData.product_name, email: dealFormData.email, phone: dealFormData.phone,
+          product_type: dealFormData.productType, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
           cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate, receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode,
           zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber,
           registration_data: dealFormData.registrationData, observation: dealFormData.observation, course_state: dealFormData.courseState,
@@ -423,7 +435,7 @@ export const CrmBoard: React.FC = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)]">
-      <div className="bg-white border-b border-slate-200 px-6 py-2 flex flex-col md:flex-row md:items-center justify-between shadow-sm z-10 gap-4">
+      <div className="bg-white border-b border-slate-200 px-6 py-2 flex flex-col md:flex-row md:items-center justify-between shadow-sm z-10 gap-4 shrink-0">
         <div className="flex items-center gap-2">
             <div className="flex items-center bg-slate-100 rounded-lg p-1">
                 <button onClick={() => setActiveView('pipeline')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'pipeline' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutGrid size={16} /> Pipeline</button>
@@ -447,7 +459,7 @@ export const CrmBoard: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-x-auto bg-slate-100/50 p-6 relative">
+      <div className="flex-1 overflow-x-auto bg-slate-100/50 p-6 relative custom-scrollbar">
         {isLoading && deals.length === 0 ? (
             <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>
         ) : (
@@ -491,7 +503,7 @@ export const CrmBoard: React.FC = () => {
                                     <div className="flex items-center justify-between pt-2 border-t border-slate-50">
                                         <span className="font-bold text-slate-700 text-sm">{formatCurrency(deal.value)}</span>
                                         <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm" title={`Responsável: ${getOwnerName(deal.owner)}`}>
-                                            {getOwnerName(deal.owner).charAt(0)}
+                                            {(getOwnerName(deal.owner) || '?').charAt(0)}
                                         </div>
                                     </div>
                                 </div>
@@ -524,16 +536,16 @@ export const CrmBoard: React.FC = () => {
                                         <button onClick={() => handleDeleteTeam(team.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
                                     </div>
                                 </div>
-                                <h3 className="font-bold text-slate-800 text-lg mb-1">{team.name}</h3>
-                                <p className="text-xs text-slate-400 mb-4">{team.members?.length || 0} membros ativos</p>
+                                <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{team.name || 'Sem nome'}</h3>
+                                <p className="text-xs text-slate-400 mb-4">{(team.members || []).length} membros ativos</p>
                                 
                                 <div className="flex flex-wrap gap-2 mb-4">
                                     {(team.members || []).map(memberId => {
-                                        const col = collaborators.find(c => c.id === memberId);
+                                        const col = (collaborators || []).find(c => c.id === memberId);
                                         if (!col) return null;
                                         return (
                                             <div key={memberId} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-600 shadow-sm" title={col.fullName}>
-                                                {col.fullName.charAt(0)}
+                                                {(col.fullName || '?').charAt(0)}
                                             </div>
                                         );
                                     })}
@@ -561,13 +573,13 @@ export const CrmBoard: React.FC = () => {
       {/* --- TEAM MODAL --- */}
       {showTeamModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
-                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                       <h3 className="font-bold text-slate-800 flex items-center gap-2"><Users size={20} className="text-indigo-600" /> {editingTeam ? 'Editar Equipe' : 'Criar Nova Equipe'}</h3>
-                      <button onClick={() => setShowTeamModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                      <button onClick={() => setShowTeamModal(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors"><X size={20}/></button>
                   </div>
                   
-                  <div className="p-6 space-y-6">
+                  <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1">
                       <div>
                           <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Nome da Equipe</label>
                           <input 
@@ -583,18 +595,20 @@ export const CrmBoard: React.FC = () => {
                           <label className="block text-xs font-bold text-slate-600 mb-3 uppercase tracking-wider">Membros do Comercial</label>
                           <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
                               {collaborators.filter(c => c.department === 'Comercial').length === 0 ? (
-                                  <p className="text-sm text-slate-400 italic">Nenhum colaborador do Comercial encontrado.</p>
+                                  <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                                      <p className="text-sm text-slate-400 italic">Nenhum colaborador do Comercial encontrado.</p>
+                                  </div>
                               ) : (
                                   collaborators.filter(c => c.department === 'Comercial').map(col => (
-                                      <label key={col.id} className={clsx("flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all", selectedMembers.includes(col.id) ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-100 hover:bg-slate-50")}>
+                                      <label key={col.id} className={clsx("flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all", (selectedMembers || []).includes(col.id) ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-100 hover:bg-slate-50")}>
                                           <div className="flex items-center gap-3">
-                                              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">{col.fullName.charAt(0)}</div>
+                                              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">{(col.fullName || '?').charAt(0)}</div>
                                               <span className="text-sm font-medium text-slate-700">{col.fullName}</span>
                                           </div>
                                           <input 
                                             type="checkbox" 
                                             className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
-                                            checked={selectedMembers.includes(col.id)}
+                                            checked={(selectedMembers || []).includes(col.id)}
                                             onChange={() => toggleMember(col.id)}
                                           />
                                       </label>

@@ -145,7 +145,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
     }
   };
 
-  // --- Derived Data: Filters ---
+  // --- Derived Data: Filters & SORTING ---
   
   const uniqueProducts = useMemo(() => {
       const prods = students.map(s => s.product_name).filter(Boolean);
@@ -153,7 +153,8 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   }, [students]);
 
   const filtered = useMemo(() => {
-      return students.filter(s => {
+      return students
+        .filter(s => {
           // 1. Text Search
           const matchesSearch = 
             (s.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -168,14 +169,17 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
           // 3. Date Mod 1 Filter
           if (filterDateMod1) {
-              // Find the class associated with this student's mod 1 code
-              // Note: s.class_mod_1 contains the Code string. 
               const studentClass = classes.find(c => c.mod1Code === s.class_mod_1);
               if (!studentClass || studentClass.dateMod1 !== filterDateMod1) return false;
           }
 
           return true;
-      });
+        })
+        .sort((a, b) => {
+            const nameA = (a.company_name || a.contact_name || '').toLowerCase();
+            const nameB = (b.company_name || b.contact_name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
   }, [students, classes, searchTerm, filterProduct, filterDateMod1]);
 
   const toggleAccess = async (student: StudentDeal) => {

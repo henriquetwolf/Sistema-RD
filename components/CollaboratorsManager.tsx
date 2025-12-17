@@ -228,8 +228,8 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
               workHours: d.work_hours,
               breakTime: d.break_time,
               workDays: d.work_days,
-              presentialDays: d.presential_days,
-              superiorId: d.superior_id,
+              presential_days: d.presential_days,
+              superior_id: d.superior_id,
               experiencePeriod: d.experience_period,
               hasOtherJob: d.has_other_job,
               status: d.status || 'active',
@@ -494,11 +494,13 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
       setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const filtered = collaborators.filter(c => 
-    (c.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (c.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.department || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = collaborators
+    .filter(c => 
+      (c.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (c.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.department || '').toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">

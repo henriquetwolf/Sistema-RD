@@ -366,7 +366,9 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
       }
   };
 
-  const filtered = teachers.filter(t => t.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = teachers
+    .filter(t => (t.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
@@ -417,7 +419,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                 <div key={t.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-orange-200 transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-lg overflow-hidden">
-                            {t.photoUrl ? <img src={t.photoUrl} alt="" className="w-full h-full object-cover" /> : t.fullName.substring(0,1)}
+                            {t.photoUrl ? <img src={t.photoUrl} alt="" className="w-full h-full object-cover" /> : (t.fullName || '').substring(0,1)}
                         </div>
                         <div>
                             <h3 className="font-bold text-slate-800">{t.fullName}</h3>

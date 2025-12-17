@@ -130,16 +130,19 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
         .order('contact_name', { ascending: true });
 
       if (error) throw error;
-      const deals = dealsData || [];
+      const deals = (dealsData || []).sort((a: any, b: any) => {
+          const nameA = (a.company_name || a.contact_name || '').toLowerCase();
+          const nameB = (b.company_name || b.contact_name || '').toLowerCase();
+          return nameA.localeCompare(nameB);
+      });
+      
       setStudents(deals);
 
-      // --- NEW: Fetch Certificate Info ---
+      // --- Certificate Info Fetch ---
       if (deals.length > 0) {
-          // 1. Get unique product names to find templates
           const productNames = Array.from(new Set(deals.map((d: any) => d.product_name).filter(Boolean)));
           
           if (productNames.length > 0) {
-              // Strategy 1: Check if product in crm_products has a template linked
               const { data: products } = await appBackend.client
                   .from('crm_products')
                   .select('name, certificate_template_id')
@@ -150,7 +153,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                   if (p.certificate_template_id) templatesMap[p.name] = p.certificate_template_id;
               });
 
-              // Strategy 2: Check if there is a certificate template directly linked to this Course Name (Text Link)
               const { data: directCerts } = await appBackend.client
                   .from('crm_certificates')
                   .select('id, linked_product_id')
@@ -163,7 +165,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
               setProductTemplates(templatesMap);
           }
 
-          // 2. Get issued certificates for these students
           const studentIds = deals.map((d: any) => d.id);
           const { data: issuedCerts } = await appBackend.client
               .from('crm_student_certificates')
@@ -188,7 +189,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
       try {
           if (courseDates.allActiveDates.length === 0) return;
 
-          // Query using the 4 calculated dates
           const { data, error } = await appBackend.client
               .from('crm_attendance')
               .select('student_id, date, present')
@@ -225,7 +225,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
           students.forEach(student => {
               courseDates.allActiveDates.forEach(dateStr => {
                   const key = `${student.id}_${dateStr}`;
-                  // If key exists in map, save it. Default to false if not checked but tracking
                   const isPresent = !!presenceMap[key];
                   
                   updates.push({
@@ -338,7 +337,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
     window.print();
   };
 
-  // Layout Conditionals
   const containerClasses = variant === 'modal' 
     ? "fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:p-0 print:bg-white"
     : "h-full flex flex-col bg-white rounded-r-xl overflow-hidden border-l border-slate-200"; 
@@ -362,7 +360,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                 </p>
             </div>
             <div className="flex items-center gap-2 print:hidden">
-                {/* Visualizar Presença Button */}
                 <button 
                     onClick={() => {
                         if (attendanceMode && isReadOnly) {
@@ -417,7 +414,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
             </div>
         </div>
 
-        {/* ATTENDANCE HEADER */}
         {attendanceMode && (
             <div className={clsx(
                 "border-b px-6 py-3 flex items-center gap-4 animate-in slide-in-from-top-2",
@@ -433,9 +429,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
             </div>
         )}
 
-        {/* Content */}
         <div className="p-0 overflow-y-auto custom-scrollbar flex-1 bg-white">
-            {/* Info Cards Row (Hidden if hideFinancials is true) */}
             {!attendanceMode && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-6 bg-slate-50/50 border-b border-slate-100 print:hidden">
                     <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
@@ -476,8 +470,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                         <tr>
                             <th className="px-6 py-3 border-b border-slate-200 w-12 text-center">#</th>
                             <th className="px-6 py-3 border-b border-slate-200 min-w-[200px]">Nome do Aluno</th>
-                            
-                            {/* DYNAMIC DATE HEADERS (4 DAYS) */}
                             {attendanceMode && (
                                 <>
                                     {courseDates.mod1Day1 ? (
@@ -485,19 +477,16 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                             M1 D1 <br/> <span className="text-[9px] font-normal opacity-75">{formatDateSimple(courseDates.mod1Day1)}</span>
                                         </th>
                                     ) : <th className="px-2 py-3 border-b border-slate-200 bg-slate-50"></th>}
-                                    
                                     {courseDates.mod1Day2 ? (
                                         <th className="px-2 py-3 border-b border-slate-200 text-center bg-purple-50 text-purple-800 border-r border-purple-100 min-w-[80px]">
                                             M1 D2 <br/> <span className="text-[9px] font-normal opacity-75">{formatDateSimple(courseDates.mod1Day2)}</span>
                                         </th>
                                     ) : <th className="px-2 py-3 border-b border-slate-200 bg-slate-50"></th>}
-
                                     {courseDates.mod2Day1 ? (
                                         <th className="px-2 py-3 border-b border-slate-200 text-center bg-orange-50 text-orange-800 border-r border-orange-100 min-w-[80px]">
                                             M2 D1 <br/> <span className="text-[9px] font-normal opacity-75">{formatDateSimple(courseDates.mod2Day1)}</span>
                                         </th>
                                     ) : <th className="px-2 py-3 border-b border-slate-200 bg-slate-50"></th>}
-                                    
                                     {courseDates.mod2Day2 ? (
                                         <th className="px-2 py-3 border-b border-slate-200 text-center bg-orange-50 text-orange-800 border-r border-orange-100 min-w-[80px]">
                                             M2 D2 <br/> <span className="text-[9px] font-normal opacity-75">{formatDateSimple(courseDates.mod2Day2)}</span>
@@ -505,7 +494,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                     ) : <th className="px-2 py-3 border-b border-slate-200 bg-slate-50"></th>}
                                 </>
                             )}
-
                             <th className="px-6 py-3 border-b border-slate-200">Status</th>
                             <th className="px-6 py-3 border-b border-slate-200">Módulo</th>
                             {!attendanceMode && <th className="px-6 py-3 border-b border-slate-200 print:hidden text-center">Certificado</th>}
@@ -513,7 +501,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {students.map((student, idx) => {
-                            // Helper to render a checkbox cell
                             const renderCheckCell = (dateStr: string, colorClass: string) => {
                                 if (!dateStr) return <td className="bg-slate-50 border-r border-slate-100"></td>;
                                 const key = `${student.id}_${dateStr}`;
@@ -533,21 +520,17 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                     </td>
                                 );
                             };
-
                             const certInfo = certificates[student.id];
                             const hasTemplate = !!productTemplates[student.product_name || ''];
-
                             return (
                                 <tr key={student.id} className={clsx("transition-colors hover:bg-slate-50")}>
                                     <td className="px-6 py-3 text-slate-400 text-center">{idx + 1}</td>
                                     <td className="px-6 py-3">
                                         <div className="flex flex-col">
-                                            <span className="font-bold text-slate-800">{student.contact_name || student.title}</span>
-                                            <span className="text-xs text-slate-500">{student.company_name}</span>
+                                            <span className="font-bold text-slate-800">{student.company_name || student.contact_name || student.title}</span>
+                                            <span className="text-xs text-slate-500">{student.company_name && student.contact_name && student.company_name !== student.contact_name ? student.contact_name : student.email}</span>
                                         </div>
                                     </td>
-
-                                    {/* 4 CHECKBOX COLUMNS */}
                                     {attendanceMode && (
                                         <>
                                             {renderCheckCell(courseDates.mod1Day1, "bg-purple-50")}
@@ -556,7 +539,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                             {renderCheckCell(courseDates.mod2Day2, "bg-orange-50")}
                                         </>
                                     )}
-
                                     <td className="px-6 py-3">
                                         <div className="flex flex-col gap-1 items-start">
                                             <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border uppercase", getStatusColor(student.stage))}>
@@ -576,41 +558,12 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                         <td className="px-6 py-3 print:hidden text-center">
                                             {certInfo ? (
                                                 <div className="flex items-center justify-center gap-2">
-                                                    <a 
-                                                        href={`/?certificateHash=${certInfo.hash}`} 
-                                                        target="_blank" 
-                                                        rel="noreferrer"
-                                                        className="p-1.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100 border border-indigo-200 transition-colors"
-                                                        title="Visualizar"
-                                                    >
-                                                        <Eye size={14} />
-                                                    </a>
-                                                    <a 
-                                                        href={`/?certificateHash=${certInfo.hash}`} 
-                                                        target="_blank" 
-                                                        rel="noreferrer"
-                                                        className="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100 border border-green-200 transition-colors"
-                                                        title="Baixar PDF"
-                                                    >
-                                                        <Download size={14} />
-                                                    </a>
-                                                    <button 
-                                                        onClick={() => copyCertLink(certInfo.hash)}
-                                                        className={clsx("p-1.5 rounded transition-colors text-xs font-bold", copiedLink === certInfo.hash ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-400 hover:bg-slate-200")}
-                                                        title="Copiar Link Público"
-                                                    >
-                                                        {copiedLink === certInfo.hash ? <CheckCircle size={14} /> : <ExternalLink size={14} />}
-                                                    </button>
+                                                    <a href={`/?certificateHash=${certInfo.hash}`} target="_blank" rel="noreferrer" className="p-1.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100 border border-indigo-200 transition-colors" title="Visualizar"><Eye size={14} /></a>
+                                                    <a href={`/?certificateHash=${certInfo.hash}`} target="_blank" rel="noreferrer" className="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100 border border-green-200 transition-colors" title="Baixar PDF"><Download size={14} /></a>
+                                                    <button onClick={() => copyCertLink(certInfo.hash)} className={clsx("p-1.5 rounded transition-colors text-xs font-bold", copiedLink === certInfo.hash ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-400 hover:bg-slate-200")} title="Copiar Link Público">{copiedLink === certInfo.hash ? <CheckCircle size={14} /> : <ExternalLink size={14} />}</button>
                                                 </div>
                                             ) : hasTemplate ? (
-                                                <button 
-                                                    onClick={() => handleIssueCertificate(student)}
-                                                    disabled={issuingFor === student.id}
-                                                    className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded hover:bg-amber-200 border border-amber-200 disabled:opacity-50 flex items-center gap-1 mx-auto"
-                                                >
-                                                    {issuingFor === student.id ? <Loader2 size={12} className="animate-spin" /> : <Award size={12} />}
-                                                    Liberar
-                                                </button>
+                                                <button onClick={() => handleIssueCertificate(student)} disabled={issuingFor === student.id} className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded hover:bg-amber-200 border border-amber-200 disabled:opacity-50 flex items-center gap-1 mx-auto">{issuingFor === student.id ? <Loader2 size={12} className="animate-spin" /> : <Award size={12} />} Liberar</button>
                                             ) : (
                                                 <span className="text-[10px] text-slate-400 block w-full text-center">N/A</span>
                                             )}
@@ -624,22 +577,12 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
             )}
         </div>
 
-        {/* Footer (Only show in Modal Mode) */}
         {variant === 'modal' && (
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 print:hidden">
                 {attendanceMode && !isReadOnly ? (
-                    <button 
-                        onClick={saveAttendance} 
-                        disabled={isSavingAttendance}
-                        className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors flex items-center gap-2"
-                    >
-                        {isSavingAttendance ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                        Salvar Chamada
-                    </button>
+                    <button onClick={saveAttendance} disabled={isSavingAttendance} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors flex items-center gap-2">{isSavingAttendance ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Chamada</button>
                 ) : (
-                    <button onClick={onClose} className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold transition-colors">
-                        Fechar
-                    </button>
+                    <button onClick={onClose} className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold transition-colors">Fechar</button>
                 )}
             </div>
         )}

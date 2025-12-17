@@ -318,3 +318,28 @@ export interface PartnerStudio {
   // Other
   attachments: string; // Link or JSON
 }
+
+// --- STOCK CONTROL ---
+
+export interface StockMovement {
+  id: string;
+  type: 'in' | 'out'; // Entrada ou Saída
+  date: string;
+  conferenceDate?: string;
+  
+  // Items (Quantities)
+  items: {
+    apostila2em1: number;
+    apostilaClassico: number;
+    sacochila: number;
+    lapis: number;
+  };
+  
+  partnerStudioId?: string; // Link to Partner Studio
+  partnerStudioName?: string; // Denormalized name for display
+  trackingCode?: string;
+  observations?: string;
+  attachments?: string; // Link
+  
+  createdAt: string;
+}

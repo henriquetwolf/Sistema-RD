@@ -204,37 +204,43 @@ export const WhatsAppInbox: React.FC = () => {
 
   // --- HELPERS PARA O WEBHOOK ---
   const supabaseProjectRef = (appBackend.client as any).supabaseUrl?.match(/https:\/\/(.*?)\.supabase\.co/)?.[1] || 'SEU-PROJETO';
-  const callbackUrl = `https://${supabaseProjectRef}.functions.supabase.co/whatsapp-webhook`;
+  const callbackUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/whatsapp-webhook`;
 
   const edgeFunctionCode = `
-// Crie uma pasta 'supabase/functions/whatsapp-webhook/index.ts'
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const VERIFY_TOKEN = "${config.webhookVerifyToken || 'seu_token_aqui'}";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const { method } = req;
+  const url = new URL(req.url);
 
-  // 1. Verificação da Meta (GET)
+  // 1. Verificação da Meta (GET) - ESSENCIAL PARA VALIDAR NA META
   if (method === "GET") {
-    const url = new URL(req.url);
     const mode = url.searchParams.get("hub.mode");
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      console.log("Webhook validado com sucesso!");
       return new Response(challenge, { status: 200 });
     }
-    return new Response("Forbidden", { status: 403 });
+    return new Response("Erro de validação: Token incorreto", { status: 403 });
   }
 
-  // 2. Recebimento de Mensagem (POST)
+  // 2. Recebimento de Mensagens (POST)
   if (method === "POST") {
     try {
       const body = await req.json();
-      const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-      const contact = body.entry?.[0]?.changes?.[0]?.value?.contacts?.[0];
+      
+      // Log para debug nos logs do Supabase
+      console.log("Mensagem recebida:", JSON.stringify(body, null, 2));
+
+      const entry = body.entry?.[0];
+      const changes = entry?.changes?.[0];
+      const value = changes?.value;
+      const message = value?.messages?.[0];
+      const contact = value?.contacts?.[0];
 
       if (message && message.type === 'text') {
         const supabase = createClient(
@@ -242,7 +248,7 @@ serve(async (req) => {
           Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         );
 
-        const waId = message.from; // Número do cliente
+        const waId = message.from; 
         const text = message.text.body;
         const contactName = contact?.profile?.name || waId;
 
@@ -265,11 +271,14 @@ serve(async (req) => {
             last_message: text, updated_at: new Date().toISOString() 
         }).eq('id', chat.id);
       }
-      return new Response("OK", { status: 200 });
+      
+      return new Response("EVENT_RECEIVED", { status: 200 });
     } catch (e) {
-      return new Response("Error", { status: 500 });
+      console.error("Erro ao processar webhook:", e);
+      return new Response("Internal Error", { status: 500 });
     }
   }
+
   return new Response("Method not allowed", { status: 405 });
 });
   `;
@@ -353,6 +362,14 @@ serve(async (req) => {
 
                               {showWebhookHelp && (
                                   <div className="animate-in slide-in-from-top-2 p-4 bg-slate-900 rounded-xl space-y-4">
+                                      <div className="bg-amber-900/30 p-3 rounded-lg border border-amber-600/30 mb-2">
+                                          <p className="text-amber-400 text-[11px] font-bold flex items-center gap-2">
+                                              <AlertTriangle size={14}/> AVISO IMPORTANTE:
+                                          </p>
+                                          <p className="text-white text-[10px] mt-1">Ao implantar a função no Supabase, você <strong>DEVE</strong> usar o comando:</p>
+                                          <code className="block mt-1 bg-black p-2 text-pink-400 text-[10px]">supabase functions deploy whatsapp-webhook --no-verify-jwt</code>
+                                      </div>
+
                                       <div>
                                           <p className="text-white text-xs font-bold mb-2 flex items-center gap-2"><Smartphone size={14} className="text-teal-400"/> Copie estes dados para a tela da Meta:</p>
                                           <div className="space-y-2">
@@ -379,7 +396,7 @@ serve(async (req) => {
                                               <pre className="text-[10px] bg-black text-slate-300 p-3 rounded-lg overflow-x-auto max-h-48 custom-scrollbar border border-slate-800">{edgeFunctionCode.trim()}</pre>
                                               <button onClick={() => navigator.clipboard.writeText(edgeFunctionCode.trim())} className="absolute top-2 right-2 bg-slate-800 text-white px-2 py-1 rounded text-[10px] hover:bg-slate-700">Copiar Código</button>
                                           </div>
-                                          <p className="text-[10px] text-slate-500 mt-2 italic">Crie uma Edge Function chamada "whatsapp-webhook" no seu painel Supabase e cole o código acima.</p>
+                                          <p className="text-[10px] text-slate-500 mt-2 italic">Não esqueça de configurar as Secret Keys (SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY) no seu projeto Supabase.</p>
                                       </div>
                                   </div>
                               )}

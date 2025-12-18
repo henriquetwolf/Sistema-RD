@@ -398,7 +398,7 @@ function App() {
                         {dashboardTab === 'overview' && (
                             <div className="space-y-8 animate-in fade-in duration-500">
                                 <div>
-                                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Painel de Controle</h2>
+                                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Sistema VOLL Pilates Group</h2>
                                     <p className="text-slate-500 text-sm mt-1">Bem-vindo ao sistema VOLL. Aqui está o resumo das suas operações.</p>
                                 </div>
 

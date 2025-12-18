@@ -62,8 +62,8 @@ interface ClassItem {
   attachments: string[]; 
 }
 
-// --- Dropdown Options Mock ---
-const COURSES = ['Formação Completa em Pilates', 'Pilates Clínico', 'Pilates Suspenso', 'Gestão de Studios', 'MIT Movimento Inteligente'];
+// --- Dropdown Options ---
+const COURSES = ['Formação Completa em Pilates', 'Formação em Pilates Clássico'];
 
 interface ClassesManagerProps {
   onBack: () => void;
@@ -252,6 +252,22 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       }
   }, [formData.state]);
 
+  // Auto-populate Studio Rent based on selected studio
+  useEffect(() => {
+      if (formData.studioMod1) {
+          const studio = partnerStudios.find(s => s.fantasyName === formData.studioMod1);
+          if (studio && studio.rentValue) {
+              const rentValueNum = Number(studio.rentValue);
+              if (!isNaN(rentValueNum)) {
+                setFormData(prev => ({
+                    ...prev,
+                    studioRent: rentValueNum
+                }));
+              }
+          }
+      }
+  }, [formData.studioMod1, partnerStudios]);
+
   // Auto-generate Module Codes
   useEffect(() => {
       const generateCode = (dateStr: string) => {
@@ -329,16 +345,16 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
         instructor_mod_1: formData.instructorMod1,
         ticket_mod_1: formData.ticketMod1,
         infrastructure: formData.infrastructure,
-        coffee_mod_1: formData.coffeeMod1,
-        hotel_mod_1: formData.hotelMod1,
+        coffee_mod_1: formData.coffee_mod_1,
+        hotel_mod_1: formData.hotel_mod_1,
         hotel_loc_mod_1: formData.hotelLocMod1,
         cost_help_1: formData.costHelp1,
-        date_mod_2: formData.dateMod2 || null,
+        date_mod_2: formData.date_mod_2 || null,
         mod_2_code: formData.mod2Code,
         instructor_mod_2: formData.instructorMod2,
         ticket_mod_2: formData.ticketMod2,
-        coffee_mod_2: formData.coffeeMod2,
-        hotel_mod_2: formData.hotelMod2,
+        coffee_mod_2: formData.coffee_mod_2,
+        hotel_mod_2: formData.hotel_mod_2,
         hotel_loc_mod_2: formData.hotelLocMod2,
         cost_help_2: formData.costHelp2,
         studio_rent: formData.studioRent,
@@ -390,14 +406,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const selectedClass = classes.find(c => c.id === selectedClassId);
 
   // --- DERIVED STUDIOS ---
-  // Filter studios that match the selected city. If no city is selected, show empty (or all, depending on UX). 
-  // Let's enforce city selection for clarity.
   const filteredStudios = useMemo(() => {
       if (!formData.city) return [];
       return partnerStudios.filter(s => s.city === formData.city && s.status === 'active');
   }, [partnerStudios, formData.city]);
 
-  // Find address of selected studio
   const selectedStudioAddress = useMemo(() => {
       const studio = partnerStudios.find(s => s.fantasyName === formData.studioMod1);
       return studio ? studio.address : '';
@@ -1014,10 +1027,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                         value={formData.studioRent || ''}
                                         onChange={e => handleInputChange('studioRent', parseFloat(e.target.value))}
                                     />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">CONTA AZUL E RD</label>
-                                    <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.contaAzulRD} onChange={e => handleInputChange('contaAzulRD', e.target.value)} />
                                 </div>
                             </div>
                         </div>

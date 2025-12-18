@@ -21,6 +21,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
   const [classes, setClasses] = useState<any[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any[]>([]);
+  const [securityMargin, setSecurityMargin] = useState<number>(5);
   
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -52,6 +53,9 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
   const fetchData = async () => {
     setIsLoading(true);
     try {
+      const margin = appBackend.getInventorySecurityMargin();
+      setSecurityMargin(margin);
+
       const [invData, studioData, classesData, dealsData, attendData] = await Promise.all([
         appBackend.getInventory(),
         appBackend.getPartnerStudios(),
@@ -88,7 +92,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // Filtramos a Matriz da lista de studios para o relatório de parceiros não ficar poluído
       return studios.filter(st => st.fantasyName !== 'VOLL MATRIZ').map(studio => {
           const received = records
             .filter(r => r.studioId === studio.id && r.type === 'exit')
@@ -345,8 +348,8 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                         ];
                         
                         // NOVA LÓGICA DE PERIGO: 
-                        // Falta real (saldo < 0) OU Demanda iminente sem estoque (prog > 0 e saldo < 5)
-                        const anyDanger = items.some(i => (i.real - i.prog < 0) || (i.prog > 0 && i.real - i.prog < 5));
+                        // Falta real (saldo < 0) OU Demanda iminente sem estoque (prog > 0 e saldo < margem)
+                        const anyDanger = items.some(i => (i.real - i.prog < 0) || (i.prog > 0 && i.real - i.prog < securityMargin));
 
                         return (
                             <tr key={s.id} className="hover:bg-slate-50 transition-colors">
@@ -358,7 +361,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                                 </td>
                                 {items.map((item, idx) => {
                                     const saldo = item.real - item.prog;
-                                    const isProblem = (saldo < 0) || (item.prog > 0 && saldo < 5);
+                                    const isProblem = (saldo < 0) || (item.prog > 0 && saldo < securityMargin);
                                     
                                     return (
                                         <td key={idx} className="px-6 py-4">
@@ -406,7 +409,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
               <strong>Como funciona o Estoque dos Studios:</strong><br/>
               O <strong>Estoque Real</strong> é o que o studio confirmou recebimento. <br/>
               O <strong>Estoque Programado</strong> é reservado automaticamente com base no número de alunos matriculados no CRM para turmas confirmadas/concluídas que ainda não atingiram o gatilho de 3 dias pós Mod 2.
-              O status <strong>Necessita Remessa</strong> só é ativado quando o Studio tem alunos marcados (Programado) e o estoque não é suficiente ou está muito próximo do fim (menos de 5 unidades de reserva).
+              O status <strong>Necessita Remessa</strong> só é ativado quando o Studio tem alunos marcados (Programado) e o estoque não é suficiente ou está muito próximo do fim (abaixo de {securityMargin} unidades de reserva).
           </div>
       </div>
 

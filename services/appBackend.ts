@@ -94,7 +94,6 @@ export const appBackend = {
   savePreset: async (preset: Omit<SavedPreset, 'id'>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
-    // Fix: preset.interval_minutes -> preset.intervalMinutes
     const payload = {
       user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.intervalMinutes || 5,
     };
@@ -112,6 +111,14 @@ export const appBackend = {
 
   getAppLogo: (): string | null => localStorage.getItem('app_logo_url'),
   saveAppLogo: (url: string) => localStorage.setItem('app_logo_url', url),
+
+  getInventorySecurityMargin: (): number => {
+    const val = localStorage.getItem('inventory_security_margin');
+    return val ? parseInt(val) : 5;
+  },
+  saveInventorySecurityMargin: (val: number) => {
+    localStorage.setItem('inventory_security_margin', val.toString());
+  },
 
   getCompanies: async (): Promise<CompanySetting[]> => {
       if (!isConfigured) return [];
@@ -153,7 +160,6 @@ export const appBackend = {
     let query = supabase.from('app_banners').select('*').order('created_at', { ascending: false });
     if (audience) query = query.eq('target_audience', audience);
     const { data } = await query;
-    // Correct link_url to linkUrl to match Banner interface
     return (data || []).map((b: any) => ({ 
       id: b.id, 
       title: b.title, 
@@ -225,7 +231,6 @@ export const appBackend = {
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
-    /* Fixed: updated property access for sizeM2 and nameOnSite to match PartnerStudio interface */
     const payload = {
       status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, 
       qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
@@ -273,7 +278,6 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (!data) return null;
-      // Fixed: ensure style and other missing fields are populated correctly from data, replaced 'd' with 'data'
       return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
   },
 
@@ -298,7 +302,6 @@ export const appBackend = {
               let assignedOwnerId = form.fixedOwnerId || null;
               if (form.distributionMode === 'round-robin' && form.teamId) {
                   const { data: teamData } = await supabase.from('crm_teams').select('members').eq('id', form.teamId).single();
-                  // Fixed: Cast teamData to any to access members if the SDK type is loose
                   const members = (teamData as any)?.members || [];
                   if (members.length > 0) {
                       const { data: counterData } = await supabase.from('crm_form_counters').select('last_index').eq('form_id', formId).single();
@@ -340,7 +343,6 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (!data) return null;
-      // Fixed: replaced 'd' with 'data'
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
@@ -370,7 +372,6 @@ export const appBackend = {
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-    // Corrected mapping keys to match CertificateModel interface
     return (data || []).map((d: any) => ({ 
         id: d.id, 
         title: d.title, 
@@ -410,11 +411,9 @@ export const appBackend = {
     if (!isConfigured) return null;
     const { data: certData } = await supabase.from('crm_student_certificates').select('*').eq('hash', hash).single();
     if (!certData) return null;
-    // Fix: cast certData to any to allow access to student_deal_id and certificate_template_id
     const { data: dealData } = await supabase.from('crm_deals').select('contact_name, company_name, course_city').eq('id', (certData as any).student_deal_id).single();
     const { data: templateData } = await supabase.from('crm_certificates').select('*').eq('id', (certData as any).certificate_template_id).single();
     if (!dealData || !templateData) return null;
-    // Fix: return mapped object with interface compliant keys
     return { 
         id: (certData as any).id, 
         studentDealId: (certData as any).student_deal_id, 
@@ -444,7 +443,6 @@ export const appBackend = {
 
   saveEvent: async (event: EventModel): Promise<EventModel> => {
     if (!isConfigured) throw new Error("Backend not configured");
-    // Corrected registration_open to registrationOpen property reference
     const payload = { id: event.id, name: event.name, description: event.description, location: event.location, dates: event.dates, registration_open: event.registrationOpen };
     const { data, error } = await supabase.from('crm_events').upsert(payload).select().single();
     if (error) throw error;
@@ -486,7 +484,7 @@ export const appBackend = {
     const payload = { id: workshop.id, event_id: workshop.eventId, block_id: workshop.blockId || null, title: workshop.title, description: workshop.description, speaker: workshop.speaker, date: workshop.date, time: workshop.time, spots: workshop.spots };
     const { data, error } = await supabase.from('crm_workshops').upsert(payload).select().single();
     if (error) throw error;
-    return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
+    return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: workshop.speaker, date: data.date, time: data.time, spots: data.spots };
   },
 
   deleteWorkshop: async (id: string): Promise<void> => {
@@ -508,8 +506,6 @@ export const appBackend = {
       await supabase.from('crm_event_registrations').insert(payload);
     }
   },
-
-  // --- INVENTORY ---
 
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];

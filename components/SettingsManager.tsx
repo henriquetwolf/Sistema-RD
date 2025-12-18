@@ -5,7 +5,7 @@ import {
     Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, 
     Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2,
     Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
-    Loader2, Package, Tag, Layers
+    Loader2, Package, Tag, Layers, Palette
 } from 'lucide-react';
 import { appBackend, CompanySetting } from '../services/appBackend';
 import { Role, Role as UserRole, Banner, InstructorLevel } from '../types';
@@ -43,6 +43,7 @@ const PRODUCT_TYPES = ['Presencial', 'Digital', 'Evento'];
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, currentLogo }) => {
   const [activeTab, setActiveTab] = useState<'visual' | 'company' | 'roles' | 'database' | 'banners' | 'instructor_levels'>('visual');
   const [preview, setPreview] = useState<string | null>(currentLogo);
+  const [securityMargin, setSecurityMargin] = useState<number>(5);
   const [isSaved, setIsSaved] = useState(false);
   const [showSql, setShowSql] = useState(false);
   const [sqlCopied, setSqlCopied] = useState(false);
@@ -65,6 +66,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
   const [editingLevel, setEditingLevel] = useState<Partial<InstructorLevel> | null>(null);
 
   useEffect(() => {
+      setSecurityMargin(appBackend.getInventorySecurityMargin());
       if (activeTab === 'roles') fetchRoles();
       else if (activeTab === 'banners') fetchBanners();
       else if (activeTab === 'company') fetchCompanies();
@@ -99,13 +101,14 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
     }
   };
 
-  const handleSaveLogo = () => {
+  const handleSaveGlobal = () => {
     if (preview) {
       appBackend.saveAppLogo(preview);
       onLogoChange(preview);
-      setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 2000);
     }
+    appBackend.saveInventorySecurityMargin(securityMargin);
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2000);
   };
 
   const generateRepairSQL = () => `
@@ -165,7 +168,7 @@ NOTIFY pgrst, 'reload config';
             <p className="text-slate-500 text-sm">Personalize acessos, identidade e banco de dados.</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto shrink-0 max-w-full">
-            <button onClick={() => setActiveTab('visual')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Identidade</button>
+            <button onClick={() => setActiveTab('visual')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Geral</button>
             <button onClick={() => setActiveTab('company')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'company' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Empresas</button>
             <button onClick={() => setActiveTab('roles')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'roles' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Acessos</button>
             <button onClick={() => setActiveTab('banners')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'banners' ? "bg-white text-orange-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Banners</button>
@@ -175,28 +178,53 @@ NOTIFY pgrst, 'reload config';
       </div>
       
       <div className="max-w-5xl space-y-8">
-        {/* TAB: IDENTIDADE VISUAL */}
+        {/* TAB: GERAL (IDENTIDADE + ESTOQUE) */}
         {activeTab === 'visual' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-8 space-y-6">
-                <div className="flex flex-col sm:flex-row items-center gap-8">
-                    <div className="flex flex-col items-center gap-2">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pré-visualização</span>
-                        <div className="w-64 h-32 bg-slate-50 border rounded-lg flex items-center justify-center p-4">
-                            {preview ? <img src={preview} alt="Logo" className="max-w-full max-h-full object-contain" /> : <ImageIcon className="text-slate-300" size={48} />}
+            <div className="space-y-6">
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-8 space-y-6">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b pb-4 mb-2"><Palette className="text-teal-600" size={20}/> Identidade do Sistema</h3>
+                    <div className="flex flex-col sm:flex-row items-center gap-8">
+                        <div className="flex flex-col items-center gap-2">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pré-visualização</span>
+                            <div className="w-64 h-32 bg-slate-50 border rounded-lg flex items-center justify-center p-4">
+                                {preview ? <img src={preview} alt="Logo" className="max-w-full max-h-full object-contain" /> : <ImageIcon className="text-slate-300" size={48} />}
+                            </div>
+                        </div>
+                        <div className="flex-1 w-full">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Upload Nova Logo</label>
+                            <label className="cursor-pointer">
+                                <div className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+                                    <Upload className="w-8 h-8 mb-3 text-slate-400" /><p className="text-sm text-slate-500">Clique para enviar</p>
+                                </div>
+                                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                            </label>
                         </div>
                     </div>
-                    <div className="flex-1 w-full">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Upload Nova Logo</label>
-                        <label className="cursor-pointer">
-                            <div className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
-                                <Upload className="w-8 h-8 mb-3 text-slate-400" /><p className="text-sm text-slate-500">Clique para enviar</p>
-                            </div>
-                            <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                        </label>
+                </div>
+
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 space-y-6">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b pb-4 mb-2"><Package className="text-teal-600" size={20}/> Configuração de Logística</h3>
+                    <div className="max-w-md">
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Margem de Segurança do Estoque de Studio</label>
+                        <div className="flex items-center gap-4">
+                            <input 
+                                type="number" 
+                                className="w-24 px-4 py-2 border rounded-lg font-bold text-slate-800"
+                                value={securityMargin}
+                                onChange={(e) => setSecurityMargin(parseInt(e.target.value) || 0)}
+                                min="0"
+                            />
+                            <p className="text-xs text-slate-400">
+                                O alerta "Necessita Remessa" será ativado se o saldo projetado do studio for menor que este valor.
+                            </p>
+                        </div>
                     </div>
                 </div>
-                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                    <button onClick={handleSaveLogo} className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-lg font-bold shadow-sm transition-all">{isSaved ? 'Salvo!' : 'Salvar Alterações'}</button>
+
+                <div className="flex justify-end gap-3 pt-4">
+                    <button onClick={handleSaveGlobal} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-2.5 rounded-xl font-bold shadow-lg shadow-teal-600/20 transition-all flex items-center gap-2">
+                        {isSaved ? <><CheckCircle size={18}/> Salvo!</> : <><Save size={18}/> Salvar Todas as Configurações</>}
+                    </button>
                 </div>
             </div>
         )}
@@ -290,7 +318,6 @@ NOTIFY pgrst, 'reload config';
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><ImageIcon size={20} className="text-orange-600" /> Banners Informativos</h3>
-                    {/* Fixed duplicate imageUrl property in the object literal below */}
                     <button onClick={() => { setNewBanner({ title: '', imageUrl: '', linkUrl: '', targetAudience: 'student', active: true }); setIsBannerModalOpen(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all"><Plus size={16} /> Novo Banner</button>
                 </div>
                 {isLoadingBanners ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-orange-600" /></div> : (

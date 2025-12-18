@@ -13,12 +13,6 @@ import { whatsappService } from '../services/whatsappService';
 
 // --- TYPES ---
 
-interface WATag {
-  id: string;
-  name: string;
-  color: string;
-}
-
 interface WAConversation {
   id: string;
   wa_id: string;
@@ -47,8 +41,6 @@ interface WAConfig {
   webhookVerifyToken: string;
 }
 
-const STAGES = ['Novo Lead', 'Sem Contato', 'Contatado', 'Negociação', 'Fechado', 'Perdido'];
-
 export const WhatsAppInbox: React.FC = () => {
   const [conversations, setConversations] = useState<WAConversation[]>([]);
   const [messages, setMessages] = useState<WAMessage[]>([]);
@@ -58,7 +50,6 @@ export const WhatsAppInbox: React.FC = () => {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [showSettings, setShowSettings] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
@@ -160,7 +151,7 @@ export const WhatsAppInbox: React.FC = () => {
         await fetchMessages(selectedChatId, false);
         await fetchConversations(false);
     } catch (err: any) {
-        alert(`Erro ao enviar: ${err.message}`);
+        alert(err.message);
         setInputText(messageText);
     } finally {
         setIsSending(false);
@@ -170,9 +161,17 @@ export const WhatsAppInbox: React.FC = () => {
   const handleSaveConfig = async () => {
       setIsSavingConfig(true);
       try {
-          await appBackend.saveWhatsAppConfig(config);
+          // Aplicar TRIM em todos os campos para evitar erros de parser de token
+          const cleanConfig = {
+              accessToken: config.accessToken.trim(),
+              phoneNumberId: config.phoneNumberId.trim(),
+              wabaId: config.wabaId.trim(),
+              webhookVerifyToken: config.webhookVerifyToken.trim()
+          };
+          await appBackend.saveWhatsAppConfig(cleanConfig);
+          setConfig(cleanConfig);
           setShowSettings(false);
-          alert("Configurações salvas!");
+          alert("Configurações salvas e campos limpos de espaços!");
       } catch (e: any) {
           alert(`Erro ao salvar: ${e.message}`);
       } finally {
@@ -227,7 +226,7 @@ export const WhatsAppInbox: React.FC = () => {
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm flex gap-3">
                           <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
                           <div className="text-amber-800 text-xs font-medium">
-                              Certifique-se de usar um <strong>Token Permanente</strong>. Tokens temporários do painel da Meta expiram em 24 horas.
+                              Certifique-se de usar um <strong>Token Permanente</strong> (Gerado em Usuários do Sistema no Gerenciador de Negócios). Tokens temporários duram apenas 24h.
                           </div>
                       </div>
 
@@ -237,13 +236,13 @@ export const WhatsAppInbox: React.FC = () => {
                           </h3>
                           <div>
                               <label className="block text-xs font-bold text-slate-600 mb-1">Access Token</label>
-                              <input 
-                                  type="password" 
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
+                              <textarea 
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none h-24 resize-none"
                                   placeholder="EAAG..."
                                   value={config.accessToken}
                                   onChange={e => setConfig({...config, accessToken: e.target.value})}
                               />
+                              <p className="text-[10px] text-slate-400 mt-1 italic">Evite espaços no início ou fim.</p>
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

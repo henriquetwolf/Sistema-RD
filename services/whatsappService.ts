@@ -7,36 +7,51 @@ export const whatsappService = {
      */
     sendTextMessage: async (to: string, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
-        if (!config || !config.accessToken || !config.phoneNumberId) {
-            throw new Error("Configurações do WhatsApp incompletas. Verifique as credenciais da API.");
-        }
-
-        const url = `https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`;
         
-        // Limpar número (remover +, espaços, traços)
-        const cleanNumber = to.replace(/\D/g, '');
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${config.accessToken}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                messaging_product: "whatsapp",
-                recipient_type: "individual",
-                to: cleanNumber,
-                type: "text",
-                text: { body: text }
-            })
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.error?.message || "Erro ao enviar mensagem via Meta API");
+        if (!config || !config.accessToken || !config.phoneNumberId) {
+            throw new Error("Configurações incompletas. Vá em Atendimento > Engrenagem e preencha o Token e o Phone Number ID.");
         }
 
-        return data;
+        const url = `https://graph.facebook.com/v21.0/${config.phoneNumberId.trim()}/messages`;
+        
+        // Limpar número e garantir formato internacional (apenas números)
+        const cleanNumber = to.replace(/\D/g, '');
+        const token = config.accessToken.trim();
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    messaging_product: "whatsapp",
+                    recipient_type: "individual",
+                    to: cleanNumber,
+                    type: "text",
+                    text: { body: text }
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                // Erros específicos da Meta
+                if (data.error?.code === 190) {
+                    throw new Error("Token de Acesso inválido ou expirado. Gere um novo Token Permanente no Painel da Meta.");
+                }
+                if (data.error?.message?.includes("parse")) {
+                    throw new Error("O Token salvo tem caracteres inválidos ou espaços. Copie o Token novamente e salve nas configurações.");
+                }
+                throw new Error(data.error?.message || "Erro na API da Meta");
+            }
+
+            return data;
+        } catch (error: any) {
+            console.error("WhatsApp API Error:", error);
+            throw error;
+        }
     },
 
     /**

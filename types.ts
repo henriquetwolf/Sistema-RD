@@ -83,6 +83,7 @@ export interface Banner {
 
 // --- FORMS & LEADS ---
 
+/* Fix: Export QuestionType to be used in FormsManager.tsx */
 export type QuestionType = 'text' | 'paragraph' | 'email' | 'phone' | 'number' | 'date';
 
 export interface FormQuestion {
@@ -96,23 +97,20 @@ export interface FormQuestion {
 export interface FormStyle {
   backgroundType: 'color' | 'image' | 'texture' | 'none';
   backgroundColor: string;
-  backgroundImage?: string; // Base64 or URL
-  backgroundTexture?: string; // CSS class or identifier
-  cardTransparent?: boolean; // Se o card branco do form deve ser transparente
+  backgroundImage?: string;
+  backgroundTexture?: string;
+  cardTransparent?: boolean;
 }
 
 export interface FormModel {
   id: string;
   title: string;
   description: string;
-  campaign?: string; // NEW: Field for campaign tracking
+  campaign?: string;
   isLeadCapture: boolean;
-  
-  // Lead Routing
   teamId?: string;
   distributionMode?: 'fixed' | 'round-robin';
   fixedOwnerId?: string;
-
   questions: FormQuestion[];
   style?: FormStyle; 
   createdAt: string;
@@ -123,13 +121,6 @@ export interface FormAnswer {
   questionId: string;
   questionTitle: string;
   value: string;
-}
-
-export interface FormSubmission {
-  id: string;
-  formId: string;
-  answers: FormAnswer[];
-  submittedAt: string;
 }
 
 // --- CONTRACTS ---
@@ -145,33 +136,33 @@ export interface ContractSigner {
   name: string;
   email: string;
   status: 'pending' | 'signed';
-  signatureData?: string; // Base64 image
+  signatureData?: string;
   signedAt?: string;
 }
 
 export interface Contract {
   id: string;
   title: string;
-  content: string; // HTML or Markdown content of the contract
+  content: string;
   city: string;
-  contractDate: string; // ISO Date string or formatted string
+  contractDate: string;
   signers: ContractSigner[];
-  status: 'draft' | 'sent' | 'signed'; // 'signed' only when ALL signers have signed
-  folderId?: string | null; // Optional folder association
+  status: 'draft' | 'sent' | 'signed';
+  folderId?: string | null;
   createdAt: string;
 }
 
 // --- CERTIFICATES ---
 
 export interface TextStyle {
-  x: number; // Percentage 0-100
-  y: number; // Percentage 0-100
-  fontSize: number; // px
+  x: number;
+  y: number;
+  fontSize: number;
   fontFamily: string;
   color: string;
   fontWeight: string;
   textAlign: 'left' | 'center' | 'right';
-  width: number; // Percentage width
+  width: number;
 }
 
 export interface CertificateLayout {
@@ -183,11 +174,11 @@ export interface CertificateLayout {
 export interface CertificateModel {
   id: string;
   title: string;
-  backgroundData: string; // Base64 image string (Front)
-  backBackgroundData?: string; // Base64 image string (Back) - NEW
-  linkedProductId?: string; // ID of the course/product - NEW
-  bodyText: string; // The static text (e.g. "Concluiu com êxito...")
-  layoutConfig?: CertificateLayout; // NEW: Stores positions and styles
+  backgroundData: string;
+  backBackgroundData?: string;
+  linkedProductId?: string;
+  bodyText: string;
+  layoutConfig?: CertificateLayout;
   createdAt: string;
 }
 
@@ -210,7 +201,7 @@ export interface Product {
   url: string;
   status: 'active' | 'inactive';
   description: string;
-  certificateTemplateId?: string; // New: Link to certificate model
+  certificateTemplateId?: string;
   createdAt: string;
 }
 
@@ -220,7 +211,7 @@ export interface StudentSession {
   email: string;
   cpf: string;
   name: string;
-  deals: any[]; // The raw deals associated with this student
+  deals: any[];
 }
 
 // --- EVENTS & WORKSHOPS ---
@@ -228,39 +219,39 @@ export interface StudentSession {
 export interface EventBlock {
   id: string;
   eventId: string;
-  date: string; // YYYY-MM-DD that this block belongs to
-  title: string; // e.g., "Manhã", "Bloco A (09:00 - 12:00)"
-  maxSelections: number; // How many workshops a student can pick in this block
+  date: string;
+  title: string;
+  maxSelections: number;
 }
 
 export interface Workshop {
   id: string;
   eventId: string;
-  blockId?: string; // Links to EventBlock
+  blockId?: string;
   title: string;
-  description?: string; // Resume/Info about the workshop
+  description?: string;
   speaker: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
+  date: string;
+  time: string;
   spots: number;
 }
 
 export interface EventModel {
   id: string;
   name: string;
-  description?: string; // General info about the event
+  description?: string;
   location: string;
-  dates: string[]; // Array of YYYY-MM-DD strings
+  dates: string[];
   createdAt: string;
-  registrationOpen: boolean; // Controls if students can see/register
+  registrationOpen: boolean;
 }
 
 export interface EventRegistration {
   id: string;
   eventId: string;
   workshopId: string;
-  studentId: string; // ID from crm_deals
-  studentName: string; // Denormalized for easier display
+  studentId: string;
+  studentName: string;
   studentEmail: string;
   registeredAt: string;
 }
@@ -270,45 +261,31 @@ export interface EventRegistration {
 export interface PartnerStudio {
   id: string;
   status: 'active' | 'inactive';
-  
-  // Responsible
   responsibleName: string;
   cpf: string;
   phone: string;
   email: string;
-  
-  // Second Contact
   secondContactName: string;
   secondContactPhone: string;
-  
-  // Business Info
   fantasyName: string;
-  legalName: string; // Razão Social
+  legalName: string;
   cnpj: string;
   studioPhone: string;
-  
-  // Location
   address: string;
   city: string;
   state: string;
   country: string;
-  
-  // Studio Details
   sizeM2: string;
   studentCapacity: string;
   rentValue: string;
-  methodology: string; // Classic / Contemporary
-  studioType: string; // Tipo de atuação
-  nameOnSite: string; // Nome conforme site
-  
-  // Financials
+  methodology: string;
+  studioType: string;
+  nameOnSite: string;
   bank: string;
   agency: string;
   account: string;
   beneficiary: string;
   pixKey: string;
-  
-  // Equipment & Infra
   hasReformer: boolean;
   qtyReformer: number;
   hasLadderBarrel: boolean;
@@ -317,11 +294,18 @@ export interface PartnerStudio {
   qtyChair: number;
   hasCadillac: boolean;
   qtyCadillac: number;
-  
   hasChairsForCourse: boolean;
   hasTv: boolean;
   maxKitsCapacity: string;
-  
-  // Other
-  attachments: string; // Link or JSON
+  attachments: string;
+}
+
+// --- INSTRUCTOR LEVELS ---
+
+export interface InstructorLevel {
+  id: string;
+  name: string;
+  honorarium: number;
+  observations: string;
+  createdAt?: string;
 }

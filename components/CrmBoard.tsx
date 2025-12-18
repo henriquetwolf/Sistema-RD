@@ -231,7 +231,7 @@ export const CrmBoard: React.FC = () => {
           if (dealsResult.data) {
               setDeals(dealsResult.data.map((d: any) => ({
                   id: d.id, dealNumber: d.deal_number, title: d.title || '', contactName: d.contact_name || '', companyName: d.company_name || '',
-                  value: Number(d.value || 0), paymentMethod: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
+                  value: Number(d.value || 0), payment_method: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
                   nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
@@ -347,6 +347,11 @@ export const CrmBoard: React.FC = () => {
     setDraggedDealId(null);
   };
 
+  /* Fix: Added missing handleInputChange function to manage form field updates */
+  const handleInputChange = (field: keyof Deal, value: any) => {
+      setDealFormData(prev => ({ ...prev, [field]: value }));
+  };
+
   const openNewDealModal = () => { 
     setEditingDealId(null); 
     const firstComercial = (collaborators || []).find(c => c.department === 'Comercial');
@@ -442,7 +447,7 @@ export const CrmBoard: React.FC = () => {
           entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1, 
           installment_value: Number(dealFormData.installmentValue || 0),
-          product_type: dealFormData.productType || null, 
+          product_type: dealFormData.product_type || null, 
           product_name: dealFormData.productName,
           email: dealFormData.email, 
           phone: dealFormData.phone,
@@ -825,19 +830,19 @@ export const CrmBoard: React.FC = () => {
                       <div>
                           <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><MapPin size={16} /> Dados de Contato e Pessoais</h4>
                           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Email</label><input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.email} onChange={e => setDealFormData({...dealFormData, email: e.target.value})} /></div>
-                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Telefone / WhatsApp</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.phone} onChange={e => setDealFormData({...dealFormData, phone: e.target.value})} /></div>
+                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Email</label><input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.email} onChange={e => handleInputChange('email', e.target.value)} /></div>
+                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Telefone / WhatsApp</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.phone} onChange={e => handleInputChange('phone', e.target.value)} /></div>
                               <div><label className="block text-xs font-bold text-slate-600 mb-1">CPF</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.cpf} onChange={e => setDealFormData({...dealFormData, cpf: formatCPF(e.target.value)})} maxLength={14} /></div>
                               <div><label className="block text-xs font-bold text-slate-600 mb-1">CEP</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.zipCode} onChange={e => setDealFormData({...dealFormData, zipCode: formatCEP(e.target.value)})} maxLength={9} /></div>
-                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Endereço</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.address} onChange={e => setDealFormData({...dealFormData, address: e.target.value})} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Número</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.addressNumber} onChange={e => setDealFormData({...dealFormData, addressNumber: e.target.value})} /></div>
+                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Endereço</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.address} onChange={e => handleInputChange('address', e.target.value)} /></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Número</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.addressNumber} onChange={e => handleInputChange('addressNumber', e.target.value)} /></div>
                           </div>
                       </div>
 
                       {dealFormData.productType === 'Presencial' && (
                           <div className="animate-in fade-in slide-in-from-top-2">
                               <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><GraduationCap size={16} /> Logística do Curso</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                   <div><label className="block text-xs font-bold text-slate-600 mb-1">Estado (UF)</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.courseState} onChange={e => setDealFormData({...dealFormData, courseState: e.target.value, courseCity: '', classMod1: '', classMod2: ''})}><option value="">Selecione...</option>{availableStates.map(uf => <option key={uf} value={uf}>{uf}</option>)}</select></div>
                                   <div><label className="block text-xs font-bold text-slate-600 mb-1">Cidade do Curso</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" value={dealFormData.courseCity} onChange={e => setDealFormData({ ...dealFormData, courseCity: e.target.value })} disabled={!dealFormData.courseState || availableCities.length === 0}><option value="">Selecione...</option>{availableCities.map(city => <option key={city} value={city}>{city}</option>)}</select></div>
                                   <div><label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 1</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})} disabled={!dealFormData.courseCity}><option value="">Selecione...</option>{availableMod1Codes.map(code => <option key={code} value={code}>{code}</option>)}</select></div>
@@ -849,8 +854,8 @@ export const CrmBoard: React.FC = () => {
                       <div>
                           <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><FileText size={16} /> Detalhes Finais</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Dados da Inscrição</label><textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-24 resize-none" value={dealFormData.registrationData} onChange={e => setDealFormData({...dealFormData, registrationData: e.target.value})} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Observação</label><textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-24 resize-none" value={dealFormData.observation} onChange={e => setDealFormData({...dealFormData, observation: e.target.value})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Dados da Inscrição</label><textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-24 resize-none" value={dealFormData.registrationData} onChange={e => handleInputChange('registrationData', e.target.value)} /></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Observação</label><textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-24 resize-none" value={dealFormData.observation} onChange={e => handleInputChange('observation', e.target.value)} /></div>
                           </div>
                       </div>
                   </div>

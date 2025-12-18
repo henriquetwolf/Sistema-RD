@@ -1,5 +1,7 @@
+
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormSubmission, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio } from '../types';
+/* Fix: Removed FormSubmission which is not exported from types.ts */
+import { SavedPreset, FormModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel } from '../types';
 
 // Credentials for the App's backend (where presets are stored)
 // We rely on Environment Variables.
@@ -162,6 +164,7 @@ export const appBackend = {
       api_key: preset.key,
       target_table_name: preset.tableName,
       target_primary_key: preset.primaryKey || null,
+      /* Fix: Property name in Omit<SavedPreset, "id"> is intervalMinutes, not interval_minutes */
       interval_minutes: preset.intervalMinutes || 5, // Save to DB
     };
 
@@ -417,7 +420,7 @@ export const appBackend = {
       agency: d.agency,
       account: d.account,
       beneficiary: d.beneficiary,
-      pixKey: d.pix_key,
+      pix_key: d.pix_key,
       hasReformer: d.has_reformer,
       qtyReformer: d.qty_reformer,
       hasLadderBarrel: d.has_ladder_barrel,
@@ -492,6 +495,54 @@ export const appBackend = {
     if (error) throw error;
   },
 
+  // --- INSTRUCTOR LEVELS ---
+
+  getInstructorLevels: async (): Promise<InstructorLevel[]> => {
+    if (!isConfigured) return [];
+    
+    const { data, error } = await supabase
+      .from('crm_instructor_levels')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.warn("Table crm_instructor_levels might not exist", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      name: d.name,
+      honorarium: Number(d.honorarium || 0),
+      observations: d.observations || '',
+      createdAt: d.created_at
+    }));
+  },
+
+  saveInstructorLevel: async (level: InstructorLevel): Promise<void> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+
+    const payload = {
+      name: level.name,
+      honorarium: level.honorarium,
+      observations: level.observations
+    };
+
+    if (level.id) {
+      const { error } = await supabase.from('crm_instructor_levels').update(payload).eq('id', level.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('crm_instructor_levels').insert([payload]);
+      if (error) throw error;
+    }
+  },
+
+  deleteInstructorLevel: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_instructor_levels').delete().eq('id', id);
+    if (error) throw error;
+  },
+
   // --- FORMS & CRM LOGIC (SUPABASE INTEGRATION) ---
   
   saveForm: async (form: FormModel): Promise<void> => {
@@ -562,6 +613,7 @@ export const appBackend = {
 
       if (error || !data) return null;
 
+      /* Fix: Replaced undefined variable 'd' with 'data' */
       return {
           id: data.id,
           title: data.title,
@@ -574,7 +626,6 @@ export const appBackend = {
           questions: data.questions || [],
           style: data.style || {},
           createdAt: data.created_at,
-          /* Fixed: Use data instead of d */
           submissionsCount: data.submissions_count || 0
       };
   },
@@ -746,7 +797,7 @@ export const appBackend = {
           city: d.city,
           contractDate: d.contract_date,
           status: d.status,
-          folderId: d.folder_id,
+          folder_id: d.folder_id,
           signers: d.signers || [], // JSONB array
           createdAt: d.created_at
       }));
@@ -774,7 +825,7 @@ export const appBackend = {
           contractDate: data.contract_date,
           status: data.status,
           folderId: data.folder_id,
-          signers: data.signers || [],
+          signers: d.signers || [],
           createdAt: data.created_at
       };
   },
@@ -882,7 +933,7 @@ export const appBackend = {
       background_base_64: cert.backgroundData,
       back_background_base_64: cert.backBackgroundData,
       linked_product_id: cert.linkedProductId || null,
-      body_text: cert.bodyText, 
+      body_text: cert.body_text, 
       layout_config: cert.layoutConfig 
     };
 
@@ -1058,7 +1109,7 @@ export const appBackend = {
         eventId: d.event_id,
         date: d.date,
         title: d.title,
-        maxSelections: d.max_selections
+        max_selections: d.max_selections
     }));
   },
 

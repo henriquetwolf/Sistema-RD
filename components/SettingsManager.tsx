@@ -4,10 +4,11 @@ import {
     Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, 
     Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, 
     Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2,
-    Monitor, Globe, Target, Info, Shield
+    Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
+    Loader2
 } from 'lucide-react';
 import { appBackend, CompanySetting } from '../services/appBackend';
-import { Role, Role as UserRole, Banner } from '../types';
+import { Role, Role as UserRole, Banner, InstructorLevel } from '../types';
 import clsx from 'clsx';
 
 interface SettingsManagerProps {
@@ -39,7 +40,7 @@ const MODULES = [
 const PRODUCT_TYPES = ['Presencial', 'Digital', 'Evento'];
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, currentLogo }) => {
-  const [activeTab, setActiveTab] = useState<'visual' | 'company' | 'roles' | 'database' | 'banners' | 'powerbi'>('visual');
+  const [activeTab, setActiveTab] = useState<'visual' | 'company' | 'roles' | 'database' | 'banners' | 'powerbi' | 'instructor_levels'>('visual');
   const [preview, setPreview] = useState<string | null>(currentLogo);
   const [isSaved, setIsSaved] = useState(false);
   const [showSql, setShowSql] = useState(false);
@@ -67,6 +68,11 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Partial<CompanySetting> | null>(null);
 
+  // Instructor Levels State
+  const [instructorLevels, setInstructorLevels] = useState<InstructorLevel[]>([]);
+  const [isLoadingLevels, setIsLoadingLevels] = useState(false);
+  const [editingLevel, setEditingLevel] = useState<Partial<InstructorLevel> | null>(null);
+
   // Power BI Helper State
   const [pbiConfig, setPbiConfig] = useState({ url: '', tableName: '', key: '' });
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -78,6 +84,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
           fetchBanners();
       } else if (activeTab === 'company') {
           fetchCompanies();
+      } else if (activeTab === 'instructor_levels') {
+          fetchInstructorLevels();
       }
   }, [activeTab]);
 
@@ -115,6 +123,18 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
       } finally {
           setIsLoadingCompanies(false);
       }
+  };
+
+  const fetchInstructorLevels = async () => {
+    setIsLoadingLevels(true);
+    try {
+        const data = await appBackend.getInstructorLevels();
+        setInstructorLevels(data);
+    } catch(e) {
+        console.error(e);
+    } finally {
+        setIsLoadingLevels(false);
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -229,6 +249,31 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
       }
   };
 
+  const handleSaveInstructorLevel = async () => {
+    if (!editingLevel?.name) {
+        alert("O nome do nível é obrigatório.");
+        return;
+    }
+    try {
+        await appBackend.saveInstructorLevel(editingLevel as InstructorLevel);
+        await fetchInstructorLevels();
+        setEditingLevel(null);
+    } catch(e: any) {
+        alert(`Erro ao salvar nível: ${e.message}`);
+    }
+  };
+
+  const handleDeleteInstructorLevel = async (id: string) => {
+    if (window.confirm("Excluir este nível de instrutor?")) {
+        try {
+            await appBackend.deleteInstructorLevel(id);
+            await fetchInstructorLevels();
+        } catch (e: any) {
+            alert(`Erro ao excluir: ${e.message}`);
+        }
+    }
+  };
+
   const handleCnpjChange = (value: string) => {
       let val = value.replace(/\D/g, '');
       val = val.substring(0, 14);
@@ -290,6 +335,12 @@ ALTER TABLE public.crm_companies ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total companies" ON public.crm_companies;
 CREATE POLICY "Acesso total companies" ON public.crm_companies FOR ALL USING (true) WITH CHECK (true);
 
+-- TABELA DE NÍVEIS DE INSTRUTOR
+CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), name text NOT NULL, honorarium numeric DEFAULT 0, observations text);
+ALTER TABLE public.crm_instructor_levels ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total instructor_levels" ON public.crm_instructor_levels;
+CREATE POLICY "Acesso total instructor_levels" ON public.crm_instructor_levels FOR ALL USING (true) WITH CHECK (true);
+
 -- TABELA DE EQUIPES COMERCIAIS
 CREATE TABLE IF NOT EXISTS public.crm_teams (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), name text NOT NULL, members jsonb DEFAULT '[]'::jsonb);
 ALTER TABLE public.crm_teams ENABLE ROW LEVEL SECURITY;
@@ -318,6 +369,8 @@ NOTIFY pgrst, 'reload config';
     setTimeout(() => setSqlCopied(false), 2000);
   };
 
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -328,6 +381,7 @@ NOTIFY pgrst, 'reload config';
         <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto">
             <button onClick={() => setActiveTab('visual')} className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><ImageIcon size={16} /> Identidade</button>
             <button onClick={() => setActiveTab('company')} className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'company' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Building2 size={16} /> Empresas</button>
+            <button onClick={() => setActiveTab('instructor_levels')} className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'instructor_levels' ? "bg-white text-orange-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><TrendingUp size={16} /> Níveis de Instrutor</button>
             <button onClick={() => setActiveTab('roles')} className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'roles' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><ShieldCheck size={16} /> Tipos de Usuário</button>
             <button onClick={() => setActiveTab('banners')} className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'banners' ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Layout size={16} /> Banners</button>
             <button onClick={() => setActiveTab('powerbi')} className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'powerbi' ? "bg-white text-yellow-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><BarChart3 size={16} /> Guia Power BI</button>
@@ -396,6 +450,93 @@ NOTIFY pgrst, 'reload config';
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {activeTab === 'instructor_levels' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
+                {editingLevel ? (
+                    <div className="p-8 space-y-6 animate-in zoom-in-95 duration-200">
+                        <h3 className="text-lg font-bold text-slate-800 border-b pb-2 mb-4">{editingLevel.id ? 'Editar Nível' : 'Novo Nível de Instrutor'}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Nome do Nível</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" 
+                                    placeholder="Ex: Master, Sênior..."
+                                    value={editingLevel.name || ''} 
+                                    onChange={(e) => setEditingLevel({...editingLevel, name: e.target.value})} 
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Honorário (Valor Sugerido)</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">R$</span>
+                                    <input 
+                                        type="number" 
+                                        className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" 
+                                        placeholder="0,00"
+                                        value={editingLevel.honorarium || ''} 
+                                        onChange={(e) => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value)})} 
+                                    />
+                                </div>
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Observações</label>
+                                <textarea 
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none h-24 resize-none" 
+                                    placeholder="Regras de pagamento, requisitos para este nível..."
+                                    value={editingLevel.observations || ''} 
+                                    onChange={(e) => setEditingLevel({...editingLevel, observations: e.target.value})}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex justify-end pt-4 gap-3 border-t">
+                            <button onClick={() => setEditingLevel(null)} className="px-6 py-2 text-slate-600 font-medium hover:bg-slate-50 rounded-lg transition-colors">Cancelar</button>
+                            <button onClick={handleSaveInstructorLevel} className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-2 rounded-lg font-bold shadow-md transition-all">Salvar Nível</button>
+                        </div>
+                    </div>
+                ) : (
+                    <div>
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800">Hierarquia de Instrutores</h3>
+                                <p className="text-sm text-slate-500">Defina os níveis e valores de honorários padrões.</p>
+                            </div>
+                            <button onClick={() => setEditingLevel({ name: '', honorarium: 0, observations: '' })} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-all"><Plus size={16} /> Novo Nível</button>
+                        </div>
+                        <div className="p-6">
+                            {isLoadingLevels ? (
+                                <div className="flex justify-center py-8"><Loader2 size={32} className="animate-spin text-orange-500" /></div>
+                            ) : instructorLevels.length === 0 ? (
+                                <div className="text-center py-12 text-slate-400 italic">Nenhum nível cadastrado.</div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {instructorLevels.map(level => (
+                                        <div key={level.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-orange-200 transition-all group flex flex-col">
+                                            <div className="flex items-start justify-between mb-2">
+                                                <div>
+                                                    <h4 className="font-bold text-slate-800 text-lg">{level.name}</h4>
+                                                    <span className="text-orange-600 font-bold text-sm flex items-center gap-1">
+                                                        <DollarSign size={14} /> {formatCurrency(level.honorarium)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => setEditingLevel(level)} className="p-2 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
+                                                    <button onClick={() => handleDeleteInstructorLevel(level.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                                                </div>
+                                            </div>
+                                            {level.observations && (
+                                                <p className="text-xs text-slate-500 line-clamp-2 mt-2 italic leading-relaxed">{level.observations}</p>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

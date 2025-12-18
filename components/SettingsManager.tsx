@@ -117,6 +117,9 @@ CREATE POLICY "Acesso total roles" ON public.crm_roles FOR ALL USING (true) WITH
 ALTER TABLE public.crm_collaborators ADD COLUMN IF NOT EXISTS role_id uuid REFERENCES public.crm_roles(id);
 ALTER TABLE public.crm_collaborators ADD COLUMN IF NOT EXISTS password text;
 
+-- ATUALIZAÇÃO STUDIO PARCEIRO
+ALTER TABLE public.crm_partner_studios ADD COLUMN IF NOT EXISTS password text;
+
 CREATE TABLE IF NOT EXISTS public.app_banners (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), title text, image_url text, link_url text, target_audience text CHECK (target_audience IN ('student', 'instructor')), active boolean DEFAULT true);
 ALTER TABLE public.app_banners ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total banners" ON public.app_banners FOR ALL USING (true) WITH CHECK (true);
@@ -158,7 +161,7 @@ NOTIFY pgrst, 'reload config';
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <h2 className="text-2xl font-bold text-slate-800">Configurações do Sistema</h2>
+            <h2 className="text-2xl font-bold text-slate-800">Configurações do Systema</h2>
             <p className="text-slate-500 text-sm">Personalize acessos, identidade e banco de dados.</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto shrink-0 max-w-full">
@@ -287,6 +290,7 @@ NOTIFY pgrst, 'reload config';
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><ImageIcon size={20} className="text-orange-600" /> Banners Informativos</h3>
+                    {/* Fixed duplicate imageUrl property in the object literal below */}
                     <button onClick={() => { setNewBanner({ title: '', imageUrl: '', linkUrl: '', targetAudience: 'student', active: true }); setIsBannerModalOpen(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all"><Plus size={16} /> Novo Banner</button>
                 </div>
                 {isLoadingBanners ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-orange-600" /></div> : (
@@ -382,7 +386,7 @@ NOTIFY pgrst, 'reload config';
               <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 flex flex-col">
                   <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                       <h3 className="font-bold text-slate-800 flex items-center gap-2"><ImageIcon size={20} className="text-orange-600" /> Configurar Banner</h3>
-                      <button onClick={() => setIsBannerModalOpen(false)} className="text-slate-400 hover:bg-slate-200 rounded p-1"><X size={20}/></button>
+                      <button onClick={() => setIsBannerModalOpen(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={20}/></button>
                   </div>
                   <div className="p-6 space-y-4">
                       <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Título/Identificação</label><input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={newBanner.title} onChange={e => setNewBanner({...newBanner, title: e.target.value})} placeholder="Ex: Aviso Lançamento Curso" /></div>

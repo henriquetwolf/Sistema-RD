@@ -95,7 +95,6 @@ export const appBackend = {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
     const payload = {
-      // Fix: changed preset.interval_minutes to preset.intervalMinutes
       user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.intervalMinutes || 5,
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -121,7 +120,6 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      // Fix: changed company.legal_name to company.legalName
       const payload = { id: company.id || undefined, legal_name: company.legalName, cnpj: company.cnpj, product_types: company.productTypes };
       await supabase.from('crm_companies').upsert(payload);
   },
@@ -179,6 +177,7 @@ export const appBackend = {
       cpf: d.cpf, 
       phone: d.phone, 
       email: d.email, 
+      password: d.password || '', // Password field
       secondContactName: d.second_contact_name, 
       secondContactPhone: d.second_contact_phone, 
       fantasyName: d.fantasy_name, 
@@ -217,9 +216,8 @@ export const appBackend = {
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: access properties on studio object using camelCase names defined in PartnerStudio interface (sizeM2, qtyReformer, qtyLadderBarrel, etc.)
     const payload = {
-      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
+      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qty_reformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
     if (studio.id) await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
     else await supabase.from('crm_partner_studios').insert([payload]);
@@ -250,7 +248,6 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      /* Fix: Changed distribution_mode to distributionMode to match FormModel interface */
       const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
       await supabase.from('crm_forms').upsert(payload);
   },
@@ -265,7 +262,6 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (!data) return null;
-      // Fix: changed d.fixed_owner_id to data.fixed_owner_id
       return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
   },
 
@@ -324,7 +320,6 @@ export const appBackend = {
   getContracts: async (): Promise<Contract[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
-      // Fix: map database snake_case fields (contract_date, folder_id) to camelCase interface properties (contractDate, folderId)
       return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
@@ -332,7 +327,6 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (!data) return null;
-      // Fix: map database snake_case fields (contract_date, folder_id) to camelCase interface properties (contractDate, folderId)
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
@@ -362,12 +356,11 @@ export const appBackend = {
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, backgroundData: d.background_base_64, backBackgroundData: d.back_background_base_64, linkedProductId: d.linked_product_id, bodyText: d.body_text, layoutConfig: d.layout_config, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, background_base_64: d.background_base_64, back_background_base_64: d.back_background_base_64, linked_product_id: d.linked_product_id, body_text: d.body_text, layout_config: d.layout_config, createdAt: d.created_at }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    /* Fix: Changed body_text to bodyText to match CertificateModel interface */
     const payload = { id: cert.id, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId || null, body_text: cert.bodyText, layout_config: cert.layoutConfig };
     await supabase.from('crm_certificates').upsert(payload);
   },
@@ -478,13 +471,15 @@ export const appBackend = {
     const { data, error } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     if (error) throw error;
     return (data || []).map((d: any) => ({
-      id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conference_date: d.conference_date, attachments: d.attachments, createdAt: d.created_at
+      // Fix property name mapping for InventoryRecord to match interface
+      id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date, attachments: d.attachments, createdAt: d.created_at
     }));
   },
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
+      // Fix record.registration_date to record.registrationDate to match interface
       type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments
     };
     if (record.id) await supabase.from('crm_inventory').update(payload).eq('id', record.id);
@@ -496,13 +491,11 @@ export const appBackend = {
     await supabase.from('crm_inventory').delete().eq('id', id);
   },
 
-  /* Fix: Added missing getWhatsAppConfig method to handle WhatsApp settings */
   getWhatsAppConfig: async (): Promise<any | null> => {
     const saved = localStorage.getItem('whatsapp_config');
     return saved ? JSON.parse(saved) : null;
   },
 
-  /* Fix: Added missing saveWhatsAppConfig method to handle WhatsApp settings */
   saveWhatsAppConfig: async (config: any): Promise<void> => {
     localStorage.setItem('whatsapp_config', JSON.stringify(config));
   }

@@ -213,6 +213,15 @@ export interface StudentSession {
   deals: any[];
 }
 
+// --- STUDIO AREA ---
+export interface PartnerStudioSession {
+    id: string;
+    fantasyName: string;
+    responsibleName: string;
+    email: string;
+    cnpj: string;
+}
+
 // --- EVENTS & WORKSHOPS ---
 
 export interface EventBlock {
@@ -264,6 +273,7 @@ export interface PartnerStudio {
   cpf: string;
   phone: string;
   email: string;
+  password?: string; // New field for access
   secondContactName: string;
   secondContactPhone: string;
   fantasyName: string;

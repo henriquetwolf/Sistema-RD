@@ -22,12 +22,13 @@ import { FranchisesManager } from './components/FranchisesManager';
 import { CertificatesManager } from './components/CertificatesManager';
 import { StudentsManager } from './components/StudentsManager';
 import { StudentArea } from './components/StudentArea';
+import { PartnerStudioArea } from './components/PartnerStudioArea';
 import { CertificateViewer } from './components/CertificateViewer'; 
 import { EventsManager } from './components/EventsManager';
 import { WhatsAppInbox } from './components/WhatsAppInbox'; 
 import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
-import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession } from './types';
+import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
@@ -60,6 +61,7 @@ function App() {
   const [currentInstructor, setCurrentInstructor] = useState<Teacher | null>(null);
   const [currentStudent, setCurrentStudent] = useState<StudentSession | null>(null);
   const [currentCollaborator, setCurrentCollaborator] = useState<CollaboratorSession | null>(null);
+  const [currentStudio, setCurrentStudio] = useState<PartnerStudioSession | null>(null);
 
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const jobsRef = useRef<SyncJob[]>([]); 
@@ -132,19 +134,16 @@ function App() {
         });
         
         const savedInstructor = sessionStorage.getItem('instructor_session');
-        if (savedInstructor) {
-            try { setCurrentInstructor(JSON.parse(savedInstructor)); } catch (e) {}
-        }
+        if (savedInstructor) { try { setCurrentInstructor(JSON.parse(savedInstructor)); } catch (e) {} }
 
         const savedStudent = sessionStorage.getItem('student_session');
-        if (savedStudent) {
-            try { setCurrentStudent(JSON.parse(savedStudent)); } catch (e) {}
-        }
+        if (savedStudent) { try { setCurrentStudent(JSON.parse(savedStudent)); } catch (e) {} }
 
         const savedCollaborator = sessionStorage.getItem('collaborator_session');
-        if (savedCollaborator) {
-            try { setCurrentCollaborator(JSON.parse(savedCollaborator)); } catch (e) {}
-        }
+        if (savedCollaborator) { try { setCurrentCollaborator(JSON.parse(savedCollaborator)); } catch (e) {} }
+
+        const savedStudio = sessionStorage.getItem('studio_session');
+        if (savedStudio) { try { setCurrentStudio(JSON.parse(savedStudio)); } catch (e) {} }
     };
     initApp();
 
@@ -165,7 +164,6 @@ function App() {
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-        // 1. Fetch Today Stats
         const { data: dealsToday } = await appBackend.client
             .from('crm_deals')
             .select('value, stage, created_at, closed_at')
@@ -175,7 +173,6 @@ function App() {
         const salesT = (dealsToday || []).filter(d => d.stage === 'closed' && d.closed_at >= startOfToday);
         const revenueT = salesT.reduce((acc, curr) => acc + (Number(curr.value) || 0), 0);
 
-        // 2. Fetch Weekly Stats
         const { data: dealsWeek } = await appBackend.client
             .from('crm_deals')
             .select('value, stage, created_at, closed_at')
@@ -186,15 +183,10 @@ function App() {
         const revenueW = salesW.reduce((acc, curr) => acc + (Number(curr.value) || 0), 0);
 
         setOverviewStats({
-            leadsToday: leadsT,
-            salesToday: salesT.length,
-            revenueToday: revenueT,
-            leadsWeek: leadsW,
-            salesWeek: salesW.length,
-            revenueWeek: revenueW
+            leadsToday: leadsT, salesToday: salesT.length, revenueToday: revenueT,
+            leadsWeek: leadsW, salesWeek: salesW.length, revenueWeek: revenueW
         });
 
-        // 3. Fetch Recent Activity
         const [teachers, studios, deals] = await Promise.all([
             appBackend.client.from('crm_teachers').select('full_name, created_at').order('created_at', { ascending: false }).limit(3),
             appBackend.client.from('crm_partner_studios').select('fantasy_name, created_at').order('created_at', { ascending: false }).limit(3),
@@ -205,7 +197,6 @@ function App() {
         teachers.data?.forEach(t => activities.push({ type: 'teacher', name: t.full_name, date: t.created_at }));
         studios.data?.forEach(s => activities.push({ type: 'studio', name: s.fantasy_name, date: s.created_at }));
         deals.data?.forEach(d => activities.push({ type: 'deal', name: d.company_name || d.contact_name, date: d.created_at }));
-
         setRecentChanges(activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8));
 
     } catch (e) {
@@ -308,6 +299,7 @@ function App() {
     if (currentInstructor) { setCurrentInstructor(null); sessionStorage.removeItem('instructor_session'); }
     else if (currentStudent) { setCurrentStudent(null); sessionStorage.removeItem('student_session'); }
     else if (currentCollaborator) { setCurrentCollaborator(null); sessionStorage.removeItem('collaborator_session'); }
+    else if (currentStudio) { setCurrentStudio(null); sessionStorage.removeItem('studio_session'); }
     else await appBackend.auth.signOut();
   };
 
@@ -324,9 +316,17 @@ function App() {
   if (publicContract) return <ContractSigning contract={publicContract} />;
   if (publicForm) return <div className="min-h-screen bg-slate-50"><FormViewer form={publicForm} isPublic={true} /></div>;
   if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
-  if (!session && !currentInstructor && !currentStudent && !currentCollaborator) return <LoginPanel onInstructorLogin={s => {setCurrentInstructor(s); sessionStorage.setItem('instructor_session', JSON.stringify(s));}} onStudentLogin={s => {setCurrentStudent(s); sessionStorage.setItem('student_session', JSON.stringify(s));}} onCollaboratorLogin={s => {setCurrentCollaborator(s); sessionStorage.setItem('collaborator_session', JSON.stringify(s));}} />;
+  if (!session && !currentInstructor && !currentStudent && !currentCollaborator && !currentStudio) {
+      return <LoginPanel 
+        onInstructorLogin={s => {setCurrentInstructor(s); sessionStorage.setItem('instructor_session', JSON.stringify(s));}} 
+        onStudentLogin={s => {setCurrentStudent(s); sessionStorage.setItem('student_session', JSON.stringify(s));}} 
+        onCollaboratorLogin={s => {setCurrentCollaborator(s); sessionStorage.setItem('collaborator_session', JSON.stringify(s));}}
+        onStudioLogin={s => {setCurrentStudio(s); sessionStorage.setItem('studio_session', JSON.stringify(s));}}
+      />;
+  }
   if (currentInstructor) return <InstructorArea instructor={currentInstructor} onLogout={handleLogout} />;
   if (currentStudent) return <StudentArea student={currentStudent} onLogout={handleLogout} />;
+  if (currentStudio) return <PartnerStudioArea studio={currentStudio} onLogout={handleLogout} />;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
@@ -407,42 +407,32 @@ function App() {
                                     <>
                                         {/* Row 1: Today Stats */}
                                         <section className="space-y-4">
-                                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                                <Target size={14} /> Desempenho de Hoje
-                                            </h3>
+                                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Target size={14} /> Desempenho de Hoje</h3>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Target size={64} className="text-indigo-600" /></div>
                                                     <p className="text-sm font-medium text-slate-500 mb-1">Novos Leads (Dia)</p>
                                                     <h4 className="text-3xl font-black text-slate-800">{overviewStats.leadsToday}</h4>
-                                                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-indigo-600 uppercase">
-                                                        <Clock size={10} /> Atualizado agora
-                                                    </div>
+                                                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-indigo-600 uppercase"><Clock size={10} /> Atualizado agora</div>
                                                 </div>
                                                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><CheckCircle size={64} className="text-green-600" /></div>
                                                     <p className="text-sm font-medium text-slate-500 mb-1">Vendas Fechadas (Dia)</p>
                                                     <h4 className="text-3xl font-black text-slate-800">{overviewStats.salesToday}</h4>
-                                                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-green-600 uppercase">
-                                                        <TrendingUp size={10} /> Batendo meta
-                                                    </div>
+                                                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-green-600 uppercase"><TrendingUp size={10} /> Batendo meta</div>
                                                 </div>
                                                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><DollarSign size={64} className="text-emerald-600" /></div>
                                                     <p className="text-sm font-medium text-slate-500 mb-1">Faturamento (Dia)</p>
                                                     <h4 className="text-3xl font-black text-emerald-600">{formatCurrency(overviewStats.revenueToday)}</h4>
-                                                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase">
-                                                        <Activity size={10} /> Em tempo real
-                                                    </div>
+                                                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase"><Activity size={10} /> Em tempo real</div>
                                                 </div>
                                             </div>
                                         </section>
 
                                         {/* Row 2: Weekly Stats */}
                                         <section className="space-y-4">
-                                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                                <BarChart3 size={14} /> Resumo da Semana
-                                            </h3>
+                                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><BarChart3 size={14} /> Resumo da Semana</h3>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                                 <div className="bg-slate-800 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Target size={64} className="text-white" /></div>
@@ -467,74 +457,35 @@ function App() {
 
                                         {/* Row 3: Recent Activity & Quick Navigation */}
                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                            {/* Recent Activity */}
                                             <section className="space-y-4">
-                                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                                    <History size={14} /> Últimas Alterações do Sistema
-                                                </h3>
+                                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14} /> Últimas Alterações</h3>
                                                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                                                     {recentChanges.length === 0 ? (
-                                                        <div className="p-10 text-center text-slate-400 text-sm">Sem atividades recentes detectadas.</div>
+                                                        <div className="p-10 text-center text-slate-400 text-sm">Sem atividades recentes.</div>
                                                     ) : (
                                                         <div className="divide-y divide-slate-100">
                                                             {recentChanges.map((activity, idx) => (
                                                                 <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
                                                                     <div className="flex items-center gap-4">
-                                                                        <div className={clsx(
-                                                                            "w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border",
-                                                                            activity.type === 'teacher' ? "bg-orange-50 border-orange-100 text-orange-600" :
-                                                                            activity.type === 'studio' ? "bg-teal-50 border-teal-100 text-teal-600" :
-                                                                            "bg-indigo-50 border-indigo-100 text-indigo-600"
-                                                                        )}>
-                                                                            {activity.type === 'teacher' ? <School size={18} /> : activity.type === 'studio' ? <Building2 size={18} /> : <Target size={18} />}
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="text-sm font-bold text-slate-800">{activity.name}</p>
-                                                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                                                                                Novo {activity.type === 'teacher' ? 'Instrutor' : activity.type === 'studio' ? 'Studio Parceiro' : 'Lead'} Cadastrado
-                                                                            </p>
-                                                                        </div>
+                                                                        <div className={clsx("w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border", activity.type === 'teacher' ? "bg-orange-50 border-orange-100 text-orange-600" : activity.type === 'studio' ? "bg-teal-50 border-teal-100 text-teal-600" : "bg-indigo-50 border-indigo-100 text-indigo-600")}>{activity.type === 'teacher' ? <School size={18} /> : activity.type === 'studio' ? <Building2 size={18} /> : <Target size={18} />}</div>
+                                                                        <div><p className="text-sm font-bold text-slate-800">{activity.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Novo {activity.type === 'teacher' ? 'Instrutor' : activity.type === 'studio' ? 'Studio' : 'Lead'} Cadastrado</p></div>
                                                                     </div>
-                                                                    <div className="text-right shrink-0">
-                                                                        <p className="text-xs font-medium text-slate-500">{new Date(activity.date).toLocaleDateString()}</p>
-                                                                        <p className="text-[10px] text-slate-400">{new Date(activity.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                                                    </div>
+                                                                    <div className="text-right shrink-0"><p className="text-xs font-medium text-slate-500">{new Date(activity.date).toLocaleDateString()}</p><p className="text-[10px] text-slate-400">{new Date(activity.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p></div>
                                                                 </div>
                                                             ))}
                                                         </div>
                                                     )}
-                                                    <div className="p-3 bg-slate-50 text-center border-t border-slate-100">
-                                                        <button onClick={() => setDashboardTab('crm')} className="text-xs font-bold text-indigo-600 hover:underline">Ver todas as atividades do CRM</button>
-                                                    </div>
+                                                    <div className="p-3 bg-slate-50 text-center border-t border-slate-100"><button onClick={() => setDashboardTab('crm')} className="text-xs font-bold text-indigo-600 hover:underline">Ver todas as atividades do CRM</button></div>
                                                 </div>
                                             </section>
 
-                                            {/* Quick Access Grid */}
                                             <section className="space-y-4">
-                                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                                    <LayoutDashboard size={14} /> Atalhos Rápidos
-                                                </h3>
+                                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutDashboard size={14} /> Atalhos Rápidos</h3>
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    <div onClick={() => setDashboardTab('crm')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group">
-                                                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Kanban size={24} /></div>
-                                                        <h4 className="font-bold text-slate-800 mb-1">CRM</h4>
-                                                        <p className="text-xs text-slate-500">Gestão Comercial.</p>
-                                                    </div>
-                                                    <div onClick={() => setDashboardTab('inventory')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group">
-                                                        <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><Package size={24} /></div>
-                                                        <h4 className="font-bold text-slate-800 mb-1">Estoque</h4>
-                                                        <p className="text-xs text-slate-500">Materiais e Logística.</p>
-                                                    </div>
-                                                    <div onClick={() => setDashboardTab('teachers')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group">
-                                                        <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-colors"><School size={24} /></div>
-                                                        <h4 className="font-bold text-slate-800 mb-1">Instrutores</h4>
-                                                        <p className="text-xs text-slate-500">Gestão docente.</p>
-                                                    </div>
-                                                    <div onClick={() => setDashboardTab('partner_studios')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-200 transition-all cursor-pointer group">
-                                                        <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-600 group-hover:text-white transition-colors"><Building2 size={24} /></div>
-                                                        <h4 className="font-bold text-slate-800 mb-1">Studios</h4>
-                                                        <p className="text-xs text-slate-500">Locais parceiros.</p>
-                                                    </div>
+                                                    <div onClick={() => setDashboardTab('crm')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Kanban size={24} /></div><h4 className="font-bold text-slate-800 mb-1">CRM</h4><p className="text-xs text-slate-500">Gestão Comercial.</p></div>
+                                                    <div onClick={() => setDashboardTab('inventory')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><Package size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Estoque</h4><p className="text-xs text-slate-500">Materiais e Logística.</p></div>
+                                                    <div onClick={() => setDashboardTab('teachers')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-colors"><School size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Instrutores</h4><p className="text-xs text-slate-500">Gestão docente.</p></div>
+                                                    <div onClick={() => setDashboardTab('partner_studios')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-600 group-hover:text-white transition-colors"><Building2 size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Studios</h4><p className="text-xs text-slate-500">Locais parceiros.</p></div>
                                                 </div>
                                             </section>
                                         </div>
@@ -564,14 +515,8 @@ function App() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {jobs.map(job => (
                                     <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex items-center justify-between">
-                                        <div>
-                                            <h4 className="font-bold text-slate-800">{job.name}</h4>
-                                            <p className="text-xs text-slate-500">{job.config.tableName}</p>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            {job.active ? <Play size={16} className="text-green-500" /> : <Pause size={16} className="text-slate-400" />}
-                                            <button onClick={() => setJobs(prev => prev.filter(j => j.id !== job.id))} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
-                                        </div>
+                                        <div><h4 className="font-bold text-slate-800">{job.name}</h4><p className="text-xs text-slate-500">{job.config.tableName}</p></div>
+                                        <div className="flex items-center gap-2">{job.active ? <Play size={16} className="text-green-500" /> : <Pause size={16} className="text-slate-400" />}<button onClick={() => setJobs(prev => prev.filter(j => j.id !== job.id))} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button></div>
                                     </div>
                                 ))}
                             </div>

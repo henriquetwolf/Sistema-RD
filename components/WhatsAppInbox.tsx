@@ -61,6 +61,7 @@ export const WhatsAppInbox: React.FC = () => {
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [showSettings, setShowSettings] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // New Chat Form
   const [newChatPhone, setNewChatPhone] = useState('');
@@ -88,14 +89,16 @@ export const WhatsAppInbox: React.FC = () => {
       loadConfig();
   }, []);
 
-  // Polling para novas mensagens (Simulação de tempo real enquanto não há webhook server)
+  // Polling para novas mensagens
   useEffect(() => {
       const timer = setInterval(() => {
-          fetchConversations(false);
-          if (selectedChatId) fetchMessages(selectedChatId, false);
-      }, 10000); // 10 segundos
+          if (!showSettings) {
+            fetchConversations(false);
+            if (selectedChatId) fetchMessages(selectedChatId, false);
+          }
+      }, 10000); 
       return () => clearInterval(timer);
-  }, [selectedChatId]);
+  }, [selectedChatId, showSettings]);
 
   // Load messages when chat changes
   useEffect(() => {
@@ -151,22 +154,30 @@ export const WhatsAppInbox: React.FC = () => {
     setInputText('');
 
     try {
-        // 1. Enviar via API da Meta
         const result = await whatsappService.sendTextMessage(selectedChat.contact_phone, messageText);
         const waId = result.messages?.[0]?.id;
-
-        // 2. Salvar no Banco
         await whatsappService.syncMessage(selectedChatId, messageText, 'agent', waId);
-        
-        // 3. Atualizar UI local
         await fetchMessages(selectedChatId, false);
         await fetchConversations(false);
     } catch (err: any) {
         alert(`Erro ao enviar: ${err.message}`);
-        setInputText(messageText); // Devolve o texto em caso de erro
+        setInputText(messageText);
     } finally {
         setIsSending(false);
     }
+  };
+
+  const handleSaveConfig = async () => {
+      setIsSavingConfig(true);
+      try {
+          await appBackend.saveWhatsAppConfig(config);
+          setShowSettings(false);
+          alert("Configurações salvas!");
+      } catch (e: any) {
+          alert(`Erro ao salvar: ${e.message}`);
+      } finally {
+          setIsSavingConfig(false);
+      }
   };
 
   const handleStartNewChat = async (e: React.FormEvent) => {
@@ -192,7 +203,108 @@ export const WhatsAppInbox: React.FC = () => {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // --- RENDER ---
+  // --- RENDER CONFIG SCREEN ---
+  if (showSettings) {
+      return (
+          <div className="h-full bg-slate-50 flex flex-col items-center justify-center p-6 animate-in fade-in">
+              <div className="max-w-3xl w-full bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <div className="flex items-center gap-3">
+                          <div className="bg-teal-100 p-2 rounded-full text-teal-700">
+                              <Settings size={20} />
+                          </div>
+                          <div>
+                              <h2 className="text-lg font-bold text-slate-800">Configurações do Atendimento</h2>
+                              <p className="text-xs text-slate-500">Integração Oficial (WhatsApp Cloud API)</p>
+                          </div>
+                      </div>
+                      <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600">
+                          <X size={20} />
+                      </button>
+                  </div>
+
+                  <div className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-50 space-y-6">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm flex gap-3">
+                          <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+                          <div className="text-amber-800 text-xs font-medium">
+                              Certifique-se de usar um <strong>Token Permanente</strong>. Tokens temporários do painel da Meta expiram em 24 horas.
+                          </div>
+                      </div>
+
+                      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                          <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2 mb-2">
+                              <Lock size={16} /> Credenciais da API
+                          </h3>
+                          <div>
+                              <label className="block text-xs font-bold text-slate-600 mb-1">Access Token</label>
+                              <input 
+                                  type="password" 
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
+                                  placeholder="EAAG..."
+                                  value={config.accessToken}
+                                  onChange={e => setConfig({...config, accessToken: e.target.value})}
+                              />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Phone Number ID</label>
+                                  <input 
+                                      type="text" 
+                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
+                                      placeholder="Ex: 1059..."
+                                      value={config.phoneNumberId}
+                                      onChange={e => setConfig({...config, phoneNumberId: e.target.value})}
+                                  />
+                              </div>
+
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">WABA ID</label>
+                                  <input 
+                                      type="text" 
+                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
+                                      placeholder="Ex: 1098..."
+                                      value={config.wabaId}
+                                      onChange={e => setConfig({...config, wabaId: e.target.value})}
+                                  />
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                          <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2 mb-2">
+                              <ShieldCheck size={16} /> Webhook
+                          </h3>
+                          <div>
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Verify Token</label>
+                              <input 
+                                  type="text" 
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                  value={config.webhookVerifyToken}
+                                  onChange={e => setConfig({...config, webhookVerifyToken: e.target.value})}
+                                  placeholder="voll_secret_token"
+                              />
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                      <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                      <button 
+                          onClick={handleSaveConfig}
+                          disabled={isSavingConfig}
+                          className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2"
+                      >
+                          {isSavingConfig ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                          Salvar Configurações
+                      </button>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  // --- RENDER MAIN INBOX ---
   return (
     <div className="flex h-[calc(100vh-140px)] bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
       
@@ -209,6 +321,13 @@ export const WhatsAppInbox: React.FC = () => {
                     title="Nova Conversa"
                 >
                     <Plus size={18} />
+                </button>
+                <button 
+                    onClick={() => setShowSettings(true)}
+                    className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-slate-200 rounded-lg"
+                    title="Configurações"
+                >
+                    <Settings size={18} />
                 </button>
                 <button onClick={fetchConversations} className="p-1.5 text-slate-400 hover:text-teal-600"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""} /></button>
             </div>

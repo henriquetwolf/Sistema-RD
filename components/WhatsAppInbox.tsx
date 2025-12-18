@@ -5,7 +5,7 @@ import {
   Check, CheckCheck, User, Phone, Mail, Tag, Clock, ChevronRight, 
   MoreHorizontal, Smile, Archive, AlertCircle, RefreshCw, Briefcase,
   X, Plus, Lock, Settings, Save, Smartphone, Globe, ShieldCheck, Copy, ExternalLink, Loader2,
-  LayoutGrid, List, Palette, Trash2, GripHorizontal, HelpCircle, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Code, Terminal
+  LayoutGrid, List, Palette, Trash2, GripHorizontal, HelpCircle, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Code, Terminal, Info
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -53,7 +53,7 @@ export const WhatsAppInbox: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
-  const [showWebhookHelp, setShowWebhookHelp] = useState(false);
+  const [showWebhookHelp, setShowWebhookHelp] = useState(true); // Default open to help user
 
   // New Chat Form
   const [newChatPhone, setNewChatPhone] = useState('');
@@ -133,7 +133,7 @@ export const WhatsAppInbox: React.FC = () => {
       } catch (e) {
           console.error(e);
       } finally {
-          setIsLoadingMessages(false);
+          setIsLoading(false);
       }
   };
 
@@ -209,33 +209,34 @@ export const WhatsAppInbox: React.FC = () => {
   const edgeFunctionCode = `
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// Este token DEVE ser exatamente o mesmo que você digitar na tela da Meta
 const VERIFY_TOKEN = "${config.webhookVerifyToken || 'seu_token_aqui'}";
 
 Deno.serve(async (req) => {
   const { method } = req;
   const url = new URL(req.url);
 
-  // 1. Verificação da Meta (GET) - ESSENCIAL PARA VALIDAR NA META
+  // 1. Verificação da Meta (Obrigatório para validar URL de Callback)
   if (method === "GET") {
     const mode = url.searchParams.get("hub.mode");
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("Webhook validado com sucesso!");
-      return new Response(challenge, { status: 200 });
+      console.log("Webhook validado!");
+      // Meta exige retorno do challenge como texto puro com status 200
+      return new Response(challenge, { 
+        status: 200, 
+        headers: { "Content-Type": "text/plain" } 
+      });
     }
-    return new Response("Erro de validação: Token incorreto", { status: 403 });
+    return new Response("Token Inválido", { status: 403 });
   }
 
-  // 2. Recebimento de Mensagens (POST)
+  // 2. Recebimento de Mensagens
   if (method === "POST") {
     try {
       const body = await req.json();
-      
-      // Log para debug nos logs do Supabase
-      console.log("Mensagem recebida:", JSON.stringify(body, null, 2));
-
       const entry = body.entry?.[0];
       const changes = entry?.changes?.[0];
       const value = changes?.value;
@@ -252,7 +253,6 @@ Deno.serve(async (req) => {
         const text = message.text.body;
         const contactName = contact?.profile?.name || waId;
 
-        // Buscar ou criar chat
         let { data: chat } = await supabase.from('crm_whatsapp_chats').select('id').eq('wa_id', waId).single();
         if (!chat) {
           const { data: newChat } = await supabase.from('crm_whatsapp_chats').insert([{
@@ -261,25 +261,21 @@ Deno.serve(async (req) => {
           chat = newChat;
         }
 
-        // Inserir mensagem
         await supabase.from('crm_whatsapp_messages').insert([{
           chat_id: chat.id, text: text, sender_type: 'user', status: 'received'
         }]);
 
-        // Atualizar chat
         await supabase.from('crm_whatsapp_chats').update({ 
             last_message: text, updated_at: new Date().toISOString() 
         }).eq('id', chat.id);
       }
-      
-      return new Response("EVENT_RECEIVED", { status: 200 });
+      return new Response("OK", { status: 200 });
     } catch (e) {
-      console.error("Erro ao processar webhook:", e);
-      return new Response("Internal Error", { status: 500 });
+      return new Response("Error", { status: 500 });
     }
   }
 
-  return new Response("Method not allowed", { status: 405 });
+  return new Response("Not Allowed", { status: 405 });
 });
   `;
 
@@ -295,7 +291,7 @@ Deno.serve(async (req) => {
                           </div>
                           <div>
                               <h2 className="text-lg font-bold text-slate-800">Conectar WhatsApp</h2>
-                              <p className="text-xs text-slate-500">Integração Oficial Cloud API</p>
+                              <p className="text-xs text-slate-500">Configuração do Webhook e API</p>
                           </div>
                       </div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600">
@@ -324,8 +320,8 @@ Deno.serve(async (req) => {
                                   <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" placeholder="Ex: 1059..." value={config.phoneNumberId} onChange={e => setConfig({...config, phoneNumberId: e.target.value})} />
                               </div>
                               <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">ID da Conta de Negócios (WABA)</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" placeholder="Ex: 1098..." value={config.wabaId} onChange={e => setConfig({...config, wabaId: e.target.value})} />
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">ID da Conta WABA</label>
+                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" placeholder="Ex: 1261..." value={config.wabaId} onChange={e => setConfig({...config, wabaId: e.target.value})} />
                               </div>
                           </div>
                       </div>
@@ -340,14 +336,14 @@ Deno.serve(async (req) => {
                                 onClick={() => setShowWebhookHelp(!showWebhookHelp)}
                                 className="text-xs text-blue-600 font-bold flex items-center gap-1 hover:underline"
                               >
-                                  {showWebhookHelp ? 'Ocultar Guia' : 'Como configurar?'}
+                                  {showWebhookHelp ? 'Ocultar Guia' : 'Mostrar Guia de Erro'}
                                   <ChevronDown size={14} className={clsx(showWebhookHelp && "rotate-180")} />
                               </button>
                           </div>
 
                           <div className="space-y-4">
                               <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Token de Verificação (Você que escolhe)</label>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Token de Verificação (Para a Meta)</label>
                                   <div className="flex gap-2">
                                       <input 
                                           type="text" 
@@ -361,42 +357,47 @@ Deno.serve(async (req) => {
                               </div>
 
                               {showWebhookHelp && (
-                                  <div className="animate-in slide-in-from-top-2 p-4 bg-slate-900 rounded-xl space-y-4">
-                                      <div className="bg-amber-900/30 p-3 rounded-lg border border-amber-600/30 mb-2">
-                                          <p className="text-amber-400 text-[11px] font-bold flex items-center gap-2">
-                                              <AlertTriangle size={14}/> AVISO IMPORTANTE:
+                                  <div className="animate-in slide-in-from-top-2 p-5 bg-slate-900 rounded-xl space-y-6">
+                                      {/* COMANDO CRÍTICO */}
+                                      <div className="bg-red-950/40 p-4 rounded-lg border border-red-500/50">
+                                          <div className="flex items-center gap-2 text-red-400 font-black text-xs uppercase mb-2">
+                                              <AlertTriangle size={16}/> Causa mais comum do erro:
+                                          </div>
+                                          <p className="text-white text-xs leading-relaxed">
+                                              O Supabase bloqueia a Meta por padrão. Para validar, você <strong>DEVE</strong> obrigatoriamente implantar a função via terminal com este comando:
                                           </p>
-                                          <p className="text-white text-[10px] mt-1">Ao implantar a função no Supabase, você <strong>DEVE</strong> usar o comando:</p>
-                                          <code className="block mt-1 bg-black p-2 text-pink-400 text-[10px]">supabase functions deploy whatsapp-webhook --no-verify-jwt</code>
+                                          <div className="mt-3 bg-black rounded p-3 flex justify-between items-center gap-3">
+                                              <code className="text-pink-400 text-[11px] font-mono break-all leading-tight">
+                                                  supabase functions deploy whatsapp-webhook --no-verify-jwt
+                                              </code>
+                                              <button onClick={() => navigator.clipboard.writeText('supabase functions deploy whatsapp-webhook --no-verify-jwt')} className="text-slate-500 hover:text-white shrink-0"><Copy size={14}/></button>
+                                          </div>
+                                          <p className="text-[10px] text-red-300 mt-2 italic">A flag "--no-verify-jwt" é o que permite a Meta "entrar" na sua função.</p>
                                       </div>
 
-                                      <div>
-                                          <p className="text-white text-xs font-bold mb-2 flex items-center gap-2"><Smartphone size={14} className="text-teal-400"/> Copie estes dados para a tela da Meta:</p>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                           <div className="space-y-2">
-                                              <div className="flex flex-col">
-                                                  <span className="text-[10px] text-slate-400 uppercase font-black">URL de Callback</span>
-                                                  <div className="flex gap-2 items-center">
-                                                      <code className="text-xs text-teal-400 bg-black/30 p-2 rounded flex-1 truncate">{callbackUrl}</code>
-                                                      <button onClick={() => navigator.clipboard.writeText(callbackUrl)} className="text-slate-400 hover:text-white p-2"><Copy size={14}/></button>
-                                                  </div>
+                                              <span className="text-[10px] text-slate-400 uppercase font-black">URL de Callback (Na Meta)</span>
+                                              <div className="flex gap-2 items-center bg-black/40 p-2 rounded border border-slate-800">
+                                                  <code className="text-xs text-teal-400 truncate">{callbackUrl}</code>
+                                                  <button onClick={() => navigator.clipboard.writeText(callbackUrl)} className="text-slate-500 hover:text-white"><Copy size={14}/></button>
                                               </div>
-                                              <div className="flex flex-col">
-                                                  <span className="text-[10px] text-slate-400 uppercase font-black">Verificar Token</span>
-                                                  <div className="flex gap-2 items-center">
-                                                      <code className="text-xs text-teal-400 bg-black/30 p-2 rounded flex-1 truncate">{config.webhookVerifyToken || '(Defina um token acima)'}</code>
-                                                      <button onClick={() => navigator.clipboard.writeText(config.webhookVerifyToken)} className="text-slate-400 hover:text-white p-2"><Copy size={14}/></button>
-                                                  </div>
+                                          </div>
+                                          <div className="space-y-2">
+                                              <span className="text-[10px] text-slate-400 uppercase font-black">Verificar Token (Na Meta)</span>
+                                              <div className="flex gap-2 items-center bg-black/40 p-2 rounded border border-slate-800">
+                                                  <code className="text-xs text-teal-400 truncate">{config.webhookVerifyToken || '(Defina acima)'}</code>
+                                                  <button onClick={() => navigator.clipboard.writeText(config.webhookVerifyToken)} className="text-slate-500 hover:text-white"><Copy size={14}/></button>
                                               </div>
                                           </div>
                                       </div>
 
                                       <div className="border-t border-slate-800 pt-4">
-                                          <p className="text-white text-xs font-bold mb-2 flex items-center gap-2"><Terminal size={14} className="text-amber-400"/> Código da Edge Function (Supabase):</p>
+                                          <p className="text-white text-xs font-bold mb-3 flex items-center gap-2"><Code size={14} className="text-amber-400"/> Código Correto (Atualizado):</p>
                                           <div className="relative">
-                                              <pre className="text-[10px] bg-black text-slate-300 p-3 rounded-lg overflow-x-auto max-h-48 custom-scrollbar border border-slate-800">{edgeFunctionCode.trim()}</pre>
-                                              <button onClick={() => navigator.clipboard.writeText(edgeFunctionCode.trim())} className="absolute top-2 right-2 bg-slate-800 text-white px-2 py-1 rounded text-[10px] hover:bg-slate-700">Copiar Código</button>
+                                              <pre className="text-[10px] bg-black text-slate-300 p-4 rounded-lg overflow-x-auto max-h-48 custom-scrollbar border border-slate-800 leading-relaxed">{edgeFunctionCode.trim()}</pre>
+                                              <button onClick={() => navigator.clipboard.writeText(edgeFunctionCode.trim())} className="absolute top-2 right-2 bg-slate-800 text-white px-3 py-1 rounded text-[10px] font-bold hover:bg-slate-700 shadow-lg">Copiar Código</button>
                                           </div>
-                                          <p className="text-[10px] text-slate-500 mt-2 italic">Não esqueça de configurar as Secret Keys (SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY) no seu projeto Supabase.</p>
                                       </div>
                                   </div>
                               )}

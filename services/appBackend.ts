@@ -456,7 +456,7 @@ export const appBackend = {
       state: studio.state,
       country: studio.country,
       size_m2: studio.sizeM2,
-      student_capacity: studio.studentCapacity,
+      student_capacity: studio.student_capacity,
       rent_value: studio.rentValue,
       methodology: studio.methodology,
       studio_type: studio.studioType,
@@ -797,7 +797,8 @@ export const appBackend = {
           city: d.city,
           contractDate: d.contract_date,
           status: d.status,
-          folder_id: d.folder_id,
+          /* Fix: Mapped correctly to folderId to match interface */
+          folderId: d.folder_id,
           signers: d.signers || [], // JSONB array
           createdAt: d.created_at
       }));
@@ -825,7 +826,8 @@ export const appBackend = {
           contractDate: data.contract_date,
           status: data.status,
           folderId: data.folder_id,
-          signers: d.signers || [],
+          /* Fix: Replaced undefined variable 'd' with 'data' */
+          signers: data.signers || [],
           createdAt: data.created_at
       };
   },
@@ -908,8 +910,8 @@ export const appBackend = {
     return data.map((d: any) => ({
       id: d.id,
       title: d.title,
-      backgroundData: d.background_base64,
-      backBackgroundData: d.back_background_base64,
+      backgroundData: d.background_base_64,
+      backBackgroundData: d.back_background_base_64,
       linkedProductId: d.linked_product_id,
       bodyText: d.body_text,
       layoutConfig: d.layout_config, 
@@ -933,7 +935,8 @@ export const appBackend = {
       background_base_64: cert.backgroundData,
       back_background_base_64: cert.backBackgroundData,
       linked_product_id: cert.linkedProductId || null,
-      body_text: cert.body_text, 
+      /* Fix: cert.body_text does not exist, use cert.bodyText */
+      body_text: cert.bodyText, 
       layout_config: cert.layoutConfig 
     };
 
@@ -1109,7 +1112,7 @@ export const appBackend = {
         eventId: d.event_id,
         date: d.date,
         title: d.title,
-        max_selections: d.max_selections
+        maxSelections: d.max_selections
     }));
   },
 

@@ -110,7 +110,10 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onInstructorLogin, onStu
                 address: '', district: '', city: '', state: '', cep: '',
                 emergencyContactName: '', emergencyContactPhone: '',
                 profession: '', councilNumber: '', isCouncilActive: true, cnpj: '', companyName: '', hasCnpjActive: true,
-                academicFormation: '', otherFormation: '', courseType: '', teacherLevel: '', isActive: true,
+                academicFormation: '', otherFormation: '', courseType: '', teacherLevel: '', 
+                /* Fix: Added missing levelHonorarium to meet Teacher interface requirements */
+                levelHonorarium: Number(data.level_honorarium || 0),
+                isActive: true,
                 bank: '', agency: '', accountNumber: '', accountDigit: '', hasPjAccount: true, pixKeyPj: '', pixKeyPf: '',
                 regionAvailability: '', weekAvailability: '', shirtSize: '', hasNotebook: true, hasVehicle: true, hasStudio: false, studioAddress: '',
                 additional1: '', valueAdditional1: '', dateAdditional1: '',

@@ -9,6 +9,7 @@ import {
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 import { appBackend } from '../services/appBackend';
+import { InstructorLevel } from '../types';
 
 // --- Types ---
 export interface Teacher {
@@ -47,13 +48,14 @@ export interface Teacher {
   otherFormation: string;
   courseType: string;
   teacherLevel: string; // Nível do Instrutor
+  levelHonorarium: number; // NOVO: Honorário automático
   isActive: boolean; // Instrutor está ativo?
 
   // Bancário
   bank: string;
   agency: string;
-  accountNumber: string; // Renomeado para evitar conflito
-  accountDigit: string;  // Renomeado para evitar conflito
+  accountNumber: string; 
+  accountDigit: string;  
   hasPjAccount: boolean;
   pixKeyPj: string;
   pixKeyPf: string;
@@ -85,6 +87,7 @@ interface TeachersManagerProps {
 
 export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [instructorLevels, setInstructorLevels] = useState<InstructorLevel[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -108,7 +111,10 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
       address: '', district: '', city: '', state: '', cep: '',
       emergencyContactName: '', emergencyContactPhone: '',
       profession: '', councilNumber: '', isCouncilActive: true, cnpj: '', companyName: '', hasCnpjActive: true,
-      academicFormation: '', otherFormation: '', courseType: '', teacherLevel: '', isActive: true,
+      academicFormation: '', otherFormation: '', courseType: '', 
+      teacherLevel: '', 
+      levelHonorarium: 0,
+      isActive: true,
       bank: '', agency: '', accountNumber: '', accountDigit: '', hasPjAccount: true, pixKeyPj: '', pixKeyPf: '',
       regionAvailability: '', weekAvailability: '', shirtSize: '', hasNotebook: true, hasVehicle: true, hasStudio: false, studioAddress: '',
       additional1: '', valueAdditional1: '', dateAdditional1: '',
@@ -121,6 +127,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
   // Fetch Data on Mount
   useEffect(() => {
       fetchTeachers();
+      fetchLevels();
       ibgeService.getStates().then(setStates);
   }, []);
 
@@ -148,26 +155,34 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  const fetchLevels = async () => {
+      try {
+          const data = await appBackend.getInstructorLevels();
+          setInstructorLevels(data);
+      } catch (e) {
+          console.error("Erro ao buscar níveis:", e);
+      }
+  };
+
   const fetchTeachers = async () => {
       setIsLoading(true);
       try {
           const { data, error } = await appBackend.client
-              .from('crm_teachers') // Ensure this table exists
+              .from('crm_teachers')
               .select('*')
               .order('full_name', { ascending: true });
 
           if (error) {
-              console.warn("Tabela 'crm_teachers' pode não existir:", error);
+              console.warn("Erro ao buscar professores:", error);
               return;
           }
 
-          // Map DB to UI
           const mapped: Teacher[] = (data || []).map((t: any) => ({
               id: t.id,
               fullName: t.full_name,
               email: t.email,
               phone: t.phone,
-              password: t.password || '', // Access Credential
+              password: t.password || '',
               rg: t.rg,
               cpf: t.cpf,
               birthDate: t.birth_date,
@@ -191,11 +206,12 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
               otherFormation: t.other_formation,
               courseType: t.course_type,
               teacherLevel: t.teacher_level,
+              levelHonorarium: Number(t.level_honorarium || 0),
               isActive: t.is_active,
               bank: t.bank,
               agency: t.agency,
-              accountNumber: t.account_number || t.account, // Fallback for old column name
-              accountDigit: t.account_digit || t.digit,     // Fallback for old column name
+              accountNumber: t.account_number || t.account,
+              accountDigit: t.account_digit || t.digit,
               hasPjAccount: t.has_pj_account,
               pixKeyPj: t.pix_key_pj,
               pixKeyPf: t.pix_key_pf,
@@ -229,6 +245,15 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
       setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleLevelChange = (levelName: string) => {
+      const selected = instructorLevels.find(l => l.name === levelName);
+      setFormData(prev => ({
+          ...prev,
+          teacherLevel: levelName,
+          levelHonorarium: selected ? selected.honorarium : 0
+      }));
+  };
+
   const handleSave = async () => {
     if (!formData.fullName) {
         alert("Nome completo é obrigatório");
@@ -241,7 +266,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
         full_name: formData.fullName,
         email: formData.email,
         phone: formData.phone,
-        password: formData.password, // Save password
+        password: formData.password,
         rg: formData.rg,
         cpf: formData.cpf,
         birth_date: formData.birthDate || null,
@@ -265,11 +290,12 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
         other_formation: formData.otherFormation,
         course_type: formData.courseType,
         teacher_level: formData.teacherLevel,
+        level_honorarium: formData.levelHonorarium,
         is_active: formData.isActive,
         bank: formData.bank,
         agency: formData.agency,
-        account_number: formData.accountNumber, // Updated column name
-        account_digit: formData.accountDigit,   // Updated column name
+        account_number: formData.accountNumber,
+        account_digit: formData.accountDigit,
         has_pj_account: formData.hasPjAccount,
         pix_key_pj: formData.pixKeyPj,
         pix_key_pf: formData.pixKeyPf,
@@ -282,28 +308,21 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
         studio_address: formData.studioAddress,
         additional_1: formData.additional1,
         value_additional_1: formData.valueAdditional1,
-        date_additional_1: formData.dateAdditional1 || null,
+        date_additional_1: formData.date_additional_1 || null,
         additional_2: formData.additional2,
         value_additional_2: formData.valueAdditional2,
-        date_additional_2: formData.dateAdditional2 || null,
+        date_additional_2: formData.date_additional_2 || null,
         additional_3: formData.additional3,
         value_additional_3: formData.valueAdditional3,
-        date_additional_3: formData.dateAdditional3 || null
+        date_additional_3: formData.date_additional_3 || null
     };
 
     try {
         if (formData.id) {
-            // Update
-            const { error } = await appBackend.client
-                .from('crm_teachers')
-                .update(payload)
-                .eq('id', formData.id);
+            const { error } = await appBackend.client.from('crm_teachers').update(payload).eq('id', formData.id);
             if (error) throw error;
         } else {
-            // Insert
-            const { error } = await appBackend.client
-                .from('crm_teachers')
-                .insert([payload]);
+            const { error } = await appBackend.client.from('crm_teachers').insert([payload]);
             if (error) throw error;
         }
         await fetchTeachers();
@@ -311,15 +330,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
         setFormData(initialFormState);
     } catch (e: any) {
         console.error(e);
-        const msg = e.message || '';
-        // Detect "column does not exist" OR "Could not find the 'x' column... in the schema cache"
-        if (
-            msg.includes('column') && (msg.includes('does not exist') || msg.includes('Could not find'))
-        ) {
-            alert("Erro de Banco de Dados: Colunas faltantes na tabela 'crm_teachers' (ex: agency, bank).\n\nPor favor, execute o script SQL fornecido no chat para atualizar o banco e limpar o cache.");
-        } else {
-            alert(`Erro ao salvar: ${msg}`);
-        }
+        alert(`Erro ao salvar: ${e.message}`);
     } finally {
         setIsSaving(false);
     }
@@ -328,10 +339,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
   const handleDelete = async (id: string) => {
       if (window.confirm("Tem certeza que deseja excluir este instrutor?")) {
           try {
-              const { error } = await appBackend.client
-                  .from('crm_teachers')
-                  .delete()
-                  .eq('id', id);
+              const { error } = await appBackend.client.from('crm_teachers').delete().eq('id', id);
               if (error) throw error;
               setTeachers(prev => prev.filter(t => t.id !== id));
           } catch(e: any) {
@@ -351,13 +359,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
       setUpdatingId(teacher.id);
       const newStatus = !teacher.isActive;
       try {
-          const { error } = await appBackend.client
-              .from('crm_teachers')
-              .update({ is_active: newStatus })
-              .eq('id', teacher.id);
-          
+          const { error } = await appBackend.client.from('crm_teachers').update({ is_active: newStatus }).eq('id', teacher.id);
           if (error) throw error;
-          
           setTeachers(prev => prev.map(t => t.id === teacher.id ? { ...t, isActive: newStatus } : t));
       } catch (e: any) {
           alert(`Erro ao atualizar status: ${e.message}`);
@@ -365,6 +368,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
           setUpdatingId(null);
       }
   };
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   const filtered = teachers
     .filter(t => (t.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()))
@@ -524,7 +529,6 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.fullName} onChange={e => handleInputChange('fullName', e.target.value)} />
                             </div>
                             
-                            {/* EMAIL E SENHA PARA LOGIN */}
                             <div className="lg:col-span-1">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">E-mail (Login)</label>
                                 <input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.email} onChange={e => handleInputChange('email', e.target.value)} />
@@ -569,7 +573,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* Section 2: Contato (Abbreviated to save tokens, logical structure maintained) */}
+                    {/* Section 2: Contato */}
                     <div>
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                             <MapPin size={16} /> Contato e Endereço
@@ -592,7 +596,6 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cep} onChange={e => handleInputChange('cep', e.target.value)} />
                             </div>
                             
-                            {/* SELETORES DE ESTADO E CIDADE */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Estado</label>
                                 <select 
@@ -631,7 +634,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* Section 3: Profissional (Abbreviated) */}
+                    {/* Section 3: Profissional */}
                     <div>
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                             <Briefcase size={16} /> Dados Profissionais
@@ -663,20 +666,34 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Nível do Instrutor</label>
-                                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.teacherLevel} onChange={e => handleInputChange('teacherLevel', e.target.value)}>
+                                <select 
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" 
+                                    value={formData.teacherLevel} 
+                                    onChange={e => handleLevelChange(e.target.value)}
+                                >
                                     <option value="">Selecionar...</option>
-                                    <option value="Júnior">Júnior</option>
-                                    <option value="Pleno">Pleno</option>
-                                    <option value="Sênior">Sênior</option>
-                                    <option value="Master">Master</option>
+                                    {instructorLevels.map(level => (
+                                        <option key={level.id} value={level.name}>{level.name}</option>
+                                    ))}
                                 </select>
                             </div>
+                            
+                            {/* NOVO CAMPO: HONORARIO AUTOMÁTICO */}
+                            <div>
+                                <label className="block text-xs font-bold text-orange-600 mb-1 flex items-center gap-1">
+                                    <DollarSign size={12}/> Honorário do Nível
+                                </label>
+                                <div className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 font-bold text-slate-700">
+                                    {formatCurrency(formData.levelHonorarium)}
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Tipo de Curso</label>
                                 <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.courseType} onChange={e => handleInputChange('courseType', e.target.value)} />
                             </div>
                             
-                            <div className="lg:col-span-3 flex gap-6 pt-3">
+                            <div className="lg:col-span-4 flex gap-6 pt-3">
                                 <label className="flex items-center gap-2 cursor-pointer">
                                     <input type="checkbox" className="rounded text-orange-600" checked={formData.isCouncilActive} onChange={e => handleInputChange('isCouncilActive', e.target.checked)} />
                                     <span className="text-sm text-slate-700">Registro conselho ativo?</span>
@@ -693,7 +710,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* SEÇÃO 4: DADOS BANCÁRIOS (UPDATED FIELDS) */}
+                    {/* SEÇÃO 4: DADOS BANCÁRIOS */}
                     <div>
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                             <DollarSign size={16} /> Dados Bancários
@@ -732,7 +749,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* SEÇÃO 5: LOGÍSTICA & PERFIL (Reused form layout) */}
+                    {/* SEÇÃO 5: LOGÍSTICA & PERFIL */}
                     <div>
                         <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
                             <Truck size={16} /> Logística e Perfil

@@ -341,6 +341,9 @@ ALTER TABLE public.crm_instructor_levels ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total instructor_levels" ON public.crm_instructor_levels;
 CREATE POLICY "Acesso total instructor_levels" ON public.crm_instructor_levels FOR ALL USING (true) WITH CHECK (true);
 
+-- ATUALIZAÇÃO TABELA DE PROFESSORES PARA NOVO CAMPO
+ALTER TABLE public.crm_teachers ADD COLUMN IF NOT EXISTS level_honorarium numeric DEFAULT 0;
+
 -- TABELA DE EQUIPES COMERCIAIS
 CREATE TABLE IF NOT EXISTS public.crm_teams (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), name text NOT NULL, members jsonb DEFAULT '[]'::jsonb);
 ALTER TABLE public.crm_teams ENABLE ROW LEVEL SECURITY;

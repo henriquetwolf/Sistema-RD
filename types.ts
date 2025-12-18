@@ -83,7 +83,6 @@ export interface Banner {
 
 // --- FORMS & LEADS ---
 
-/* Fix: Export QuestionType to be used in FormsManager.tsx */
 export type QuestionType = 'text' | 'paragraph' | 'email' | 'phone' | 'number' | 'date';
 
 export interface FormQuestion {
@@ -307,5 +306,23 @@ export interface InstructorLevel {
   name: string;
   honorarium: number;
   observations: string;
+  createdAt?: string;
+}
+
+// --- INVENTORY ---
+
+export interface InventoryRecord {
+  id: string;
+  type: 'entry' | 'exit';
+  itemApostilaNova: number;
+  itemApostilaClassico: number;
+  itemSacochila: number;
+  itemLapis: number;
+  registrationDate: string;
+  studioId: string;
+  trackingCode: string;
+  observations: string;
+  conferenceDate: string;
+  attachments?: string;
   createdAt?: string;
 }

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Package, Plus, Search, MoreVertical, Edit2, Trash2, 
@@ -71,7 +72,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
     }
   };
 
-  // --- LÓGICA DE ESTOQUE DA MATRIZ (SALDO TOTAL) ---
   const matrizStock = useMemo(() => {
     return records.reduce((acc, curr) => {
       const multiplier = curr.type === 'entry' ? 1 : -1;
@@ -84,13 +84,12 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
     }, { nova: 0, classico: 0, sacochila: 0, lapis: 0 });
   }, [records]);
 
-  // --- LÓGICA DE ESTOQUE POR STUDIO ---
   const studiosStockReport = useMemo(() => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      return studios.map(studio => {
-          // 1. Total Recebido (Movimentações 'exit' da matriz para este studio)
+      // Filtramos a Matriz da lista de studios para o relatório de parceiros não ficar poluído
+      return studios.filter(st => st.fantasyName !== 'VOLL MATRIZ').map(studio => {
           const received = records
             .filter(r => r.studioId === studio.id && r.type === 'exit')
             .reduce((acc, curr) => ({
@@ -103,7 +102,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
           const consumed = { nova: 0, classico: 0, sacochila: 0, lapis: 0 };
           const scheduled = { nova: 0, classico: 0, sacochila: 0, lapis: 0 };
 
-          // 2. Filtrar turmas deste studio
           const studioClasses = classes.filter(c => c.studio_mod_1 === studio.fantasyName);
 
           studioClasses.forEach(cls => {
@@ -118,14 +116,12 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
               const isClassico = cls.course?.toLowerCase().includes('clássico');
 
               if (isFinalized) {
-                  // Consumo Real: Presenças confirmadas
                   const presentCount = new Set(attendance.filter(a => a.class_id === cls.id).map(a => a.student_id)).size;
                   if (isCompleta) consumed.nova += presentCount;
                   if (isClassico) consumed.classico += presentCount;
                   consumed.sacochila += presentCount;
                   consumed.lapis += presentCount;
               } else {
-                  // Programado: Matrículas no CRM
                   const enrolled = deals.filter(d => d.class_mod_1 === cls.mod_1_code).length;
                   if (isCompleta) scheduled.nova += enrolled;
                   if (isClassico) scheduled.classico += enrolled;
@@ -172,7 +168,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
     }
   };
 
-  // Fixed: Added handleEdit function to populate the form with existing record data
   const handleEdit = (record: InventoryRecord) => {
     setFormData({ ...record });
     setShowModal(true);
@@ -229,7 +224,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
         </div>
       </div>
 
-      {/* KPI da Matriz (Sempre visível) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
               { label: 'Apostila Nova', val: matrizStock.nova, color: 'teal' },
@@ -262,7 +256,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
         {isLoading ? (
           <div className="flex justify-center py-20 flex-1 items-center"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
         ) : activeTab === 'movements' ? (
-          /* ABA MOVIMENTAÇÕES */
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-slate-600 border-collapse">
                 <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500 sticky top-0 z-10 shadow-sm">
@@ -330,7 +323,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
             </table>
           </div>
         ) : (
-          /* ABA VISÃO POR STUDIO */
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-slate-600 border-collapse">
                 <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500 sticky top-0 z-10 shadow-sm">
@@ -351,7 +343,10 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                             { real: s.stockInHands.sacochila, prog: s.scheduled.sacochila },
                             { real: s.stockInHands.lapis, prog: s.scheduled.lapis },
                         ];
-                        const anyDanger = items.some(i => i.real - i.prog < 5);
+                        
+                        // NOVA LÓGICA DE PERIGO: 
+                        // Falta real (saldo < 0) OU Demanda iminente sem estoque (prog > 0 e saldo < 5)
+                        const anyDanger = items.some(i => (i.real - i.prog < 0) || (i.prog > 0 && i.real - i.prog < 5));
 
                         return (
                             <tr key={s.id} className="hover:bg-slate-50 transition-colors">
@@ -361,22 +356,30 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                                         <span className="text-[10px] text-slate-400 flex items-center gap-1 uppercase tracking-tighter"><MapPin size={10}/> {s.city}/{s.state}</span>
                                     </div>
                                 </td>
-                                {items.map((item, idx) => (
-                                    <td key={idx} className="px-6 py-4">
-                                        <div className="flex flex-col items-center">
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="text-sm font-black text-slate-700">{item.real}</span>
-                                                <span className="text-[9px] text-slate-400 uppercase font-bold">real</span>
+                                {items.map((item, idx) => {
+                                    const saldo = item.real - item.prog;
+                                    const isProblem = (saldo < 0) || (item.prog > 0 && saldo < 5);
+                                    
+                                    return (
+                                        <td key={idx} className="px-6 py-4">
+                                            <div className="flex flex-col items-center">
+                                                <div className="flex items-baseline gap-1">
+                                                    <span className="text-sm font-black text-slate-700">{item.real}</span>
+                                                    <span className="text-[9px] text-slate-400 uppercase font-bold">real</span>
+                                                </div>
+                                                <div className={clsx("text-[10px] font-bold uppercase tracking-tighter", item.prog > 0 ? "text-orange-500" : "text-slate-300")}>
+                                                    Prog: {item.prog}
+                                                </div>
+                                                <div className={clsx(
+                                                    "text-[10px] font-black mt-1 px-1.5 rounded", 
+                                                    isProblem ? "bg-red-50 text-red-600" : "text-slate-300"
+                                                )}>
+                                                    Saldo: {saldo}
+                                                </div>
                                             </div>
-                                            <div className={clsx("text-[10px] font-bold uppercase tracking-tighter", item.prog > 0 ? "text-orange-500" : "text-slate-300")}>
-                                                Prog: {item.prog}
-                                            </div>
-                                            <div className={clsx("text-[10px] font-black mt-1 px-1.5 rounded", item.real - item.prog < 5 ? "bg-red-50 text-red-600" : "text-slate-300")}>
-                                                Saldo: {item.real - item.prog}
-                                            </div>
-                                        </div>
-                                    </td>
-                                ))}
+                                        </td>
+                                    );
+                                })}
                                 <td className="px-6 py-4 text-center">
                                     {anyDanger ? (
                                         <div className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 mx-auto w-fit border border-red-100">
@@ -403,6 +406,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
               <strong>Como funciona o Estoque dos Studios:</strong><br/>
               O <strong>Estoque Real</strong> é o que o studio confirmou recebimento. <br/>
               O <strong>Estoque Programado</strong> é reservado automaticamente com base no número de alunos matriculados no CRM para turmas confirmadas/concluídas que ainda não atingiram o gatilho de 3 dias pós Mod 2.
+              O status <strong>Necessita Remessa</strong> só é ativado quando o Studio tem alunos marcados (Programado) e o estoque não é suficiente ou está muito próximo do fim (menos de 5 unidades de reserva).
           </div>
       </div>
 

@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Package, Plus, Search, MoreVertical, Edit2, Trash2, 
   ArrowLeft, Save, X, Loader2, Calendar, FileText, 
   Truck, AlertCircle, RefreshCw, LayoutList, Building, ArrowUpCircle, ArrowDownCircle, Paperclip,
-  CheckCircle2, Info, TrendingUp, Inbox, Clock
+  CheckCircle2, Info, TrendingUp, Inbox, Clock, MapPin, AlertTriangle, BarChart3, List, History
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -15,8 +14,13 @@ interface InventoryManagerProps {
 }
 
 export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) => {
+  const [activeTab, setActiveTab] = useState<'movements' | 'studios'>('movements');
   const [records, setRecords] = useState<InventoryRecord[]>([]);
   const [studios, setStudios] = useState<PartnerStudio[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [deals, setDeals] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -47,12 +51,19 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [invData, studioData] = await Promise.all([
+      const [invData, studioData, classesData, dealsData, attendData] = await Promise.all([
         appBackend.getInventory(),
-        appBackend.getPartnerStudios()
+        appBackend.getPartnerStudios(),
+        appBackend.client.from('crm_classes').select('*'),
+        appBackend.client.from('crm_deals').select('id, class_mod_1, stage'),
+        appBackend.client.from('crm_attendance').select('student_id, class_id, present').eq('present', true)
       ]);
-      setRecords(invData);
-      setStudios(studioData);
+      
+      setRecords(invData || []);
+      setStudios(studioData || []);
+      setClasses(classesData.data || []);
+      setDeals(dealsData.data || []);
+      setAttendance(attendData.data || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -60,7 +71,8 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
     }
   };
 
-  const stockBalance = useMemo(() => {
+  // --- LÓGICA DE ESTOQUE DA MATRIZ (SALDO TOTAL) ---
+  const matrizStock = useMemo(() => {
     return records.reduce((acc, curr) => {
       const multiplier = curr.type === 'entry' ? 1 : -1;
       return {
@@ -71,6 +83,69 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
       };
     }, { nova: 0, classico: 0, sacochila: 0, lapis: 0 });
   }, [records]);
+
+  // --- LÓGICA DE ESTOQUE POR STUDIO ---
+  const studiosStockReport = useMemo(() => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      return studios.map(studio => {
+          // 1. Total Recebido (Movimentações 'exit' da matriz para este studio)
+          const received = records
+            .filter(r => r.studioId === studio.id && r.type === 'exit')
+            .reduce((acc, curr) => ({
+                nova: acc.nova + (curr.itemApostilaNova || 0),
+                classico: acc.classico + (curr.itemApostilaClassico || 0),
+                sacochila: acc.sacochila + (curr.itemSacochila || 0),
+                lapis: acc.lapis + (curr.itemLapis || 0),
+            }), { nova: 0, classico: 0, sacochila: 0, lapis: 0 });
+
+          const consumed = { nova: 0, classico: 0, sacochila: 0, lapis: 0 };
+          const scheduled = { nova: 0, classico: 0, sacochila: 0, lapis: 0 };
+
+          // 2. Filtrar turmas deste studio
+          const studioClasses = classes.filter(c => c.studio_mod_1 === studio.fantasyName);
+
+          studioClasses.forEach(cls => {
+              if (cls.status !== 'Confirmado' && cls.status !== 'Concluído') return;
+
+              const dateMod2 = cls.date_mod_2 ? new Date(cls.date_mod_2) : null;
+              const isFinalized = dateMod2 
+                ? (new Date(dateMod2.getTime() + 3 * 24 * 60 * 60 * 1000) < today) 
+                : false;
+
+              const isCompleta = cls.course?.toLowerCase().includes('completa');
+              const isClassico = cls.course?.toLowerCase().includes('clássico');
+
+              if (isFinalized) {
+                  // Consumo Real: Presenças confirmadas
+                  const presentCount = new Set(attendance.filter(a => a.class_id === cls.id).map(a => a.student_id)).size;
+                  if (isCompleta) consumed.nova += presentCount;
+                  if (isClassico) consumed.classico += presentCount;
+                  consumed.sacochila += presentCount;
+                  consumed.lapis += presentCount;
+              } else {
+                  // Programado: Matrículas no CRM
+                  const enrolled = deals.filter(d => d.class_mod_1 === cls.mod_1_code).length;
+                  if (isCompleta) scheduled.nova += enrolled;
+                  if (isClassico) scheduled.classico += enrolled;
+                  scheduled.sacochila += enrolled;
+                  scheduled.lapis += enrolled;
+              }
+          });
+
+          return {
+              ...studio,
+              stockInHands: {
+                  nova: received.nova - consumed.nova,
+                  classico: received.classico - consumed.classico,
+                  sacochila: received.sacochila - consumed.sacochila,
+                  lapis: received.lapis - consumed.lapis,
+              },
+              scheduled
+          };
+      });
+  }, [studios, records, classes, deals, attendance]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -97,19 +172,24 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
     }
   };
 
+  // Fixed: Added handleEdit function to populate the form with existing record data
   const handleEdit = (record: InventoryRecord) => {
-    setFormData(record);
+    setFormData({ ...record });
     setShowModal(true);
     setActiveMenuId(null);
   };
 
-  const filtered = records.filter(r => 
+  const filteredMovements = records.filter(r => 
     r.trackingCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
     r.observations.toLowerCase().includes(searchTerm.toLowerCase()) ||
     studios.find(s => s.id === r.studioId)?.fantasyName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const formatValue = (val: number) => val.toLocaleString('pt-BR');
+  const filteredStudiosReport = studiosStockReport.filter(s => 
+      s.fantasyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.state.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20 h-full flex flex-col">
@@ -126,9 +206,20 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
           </div>
         </div>
         <div className="flex items-center gap-3">
-            <button onClick={fetchData} className="p-2 text-slate-400 hover:text-teal-600 transition-colors">
-                <RefreshCw size={20} className={isLoading ? "animate-spin" : ""} />
-            </button>
+            <div className="bg-slate-100 p-1 rounded-lg flex items-center mr-2">
+                <button 
+                    onClick={() => { setActiveTab('movements'); setSearchTerm(''); }}
+                    className={clsx("px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", activeTab === 'movements' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                >
+                    <History size={16} /> Movimentações
+                </button>
+                <button 
+                    onClick={() => { setActiveTab('studios'); setSearchTerm(''); }}
+                    className={clsx("px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", activeTab === 'studios' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                >
+                    <Building size={16} /> Visão por Studio
+                </button>
+            </div>
             <button 
                 onClick={() => { setFormData(initialFormState); setShowModal(true); }}
                 className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
@@ -138,27 +229,20 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-4 duration-500">
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group">
-              <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><Inbox size={48} className="text-teal-600" /></div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Apostila Nova (2 em 1)</p>
-              <h3 className="text-2xl font-black text-slate-800">{formatValue(stockBalance.nova)} <span className="text-xs font-medium text-slate-400">unid.</span></h3>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group">
-              <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><Inbox size={48} className="text-indigo-600" /></div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Apostila Clássico</p>
-              <h3 className="text-2xl font-black text-slate-800">{formatValue(stockBalance.classico)} <span className="text-xs font-medium text-slate-400">unid.</span></h3>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group">
-              <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><Package size={48} className="text-orange-600" /></div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Sacochilas VOLL</p>
-              <h3 className="text-2xl font-black text-slate-800">{formatValue(stockBalance.sacochila)} <span className="text-xs font-medium text-slate-400">unid.</span></h3>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group">
-              <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><Edit2 size={48} className="text-blue-600" /></div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Lápis VOLL</p>
-              <h3 className="text-2xl font-black text-slate-800">{formatValue(stockBalance.lapis)} <span className="text-xs font-medium text-slate-400">unid.</span></h3>
-          </div>
+      {/* KPI da Matriz (Sempre visível) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+              { label: 'Apostila Nova', val: matrizStock.nova, color: 'teal' },
+              { label: 'Apostila Clássico', val: matrizStock.classico, color: 'indigo' },
+              { label: 'Sacochilas VOLL', val: matrizStock.sacochila, color: 'orange' },
+              { label: 'Lápis VOLL', val: matrizStock.lapis, color: 'blue' }
+          ].map((item, i) => (
+              <div key={i} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                  <div className="absolute right-0 top-0 p-3 opacity-10"><Inbox size={48} /></div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{item.label}</p>
+                  <h3 className="text-2xl font-black text-slate-800">{item.val.toLocaleString()} <span className="text-[10px] font-bold text-slate-400">NA MATRIZ</span></h3>
+              </div>
+          ))}
       </div>
 
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm shrink-0">
@@ -166,7 +250,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" 
-            placeholder="Buscar por código de rastreio, studio de destino ou observações..." 
+            placeholder={activeTab === 'movements' ? "Buscar por código de rastreio ou studio..." : "Buscar por nome do studio, cidade ou UF..."}
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
@@ -174,105 +258,152 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto flex-1 flex flex-col">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex-1 flex flex-col">
         {isLoading ? (
           <div className="flex justify-center py-20 flex-1 items-center"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-20 text-slate-400 flex-1 flex flex-col items-center justify-center">
-              <Package size={48} className="opacity-20 mb-2" />
-              <p>Nenhum registro de estoque encontrado.</p>
+        ) : activeTab === 'movements' ? (
+          /* ABA MOVIMENTAÇÕES */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-600 border-collapse">
+                <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500 sticky top-0 z-10 shadow-sm">
+                <tr>
+                    <th className="px-6 py-4">Data / Tipo</th>
+                    <th className="px-6 py-4">Origem / Destino</th>
+                    <th className="px-6 py-4">Rastreio</th>
+                    <th className="px-6 py-4">Materiais</th>
+                    <th className="px-6 py-4">Conferência</th>
+                    <th className="px-6 py-4 text-right">Ações</th>
+                </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                {filteredMovements.map(record => {
+                    const studio = studios.find(s => s.id === record.studioId);
+                    const isEntry = record.type === 'entry';
+                    return (
+                    <tr key={record.id} className="hover:bg-slate-50 transition-colors group">
+                        <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                            <span className="font-bold text-slate-800">{new Date(record.registrationDate).toLocaleDateString()}</span>
+                            <span className={clsx("flex items-center gap-1 text-[10px] font-bold uppercase w-fit px-1.5 py-0.5 rounded", isEntry ? "text-green-700 bg-green-50" : "text-orange-700 bg-orange-50")}>
+                            {isEntry ? <ArrowUpCircle size={10} /> : <ArrowDownCircle size={10} />}
+                            {isEntry ? 'Entrada' : 'Saída'}
+                            </span>
+                        </div>
+                        </td>
+                        <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                            <span className="font-bold text-slate-700">{studio?.fantasyName || 'VOLL MATRIZ'}</span>
+                            <span className="text-[10px] text-slate-400">{isEntry ? 'Origem de Fabricante' : 'Envio da Matriz'}</span>
+                        </div>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs text-slate-500">{record.trackingCode || '--'}</td>
+                        <td className="px-6 py-4">
+                            <div className="text-[10px] grid grid-cols-2 gap-x-2 gap-y-0.5">
+                                <span className="opacity-60">Nova: {record.itemApostilaNova}</span>
+                                <span className="opacity-60">Clas: {record.itemApostilaClassico}</span>
+                                <span className="opacity-60">Saco: {record.itemSacochila}</span>
+                                <span className="opacity-60">Láp: {record.itemLapis}</span>
+                            </div>
+                        </td>
+                        <td className="px-6 py-4">
+                        {record.conferenceDate ? (
+                            <div className="flex items-center gap-1 text-xs text-green-600 font-bold bg-green-50 px-2 py-1 rounded-full w-fit">
+                            <CheckCircle2 size={14} /> {new Date(record.conferenceDate).toLocaleDateString()}
+                            </div>
+                        ) : (
+                            <span className="text-xs text-slate-300 italic flex items-center gap-1"><Clock size={12}/> Pendente</span>
+                        )}
+                        </td>
+                        <td className="px-6 py-4 text-right relative">
+                        <button onClick={() => setActiveMenuId(activeMenuId === record.id ? null : record.id)} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200"><MoreVertical size={18} /></button>
+                        {activeMenuId === record.id && (
+                            <div className="absolute right-10 top-8 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                            <button onClick={() => handleEdit(record)} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Edit2 size={12} /> Editar</button>
+                            <button onClick={() => handleDelete(record.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"><Trash2 size={12} /> Excluir</button>
+                            </div>
+                        )}
+                        </td>
+                    </tr>
+                    );
+                })}
+                </tbody>
+            </table>
           </div>
         ) : (
-          <table className="w-full text-left text-sm text-slate-600 border-collapse">
-            <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500 sticky top-0 z-10 shadow-sm">
-              <tr>
-                <th className="px-6 py-4">Data / Tipo</th>
-                <th className="px-6 py-4">Origem / Destino</th>
-                <th className="px-6 py-4">Rastreio</th>
-                <th className="px-6 py-4">Materiais</th>
-                <th className="px-6 py-4">Conferência</th>
-                <th className="px-6 py-4 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map(record => {
-                const studio = studios.find(s => s.id === record.studioId);
-                const isEntry = record.type === 'entry';
-                return (
-                  <tr key={record.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-800">{new Date(record.registrationDate).toLocaleDateString()}</span>
-                        <span className={clsx("flex items-center gap-1 text-[10px] font-bold uppercase w-fit px-1.5 py-0.5 rounded", isEntry ? "text-green-700 bg-green-50" : "text-orange-700 bg-orange-50")}>
-                          {isEntry ? <ArrowUpCircle size={10} /> : <ArrowDownCircle size={10} />}
-                          {isEntry ? 'Entrada' : 'Saída'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        {isEntry ? (
-                            <>
-                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Chegada em:</span>
-                                <span className="font-bold text-slate-700">{studio?.fantasyName || 'VOLL MATRIZ'}</span>
-                            </>
-                        ) : (
-                            <>
-                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">De: VOLL MATRIZ para:</span>
-                                <span className="font-bold text-indigo-600">{studio?.fantasyName || 'Outro Destino'}</span>
-                            </>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                        <span className="text-xs text-slate-500 font-mono bg-slate-100 px-2 py-1 rounded">
-                          {record.trackingCode || 'Sem código'}
-                        </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[9px] uppercase font-bold text-slate-500">
-                        <div className="flex justify-between border-b border-slate-50"><span>Nova:</span> <span className={clsx(record.itemApostilaNova > 0 ? "text-slate-900" : "text-slate-300")}>{record.itemApostilaNova}</span></div>
-                        <div className="flex justify-between border-b border-slate-50"><span>Saco:</span> <span className={clsx(record.itemSacochila > 0 ? "text-slate-900" : "text-slate-300")}>{record.itemSacochila}</span></div>
-                        <div className="flex justify-between border-b border-slate-50"><span>Clás:</span> <span className={clsx(record.itemApostilaClassico > 0 ? "text-slate-900" : "text-slate-300")}>{record.itemApostilaClassico}</span></div>
-                        <div className="flex justify-between border-b border-slate-50"><span>Láp:</span> <span className={clsx(record.itemLapis > 0 ? "text-slate-900" : "text-slate-300")}>{record.itemLapis}</span></div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {record.conferenceDate ? (
-                        <div className="flex items-center gap-1 text-xs text-green-600 font-bold bg-green-50 px-2 py-1 rounded-full w-fit">
-                          <CheckCircle2 size={14} />
-                          {new Date(record.conferenceDate).toLocaleDateString()}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-300 italic flex items-center gap-1">
-                          <Clock size={12}/> Pendente
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right relative">
-                      <button 
-                        onClick={() => setActiveMenuId(activeMenuId === record.id ? null : record.id)}
-                        className="p-2 text-slate-400 hover:text-slate-600 menu-btn rounded-lg hover:bg-slate-200"
-                      >
-                        <MoreVertical size={18} />
-                      </button>
-                      {activeMenuId === record.id && (
-                        <div className="absolute right-10 top-8 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
-                          <button onClick={() => handleEdit(record)} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2">
-                            <Edit2 size={12} /> Editar
-                          </button>
-                          <button onClick={() => handleDelete(record.id)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
-                            <Trash2 size={12} /> Excluir
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          /* ABA VISÃO POR STUDIO */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-600 border-collapse">
+                <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500 sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        <th className="px-6 py-4">Studio / Local</th>
+                        <th className="px-6 py-4 text-center">Apostila Nova</th>
+                        <th className="px-6 py-4 text-center">Apostila Cláss.</th>
+                        <th className="px-6 py-4 text-center">Sacochilas</th>
+                        <th className="px-6 py-4 text-center">Lápis</th>
+                        <th className="px-6 py-4 text-center">Status Geral</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {filteredStudiosReport.map(s => {
+                        const items = [
+                            { real: s.stockInHands.nova, prog: s.scheduled.nova },
+                            { real: s.stockInHands.classico, prog: s.scheduled.classico },
+                            { real: s.stockInHands.sacochila, prog: s.scheduled.sacochila },
+                            { real: s.stockInHands.lapis, prog: s.scheduled.lapis },
+                        ];
+                        const anyDanger = items.some(i => i.real - i.prog < 5);
+
+                        return (
+                            <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-6 py-4">
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-slate-800">{s.fantasyName}</span>
+                                        <span className="text-[10px] text-slate-400 flex items-center gap-1 uppercase tracking-tighter"><MapPin size={10}/> {s.city}/{s.state}</span>
+                                    </div>
+                                </td>
+                                {items.map((item, idx) => (
+                                    <td key={idx} className="px-6 py-4">
+                                        <div className="flex flex-col items-center">
+                                            <div className="flex items-baseline gap-1">
+                                                <span className="text-sm font-black text-slate-700">{item.real}</span>
+                                                <span className="text-[9px] text-slate-400 uppercase font-bold">real</span>
+                                            </div>
+                                            <div className={clsx("text-[10px] font-bold uppercase tracking-tighter", item.prog > 0 ? "text-orange-500" : "text-slate-300")}>
+                                                Prog: {item.prog}
+                                            </div>
+                                            <div className={clsx("text-[10px] font-black mt-1 px-1.5 rounded", item.real - item.prog < 5 ? "bg-red-50 text-red-600" : "text-slate-300")}>
+                                                Saldo: {item.real - item.prog}
+                                            </div>
+                                        </div>
+                                    </td>
+                                ))}
+                                <td className="px-6 py-4 text-center">
+                                    {anyDanger ? (
+                                        <div className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 mx-auto w-fit border border-red-100">
+                                            <AlertTriangle size={12}/> Necessita Remessa
+                                        </div>
+                                    ) : (
+                                        <div className="bg-teal-50 text-teal-600 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 mx-auto w-fit border border-teal-100">
+                                            <CheckCircle2 size={12}/> Estoque OK
+                                        </div>
+                                    )}
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+          </div>
         )}
+      </div>
+
+      <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 text-xs text-blue-800 shadow-sm animate-in fade-in delay-200">
+          <Info className="text-blue-600 shrink-0" size={18} />
+          <div>
+              <strong>Como funciona o Estoque dos Studios:</strong><br/>
+              O <strong>Estoque Real</strong> é o que o studio confirmou recebimento. <br/>
+              O <strong>Estoque Programado</strong> é reservado automaticamente com base no número de alunos matriculados no CRM para turmas confirmadas/concluídas que ainda não atingiram o gatilho de 3 dias pós Mod 2.
+          </div>
       </div>
 
       {showModal && (
@@ -291,24 +422,24 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                 <label className="text-xs font-bold text-slate-400 uppercase">Tipo de Operação</label>
                 <div className="flex gap-4">
                     <button 
-                    onClick={() => setFormData({...formData, type: 'entry'})}
-                    className={clsx(
-                        "flex-1 py-3 rounded-xl border-2 font-bold transition-all flex flex-col items-center justify-center gap-1",
-                        formData.type === 'entry' ? "bg-green-50 border-green-500 text-green-700" : "bg-white border-slate-100 text-slate-400 grayscale"
-                    )}
+                        onClick={() => setFormData({...formData, type: 'entry', studioId: ''})}
+                        className={clsx(
+                            "flex-1 py-3 rounded-xl border-2 font-bold transition-all flex flex-col items-center justify-center gap-1",
+                            formData.type === 'entry' ? "bg-green-50 border-green-500 text-green-700" : "bg-white border-slate-100 text-slate-400 grayscale"
+                        )}
                     >
                         <div className="flex items-center gap-2"><ArrowUpCircle size={20} /> Entrada de Materiais</div>
-                        <span className="text-[10px] font-medium">Abastecendo estoque da Matriz</span>
+                        <span className="text-[10px] font-medium text-center">Abastecendo estoque da Matriz<br/>(Compra de fornecedor)</span>
                     </button>
                     <button 
-                    onClick={() => setFormData({...formData, type: 'exit'})}
-                    className={clsx(
-                        "flex-1 py-3 rounded-xl border-2 font-bold transition-all flex flex-col items-center justify-center gap-1",
-                        formData.type === 'exit' ? "bg-orange-50 border-orange-500 text-orange-700" : "bg-white border-slate-100 text-slate-400 grayscale"
-                    )}
+                        onClick={() => setFormData({...formData, type: 'exit'})}
+                        className={clsx(
+                            "flex-1 py-3 rounded-xl border-2 font-bold transition-all flex flex-col items-center justify-center gap-1",
+                            formData.type === 'exit' ? "bg-orange-50 border-orange-500 text-orange-700" : "bg-white border-slate-100 text-slate-400 grayscale"
+                        )}
                     >
-                        <div className="flex items-center gap-2"><ArrowDownCircle size={20} /> Saída (Envio)</div>
-                        <span className="text-[10px] font-medium">Retirando da VOLL MATRIZ</span>
+                        <div className="flex items-center gap-2"><ArrowDownCircle size={20} /> Saída (Envio p/ Studio)</div>
+                        <span className="text-[10px] font-medium text-center">Retirando da VOLL MATRIZ<br/>e enviando para parceiro</span>
                     </button>
                 </div>
               </div>
@@ -346,50 +477,41 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    {formData.type === 'exit' ? 'Studio de Destino' : 'Studio Origem'}
+                    {formData.type === 'exit' ? 'Studio de Destino' : 'Observação da Origem'}
                   </label>
-                  <select 
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" 
-                    value={formData.studioId} 
-                    onChange={e => setFormData({...formData, studioId: e.target.value})}
-                  >
-                    <option value="">{formData.type === 'exit' ? 'Selecione o Destino...' : 'Nenhum / Próprio'}</option>
-                    {studios.map(s => <option key={s.id} value={s.id}>{s.fantasyName} ({s.city})</option>)}
-                  </select>
+                  {formData.type === 'exit' ? (
+                      <select 
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" 
+                        value={formData.studioId} 
+                        onChange={e => setFormData({...formData, studioId: e.target.value})}
+                        required
+                      >
+                        <option value="">Selecione o Destino...</option>
+                        {studios.map(s => <option key={s.id} value={s.id}>{s.fantasyName} ({s.city})</option>)}
+                      </select>
+                  ) : (
+                      <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500" value="ENTRADA FORNECEDOR" readOnly />
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Cód. Rastreio</label>
                   <div className="relative">
                     <Truck className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
-                    <input type="text" className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm" value={formData.trackingCode} onChange={e => setFormData({...formData, trackingCode: e.target.value})} />
+                    <input type="text" className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm" value={formData.trackingCode} onChange={e => setFormData({...formData, trackingCode: e.target.value})} placeholder="Para envios ao studio" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Data Conferência</label>
-                  <input type="date" className="w-full px-3 py-2 border rounded-lg text-sm" value={formData.conferenceDate} onChange={e => setFormData({...formData, conferenceDate: e.target.value})} />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Observações Gerais</label>
+                  <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={formData.observations} onChange={e => setFormData({...formData, observations: e.target.value})} placeholder="Algum detalhe extra?" />
                 </div>
-              </div>
-
-              {formData.type === 'exit' && (
-                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex gap-3">
-                      <Info className="text-blue-600 shrink-0" size={18} />
-                      <p className="text-xs text-blue-800 leading-relaxed font-medium">
-                          <strong>Regra VOLL:</strong> Este lançamento registrará a baixa automática dos itens do saldo da <strong>VOLL MATRIZ</strong>.
-                      </p>
-                  </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Observações</label>
-                <textarea className="w-full px-3 py-2 border rounded-lg text-sm h-20 resize-none" value={formData.observations} onChange={e => setFormData({...formData, observations: e.target.value})} />
               </div>
             </div>
 
             <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3 rounded-b-xl">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
-              <button onClick={handleSave} disabled={isSaving} className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-lg font-bold text-sm flex items-center gap-2">
+              <button onClick={handleSave} disabled={isSaving} className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg shadow-teal-600/20">
                 {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                {formData.id ? 'Salvar Alterações' : 'Confirmar'}
+                Confirmar Lançamento
               </button>
             </div>
           </div>

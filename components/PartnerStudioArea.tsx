@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   LogOut, Calendar, MapPin, Loader2, Package, Building2, 
   ChevronRight, Inbox, Truck, Clock, CheckCircle2, User, Info,
-  ArrowDownCircle, ArrowUpCircle
+  ArrowDownCircle, ArrowUpCircle, CheckSquare, Save, X, MessageSquare
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { PartnerStudioSession, InventoryRecord } from '../types';
@@ -20,6 +20,11 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
   const [inventory, setInventory] = useState<InventoryRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // States para o processo de confirmação
+  const [confirmingRecord, setConfirmingRecord] = useState<InventoryRecord | null>(null);
+  const [confirmNote, setConfirmNote] = useState('');
+  const [isConfirming, setIsConfirming] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, [studio]);
@@ -27,14 +32,14 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 1. Buscar turmas vinculadas ao Studio (pelo nome fantasia)
+      // 1. Buscar turmas vinculadas ao Studio
       const { data: classesData } = await appBackend.client
         .from('crm_classes')
         .select('*')
         .eq('studio_mod_1', studio.fantasyName)
         .order('date_mod_1', { ascending: true });
 
-      // 2. Buscar envios de materiais (inventory records onde studioId = studio.id e type = exit)
+      // 2. Buscar envios de materiais (tipo 'exit')
       const { data: invData } = await appBackend.client
         .from('crm_inventory')
         .select('*')
@@ -44,12 +49,51 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
 
       setClasses(classesData || []);
       setInventory((invData || []).map((d: any) => ({
-        id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date, attachments: d.attachments
+        id: d.id, 
+        type: d.type, 
+        itemApostilaNova: d.item_apostila_nova, 
+        itemApostilaClassico: d.item_apostila_classico, 
+        itemSacochila: d.item_sacochila, 
+        itemLapis: d.item_lapis, 
+        registrationDate: d.registration_date, 
+        studioId: d.studio_id, 
+        trackingCode: d.tracking_code, 
+        observations: d.observations || '', 
+        conferenceDate: d.conference_date || '', 
+        attachments: d.attachments
       })));
     } catch (e) {
-      console.error("Erro ao carregar dados do studio:", e);
+      console.error("Erro ao carregar dados do portal:", e);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleConfirmReceipt = async () => {
+    if (!confirmingRecord) return;
+    
+    setIsConfirming(true);
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Atualiza o registro com a data de hoje e anexa a observação do parceiro
+        const updatedRecord: InventoryRecord = {
+            ...confirmingRecord,
+            conferenceDate: today,
+            observations: confirmNote.trim() 
+                ? `${confirmingRecord.observations ? confirmingRecord.observations + ' | ' : ''}Nota do Studio: ${confirmNote}`
+                : confirmingRecord.observations
+        };
+
+        await appBackend.saveInventoryRecord(updatedRecord);
+        await fetchData(); // Recarrega a lista
+        setConfirmingRecord(null);
+        setConfirmNote('');
+        alert("Recebimento confirmado com sucesso!");
+    } catch (e: any) {
+        alert(`Erro ao confirmar recebimento: ${e.message}`);
+    } finally {
+        setIsConfirming(false);
     }
   };
 
@@ -73,7 +117,7 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
         </div>
       </header>
 
-      {/* Tabs Navigation */}
+      {/* Tabs */}
       <div className="bg-white border-b border-slate-200 shrink-0">
           <div className="max-w-5xl mx-auto px-4 flex">
               <button 
@@ -100,10 +144,10 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                     <div className="space-y-4">
                         <div className="flex items-center justify-between mb-2">
                             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Calendar size={20} className="text-teal-600"/> Agenda de Cursos</h2>
-                            <span className="text-xs font-medium text-slate-400">{classes.length} turmas encontradas</span>
+                            <span className="text-xs font-medium text-slate-400">{classes.length} turmas</span>
                         </div>
                         {classes.length === 0 ? (
-                            <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-400">Nenhuma turma agendada para o seu studio no momento.</div>
+                            <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-400 font-medium">Nenhuma turma vinculada ao seu studio no momento.</div>
                         ) : (
                             classes.map(cls => (
                                 <div key={cls.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -140,7 +184,7 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                             <span className="text-xs font-medium text-slate-400">{inventory.length} remessas</span>
                         </div>
                         {inventory.length === 0 ? (
-                            <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-400">Nenhum material enviado para este studio ainda.</div>
+                            <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-400">Nenhum material enviado ainda.</div>
                         ) : (
                             inventory.map(record => (
                                 <div key={record.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
@@ -154,44 +198,56 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                                         </div>
                                         <div className="flex flex-col items-start md:items-end">
                                             <span className="text-[10px] font-bold text-slate-400 uppercase">Código de Rastreio</span>
-                                            <span className="text-sm font-mono font-bold text-teal-700">{record.trackingCode || 'Processando...'}</span>
+                                            <span className="text-sm font-mono font-bold text-teal-700">{record.trackingCode || 'S/ Código'}</span>
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                                        <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
+                                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase">Apostila Nova</p>
-                                            <p className="text-lg font-black text-slate-700">{record.itemApostilaNova}</p>
+                                            <p className="text-xl font-black text-slate-700">{record.itemApostilaNova}</p>
                                         </div>
-                                        <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
+                                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase">Apostila Clás.</p>
-                                            <p className="text-lg font-black text-slate-700">{record.itemApostilaClassico}</p>
+                                            <p className="text-xl font-black text-slate-700">{record.itemApostilaClassico}</p>
                                         </div>
-                                        <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
+                                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase">Sacochilas</p>
-                                            <p className="text-lg font-black text-slate-700">{record.itemSacochila}</p>
+                                            <p className="text-xl font-black text-slate-700">{record.itemSacochila}</p>
                                         </div>
-                                        <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
+                                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase">Lápis</p>
-                                            <p className="text-lg font-black text-slate-700">{record.itemLapis}</p>
+                                            <p className="text-xl font-black text-slate-700">{record.itemLapis}</p>
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                                        <div className="flex-1 w-full">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pt-4 border-t border-slate-50">
+                                        <div className="flex-1">
                                             {record.observations && (
-                                                <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded italic">Obs: {record.observations}</p>
+                                                <div className="flex gap-2 items-start text-xs text-slate-500 bg-slate-50 p-2 rounded-lg italic">
+                                                    <Info size={14} className="shrink-0 mt-0.5 text-slate-400" />
+                                                    <span>{record.observations}</span>
+                                                </div>
                                             )}
                                         </div>
-                                        <div className="shrink-0">
+                                        
+                                        <div className="shrink-0 flex items-center gap-3 w-full md:w-auto">
                                             {record.conferenceDate ? (
                                                 <div className="flex items-center gap-1.5 text-green-600 text-xs font-bold bg-green-50 px-3 py-1.5 rounded-full border border-green-200">
-                                                    <CheckCircle2 size={14} /> Conferido em {new Date(record.conferenceDate).toLocaleDateString()}
+                                                    <CheckCircle2 size={14} /> Recebido em {new Date(record.conferenceDate).toLocaleDateString()}
                                                 </div>
                                             ) : (
-                                                <div className="flex items-center gap-1.5 text-amber-600 text-xs font-bold bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200">
-                                                    <Clock size={14} /> Chegada Pendente
-                                                </div>
+                                                <>
+                                                    <div className="flex items-center gap-1.5 text-amber-600 text-xs font-bold bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200">
+                                                        <Clock size={14} /> Chegada Pendente
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => { setConfirmingRecord(record); setConfirmNote(''); }}
+                                                        className="flex-1 md:flex-none px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-2"
+                                                    >
+                                                        <CheckSquare size={16} /> Confirmar Recebimento
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     </div>
@@ -203,8 +259,85 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
             </div>
         )}
       </main>
+
+      {/* MODAL DE CONFIRMAÇÃO */}
+      {confirmingRecord && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <CheckSquare className="text-teal-600" size={20} />
+                        <h3 className="font-bold text-slate-800">Confirmar Recebimento</h3>
+                      </div>
+                      <button onClick={() => setConfirmingRecord(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors">
+                          <X size={20}/>
+                      </button>
+                  </div>
+                  
+                  <div className="p-6 space-y-6">
+                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex gap-3">
+                          <Info size={20} className="text-blue-600 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs text-blue-800 font-bold mb-1">Atenção:</p>
+                            <p className="text-xs text-blue-800 leading-relaxed">
+                                Você está confirmando a chegada física dos materiais hoje, <strong>{new Date().toLocaleDateString()}</strong>. Verifique se as quantidades batem com o resumo abaixo.
+                            </p>
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2 text-center">
+                          <div className="p-2 border rounded-lg bg-slate-50 flex flex-col">
+                              <span className="text-[8px] font-black text-slate-400 uppercase">Nova</span>
+                              <span className="font-bold text-slate-700">{confirmingRecord.itemApostilaNova}</span>
+                          </div>
+                          <div className="p-2 border rounded-lg bg-slate-50 flex flex-col">
+                              <span className="text-[8px] font-black text-slate-400 uppercase">Clás.</span>
+                              <span className="font-bold text-slate-700">{confirmingRecord.itemApostilaClassico}</span>
+                          </div>
+                          <div className="p-2 border rounded-lg bg-slate-50 flex flex-col">
+                              <span className="text-[8px] font-black text-slate-400 uppercase">Saco.</span>
+                              <span className="font-bold text-slate-700">{confirmingRecord.itemSacochila}</span>
+                          </div>
+                          <div className="p-2 border rounded-lg bg-slate-50 flex flex-col">
+                              <span className="text-[8px] font-black text-slate-400 uppercase">Lápis</span>
+                              <span className="font-bold text-slate-700">{confirmingRecord.itemLapis}</span>
+                          </div>
+                      </div>
+
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider flex items-center gap-2">
+                              <MessageSquare size={14} className="text-teal-600" /> Observações do Studio (Opcional)
+                          </label>
+                          <textarea 
+                            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm h-28 resize-none outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all bg-slate-50"
+                            placeholder="Algum item faltante? A caixa chegou danificada? Deixe seu feedback aqui..."
+                            value={confirmNote}
+                            onChange={e => setConfirmNote(e.target.value)}
+                          ></textarea>
+                      </div>
+                  </div>
+
+                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                      <button 
+                        onClick={() => setConfirmingRecord(null)} 
+                        className="px-6 py-2 text-slate-600 hover:bg-slate-200 rounded-xl font-bold text-sm transition-colors"
+                      >
+                          Cancelar
+                      </button>
+                      <button 
+                        onClick={handleConfirmReceipt}
+                        disabled={isConfirming}
+                        className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all disabled:opacity-50"
+                      >
+                          {isConfirming ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                          Confirmar Agora
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
       
-      <footer className="mt-auto p-6 text-center bg-white border-t border-slate-100 no-print">
+      <footer className="mt-auto p-8 text-center bg-white border-t border-slate-100 no-print">
           <p className="text-xs text-slate-400">Sistema VOLL Pilates Group &copy; {new Date().getFullYear()}</p>
           <div className="mt-2 flex justify-center gap-4 text-[10px] font-bold text-teal-600 uppercase tracking-widest">
               <span>Matriz</span>

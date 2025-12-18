@@ -275,8 +275,51 @@ export const appBackend = {
       if (error) throw error;
   },
 
-  // --- ROLES & PERMISSIONS ---
+  // --- WHATSAPP CONFIG (GLOBAL CLOUD STORAGE) ---
 
+  saveWhatsAppConfig: async (config: any): Promise<void> => {
+      if (!isConfigured) {
+          localStorage.setItem('whatsapp_config', JSON.stringify(config));
+          return;
+      }
+
+      const payload = {
+          id: 'singleton', // only one config row
+          access_token: config.accessToken,
+          phone_number_id: config.phoneNumberId,
+          waba_id: config.wabaId,
+          webhook_verify_token: config.webhookVerifyToken,
+          updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase.from('app_whatsapp_config').upsert(payload);
+      if (error) throw error;
+  },
+
+  getWhatsAppConfig: async (): Promise<any> => {
+      if (!isConfigured) {
+          const saved = localStorage.getItem('whatsapp_config');
+          return saved ? JSON.parse(saved) : null;
+      }
+
+      const { data, error } = await supabase
+          .from('app_whatsapp_config')
+          .select('*')
+          .eq('id', 'singleton')
+          .single();
+      
+      if (error || !data) return null;
+
+      return {
+          accessToken: data.access_token,
+          phoneNumberId: data.phone_number_id,
+          wabaId: data.waba_id,
+          webhookVerifyToken: data.webhook_verify_token
+      };
+  },
+
+  // --- ROLES & PERMISSIONS ---
+  // ... rest of file (kept same)
   getRoles: async (): Promise<Role[]> => {
     if (!isConfigured) return [];
     
@@ -420,7 +463,8 @@ export const appBackend = {
       agency: d.agency,
       account: d.account,
       beneficiary: d.beneficiary,
-      pix_key: d.pix_key,
+      /* Fix: Interface PartnerStudio uses camelCase property names. Mapping from snake_case database fields to camelCase. */
+      pixKey: d.pix_key,
       hasReformer: d.has_reformer,
       qtyReformer: d.qty_reformer,
       hasLadderBarrel: d.has_ladder_barrel,
@@ -456,7 +500,7 @@ export const appBackend = {
       state: studio.state,
       country: studio.country,
       size_m2: studio.sizeM2,
-      student_capacity: studio.student_capacity,
+      student_capacity: studio.studentCapacity,
       rent_value: studio.rentValue,
       methodology: studio.methodology,
       studio_type: studio.studioType,
@@ -465,6 +509,7 @@ export const appBackend = {
       agency: studio.agency,
       account: studio.account,
       beneficiary: studio.beneficiary,
+      /* Fix: Property names on studio (PartnerStudio) are camelCase, while database payload uses snake_case. */
       pix_key: studio.pixKey,
       has_reformer: studio.hasReformer,
       qty_reformer: studio.qtyReformer,
@@ -948,7 +993,7 @@ export const appBackend = {
     if (!isConfigured) {
       const certs = JSON.parse(localStorage.getItem('app_certificates') || '[]');
       const filtered = certs.filter((c: CertificateModel) => c.id !== id);
-      localStorage.setItem('app_certificates', JSON.stringify(filtered));
+      localStorage.setItem('app_certificates', JSON.stringify(certs));
       return;
     }
 
@@ -1112,7 +1157,7 @@ export const appBackend = {
         eventId: d.event_id,
         date: d.date,
         title: d.title,
-        maxSelections: d.max_selections
+        max_selections: d.max_selections
     }));
   },
 

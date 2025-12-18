@@ -335,6 +335,12 @@ ALTER TABLE public.crm_companies ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total companies" ON public.crm_companies;
 CREATE POLICY "Acesso total companies" ON public.crm_companies FOR ALL USING (true) WITH CHECK (true);
 
+-- TABELA DE CONFIGURAÇÃO DO WHATSAPP
+CREATE TABLE IF NOT EXISTS public.app_whatsapp_config (id text PRIMARY KEY DEFAULT 'singleton', created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), access_token text, phone_number_id text, waba_id text, webhook_verify_token text);
+ALTER TABLE public.app_whatsapp_config ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total whatsapp_config" ON public.app_whatsapp_config;
+CREATE POLICY "Acesso total whatsapp_config" ON public.app_whatsapp_config FOR ALL USING (true) WITH CHECK (true);
+
 -- TABELA DE NÍVEIS DE INSTRUTOR
 CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), name text NOT NULL, honorarium numeric DEFAULT 0, observations text);
 ALTER TABLE public.crm_instructor_levels ENABLE ROW LEVEL SECURITY;
@@ -391,7 +397,7 @@ NOTIFY pgrst, 'reload config';
             <button onClick={() => setActiveTab('database')} className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'database' ? "bg-white text-amber-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Database size={16} /> Banco de Dados</button>
         </div>
       </div>
-
+      {/* Rest of component kept same... */}
       <div className="max-w-4xl space-y-8">
         {activeTab === 'visual' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">

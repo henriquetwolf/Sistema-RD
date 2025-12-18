@@ -8,6 +8,7 @@ import {
   LayoutGrid, List, Palette, Trash2, GripHorizontal, HelpCircle, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2
 } from 'lucide-react';
 import clsx from 'clsx';
+import { appBackend } from '../services/appBackend';
 
 // --- TYPES (Mocking Backend Structure) ---
 
@@ -139,6 +140,7 @@ export const WhatsAppInbox: React.FC = () => {
       wabaId: '',
       webhookVerifyToken: 'voll_secret_token_123'
   });
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -150,11 +152,24 @@ export const WhatsAppInbox: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [selectedChat?.messages]);
 
-  // Load Config Mock
+  // Load Config on mount or when settings open
   useEffect(() => {
-      const saved = localStorage.getItem('whatsapp_config');
-      if (saved) setConfig(JSON.parse(saved));
+      loadConfig();
   }, []);
+
+  const loadConfig = async () => {
+      setIsLoadingConfig(true);
+      try {
+          const cloudConfig = await appBackend.getWhatsAppConfig();
+          if (cloudConfig) {
+              setConfig(cloudConfig);
+          }
+      } catch (e) {
+          console.error("Erro ao carregar configuração", e);
+      } finally {
+          setIsLoadingConfig(false);
+      }
+  };
 
   const handleSendMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -184,14 +199,17 @@ export const WhatsAppInbox: React.FC = () => {
     setIsNoteMode(false);
   };
 
-  const handleSaveConfig = () => {
+  const handleSaveConfig = async () => {
       setIsSavingConfig(true);
-      setTimeout(() => {
-          localStorage.setItem('whatsapp_config', JSON.stringify(config));
+      try {
+          await appBackend.saveWhatsAppConfig(config);
           setIsSavingConfig(false);
           setShowSettings(false);
-          alert("Configurações salvas! O sistema agora está pronto para receber webhooks.");
-      }, 1000);
+          alert("Configurações salvas no banco de dados! Todos os usuários agora verão as mesmas credenciais.");
+      } catch (e: any) {
+          alert(`Erro ao salvar: ${e.message}`);
+          setIsSavingConfig(false);
+      }
   };
 
   // --- DRAG AND DROP LOGIC ---
@@ -306,199 +324,208 @@ export const WhatsAppInbox: React.FC = () => {
 
                   <div className="p-0 overflow-y-auto custom-scrollbar flex-1 bg-slate-50">
                       
-                      {/* TAB: CONNECTION */}
-                      {settingsTab === 'connection' && (
-                          <div className="p-6 space-y-6">
-                              
-                              {/* Warning about Temp Token */}
-                              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm flex gap-3">
-                                  <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
-                                  <div className="text-amber-800 text-xs">
-                                      <strong>Atenção:</strong> O token exibido na tela inicial do painel da Meta expira em 24 horas. 
-                                      Para uma conexão estável, você deve criar um <strong>Usuário do Sistema</strong> e gerar um token permanente.
-                                  </div>
-                              </div>
-
-                              <div className="space-y-4">
-                                  <div className="flex justify-between items-center">
-                                      <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2">
-                                          <Lock size={16} /> Credenciais da API
-                                      </h3>
-                                      <a 
-                                        href="https://developers.facebook.com/apps/" 
-                                        target="_blank" 
-                                        rel="noreferrer"
-                                        className="text-xs text-indigo-600 hover:underline flex items-center gap-1 font-medium"
-                                      >
-                                          Abrir Painel Meta <ExternalLink size={12}/>
-                                      </a>
-                                  </div>
-
-                                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-600 mb-1">Access Token (Permanente)</label>
-                                          <input 
-                                              type="password" 
-                                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
-                                              placeholder="EAAG..."
-                                              value={config.accessToken}
-                                              onChange={e => setConfig({...config, accessToken: e.target.value})}
-                                          />
-                                          <button 
-                                            onClick={() => setShowTokenHelp(!showTokenHelp)}
-                                            className="text-[10px] text-teal-600 font-bold mt-1 flex items-center gap-1 hover:underline"
-                                          >
-                                              <HelpCircle size={10} /> Como obter token permanente?
-                                          </button>
-                                          
-                                          {/* Token Help Accordion */}
-                                          {showTokenHelp && (
-                                              <div className="mt-2 p-3 bg-slate-50 rounded border border-slate-200 text-xs text-slate-600 space-y-1 animate-in fade-in slide-in-from-top-1">
-                                                  <p>1. No Business Manager, vá em <strong>Configurações do Negócio</strong>.</p>
-                                                  <p>2. Em <strong>Usuários</strong> {'>'} <strong>Usuários do Sistema</strong>, adicione um usuário "Admin".</p>
-                                                  <p>3. Clique em "Gerar novo token" e selecione o app criado.</p>
-                                                  <p>4. Marque as permissões: <code>whatsapp_business_messaging</code> e <code>whatsapp_business_management</code>.</p>
-                                                  <p>5. Copie o token gerado e cole acima.</p>
-                                              </div>
-                                          )}
-                                      </div>
-
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                          <div>
-                                              <label className="block text-xs font-bold text-slate-600 mb-1">Phone Number ID</label>
-                                              <input 
-                                                  type="text" 
-                                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
-                                                  placeholder="Ex: 1059..."
-                                                  value={config.phoneNumberId}
-                                                  onChange={e => setConfig({...config, phoneNumberId: e.target.value})}
-                                              />
-                                              <p className="text-[10px] text-slate-400 mt-1">Encontrado em: WhatsApp {'>'} Configuração da API</p>
-                                          </div>
-
-                                          <div>
-                                              <label className="block text-xs font-bold text-slate-600 mb-1">WABA ID (Business Account)</label>
-                                              <input 
-                                                  type="text" 
-                                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
-                                                  placeholder="Ex: 1098..."
-                                                  value={config.wabaId}
-                                                  onChange={e => setConfig({...config, wabaId: e.target.value})}
-                                              />
-                                              <p className="text-[10px] text-slate-400 mt-1">Encontrado em: WhatsApp {'>'} Configuração da API</p>
-                                          </div>
-                                      </div>
-                                  </div>
-                              </div>
-
-                              {/* Webhook Section */}
-                              <div className="space-y-4 pt-2">
-                                  <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2">
-                                      <ShieldCheck size={16} /> Configuração do Webhook
-                                  </h3>
-                                  
-                                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                                      <div className="bg-blue-50 text-blue-800 text-xs p-3 rounded border border-blue-100 mb-2">
-                                          No painel da Meta, vá em <strong>WhatsApp {'>'} Configuração</strong> e configure o Webhook com os dados abaixo.
-                                      </div>
-
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                          <div>
-                                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Callback URL</label>
-                                              <div className="flex bg-slate-100 border border-slate-200 rounded-lg p-2 items-center justify-between group hover:border-slate-300 transition-colors">
-                                                  <span className="text-xs font-mono text-slate-600 truncate select-all">https://api.vollpilates.com.br/webhook/whatsapp</span>
-                                                  <button 
-                                                    onClick={() => navigator.clipboard.writeText("https://api.vollpilates.com.br/webhook/whatsapp")}
-                                                    className="text-slate-400 hover:text-teal-600 p-1" 
-                                                    title="Copiar"
-                                                  >
-                                                      <Copy size={14} />
-                                                  </button>
-                                              </div>
-                                          </div>
-                                          <div>
-                                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Verify Token</label>
-                                              <div className="flex bg-slate-100 border border-slate-200 rounded-lg p-2 items-center justify-between group hover:border-slate-300 transition-colors">
-                                                  <span className="text-xs font-mono text-slate-600 truncate select-all">{config.webhookVerifyToken}</span>
-                                                  <button 
-                                                    onClick={() => navigator.clipboard.writeText(config.webhookVerifyToken)}
-                                                    className="text-slate-400 hover:text-teal-600 p-1" 
-                                                    title="Copiar"
-                                                  >
-                                                      <Copy size={14} />
-                                                  </button>
-                                              </div>
-                                          </div>
-                                      </div>
-
-                                      <div className="pt-2">
-                                          <p className="text-xs font-bold text-slate-600 mb-2">Campos para Assinar (Webhooks Fields):</p>
-                                          <div className="flex flex-wrap gap-2">
-                                              <span className="bg-green-50 text-green-700 border border-green-200 px-2 py-1 rounded text-[10px] font-mono flex items-center gap-1"><CheckCircle2 size={10}/> messages</span>
-                                              <span className="bg-green-50 text-green-700 border border-green-200 px-2 py-1 rounded text-[10px] font-mono flex items-center gap-1"><CheckCircle2 size={10}/> message_status</span>
-                                              <span className="bg-slate-50 text-slate-500 border border-slate-200 px-2 py-1 rounded text-[10px] font-mono">message_deliveries</span>
-                                              <span className="bg-slate-50 text-slate-500 border border-slate-200 px-2 py-1 rounded text-[10px] font-mono">message_reads</span>
-                                          </div>
-                                      </div>
-                                  </div>
-                              </div>
+                      {isLoadingConfig ? (
+                          <div className="flex flex-col items-center justify-center h-64 gap-3">
+                              <Loader2 className="animate-spin text-teal-600" size={32} />
+                              <p className="text-sm text-slate-500">Buscando configurações na nuvem...</p>
                           </div>
-                      )}
+                      ) : (
+                        <>
+                            {/* TAB: CONNECTION */}
+                            {settingsTab === 'connection' && (
+                                <div className="p-6 space-y-6">
+                                    
+                                    {/* Warning about Temp Token */}
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm flex gap-3">
+                                        <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+                                        <div className="text-amber-800 text-xs">
+                                            <strong>Atenção:</strong> O token exibido na tela inicial do painel da Meta expira em 24 horas. 
+                                            Para uma conexão estável, você deve criar um <strong>Usuário do Sistema</strong> e gerar um token permanente.
+                                        </div>
+                                    </div>
 
-                      {/* TAB: TAGS */}
-                      {settingsTab === 'tags' && (
-                          <div className="p-6 space-y-6">
-                              <div className="flex gap-2 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
-                                  <div className="flex-1">
-                                      <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Nova Etiqueta</label>
-                                      <input 
-                                          type="text" 
-                                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                                          placeholder="Ex: Urgente, Pós-Venda..."
-                                          value={newTagName}
-                                          onChange={e => setNewTagName(e.target.value)}
-                                      />
-                                  </div>
-                                  <div className="w-40">
-                                      <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Estilo</label>
-                                      <select 
-                                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-                                          value={newTagColor}
-                                          onChange={e => setNewTagColor(e.target.value)}
-                                      >
-                                          <option value="bg-slate-100 text-slate-700 border-slate-200">Cinza</option>
-                                          <option value="bg-blue-100 text-blue-700 border-blue-200">Azul</option>
-                                          <option value="bg-green-100 text-green-700 border-green-200">Verde</option>
-                                          <option value="bg-amber-100 text-amber-700 border-amber-200">Laranja</option>
-                                          <option value="bg-red-100 text-red-700 border-red-200">Vermelho</option>
-                                          <option value="bg-purple-100 text-purple-700 border-purple-200">Roxo</option>
-                                      </select>
-                                  </div>
-                                  <button onClick={handleAddTag} className="bg-teal-600 hover:bg-teal-700 text-white p-2.5 rounded-lg transition-colors">
-                                      <Plus size={18} />
-                                  </button>
-                              </div>
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2">
+                                                <Lock size={16} /> Credenciais da API
+                                            </h3>
+                                            <a 
+                                                href="https://developers.facebook.com/apps/" 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="text-xs text-indigo-600 hover:underline flex items-center gap-1 font-medium"
+                                            >
+                                                Abrir Painel Meta <ExternalLink size={12}/>
+                                            </a>
+                                        </div>
 
-                              <div>
-                                  <h3 className="font-bold text-slate-700 mb-3 text-sm uppercase">Etiquetas Existentes</h3>
-                                  <div className="space-y-2">
-                                      {tags.map(tag => (
-                                          <div key={tag.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-lg hover:border-slate-300 transition-colors group">
-                                              <div className="flex items-center gap-3">
-                                                  <Palette size={16} className="text-slate-400" />
-                                                  <span className={clsx("text-xs font-bold px-2 py-1 rounded border", tag.color)}>
-                                                      {tag.name}
-                                                  </span>
-                                              </div>
-                                              <button onClick={() => handleDeleteTag(tag.id)} className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                  <Trash2 size={16} />
-                                              </button>
-                                          </div>
-                                      ))}
-                                      {tags.length === 0 && <p className="text-sm text-slate-400 italic">Nenhuma etiqueta cadastrada.</p>}
-                                  </div>
-                              </div>
-                          </div>
+                                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-600 mb-1">Access Token (Permanente)</label>
+                                                <input 
+                                                    type="password" 
+                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
+                                                    placeholder="EAAG..."
+                                                    value={config.accessToken}
+                                                    onChange={e => setConfig({...config, accessToken: e.target.value})}
+                                                />
+                                                <button 
+                                                    onClick={() => setShowTokenHelp(!showTokenHelp)}
+                                                    className="text-[10px] text-teal-600 font-bold mt-1 flex items-center gap-1 hover:underline"
+                                                >
+                                                    <HelpCircle size={10} /> Como obter token permanente?
+                                                </button>
+                                                
+                                                {/* Token Help Accordion */}
+                                                {showTokenHelp && (
+                                                    <div className="mt-2 p-3 bg-slate-50 rounded border border-slate-200 text-xs text-slate-600 space-y-1 animate-in fade-in slide-in-from-top-1">
+                                                        <p>1. No Business Manager, vá em <strong>Configurações do Negócio</strong>.</p>
+                                                        <p>2. Em <strong>Usuários</strong> {'>'} <strong>Usuários do Sistema</strong>, adicione um usuário "Admin".</p>
+                                                        <p>3. Clique em "Gerar novo token" e selecione o app criado.</p>
+                                                        <p>4. Marque as permissões: <code>whatsapp_business_messaging</code> e <code>whatsapp_business_management</code>.</p>
+                                                        <p>5. Copie o token gerado e cole acima.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">Phone Number ID</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
+                                                        placeholder="Ex: 1059..."
+                                                        value={config.phoneNumberId}
+                                                        onChange={e => setConfig({...config, phoneNumberId: e.target.value})}
+                                                    />
+                                                    <p className="text-[10px] text-slate-400 mt-1">Encontrado em: WhatsApp {'>'} Configuração da API</p>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">WABA ID (Business Account)</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
+                                                        placeholder="Ex: 1098..."
+                                                        value={config.wabaId}
+                                                        onChange={e => setConfig({...config, wabaId: e.target.value})}
+                                                    />
+                                                    <p className="text-[10px] text-slate-400 mt-1">Encontrado em: WhatsApp {'>'} Configuração da API</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Webhook Section */}
+                                    <div className="space-y-4 pt-2">
+                                        <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2">
+                                            <ShieldCheck size={16} /> Configuração do Webhook
+                                        </h3>
+                                        
+                                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                                            <div className="bg-blue-50 text-blue-800 text-xs p-3 rounded border border-blue-100 mb-2">
+                                                No painel da Meta, vá em <strong>WhatsApp {'>'} Configuração</strong> e configure o Webhook com os dados abaixo.
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Callback URL</label>
+                                                    <div className="flex bg-slate-100 border border-slate-200 rounded-lg p-2 items-center justify-between group hover:border-slate-300 transition-colors">
+                                                        <span className="text-xs font-mono text-slate-600 truncate select-all">https://api.vollpilates.com.br/webhook/whatsapp</span>
+                                                        <button 
+                                                            onClick={() => navigator.clipboard.writeText("https://api.vollpilates.com.br/webhook/whatsapp")}
+                                                            className="text-slate-400 hover:text-teal-600 p-1" 
+                                                            title="Copiar"
+                                                        >
+                                                            <Copy size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Verify Token</label>
+                                                    <div className="flex bg-slate-100 border border-slate-200 rounded-lg p-2 items-center justify-between group hover:border-slate-300 transition-colors">
+                                                        <span className="text-xs font-mono text-slate-600 truncate select-all">{config.webhookVerifyToken}</span>
+                                                        <button 
+                                                            onClick={() => navigator.clipboard.writeText(config.webhookVerifyToken)}
+                                                            className="text-slate-400 hover:text-teal-600 p-1" 
+                                                            title="Copiar"
+                                                        >
+                                                            <Copy size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="pt-2">
+                                                <p className="text-xs font-bold text-slate-600 mb-2">Campos para Assinar (Webhooks Fields):</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <span className="bg-green-50 text-green-700 border border-green-200 px-2 py-1 rounded text-[10px] font-mono flex items-center gap-1"><CheckCircle2 size={10}/> messages</span>
+                                                    <span className="bg-green-50 text-green-700 border border-green-200 px-2 py-1 rounded text-[10px] font-mono flex items-center gap-1"><CheckCircle2 size={10}/> message_status</span>
+                                                    <span className="bg-slate-50 text-slate-500 border border-slate-200 px-2 py-1 rounded text-[10px] font-mono">message_deliveries</span>
+                                                    <span className="bg-slate-50 text-slate-500 border border-slate-200 px-2 py-1 rounded text-[10px] font-mono">message_reads</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB: TAGS */}
+                            {settingsTab === 'tags' && (
+                                <div className="p-6 space-y-6">
+                                    <div className="flex gap-2 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Nova Etiqueta</label>
+                                            <input 
+                                                type="text" 
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                                placeholder="Ex: Urgente, Pós-Venda..."
+                                                value={newTagName}
+                                                onChange={e => setNewTagName(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="w-40">
+                                            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Estilo</label>
+                                            <select 
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                                value={newTagColor}
+                                                onChange={e => setNewTagColor(e.target.value)}
+                                            >
+                                                <option value="bg-slate-100 text-slate-700 border-slate-200">Cinza</option>
+                                                <option value="bg-blue-100 text-blue-700 border-blue-200">Azul</option>
+                                                <option value="bg-green-100 text-green-700 border-green-200">Verde</option>
+                                                <option value="bg-amber-100 text-amber-700 border-amber-200">Laranja</option>
+                                                <option value="bg-red-100 text-red-700 border-red-200">Vermelho</option>
+                                                <option value="bg-purple-100 text-purple-700 border-purple-200">Roxo</option>
+                                            </select>
+                                        </div>
+                                        <button onClick={handleAddTag} className="bg-teal-600 hover:bg-teal-700 text-white p-2.5 rounded-lg transition-colors">
+                                            <Plus size={18} />
+                                        </button>
+                                    </div>
+
+                                    <div>
+                                        <h3 className="font-bold text-slate-700 mb-3 text-sm uppercase">Etiquetas Existentes</h3>
+                                        <div className="space-y-2">
+                                            {tags.map(tag => (
+                                                <div key={tag.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-lg hover:border-slate-300 transition-colors group">
+                                                    <div className="flex items-center gap-3">
+                                                        <Palette size={16} className="text-slate-400" />
+                                                        <span className={clsx("text-xs font-bold px-2 py-1 rounded border", tag.color)}>
+                                                            {tag.name}
+                                                        </span>
+                                                    </div>
+                                                    <button onClick={() => handleDeleteTag(tag.id)} className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            {tags.length === 0 && <p className="text-sm text-slate-400 italic">Nenhuma etiqueta cadastrada.</p>}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </>
                       )}
 
                   </div>
@@ -507,7 +534,7 @@ export const WhatsAppInbox: React.FC = () => {
                       <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
                       <button 
                           onClick={handleSaveConfig}
-                          disabled={isSavingConfig}
+                          disabled={isSavingConfig || isLoadingConfig}
                           className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2"
                       >
                           {isSavingConfig ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
@@ -786,7 +813,7 @@ export const WhatsAppInbox: React.FC = () => {
                     onClick={() => setIsNoteMode(!isNoteMode)}
                     className={clsx(
                         "text-xs px-2 py-1 rounded flex items-center gap-1 transition-colors font-bold",
-                        isNoteMode ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        isNoteMode ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     )}
                 >
                     {isNoteMode ? 'Modo Nota Interna (Privado)' : 'Nota Interna'}

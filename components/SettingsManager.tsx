@@ -341,6 +341,16 @@ ALTER TABLE public.app_whatsapp_config ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total whatsapp_config" ON public.app_whatsapp_config;
 CREATE POLICY "Acesso total whatsapp_config" ON public.app_whatsapp_config FOR ALL USING (true) WITH CHECK (true);
 
+-- TABELAS DE MENSAGENS DO WHATSAPP
+CREATE TABLE IF NOT EXISTS public.crm_whatsapp_chats (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), wa_id text UNIQUE, contact_name text, contact_phone text, last_message text, unread_count int DEFAULT 0, status text DEFAULT 'open', crm_stage text DEFAULT 'Novo Lead');
+CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), chat_id uuid REFERENCES public.crm_whatsapp_chats(id) ON DELETE CASCADE, sender_type text CHECK (sender_type IN ('user', 'agent', 'system')), text text, wa_message_id text, status text DEFAULT 'sent');
+ALTER TABLE public.crm_whatsapp_chats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crm_whatsapp_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total whatsapp_chats" ON public.crm_whatsapp_chats;
+CREATE POLICY "Acesso total whatsapp_chats" ON public.crm_whatsapp_chats FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Acesso total whatsapp_messages" ON public.crm_whatsapp_messages;
+CREATE POLICY "Acesso total whatsapp_messages" ON public.crm_whatsapp_messages FOR ALL USING (true) WITH CHECK (true);
+
 -- TABELA DE NÍVEIS DE INSTRUTOR
 CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), name text NOT NULL, honorarium numeric DEFAULT 0, observations text);
 ALTER TABLE public.crm_instructor_levels ENABLE ROW LEVEL SECURITY;
@@ -397,7 +407,7 @@ NOTIFY pgrst, 'reload config';
             <button onClick={() => setActiveTab('database')} className={clsx("px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 whitespace-nowrap", activeTab === 'database' ? "bg-white text-amber-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Database size={16} /> Banco de Dados</button>
         </div>
       </div>
-      {/* Rest of component kept same... */}
+      
       <div className="max-w-4xl space-y-8">
         {activeTab === 'visual' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
@@ -616,7 +626,7 @@ NOTIFY pgrst, 'reload config';
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
                 <div className="p-6 border-b border-slate-100 flex items-center gap-3"><BarChart3 className="text-yellow-600" /><h3 className="text-lg font-bold text-slate-800">Conexão Power BI</h3></div>
                 <div className="p-8 space-y-6">
-                    <p className="text-sm text-slate-600">No Power BI, selecione a opção de Obter Dados &gt; Web &gt; Avançado e use os valores abaixo:</p>
+                    <p className="text-sm text-slate-600">No Power BI, selecione a option de Obter Dados &gt; Web &gt; Avançado e use os valores abaixo:</p>
                     <div className="space-y-4">
                         <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded text-xs font-mono" placeholder="URL do Projeto Supabase" value={pbiConfig.url} onChange={e => setPbiConfig({...pbiConfig, url: e.target.value})} />
                         <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded text-xs font-mono" placeholder="Nome da Tabela" value={pbiConfig.tableName} onChange={e => setPbiConfig({...pbiConfig, tableName: e.target.value})} />

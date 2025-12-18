@@ -5,7 +5,7 @@ import {
   Check, CheckCheck, User, Phone, Mail, Tag, Clock, ChevronRight, 
   MoreHorizontal, Smile, Archive, AlertCircle, RefreshCw, Briefcase,
   X, Plus, Lock, Settings, Save, Smartphone, Globe, ShieldCheck, Copy, ExternalLink, Loader2,
-  LayoutGrid, List, Palette, Trash2, GripHorizontal, HelpCircle, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2
+  LayoutGrid, List, Palette, Trash2, GripHorizontal, HelpCircle, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Code, Terminal
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -53,6 +53,7 @@ export const WhatsAppInbox: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [showWebhookHelp, setShowWebhookHelp] = useState(false);
 
   // New Chat Form
   const [newChatPhone, setNewChatPhone] = useState('');
@@ -161,7 +162,6 @@ export const WhatsAppInbox: React.FC = () => {
   const handleSaveConfig = async () => {
       setIsSavingConfig(true);
       try {
-          // Aplicar TRIM em todos os campos para evitar erros de parser de token
           const cleanConfig = {
               accessToken: config.accessToken.trim(),
               phoneNumberId: config.phoneNumberId.trim(),
@@ -171,7 +171,7 @@ export const WhatsAppInbox: React.FC = () => {
           await appBackend.saveWhatsAppConfig(cleanConfig);
           setConfig(cleanConfig);
           setShowSettings(false);
-          alert("Configurações salvas e campos limpos de espaços!");
+          alert("Configurações salvas!");
       } catch (e: any) {
           alert(`Erro ao salvar: ${e.message}`);
       } finally {
@@ -202,19 +202,91 @@ export const WhatsAppInbox: React.FC = () => {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // --- HELPERS PARA O WEBHOOK ---
+  const supabaseProjectRef = (appBackend.client as any).supabaseUrl?.match(/https:\/\/(.*?)\.supabase\.co/)?.[1] || 'SEU-PROJETO';
+  const callbackUrl = `https://${supabaseProjectRef}.functions.supabase.co/whatsapp-webhook`;
+
+  const edgeFunctionCode = `
+// Crie uma pasta 'supabase/functions/whatsapp-webhook/index.ts'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const VERIFY_TOKEN = "${config.webhookVerifyToken || 'seu_token_aqui'}";
+
+serve(async (req) => {
+  const { method } = req;
+
+  // 1. Verificação da Meta (GET)
+  if (method === "GET") {
+    const url = new URL(req.url);
+    const mode = url.searchParams.get("hub.mode");
+    const token = url.searchParams.get("hub.verify_token");
+    const challenge = url.searchParams.get("hub.challenge");
+
+    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      return new Response(challenge, { status: 200 });
+    }
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  // 2. Recebimento de Mensagem (POST)
+  if (method === "POST") {
+    try {
+      const body = await req.json();
+      const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+      const contact = body.entry?.[0]?.changes?.[0]?.value?.contacts?.[0];
+
+      if (message && message.type === 'text') {
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+
+        const waId = message.from; // Número do cliente
+        const text = message.text.body;
+        const contactName = contact?.profile?.name || waId;
+
+        // Buscar ou criar chat
+        let { data: chat } = await supabase.from('crm_whatsapp_chats').select('id').eq('wa_id', waId).single();
+        if (!chat) {
+          const { data: newChat } = await supabase.from('crm_whatsapp_chats').insert([{
+             wa_id: waId, contact_name: contactName, contact_phone: waId, last_message: text, status: 'open'
+          }]).select().single();
+          chat = newChat;
+        }
+
+        // Inserir mensagem
+        await supabase.from('crm_whatsapp_messages').insert([{
+          chat_id: chat.id, text: text, sender_type: 'user', status: 'received'
+        }]);
+
+        // Atualizar chat
+        await supabase.from('crm_whatsapp_chats').update({ 
+            last_message: text, updated_at: new Date().toISOString() 
+        }).eq('id', chat.id);
+      }
+      return new Response("OK", { status: 200 });
+    } catch (e) {
+      return new Response("Error", { status: 500 });
+    }
+  }
+  return new Response("Method not allowed", { status: 405 });
+});
+  `;
+
   // --- RENDER CONFIG SCREEN ---
   if (showSettings) {
       return (
-          <div className="h-full bg-slate-50 flex flex-col items-center justify-center p-6 animate-in fade-in">
-              <div className="max-w-3xl w-full bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+          <div className="h-full bg-slate-50 flex flex-col items-center p-6 overflow-y-auto animate-in fade-in custom-scrollbar">
+              <div className="max-w-4xl w-full bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden flex flex-col mb-10">
                   <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                       <div className="flex items-center gap-3">
                           <div className="bg-teal-100 p-2 rounded-full text-teal-700">
                               <Settings size={20} />
                           </div>
                           <div>
-                              <h2 className="text-lg font-bold text-slate-800">Configurações do Atendimento</h2>
-                              <p className="text-xs text-slate-500">Integração Oficial (WhatsApp Cloud API)</p>
+                              <h2 className="text-lg font-bold text-slate-800">Conectar WhatsApp</h2>
+                              <p className="text-xs text-slate-500">Integração Oficial Cloud API</p>
                           </div>
                       </div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600">
@@ -222,77 +294,105 @@ export const WhatsAppInbox: React.FC = () => {
                       </button>
                   </div>
 
-                  <div className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-50 space-y-6">
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm flex gap-3">
-                          <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
-                          <div className="text-amber-800 text-xs font-medium">
-                              Certifique-se de usar um <strong>Token Permanente</strong> (Gerado em Usuários do Sistema no Gerenciador de Negócios). Tokens temporários duram apenas 24h.
-                          </div>
-                      </div>
-
+                  <div className="p-6 space-y-6 bg-slate-50">
+                      {/* PASSO 1: CREDENCIAIS */}
                       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                           <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2 mb-2">
-                              <Lock size={16} /> Credenciais da API
+                              <Lock size={16} className="text-teal-600" /> 1. Credenciais da Meta
                           </h3>
-                          <div>
-                              <label className="block text-xs font-bold text-slate-600 mb-1">Access Token</label>
-                              <textarea 
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none h-24 resize-none"
-                                  placeholder="EAAG..."
-                                  value={config.accessToken}
-                                  onChange={e => setConfig({...config, accessToken: e.target.value})}
-                              />
-                              <p className="text-[10px] text-slate-400 mt-1 italic">Evite espaços no início ou fim.</p>
-                          </div>
-
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Phone Number ID</label>
-                                  <input 
-                                      type="text" 
-                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
-                                      placeholder="Ex: 1059..."
-                                      value={config.phoneNumberId}
-                                      onChange={e => setConfig({...config, phoneNumberId: e.target.value})}
+                              <div className="md:col-span-2">
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Access Token (Permanente)</label>
+                                  <textarea 
+                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none h-20 resize-none"
+                                      placeholder="EAAG..."
+                                      value={config.accessToken}
+                                      onChange={e => setConfig({...config, accessToken: e.target.value})}
                                   />
                               </div>
-
                               <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">WABA ID</label>
-                                  <input 
-                                      type="text" 
-                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none"
-                                      placeholder="Ex: 1098..."
-                                      value={config.wabaId}
-                                      onChange={e => setConfig({...config, wabaId: e.target.value})}
-                                  />
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">ID do Número de Telefone</label>
+                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" placeholder="Ex: 1059..." value={config.phoneNumberId} onChange={e => setConfig({...config, phoneNumberId: e.target.value})} />
+                              </div>
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">ID da Conta de Negócios (WABA)</label>
+                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" placeholder="Ex: 1098..." value={config.wabaId} onChange={e => setConfig({...config, wabaId: e.target.value})} />
                               </div>
                           </div>
                       </div>
 
+                      {/* PASSO 2: WEBHOOK HELP */}
                       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                          <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2 mb-2">
-                              <ShieldCheck size={16} /> Webhook
-                          </h3>
-                          <div>
-                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Verify Token</label>
-                              <input 
-                                  type="text" 
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                                  value={config.webhookVerifyToken}
-                                  onChange={e => setConfig({...config, webhookVerifyToken: e.target.value})}
-                                  placeholder="voll_secret_token"
-                              />
+                          <div className="flex justify-between items-center">
+                              <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2">
+                                  <Globe size={16} className="text-blue-600" /> 2. Configuração do Webhook
+                              </h3>
+                              <button 
+                                onClick={() => setShowWebhookHelp(!showWebhookHelp)}
+                                className="text-xs text-blue-600 font-bold flex items-center gap-1 hover:underline"
+                              >
+                                  {showWebhookHelp ? 'Ocultar Guia' : 'Como configurar?'}
+                                  <ChevronDown size={14} className={clsx(showWebhookHelp && "rotate-180")} />
+                              </button>
+                          </div>
+
+                          <div className="space-y-4">
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Token de Verificação (Você que escolhe)</label>
+                                  <div className="flex gap-2">
+                                      <input 
+                                          type="text" 
+                                          className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-blue-700 bg-blue-50"
+                                          value={config.webhookVerifyToken}
+                                          onChange={e => setConfig({...config, webhookVerifyToken: e.target.value})}
+                                          placeholder="Ex: voll_secret_123"
+                                      />
+                                      <button onClick={() => setConfig({...config, webhookVerifyToken: Math.random().toString(36).substring(2, 15)})} className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200" title="Gerar Aleatório"><RefreshCw size={14}/></button>
+                                  </div>
+                              </div>
+
+                              {showWebhookHelp && (
+                                  <div className="animate-in slide-in-from-top-2 p-4 bg-slate-900 rounded-xl space-y-4">
+                                      <div>
+                                          <p className="text-white text-xs font-bold mb-2 flex items-center gap-2"><Smartphone size={14} className="text-teal-400"/> Copie estes dados para a tela da Meta:</p>
+                                          <div className="space-y-2">
+                                              <div className="flex flex-col">
+                                                  <span className="text-[10px] text-slate-400 uppercase font-black">URL de Callback</span>
+                                                  <div className="flex gap-2 items-center">
+                                                      <code className="text-xs text-teal-400 bg-black/30 p-2 rounded flex-1 truncate">{callbackUrl}</code>
+                                                      <button onClick={() => navigator.clipboard.writeText(callbackUrl)} className="text-slate-400 hover:text-white p-2"><Copy size={14}/></button>
+                                                  </div>
+                                              </div>
+                                              <div className="flex flex-col">
+                                                  <span className="text-[10px] text-slate-400 uppercase font-black">Verificar Token</span>
+                                                  <div className="flex gap-2 items-center">
+                                                      <code className="text-xs text-teal-400 bg-black/30 p-2 rounded flex-1 truncate">{config.webhookVerifyToken || '(Defina um token acima)'}</code>
+                                                      <button onClick={() => navigator.clipboard.writeText(config.webhookVerifyToken)} className="text-slate-400 hover:text-white p-2"><Copy size={14}/></button>
+                                                  </div>
+                                              </div>
+                                          </div>
+                                      </div>
+
+                                      <div className="border-t border-slate-800 pt-4">
+                                          <p className="text-white text-xs font-bold mb-2 flex items-center gap-2"><Terminal size={14} className="text-amber-400"/> Código da Edge Function (Supabase):</p>
+                                          <div className="relative">
+                                              <pre className="text-[10px] bg-black text-slate-300 p-3 rounded-lg overflow-x-auto max-h-48 custom-scrollbar border border-slate-800">{edgeFunctionCode.trim()}</pre>
+                                              <button onClick={() => navigator.clipboard.writeText(edgeFunctionCode.trim())} className="absolute top-2 right-2 bg-slate-800 text-white px-2 py-1 rounded text-[10px] hover:bg-slate-700">Copiar Código</button>
+                                          </div>
+                                          <p className="text-[10px] text-slate-500 mt-2 italic">Crie uma Edge Function chamada "whatsapp-webhook" no seu painel Supabase e cole o código acima.</p>
+                                      </div>
+                                  </div>
+                              )}
                           </div>
                       </div>
                   </div>
 
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
-                      <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                      <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
                       <button 
                           onClick={handleSaveConfig}
                           disabled={isSavingConfig}
-                          className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2"
+                          className="bg-green-600 hover:bg-green-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-green-600/20 flex items-center gap-2"
                       >
                           {isSavingConfig ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                           Salvar Configurações

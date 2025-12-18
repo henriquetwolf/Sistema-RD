@@ -95,6 +95,7 @@ export const appBackend = {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
     const payload = {
+      // Fix: changed preset.interval_minutes to preset.intervalMinutes
       user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.intervalMinutes || 5,
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -120,7 +121,8 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: company.id || undefined, legal_name: company.legal_name, cnpj: company.cnpj, product_types: company.productTypes };
+      // Fix: changed company.legal_name to company.legalName
+      const payload = { id: company.id || undefined, legal_name: company.legalName, cnpj: company.cnpj, product_types: company.productTypes };
       await supabase.from('crm_companies').upsert(payload);
   },
 
@@ -171,14 +173,52 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name', { ascending: true });
     return (data || []).map((d: any) => ({
-      id: d.id, status: d.status || 'active', responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2, studentCapacity: d.student_capacity, rent_value: d.rent_value, methodology: d.methodology, studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account, beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: d.has_reformer, qtyReformer: d.qty_reformer, hasLadderBarrel: d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel, hasChair: d.has_chair, qtyChair: d.qty_chair, hasCadillac: d.has_cadillac, qtyCadillac: d.qty_cadillac, hasChairsForCourse: d.has_chairs_for_course, hasTv: d.has_tv, maxKitsCapacity: d.max_kits_capacity, attachments: d.attachments
+      id: d.id, 
+      status: d.status || 'active', 
+      responsibleName: d.responsible_name, 
+      cpf: d.cpf, 
+      phone: d.phone, 
+      email: d.email, 
+      secondContactName: d.second_contact_name, 
+      secondContactPhone: d.second_contact_phone, 
+      fantasyName: d.fantasy_name, 
+      legalName: d.legal_name, 
+      cnpj: d.cnpj, 
+      studioPhone: d.studio_phone, 
+      address: d.address, 
+      city: d.city, 
+      state: d.state, 
+      country: d.country, 
+      sizeM2: d.size_m2, 
+      studentCapacity: d.student_capacity, 
+      rentValue: d.rent_value, 
+      methodology: d.methodology, 
+      studioType: d.studio_type, 
+      nameOnSite: d.name_on_site, 
+      bank: d.bank, 
+      agency: d.agency, 
+      account: d.account, 
+      beneficiary: d.beneficiary, 
+      pixKey: d.pix_key, 
+      hasReformer: d.has_reformer, 
+      qtyReformer: d.qty_reformer, 
+      hasLadderBarrel: d.has_ladder_barrel, 
+      qtyLadderBarrel: d.qty_ladder_barrel, 
+      hasChair: d.has_chair, 
+      qtyChair: d.qty_chair, 
+      hasCadillac: d.has_cadillac, 
+      qtyCadillac: d.qty_cadillac, 
+      hasChairsForCourse: d.has_chairs_for_course, 
+      hasTv: d.has_tv, 
+      maxKitsCapacity: d.max_kits_capacity, 
+      attachments: d.attachments
     }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qty_reformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
+      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.size_m2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qty_ladder_barrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
     if (studio.id) await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
     else await supabase.from('crm_partner_studios').insert([payload]);
@@ -224,6 +264,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (!data) return null;
+      // Fix: changed d.fixed_owner_id to data.fixed_owner_id
       return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
   },
 
@@ -282,14 +323,14 @@ export const appBackend = {
   getContracts: async (): Promise<Contract[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folder_id: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
       if (!isConfigured) return null;
       const { data } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (!data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contract_date: data.contract_date, status: data.status, folder_id: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
@@ -352,7 +393,7 @@ export const appBackend = {
     const { data: dealData } = await supabase.from('crm_deals').select('contact_name, company_name, course_city').eq('id', certData.student_deal_id).single();
     const { data: templateData } = await supabase.from('crm_certificates').select('*').eq('id', certData.certificate_template_id).single();
     if (!dealData || !templateData) return null;
-    return { id: certData.id, studentDealId: certData.student_deal_id, certificateTemplateId: certData.certificate_template_id, hash: certData.hash, issuedAt: certData.issued_at, studentName: dealData.company_name || dealData.contact_name, studentCity: dealData.course_city || 'Local', template: { id: templateData.id, title: templateData.title, backgroundData: templateData.background_base_64, backBackgroundData: templateData.back_background_base_64, linkedProductId: templateData.linked_product_id, bodyText: templateData.body_text, layoutConfig: templateData.layout_config, createdAt: templateData.created_at } };
+    return { id: certData.id, studentDealId: certData.student_deal_id, certificateTemplateId: certData.certificate_template_id, hash: certData.hash, issuedAt: certData.issued_at, studentName: dealData.company_name || dealData.contact_name, studentCity: dealData.course_city || 'Local', template: { id: templateData.id, title: templateData.title, backgroundData: templateData.background_base_64, backBackgroundData: templateData.back_background_base_64, linkedProductId: templateData.linked_product_id, bodyText: templateData.body_text, layout_config: templateData.layout_config, createdAt: templateData.created_at } };
   },
 
   getEvents: async (): Promise<EventModel[]> => {

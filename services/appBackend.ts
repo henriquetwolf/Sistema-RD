@@ -194,7 +194,7 @@ export const appBackend = {
       rentValue: d.rent_value, 
       methodology: d.methodology, 
       studioType: d.studio_type, 
-      nameOnSite: d.name_on_site, 
+      name_on_site: d.name_on_site, 
       bank: d.bank, 
       agency: d.agency, 
       account: d.account, 
@@ -217,8 +217,9 @@ export const appBackend = {
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
+    // Fix: access properties on studio object using camelCase names defined in PartnerStudio interface (sizeM2, qtyReformer, qtyLadderBarrel, etc.)
     const payload = {
-      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.size_m2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qty_ladder_barrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
+      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
     if (studio.id) await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
     else await supabase.from('crm_partner_studios').insert([payload]);
@@ -323,14 +324,16 @@ export const appBackend = {
   getContracts: async (): Promise<Contract[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folder_id: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
+      // Fix: map database snake_case fields (contract_date, folder_id) to camelCase interface properties (contractDate, folderId)
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
       if (!isConfigured) return null;
       const { data } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (!data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contract_date: data.contract_date, status: data.status, folder_id: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
+      // Fix: map database snake_case fields (contract_date, folder_id) to camelCase interface properties (contractDate, folderId)
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {

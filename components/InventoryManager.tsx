@@ -125,7 +125,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                   consumed.sacochila += presentCount;
                   consumed.lapis += presentCount;
               } else {
-                  // Fix: Corrected property name from allDeals to deals
+                  // Variável corrigida aqui de allDeals para deals
                   const enrolled = deals.filter(d => d.class_mod_1 === cls.mod_1_code).length;
                   if (isCompleta) scheduled.nova += enrolled;
                   if (isClassico) scheduled.classico += enrolled;
@@ -425,7 +425,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={24}/></button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
+            <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar flex-1">
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-slate-400 uppercase">Tipo de Operação</label>
                 <div className="flex gap-4">
@@ -515,7 +515,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
               </div>
             </div>
 
-            <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3 rounded-b-xl">
+            <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3 rounded-b-xl shrink-0">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
               <button onClick={handleSave} disabled={isSaving} className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg shadow-teal-600/20">
                 {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}

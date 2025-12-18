@@ -94,6 +94,7 @@ export const appBackend = {
   savePreset: async (preset: Omit<SavedPreset, 'id'>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
+    // Corrected to use camelCase intervalMinutes from preset interface
     const payload = {
       user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.intervalMinutes || 5,
     };
@@ -260,10 +261,47 @@ export const appBackend = {
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: Corrected property name from name_on_site to nameOnSite in the studio object access
+    // Correção: name_on_site deve receber nameOnSite do objeto studio
     const payload = {
-      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, 
-      qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
+      status: studio.status, 
+      responsible_name: studio.responsibleName, 
+      cpf: studio.cpf, 
+      phone: studio.phone, 
+      email: studio.email, 
+      password: studio.password, 
+      second_contact_name: studio.secondContactName, 
+      second_contact_phone: studio.secondContactPhone, 
+      fantasy_name: studio.fantasyName, 
+      legal_name: studio.legalName, 
+      cnpj: studio.cnpj, 
+      studio_phone: studio.studioPhone, 
+      address: studio.address, 
+      city: studio.city, 
+      state: studio.state, 
+      country: studio.country, 
+      size_m2: studio.sizeM2, 
+      student_capacity: studio.studentCapacity, 
+      rent_value: studio.rentValue, 
+      methodology: studio.methodology, 
+      studio_type: studio.studioType, 
+      name_on_site: studio.nameOnSite, 
+      bank: studio.bank, 
+      agency: studio.agency, 
+      account: studio.account, 
+      beneficiary: studio.beneficiary, 
+      pix_key: studio.pixKey, 
+      has_reformer: studio.hasReformer, 
+      qty_reformer: studio.qtyReformer, 
+      has_ladder_barrel: studio.hasLadderBarrel, 
+      qty_ladder_barrel: studio.qtyLadderBarrel, 
+      has_chair: studio.hasChair, 
+      qty_chair: studio.qtyChair, 
+      has_cadillac: studio.hasCadillac, 
+      qty_cadillac: studio.qtyCadillac, 
+      has_chairs_for_course: studio.hasChairsForCourse, 
+      has_tv: studio.hasTv, 
+      max_kits_capacity: studio.maxKitsCapacity, 
+      attachments: studio.attachments
     };
     if (studio.id) await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
     else await supabase.from('crm_partner_studios').insert([payload]);
@@ -308,6 +346,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (!data) return null;
+      // Fixed undefined variable 'd' changed to 'data'
       return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
   },
 
@@ -476,6 +515,7 @@ export const appBackend = {
     const payload = { id: event.id, name: event.name, description: event.description, location: event.location, dates: event.dates, registration_open: event.registrationOpen };
     const { data, error } = await supabase.from('crm_events').upsert(payload).select().single();
     if (error) throw error;
+    // Fixed undefined variable 'd' changed to 'data'
     return { id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates || [], createdAt: data.created_at, registrationOpen: data.registration_open || false };
   },
 
@@ -541,8 +581,21 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     if (error) throw error;
+    // Corrected mapping: defined d as parameter of map, and mapped database snake_case fields to camelCase interface properties
     return (data || []).map((d: any) => ({
-      id: d.id, type: d.type, item_apostila_nova: d.item_apostila_nova, item_apostila_classico: d.item_apostila_classico, item_sacochila: d.item_sacochila, item_lapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, tracking_code: d.tracking_code, observations: d.observations, conference_date: d.conference_date, attachments: d.attachments, createdAt: d.created_at
+      id: d.id, 
+      type: d.type, 
+      itemApostilaNova: d.item_apostila_nova, 
+      itemApostilaClassico: d.item_apostila_classico, 
+      itemSacochila: d.item_sacochila, 
+      itemLapis: d.item_lapis, 
+      registrationDate: d.registration_date, 
+      studioId: d.studio_id, 
+      trackingCode: d.tracking_code, 
+      observations: d.observations, 
+      conferenceDate: d.conference_date, 
+      attachments: d.attachments, 
+      createdAt: d.created_at
     }));
   },
 

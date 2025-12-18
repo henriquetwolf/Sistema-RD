@@ -92,7 +92,7 @@ function App() {
 
   useEffect(() => {
     const initApp = async () => {
-        const savedLogo = appBackend.getAppLogo();
+        const savedLogo = await appBackend.getAppLogo();
         if (savedLogo) setAppLogo(savedLogo);
 
         const params = new URLSearchParams(window.location.search);
@@ -151,11 +151,12 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Ajuste: O Dashboard deve carregar se houver session (Admin) OU currentCollaborator (Equipe)
   useEffect(() => {
-    if (dashboardTab === 'overview' && session) {
+    if (dashboardTab === 'overview' && (session || currentCollaborator)) {
         fetchOverviewData();
     }
-  }, [dashboardTab, session]);
+  }, [dashboardTab, session, currentCollaborator]);
 
   const fetchOverviewData = async () => {
     setIsOverviewLoading(true);

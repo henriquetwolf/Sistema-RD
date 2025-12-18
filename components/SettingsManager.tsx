@@ -66,12 +66,19 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
   const [editingLevel, setEditingLevel] = useState<Partial<InstructorLevel> | null>(null);
 
   useEffect(() => {
-      setSecurityMargin(appBackend.getInventorySecurityMargin());
+      fetchGlobalSettings();
       if (activeTab === 'roles') fetchRoles();
       else if (activeTab === 'banners') fetchBanners();
       else if (activeTab === 'company') fetchCompanies();
       else if (activeTab === 'instructor_levels') fetchInstructorLevels();
   }, [activeTab]);
+
+  const fetchGlobalSettings = async () => {
+    const margin = await appBackend.getInventorySecurityMargin();
+    setSecurityMargin(margin);
+    const logo = await appBackend.getAppLogo();
+    setPreview(logo);
+  };
 
   const fetchRoles = async () => {
       setIsLoadingRoles(true);
@@ -101,18 +108,27 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
     }
   };
 
-  const handleSaveGlobal = () => {
+  const handleSaveGlobal = async () => {
     if (preview) {
-      appBackend.saveAppLogo(preview);
+      await appBackend.saveAppLogo(preview);
       onLogoChange(preview);
     }
-    appBackend.saveInventorySecurityMargin(securityMargin);
+    await appBackend.saveInventorySecurityMargin(securityMargin);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE ATUALIZAÇÃO DO BANCO DE DADOS VOLL
+-- TABELA DE CONFIGURAÇÕES GLOBAIS (SINCRONIZADA)
+CREATE TABLE IF NOT EXISTS public.app_settings (
+    key text PRIMARY KEY,
+    value jsonb,
+    updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total settings" ON public.app_settings FOR ALL USING (true) WITH CHECK (true);
+
+-- SCRIPTS ANTERIORES...
 CREATE TABLE IF NOT EXISTS public.crm_roles (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), name text NOT NULL, permissions jsonb DEFAULT '{}'::jsonb);
 ALTER TABLE public.crm_roles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total roles" ON public.crm_roles FOR ALL USING (true) WITH CHECK (true);
@@ -120,7 +136,6 @@ CREATE POLICY "Acesso total roles" ON public.crm_roles FOR ALL USING (true) WITH
 ALTER TABLE public.crm_collaborators ADD COLUMN IF NOT EXISTS role_id uuid REFERENCES public.crm_roles(id);
 ALTER TABLE public.crm_collaborators ADD COLUMN IF NOT EXISTS password text;
 
--- ATUALIZAÇÃO STUDIO PARCEIRO
 ALTER TABLE public.crm_partner_studios ADD COLUMN IF NOT EXISTS password text;
 
 CREATE TABLE IF NOT EXISTS public.app_banners (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), title text, image_url text, link_url text, target_audience text CHECK (target_audience IN ('student', 'instructor')), active boolean DEFAULT true);
@@ -135,7 +150,6 @@ CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_ran
 ALTER TABLE public.crm_instructor_levels ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total instructor_levels" ON public.crm_instructor_levels FOR ALL USING (true) WITH CHECK (true);
 
--- TABELA DE ESTOQUE
 CREATE TABLE IF NOT EXISTS public.crm_inventory (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),

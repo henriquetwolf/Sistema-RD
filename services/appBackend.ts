@@ -109,16 +109,45 @@ export const appBackend = {
     await supabase.from(TABLE_NAME).delete().eq('id', id);
   },
 
-  getAppLogo: (): string | null => localStorage.getItem('app_logo_url'),
-  saveAppLogo: (url: string) => localStorage.setItem('app_logo_url', url),
+  // --- CONFIGURAÇÕES GLOBAIS NO SUPABASE ---
+  
+  getAppSetting: async (key: string): Promise<any | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('app_settings').select('value').eq('key', key).single();
+    return data ? data.value : null;
+  },
 
-  getInventorySecurityMargin: (): number => {
-    const val = localStorage.getItem('inventory_security_margin');
-    return val ? parseInt(val) : 5;
+  saveAppSetting: async (key: string, value: any): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() });
   },
-  saveInventorySecurityMargin: (val: number) => {
-    localStorage.setItem('inventory_security_margin', val.toString());
+
+  getAppLogo: async (): Promise<string | null> => {
+    return await appBackend.getAppSetting('app_logo_url');
   },
+  
+  saveAppLogo: async (url: string) => {
+    await appBackend.saveAppSetting('app_logo_url', url);
+  },
+
+  getInventorySecurityMargin: async (): Promise<number> => {
+    const val = await appBackend.getAppSetting('inventory_security_margin');
+    return val !== null ? parseInt(val) : 5;
+  },
+
+  saveInventorySecurityMargin: async (val: number) => {
+    await appBackend.saveAppSetting('inventory_security_margin', val);
+  },
+
+  getWhatsAppConfig: async (): Promise<any | null> => {
+    return await appBackend.getAppSetting('whatsapp_config');
+  },
+
+  saveWhatsAppConfig: async (config: any): Promise<void> => {
+    await appBackend.saveAppSetting('whatsapp_config', config);
+  },
+
+  // --- RESTO DO BACKEND ---
 
   getCompanies: async (): Promise<CompanySetting[]> => {
       if (!isConfigured) return [];
@@ -231,6 +260,7 @@ export const appBackend = {
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
+    // Fix: Corrected property name from name_on_site to nameOnSite in the studio object access
     const payload = {
       status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, 
       qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
@@ -512,7 +542,7 @@ export const appBackend = {
     const { data, error } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     if (error) throw error;
     return (data || []).map((d: any) => ({
-      id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date, attachments: d.attachments, createdAt: d.created_at
+      id: d.id, type: d.type, item_apostila_nova: d.item_apostila_nova, item_apostila_classico: d.item_apostila_classico, item_sacochila: d.item_sacochila, item_lapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, tracking_code: d.tracking_code, observations: d.observations, conference_date: d.conference_date, attachments: d.attachments, createdAt: d.created_at
     }));
   },
 
@@ -539,13 +569,4 @@ export const appBackend = {
     if (!isConfigured) return;
     await supabase.from('crm_inventory').delete().eq('id', id);
   },
-
-  getWhatsAppConfig: async (): Promise<any | null> => {
-    const saved = localStorage.getItem('whatsapp_config');
-    return saved ? JSON.parse(saved) : null;
-  },
-
-  saveWhatsAppConfig: async (config: any): Promise<void> => {
-    localStorage.setItem('whatsapp_config', JSON.stringify(config));
-  }
 };

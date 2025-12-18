@@ -53,7 +53,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const margin = appBackend.getInventorySecurityMargin();
+      const margin = await appBackend.getInventorySecurityMargin();
       setSecurityMargin(margin);
 
       const [invData, studioData, classesData, dealsData, attendData] = await Promise.all([
@@ -125,6 +125,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                   consumed.sacochila += presentCount;
                   consumed.lapis += presentCount;
               } else {
+                  // Fix: Corrected property name from allDeals to deals
                   const enrolled = deals.filter(d => d.class_mod_1 === cls.mod_1_code).length;
                   if (isCompleta) scheduled.nova += enrolled;
                   if (isClassico) scheduled.classico += enrolled;

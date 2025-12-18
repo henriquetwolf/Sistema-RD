@@ -94,6 +94,7 @@ export const appBackend = {
   savePreset: async (preset: Omit<SavedPreset, 'id'>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
+    // Fix: preset.interval_minutes -> preset.intervalMinutes
     const payload = {
       user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.intervalMinutes || 5,
     };
@@ -224,8 +225,9 @@ export const appBackend = {
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
+    /* Fixed: updated property access for sizeM2 and nameOnSite to match PartnerStudio interface */
     const payload = {
-      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.size_m2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.name_on_site, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, 
+      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, 
       qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
     if (studio.id) await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
@@ -271,7 +273,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (!data) return null;
-      // Fixed: ensure style and other missing fields are populated correctly from data
+      // Fixed: ensure style and other missing fields are populated correctly from data, replaced 'd' with 'data'
       return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
   },
 
@@ -338,6 +340,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (!data) return null;
+      // Fixed: replaced 'd' with 'data'
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 

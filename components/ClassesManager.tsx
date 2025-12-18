@@ -64,6 +64,7 @@ interface ClassItem {
 
 // --- Dropdown Options ---
 const COURSES = ['Formação Completa em Pilates', 'Formação em Pilates Clássico'];
+const STATUS_OPTIONS = ['Confirmado', 'Cancelado', 'Adiado'];
 
 interface ClassesManagerProps {
   onBack: () => void;
@@ -110,7 +111,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   // Initial Empty Form State
   const initialFormState: ClassItem = {
       id: '',
-      status: 'Planejamento',
+      status: 'Confirmado',
       state: '',
       city: '',
       classCode: '', 
@@ -320,21 +321,21 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
         mod_1_code: formData.mod1Code,
         material: formData.material,
         studio_mod_1: formData.studioMod1,
-        instructor_mod_1: formData.instructorMod1,
-        ticket_mod_1: formData.ticketMod1,
+        instructor_mod_1: formData.instructor_mod_1,
+        ticket_mod_1: formData.ticket_mod_1,
         infrastructure: formData.infrastructure,
-        coffee_mod_1: formData.coffeeMod1,
-        hotel_mod_1: formData.hotelMod1,
-        hotel_loc_mod_1: formData.hotelLocMod1,
-        cost_help_1: formData.costHelp1,
-        date_mod_2: formData.dateMod2 || null,
+        coffee_mod_1: formData.coffee_mod_1,
+        hotel_mod_1: formData.hotel_mod_1,
+        hotel_loc_mod_1: formData.hotel_loc_mod_1,
+        cost_help_1: formData.cost_help_1,
+        date_mod_2: formData.date_mod_2 || null,
         mod_2_code: formData.mod2Code,
-        instructor_mod_2: formData.instructorMod2,
-        ticket_mod_2: formData.ticketMod2,
-        coffee_mod_2: formData.coffeeMod2,
-        hotel_mod_2: formData.hotelMod2,
-        hotel_loc_mod_2: formData.hotelLocMod2,
-        cost_help_2: formData.costHelp2,
+        instructor_mod_2: formData.instructor_mod_2,
+        ticket_mod_2: formData.ticket_mod_2,
+        coffee_mod_2: formData.coffee_mod_2,
+        hotel_mod_2: formData.hotel_mod_2,
+        hotel_loc_mod_2: formData.hotel_loc_mod_2,
+        cost_help_2: formData.cost_help_2,
         studio_rent: formData.studioRent,
         conta_azul_rd: formData.contaAzulRD,
         is_ready: formData.isReady,
@@ -490,10 +491,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                   <div className="flex gap-2">
                       <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="flex-1 bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-2 outline-none">
                           <option value="Todos">Todos Status</option>
-                          <option value="Planejamento">Planejamento</option>
-                          <option value="Confirmado">Confirmado</option>
-                          <option value="Concluído">Concluído</option>
-                          <option value="Cancelado">Cancelado</option>
+                          {STATUS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                       <div className="text-xs text-slate-400 flex items-center px-2">{filteredClasses.length} turmas</div>
                   </div>
@@ -510,7 +508,14 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                   <div className="flex justify-between items-start mb-1">
                                       <span className={clsx("text-[10px] font-bold px-1.5 py-0.5 rounded uppercase", cls.status === 'Confirmado' ? 'bg-green-100 text-green-700' : cls.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700')}>{cls.status}</span>
                                       <div className="relative">
-                                          <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === cls.id ? null : cls.id); }} className="p-1 hover:bg-slate-100 rounded text-slate-400 class-menu-btn"><MoreHorizontal size={16} /></button>
+                                          <button 
+                                              onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === cls.id ? null : cls.id); }} 
+                                              className="p-1 hover:bg-slate-100 rounded text-slate-400 class-menu-btn"
+                                              aria-haspopup="true"
+                                              aria-expanded={activeMenuId === cls.id}
+                                          >
+                                            <MoreHorizontal size={16} />
+                                          </button>
                                           {activeMenuId === cls.id && (
                                               <div className="absolute right-0 top-6 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
                                                   <button onClick={(e) => { e.stopPropagation(); handleEdit(cls); }} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Edit2 size={12} /> Editar</button>
@@ -545,7 +550,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       {modalViewerClass && <ClassStudentsViewer classItem={modalViewerClass} onClose={() => setModalViewerClass(null)} variant="modal" canTakeAttendance={true} />}
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto" role="dialog" aria-modal="true">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
                 <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 rounded-t-xl">
                     <div>
@@ -561,10 +566,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">STATUS</label>
                                 <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.status} onChange={e => handleInputChange('status', e.target.value)}>
-                                    <option value="Planejamento">Planejamento</option>
-                                    <option value="Confirmado">Confirmado</option>
-                                    <option value="Concluído">Concluído</option>
-                                    <option value="Cancelado">Cancelado</option>
+                                    {STATUS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                 </select>
                             </div>
                             <div>

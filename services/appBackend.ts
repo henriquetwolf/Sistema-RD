@@ -1,5 +1,5 @@
 
-import { createClient, Session } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, Session } from '@supabase/supabase-js';
 import { SavedPreset, FormModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
@@ -140,7 +140,8 @@ export const appBackend = {
       status: row.status,
       lastMessage: row.last_message,
       active: row.active,
-      interval_minutes: row.interval_minutes,
+      // Fix: return type SyncJob expects intervalMinutes
+      intervalMinutes: row.interval_minutes,
       createdBy: row.created_by_name,
       createdAt: row.created_at
     }));
@@ -214,7 +215,8 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      interval_minutes: preset.interval_minutes || 5,
+      // Fix: Property 'interval_minutes' does not exist on type 'Omit<SavedPreset, "id">'. Did you mean 'intervalMinutes'?
+      interval_minutes: preset.intervalMinutes || 5, 
       created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();

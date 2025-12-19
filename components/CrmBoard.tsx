@@ -4,7 +4,7 @@ import {
   Plus, Search, Filter, MoreHorizontal, Calendar, 
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
-  Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
+  Building2, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
   MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -229,7 +229,7 @@ export const CrmBoard: React.FC = () => {
                   email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
                   transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
-                  classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
+                  classMod1: d.class_mod_1, class_mod_2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
               })));
           } else {
@@ -275,7 +275,6 @@ export const CrmBoard: React.FC = () => {
     const ownerName = getOwnerName(deal.owner);
     const today = new Date().toISOString().split('T')[0];
     
-    // Mapeamento de Observações para o Array JSON
     const obsArray = [
         { label: "Vendedor", value: ownerName },
         { label: "Tipo de Produto", value: deal.productType || "--" },
@@ -366,7 +365,6 @@ export const CrmBoard: React.FC = () => {
         if (currentStage === 'closed' && newStage !== 'closed') updates.closed_at = null;
         await appBackend.client.from('crm_deals').update(updates).eq('id', dealId);
         
-        // GATILHO WEBHOOK
         if (newStage === 'closed') {
             sendToPlugaWebhook({ ...deal, stage: 'closed' });
         }
@@ -387,7 +385,6 @@ export const CrmBoard: React.FC = () => {
         else if (currentDeal.stage === 'closed') updates.closed_at = null;
         await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId);
         
-        // GATILHO WEBHOOK
         if (targetStage === 'closed') {
             sendToPlugaWebhook({ ...currentDeal, stage: 'closed' });
         }
@@ -408,9 +405,9 @@ export const CrmBoard: React.FC = () => {
           product_type: dealFormData.productType || null, product_name: dealFormData.productName,
           email: dealFormData.email, phone: dealFormData.phone, cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null,
           receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode, zip_code: dealFormData.zipCode, 
-          address: dealFormData.address, address_number: dealFormData.addressNumber, registration_data: dealFormData.registrationData, 
-          observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
-          class_mod_1: dealFormData.class_mod_1, class_mod_2: dealFormData.class_mod_2, pipeline: dealFormData.pipeline || 'Padrão', 
+          address: dealFormData.address, address_number: dealFormData.address_number, registration_data: dealFormData.registration_data, 
+          observation: dealFormData.observation, course_state: dealFormData.course_state, course_city: dealFormData.course_city, 
+          class_mod_1: dealFormData.classMod1, class_mod_2: dealFormData.classMod2, pipeline: dealFormData.pipeline || 'Padrão', 
           tasks: dealFormData.tasks, billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName
       };
 
@@ -425,7 +422,6 @@ export const CrmBoard: React.FC = () => {
               savedDeal = { ...dealFormData, ...payload, id: data?.id, dealNumber };
           }
 
-          // GATILHO WEBHOOK
           if (isClosing) {
               sendToPlugaWebhook(savedDeal as Deal);
           }
@@ -435,13 +431,23 @@ export const CrmBoard: React.FC = () => {
       } catch (e: any) { handleDbError(e); }
   };
 
-  // --- REST OF COMPONENT UI MANTIDO ---
   const handleDragStart = (e: React.DragEvent, dealId: string) => { setDraggedDealId(dealId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dealId); };
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
   const openNewDealModal = () => { setEditingDealId(null); setDealFormData({ ...INITIAL_FORM_STATE, owner: collaborators.find(c => c.department === 'Comercial')?.id || '' }); setShowDealModal(true); };
   const openEditDealModal = (deal: Deal) => { setEditingDealId(deal.id); setDealFormData({ ...deal }); setShowDealModal(true); };
   const getStageSummary = (stage: DealStage) => { const stageDeals = (deals || []).filter(d => d.stage === stage); return { count: stageDeals.length, total: stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0) }; };
   const filteredDeals = (deals || []).filter(d => (d.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || (d.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) || (d.dealNumber && d.dealNumber.toString().includes(searchTerm)));
+
+  const handleAddTask = () => {
+    if (!newTaskDesc || !newTaskDate) return;
+    const newTask: DealTask = { id: crypto.randomUUID(), description: newTaskDesc, dueDate: newTaskDate, type: newTaskType, isDone: false };
+    setDealFormData(prev => ({ ...prev, tasks: [...(prev.tasks || []), newTask] }));
+    setNoTaskDesc(''); setNoTaskDate('');
+  };
+
+  const removeTask = (taskId: string) => {
+    setDealFormData(prev => ({ ...prev, tasks: prev.tasks?.filter(t => t.id !== taskId) }));
+  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)]">
@@ -512,6 +518,7 @@ export const CrmBoard: React.FC = () => {
                       <button onClick={() => setShowDealModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={20}/></button>
                   </div>
                   <div className="p-8 overflow-y-auto custom-scrollbar space-y-8 bg-white">
+                      {/* 1. DADOS DA NEGOCIAÇÃO */}
                       <div>
                           <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><Target size={16} /> Dados da Negociação</h4>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -524,8 +531,89 @@ export const CrmBoard: React.FC = () => {
                               <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor Total (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.value} onChange={e => setDealFormData({...dealFormData, value: parseFloat(e.target.value) || 0})} /></div>
                           </div>
                       </div>
+
+                      {/* 2. CONTATO E FATURAMENTO */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                          <div>
+                              <h4 className="text-sm font-bold text-teal-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><Phone size={16} /> Contato do Cliente</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-500 mb-1">Email Principal</label><input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.email} onChange={e => setDealFormData({...dealFormData, email: e.target.value})} /></div>
+                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">Telefone/WhatsApp</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.phone} onChange={e => setDealFormData({...dealFormData, phone: e.target.value})} /></div>
+                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">CPF/CNPJ Cliente</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.cpf} onChange={e => setDealFormData({...dealFormData, cpf: e.target.value})} /></div>
+                              </div>
+                          </div>
+                          <div>
+                              <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><Building2 size={16} /> Faturamento (Setor Comercial)</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-500 mb-1">Empresa de Faturamento (Auto)</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500" value={dealFormData.billingCompanyName || '--'} readOnly /></div>
+                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">CNPJ de Faturamento</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500" value={dealFormData.billingCnpj || '--'} readOnly /></div>
+                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">Fonte de Negócio</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.source} onChange={e => setDealFormData({...dealFormData, source: e.target.value})} /></div>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* 3. ENDEREÇO E CURSO */}
+                      <div>
+                          <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><MapPin size={16} /> Endereço e Dados de Aluno</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                              {/* Fix: Cannot find name 'setFormData'. Did you mean 'FormData'? (Changed to setDealFormData) */}
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">CEP</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.zipCode} onChange={e => setDealFormData({ ...dealFormData, zipCode: formatCEP(e.target.value) })} /></div>
+                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-500 mb-1">Logradouro / Rua</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.address} onChange={e => setDealFormData({...dealFormData, address: e.target.value})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">Nº Endereço</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.addressNumber} onChange={e => setDealFormData({...dealFormData, addressNumber: e.target.value})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">Cidade (Filtro)</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.courseCity} onChange={e => setDealFormData({...dealFormData, courseCity: e.target.value})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">UF (Filtro)</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.courseState} onChange={e => setDealFormData({...dealFormData, courseState: e.target.value})} maxLength={2} /></div>
+                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-500 mb-1">Dados Complementares / Inscrição</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.registrationData} onChange={e => setDealFormData({...dealFormData, registrationData: e.target.value})} /></div>
+                          </div>
+                      </div>
+
+                      {/* 4. PAGAMENTO E TURMAS */}
+                      <div>
+                          <h4 className="text-sm font-bold text-emerald-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><CreditCard size={16} /> Pagamento e Agendamento</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-slate-50 p-6 rounded-xl border border-slate-200">
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Forma de Pagamento</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.paymentMethod} onChange={e => setDealFormData({...dealFormData, paymentMethod: e.target.value})}><option value="">Selecione...</option><option value="Pix">Pix</option><option value="Cartão de Crédito">Cartão de Crédito</option><option value="Boleto">Boleto</option><option value="Link de Pagamento">Link de Pagamento</option><option value="Transferência">Transferência</option></select></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor de Entrada (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.entryValue} onChange={e => setDealFormData({...dealFormData, entryValue: parseFloat(e.target.value) || 0})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Nº Parcelas</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.installments} onChange={e => setDealFormData({...dealFormData, installments: parseInt(e.target.value) || 1})} min={1} /></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor da Parcela (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.installmentValue} onChange={e => setDealFormData({...dealFormData, installmentValue: parseFloat(e.target.value) || 0})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">1º Vencimento</label><input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.firstDueDate} onChange={e => setDealFormData({...dealFormData, firstDueDate: e.target.value})} /></div>
+                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1 flex items-center gap-1"><GraduationCap size={14}/> Turma / Código do Curso</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value, classMod2: e.target.value})}><option value="">Vincular Turma...</option>{registeredClasses.map(c => <option key={c.id} value={c.mod1Code}>{c.mod1Code}</option>)}</select></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">ID da Transação / Pedido</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.transactionCode} onChange={e => setDealFormData({...dealFormData, transactionCode: e.target.value})} /></div>
+                          </div>
+                      </div>
+
+                      {/* 5. TAREFAS E OBSERVAÇÕES */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                          <div>
+                              <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><ListTodo size={16} /> Próximas Tarefas</h4>
+                              <div className="space-y-4">
+                                  <div className="flex gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl">
+                                      <input type="text" placeholder="O que precisa ser feito?" className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" value={newTaskDesc} onChange={e => setNoTaskDesc(e.target.value)} />
+                                      <input type="date" className="bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs outline-none" value={newTaskDate} onChange={e => setNoTaskDate(e.target.value)} />
+                                      <button onClick={handleAddTask} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm"><Plus size={18} /></button>
+                                  </div>
+                                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                                      {dealFormData.tasks?.map(task => (
+                                          <div key={task.id} className="flex items-center justify-between p-2 bg-white border border-slate-100 rounded-lg group">
+                                              <div className="flex items-center gap-3">
+                                                  <input type="checkbox" className="w-4 h-4 rounded text-indigo-600" checked={task.isDone} onChange={() => {}} />
+                                                  <div><p className="text-xs font-bold text-slate-700">{task.description}</p><p className="text-[10px] text-slate-400">Vencimento: {new Date(task.dueDate).toLocaleDateString()}</p></div>
+                                              </div>
+                                              <button onClick={() => removeTask(task.id)} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><X size={14}/></button>
+                                          </div>
+                                      ))}
+                                      {(!dealFormData.tasks || dealFormData.tasks.length === 0) && <p className="text-center text-xs text-slate-300 italic py-4">Sem tarefas agendadas.</p>}
+                                  </div>
+                              </div>
+                          </div>
+                          <div>
+                              <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><FileText size={16} /> Observações Internas</h4>
+                              <textarea className="w-full border border-slate-300 rounded-xl p-4 text-sm h-full min-h-[140px] outline-none focus:border-indigo-400 resize-none bg-slate-50/30" placeholder="Histórico de conversas, preferências do aluno..." value={dealFormData.observation} onChange={e => setDealFormData({...dealFormData, observation: e.target.value})}></textarea>
+                          </div>
+                      </div>
                   </div>
-                  <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-200 shrink-0"><button onClick={() => setShowDealModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button><button onClick={handleSaveDeal} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center gap-2"><Save size={16} /> Salvar Negócio</button></div>
+                  <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-200 shrink-0">
+                      <button onClick={() => setShowDealModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                      <button onClick={handleSaveDeal} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg shadow-indigo-600/20"><Save size={16} /> Salvar Negócio</button>
+                  </div>
               </div>
           </div>
       )}

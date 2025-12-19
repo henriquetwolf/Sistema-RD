@@ -301,6 +301,7 @@ export const CrmBoard: React.FC = () => {
   const sendToPlugaWebhook = async (deal: Deal) => {
     const ownerName = getOwnerName(deal.owner);
     const today = new Date().toISOString().split('T')[0];
+    const PLUGA_URL = "https://hooks.pluga.co/v2/webhooks/MzkxODM1ODg4MjcxOTY2MDQ5NFQxNzY2MDAwMjI4";
     
     // Construct the "observacoes_array" structure requested
     const obsArray = [
@@ -363,12 +364,22 @@ export const CrmBoard: React.FC = () => {
         observacoes_array: JSON.stringify(obsArray)
     };
 
+    console.log("Enviando dados para Pluga:", payload);
+
     try {
-        await fetch("https://hooks.pluga.co/v2/webhooks/MzkxODM1ODg4MjcxOTY2MDQ5NFQxNzY2MDAwMjY4", {
+        const response = await fetch(PLUGA_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
             body: JSON.stringify(payload)
         });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         console.log("Pluga Webhook enviado com sucesso!");
     } catch (e) {
         console.error("Erro ao enviar Webhook para Pluga:", e);
@@ -562,8 +573,8 @@ export const CrmBoard: React.FC = () => {
           observation: dealFormData.observation, 
           course_state: dealFormData.courseState,
           course_city: dealFormData.courseCity, 
-          class_mod_1: dealFormData.classMod1, 
-          class_mod_2: dealFormData.classMod2,
+          class_mod_1: dealFormData.class_mod_1, 
+          class_mod_2: dealFormData.class_mod_2,
           pipeline: dealFormData.pipeline || 'Padrão', 
           tasks: dealFormData.tasks,
           billing_cnpj: dealFormData.billingCnpj, 
@@ -571,21 +582,21 @@ export const CrmBoard: React.FC = () => {
       };
 
       try {
-          let updatedDeal: any;
+          let savedData: any;
           if (editingDealId) {
               await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId);
               await appBackend.logActivity({ action: 'update', module: 'crm', details: `Editou negócio: ${dealTitle}`, recordId: editingDealId });
-              updatedDeal = { ...dealFormData, id: editingDealId };
+              savedData = { ...dealFormData, id: editingDealId };
           } else {
               const dealNumber = generateDealNumber();
               const { data } = await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]).select().single();
               await appBackend.logActivity({ action: 'create', module: 'crm', details: `Criou novo negócio: ${dealTitle}`, recordId: data?.id });
-              updatedDeal = { ...payload, id: data?.id, dealNumber };
+              savedData = { ...dealFormData, ...payload, id: data?.id, dealNumber };
           }
 
           // TRIGGER PLUGA WEBHOOK IF STATUS IS CLOSED
           if (isClosing) {
-              sendToPlugaWebhook(updatedDeal as Deal);
+              sendToPlugaWebhook(savedData as Deal);
           }
 
           await fetchData();
@@ -957,8 +968,8 @@ export const CrmBoard: React.FC = () => {
                               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                   <div><label className="block text-xs font-bold text-slate-600 mb-1">Estado (UF)</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.courseState} onChange={e => setDealFormData({...dealFormData, courseState: e.target.value, courseCity: '', classMod1: '', classMod2: ''})}><option value="">Selecione...</option>{availableStates.map(uf => <option key={uf} value={uf}>{uf}</option>)}</select></div>
                                   <div><label className="block text-xs font-bold text-slate-600 mb-1">Cidade do Curso</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" value={dealFormData.courseCity} onChange={e => setDealFormData({ ...dealFormData, courseCity: e.target.value })} disabled={!dealFormData.courseState || availableCities.length === 0}><option value="">Selecione...</option>{availableCities.map(city => <option key={city} value={city}>{city}</option>)}</select></div>
-                                  <div><label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 1</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})} disabled={!dealFormData.courseCity}><option value="">Selecione...</option>{availableMod1Codes.map(code => <option key={code} value={code}>{code}</option>)}</select></div>
-                                  <div><label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 2</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.classMod2} onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})} disabled={!dealFormData.courseCity}><option value="">Selecione...</option>{availableMod2Codes.map(code => <option key={code} value={code}>{code}</option>)}</select></div>
+                                  <div><label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 1</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.class_mod_1} onChange={e => setDealFormData({...dealFormData, class_mod_1: e.target.value})} disabled={!dealFormData.courseCity}><option value="">Selecione...</option>{availableMod1Codes.map(code => <option key={code} value={code}>{code}</option>)}</select></div>
+                                  <div><label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 2</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.class_mod_2} onChange={e => setDealFormData({...dealFormData, class_mod_2: e.target.value})} disabled={!dealFormData.courseCity}><option value="">Selecione...</option>{availableMod2Codes.map(code => <option key={code} value={code}>{code}</option>)}</select></div>
                               </div>
                           </div>
                       )}

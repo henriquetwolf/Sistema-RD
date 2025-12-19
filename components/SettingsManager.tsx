@@ -5,15 +5,20 @@ import {
     Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, 
     Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2,
     Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
-    Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search
+    Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search,
+    Play, Pause, Calendar
 } from 'lucide-react';
 import { appBackend, CompanySetting } from '../services/appBackend';
-import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog } from '../types';
+import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob } from '../types';
 import clsx from 'clsx';
 
 interface SettingsManagerProps {
   onLogoChange: (newLogo: string | null) => void;
   currentLogo: string | null;
+  // Novas props para gerenciar conexões
+  jobs: SyncJob[];
+  onStartWizard: () => void;
+  onDeleteJob: (id: string) => void;
 }
 
 const MODULES = [
@@ -33,15 +38,19 @@ const MODULES = [
     { id: 'events', label: 'Eventos' },
     { id: 'students', label: 'Alunos' },
     { id: 'certificates', label: 'Certificados' },
-    { id: 'tables', label: 'Dados Brutos' },
-    { id: 'settings', label: 'Conexões' },
     { id: 'global_settings', label: 'Configurações' },
 ];
 
 const PRODUCT_TYPES = ['Presencial', 'Digital', 'Evento'];
 
-export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, currentLogo }) => {
-  const [activeTab, setActiveTab] = useState<'visual' | 'company' | 'roles' | 'database' | 'banners' | 'instructor_levels' | 'logs'>('visual');
+export const SettingsManager: React.FC<SettingsManagerProps> = ({ 
+  onLogoChange, 
+  currentLogo,
+  jobs,
+  onStartWizard,
+  onDeleteJob
+}) => {
+  const [activeTab, setActiveTab] = useState<'visual' | 'connections' | 'company' | 'roles' | 'database' | 'banners' | 'instructor_levels' | 'logs'>('visual');
   const [preview, setPreview] = useState<string | null>(currentLogo);
   const [securityMargin, setSecurityMargin] = useState<number>(5);
   const [isSaved, setIsSaved] = useState(false);
@@ -103,7 +112,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
 
   const fetchInstructorLevels = async () => {
     setIsLoadingLevels(true);
-    try { const data = await appBackend.getInstructorLevels(); setInstructorLevels(data); } catch(e) { console.error(e); } finally { setIsLoadingLevels(false); }
+    try { const data = await appBackend.getInstructorLevels(); setInstructorLevels(data); } catch (e) { console.error(e); } finally { setIsLoadingLevels(false); }
   };
 
   const fetchLogs = async () => {
@@ -263,11 +272,12 @@ NOTIFY pgrst, 'reload config';
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <h2 className="text-2xl font-bold text-slate-800">Configurações do Systema</h2>
+            <h2 className="text-2xl font-bold text-slate-800">Configurações do Sistema</h2>
             <p className="text-slate-500 text-sm">Personalize acessos, identidade e acompanhe atividades.</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto shrink-0 max-w-full no-scrollbar">
             <button onClick={() => setActiveTab('visual')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Geral</button>
+            <button onClick={() => setActiveTab('connections')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'connections' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Conexões</button>
             <button onClick={() => setActiveTab('company')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'company' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Empresas</button>
             <button onClick={() => setActiveTab('roles')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'roles' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Acessos</button>
             <button onClick={() => setActiveTab('logs')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'logs' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Atividades</button>
@@ -278,6 +288,85 @@ NOTIFY pgrst, 'reload config';
       </div>
       
       <div className="max-w-5xl space-y-8">
+
+        {/* TAB: CONEXÕES (Transferida da Sidebar) */}
+        {activeTab === 'connections' && (
+          <div className="space-y-6 animate-in fade-in">
+              <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Database className="text-teal-600" size={20}/> Gerenciamento de Conexões</h3>
+                    <p className="text-sm text-slate-500">Fontes de dados sincronizadas com o banco de dados.</p>
+                  </div>
+                  <button onClick={onStartWizard} className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg shadow-teal-600/20 transition-all">
+                      <Plus size={18} /> Nova Conexão
+                  </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {jobs.length === 0 ? (
+                      <div className="col-span-full py-12 text-center bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400">
+                          Nenhuma conexão ativa encontrada.
+                      </div>
+                  ) : (
+                      jobs.map(job => {
+                          const safeDate = (d: any) => d ? new Date(d) : new Date();
+                          return (
+                              <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4 group hover:border-teal-200 transition-all">
+                                  <div className="flex items-center justify-between">
+                                      <div>
+                                          <h4 className="font-bold text-slate-800 leading-tight">{job.name}</h4>
+                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{job.config.tableName}</p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                          {job.active ? <Play size={16} className="text-green-500" /> : <Pause size={16} className="text-slate-400" />}
+                                          <button onClick={() => onDeleteJob(job.id)} className="text-slate-300 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
+                                              <Trash2 size={16} />
+                                          </button>
+                                      </div>
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+                                      <div className="flex items-start gap-2">
+                                          <Users className="text-slate-300 shrink-0" size={14} />
+                                          <div className="flex flex-col">
+                                              <span className="text-[9px] font-bold text-slate-400 uppercase">Criado por</span>
+                                              <span className="text-[11px] font-medium text-slate-600 truncate max-w-[120px]" title={job.createdBy}>{job.createdBy || 'Desconhecido'}</span>
+                                          </div>
+                                      </div>
+                                      <div className="flex items-start gap-2">
+                                          <Calendar size={14} className="text-slate-300 shrink-0" />
+                                          <div className="flex flex-col">
+                                              <span className="text-[9px] font-bold text-slate-400 uppercase">Data/Hora</span>
+                                              <span className="text-[11px] font-medium text-slate-600">
+                                                  {safeDate(job.createdAt).toLocaleDateString()}
+                                              </span>
+                                          </div>
+                                      </div>
+                                  </div>
+
+                                  <div className="pt-2">
+                                      <span className={clsx("text-[10px] font-bold uppercase px-2 py-0.5 rounded", 
+                                          job.status === 'success' ? "bg-green-100 text-green-700" : 
+                                          job.status === 'error' ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-400"
+                                      )}>
+                                          Status: {job.status === 'success' ? 'Sincronizado' : job.status === 'error' ? 'Erro' : 'Aguardando'}
+                                      </span>
+                                  </div>
+
+                                  {job.lastSync && (
+                                      <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-400 bg-slate-50 px-2 py-1 rounded">
+                                          <Clock size={10} />
+                                          Última Sinc: {safeDate(job.lastSync).toLocaleString()}
+                                      </div>
+                                  )}
+                              </div>
+                          )
+                      })
+                  )}
+              </div>
+          </div>
+        )}
+
         {/* TAB: ATIVIDADES (LOGS) */}
         {activeTab === 'logs' && (
             <div className="space-y-6">

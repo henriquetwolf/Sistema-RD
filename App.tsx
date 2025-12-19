@@ -66,7 +66,7 @@ function App() {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const jobsRef = useRef<SyncJob[]>([]); 
   
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'settings' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios' | 'inventory'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'tables' | 'crm' | 'analysis' | 'collaborators' | 'classes' | 'teachers' | 'forms' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios' | 'inventory'>('overview');
 
   // Overview Stats State
   const [overviewStats, setOverviewStats] = useState({
@@ -338,7 +338,7 @@ function App() {
       
       setJobs(prev => [...prev, newJob]);
       setStep(AppStep.DASHBOARD);
-      setDashboardTab('settings');
+      setDashboardTab('global_settings'); // Redireciona para onde as conexões agora vivem
       setStatus('idle');
       if (isAutoSync) setTimeout(() => performJobSync(newJob), 500);
   };
@@ -443,8 +443,6 @@ function App() {
                                 {canAccess('collaborators') && <button onClick={() => setDashboardTab('collaborators')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'collaborators' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Briefcase size={18} /> Colaboradores</button>}
                                 {canAccess('classes') && <button onClick={() => setDashboardTab('classes')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'classes' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><GraduationCap size={18} /> Turmas</button>}
                                 {canAccess('teachers') && <button onClick={() => setDashboardTab('teachers')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'teachers' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><School size={18} /> Professores</button>}
-                                {canAccess('tables') && <button onClick={() => setDashboardTab('tables')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'tables' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Table size={18} /> Dados Brutos</button>}
-                                {canAccess('settings') && <button onClick={() => setDashboardTab('settings')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Database size={18} /> Conexões</button>}
                             </nav>
                             {canAccess('global_settings') && <div className="mt-4 pt-4 border-t border-slate-100"><button onClick={() => setDashboardTab('global_settings')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'global_settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Cog size={18} /> Configurações</button></div>}
                         </div>
@@ -559,70 +557,10 @@ function App() {
                         {dashboardTab === 'products' && <ProductsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'students' && <StudentsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'events' && <EventsManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} />}
+                        {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} jobs={jobs} onStartWizard={handleStartWizard} onDeleteJob={handleDeleteJob} />}
                         {dashboardTab === 'analysis' && <SalesAnalysis />}
                         {dashboardTab === 'whatsapp' && <WhatsAppInbox />}
                         {dashboardTab === 'crm' && <div className="h-full"><CrmBoard /></div>}
-                        {dashboardTab === 'tables' && <TableViewer jobs={jobs} />}
-                        {dashboardTab === 'settings' && <div className="space-y-6">
-                            <div className="flex justify-between items-end"><div><h2 className="text-2xl font-bold text-slate-800">Conexões</h2><p className="text-sm text-slate-500">Conexões salvas na nuvem e sincronizadas em todos os seus computadores.</p></div><button onClick={handleStartWizard} className="bg-teal-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"><Plus size={18} /> Nova Conexão</button></div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {jobs.map(job => {
-                                    const safeDate = (d: any) => d ? new Date(d) : new Date();
-                                    return (
-                                        <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <h4 className="font-bold text-slate-800 leading-tight">{job.name}</h4>
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{job.config.tableName}</p>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    {job.active ? <Play size={16} className="text-green-500" /> : <Pause size={16} className="text-slate-400" />}
-                                                    <button onClick={() => handleDeleteJob(job.id)} className="text-red-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
-                                                <div className="flex items-start gap-2">
-                                                    <Users className="text-slate-300 shrink-0" size={14} />
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase">Criado por</span>
-                                                        <span className="text-[11px] font-medium text-slate-600 truncate max-w-[120px]" title={job.createdBy}>{job.createdBy || 'Desconhecido'}</span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <Calendar className="text-slate-300 shrink-0" size={14} />
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase">Data/Hora</span>
-                                                        <span className="text-[11px] font-medium text-slate-600">
-                                                            {safeDate(job.createdAt).toLocaleDateString()} {safeDate(job.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="pt-2">
-                                                <span className={clsx("text-[10px] font-bold uppercase px-2 py-0.5 rounded", 
-                                                    job.status === 'success' ? "bg-green-100 text-green-700" : 
-                                                    job.status === 'error' ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-400"
-                                                )}>
-                                                    Status: {job.status === 'success' ? 'Sincronizado' : job.status === 'error' ? 'Erro' : 'Aguardando'}
-                                                </span>
-                                            </div>
-
-                                            {job.lastSync && (
-                                                <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-400 bg-slate-50 px-2 py-1 rounded">
-                                                    <Clock size={10} />
-                                                    Última Sinc: {safeDate(job.lastSync).toLocaleString()}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </div>}
                     </div>
                 </div>
             </main>

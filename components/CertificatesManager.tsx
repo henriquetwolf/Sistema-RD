@@ -19,7 +19,6 @@ const DEFAULT_LAYOUT: CertificateLayout = {
     footer: { x: 50, y: 80, fontSize: 16, fontFamily: 'serif', color: '#475569', fontWeight: 'normal', textAlign: 'center', width: 80 }
 };
 
-// Hardcoded Courses from ClassesManager to allow direct linking
 const STANDARD_COURSES = ['Formação Completa em Pilates', 'Pilates Clínico', 'Pilates Suspenso', 'Gestão de Studios', 'MIT Movimento Inteligente'];
 
 const INITIAL_CERT: CertificateModel = {
@@ -33,13 +32,12 @@ const INITIAL_CERT: CertificateModel = {
     createdAt: ''
 };
 
-// Helper Component for Dragging
 interface InteractableTextProps {
     text: string | React.ReactNode;
     style: TextStyle;
     isSelected: boolean;
     onSelect: () => void;
-    onMouseDown: (e: React.MouseEvent) => void; // Pass down logic
+    onMouseDown: (e: React.MouseEvent) => void;
     scale: number;
 }
 
@@ -47,11 +45,11 @@ const InteractableText: React.FC<InteractableTextProps> = ({ text, style, isSele
     return (
         <div 
             onMouseDown={(e) => {
-                e.stopPropagation(); // Prevent container drag/click
-                onSelect(); // Select immediately
-                onMouseDown(e); // Start drag logic
+                e.stopPropagation();
+                onSelect();
+                onMouseDown(e);
             }}
-            onClick={(e) => e.stopPropagation()} // CRITICAL: Stop click from bubbling to container (which deselects)
+            onClick={(e) => e.stopPropagation()}
             className={clsx(
                 "absolute cursor-move select-none p-2 border-2 transition-all group",
                 isSelected ? "border-amber-500 bg-amber-50/30 z-20 shadow-sm" : "border-transparent hover:border-slate-300/50 z-10"
@@ -71,8 +69,6 @@ const InteractableText: React.FC<InteractableTextProps> = ({ text, style, isSele
             }}
         >
             {text}
-            
-            {/* Visual Indicator when selected */}
             {isSelected && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex gap-1">
                     <div className="bg-amber-500 w-2 h-2 rounded-full"></div>
@@ -88,7 +84,6 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
   const [products, setProducts] = useState<{id: string, name: string}[]>([]);
   const [currentCert, setCurrentCert] = useState<CertificateModel>(INITIAL_CERT);
   
-  // Editor State
   const [editorSide, setEditorSide] = useState<'front' | 'back'>('front');
   const [selectedElement, setSelectedElement] = useState<'body' | 'name' | 'footer' | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -96,12 +91,10 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
   const elementStartRef = useRef<{x: number, y: number} | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Generator State
   const [genName, setGenName] = useState('');
   const [genCity, setGenCity] = useState('');
   const [genDate, setGenDate] = useState('');
   
-  // Loading
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -132,7 +125,6 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
   };
 
   const handleEdit = (cert: CertificateModel) => {
-      // Merge with default layout if missing (migration)
       const layout = cert.layoutConfig || DEFAULT_LAYOUT;
       setCurrentCert({ ...cert, layoutConfig: layout });
       setView('editor');
@@ -148,9 +140,15 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
   };
 
   const handleDelete = async (id: string) => {
+      const target = certificates.find(c => c.id === id);
       if(window.confirm("Excluir este modelo?")) {
-          await appBackend.deleteCertificate(id);
-          fetchCertificates();
+          try {
+              await appBackend.deleteCertificate(id);
+              await appBackend.logActivity({ action: 'delete', module: 'certificates', details: `Excluiu modelo de certificado: ${target?.title}`, recordId: id });
+              fetchCertificates();
+          } catch (e: any) {
+              alert(`Erro ao excluir: ${e.message}`);
+          }
       }
   };
 
@@ -161,19 +159,25 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       }
       setIsSaving(true);
       try {
+          const isUpdate = !!currentCert.id;
           const certToSave = { 
               ...currentCert, 
               id: currentCert.id || crypto.randomUUID(),
               createdAt: currentCert.createdAt || new Date().toISOString()
           };
           await appBackend.saveCertificate(certToSave);
+          await appBackend.logActivity({ 
+              action: isUpdate ? 'update' : 'create', 
+              module: 'certificates', 
+              details: `${isUpdate ? 'Editou' : 'Criou'} modelo de certificado: ${currentCert.title}`, 
+              recordId: certToSave.id 
+          });
           await fetchCertificates();
           setView('list');
       } catch (e: any) {
           console.error(e);
-          // Check for column errors
-          if (e.message?.includes('column') || e.message?.includes('does not exist') || e.message?.includes('layout_config')) {
-             alert("Erro de Banco de Dados: O sistema tentou salvar informações em colunas que não existem (ex: layout_config, back_background).\n\nVá em 'Configurações' > 'Diagnóstico de Banco de Dados' e copie/execute o Script SQL de Correção.");
+          if (e.message?.includes('column') || e.message?.includes('does not exist')) {
+             alert("Erro de Banco de Dados: Colunas ausentes no banco. Vá em 'Configurações' > 'Banco de Dados' e rode o SQL de reparo.");
           } else {
              alert(`Erro ao salvar: ${e.message}`);
           }
@@ -188,11 +192,10 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
           const reader = new FileReader();
           reader.onloadend = () => {
               const result = reader.result as string;
-              if (side === 'front') {
-                  setCurrentCert({ ...currentCert, backgroundData: result });
-              } else {
-                  setCurrentCert({ ...currentCert, backBackgroundData: result });
-              }
+              setCurrentCert(prev => ({
+                  ...prev,
+                  [side === 'front' ? 'backgroundData' : 'backBackgroundData']: result
+              }));
           };
           reader.readAsDataURL(file);
       }
@@ -202,34 +205,29 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       window.print();
   };
 
-  // --- DRAG LOGIC ---
   const handleElementMouseDown = (e: React.MouseEvent, element: 'body' | 'name' | 'footer') => {
-      // Logic handled in InteractableText, here we just prepare state
       setIsDragging(true);
       dragStartRef.current = { x: e.clientX, y: e.clientY };
-      
       const layout = currentCert.layoutConfig || DEFAULT_LAYOUT;
       elementStartRef.current = { x: layout[element].x, y: layout[element].y };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
       if (!isDragging || !selectedElement || !containerRef.current || !dragStartRef.current || !elementStartRef.current) return;
-
       e.preventDefault();
       const rect = containerRef.current.getBoundingClientRect();
       const deltaX = e.clientX - dragStartRef.current.x;
       const deltaY = e.clientY - dragStartRef.current.y;
-
-      // Calculate percentage movement relative to container size
       const percentX = (deltaX / rect.width) * 100;
       const percentY = (deltaY / rect.height) * 100;
-
       const newX = Math.max(0, Math.min(100, elementStartRef.current.x + percentX));
       const newY = Math.max(0, Math.min(100, elementStartRef.current.y + percentY));
 
-      const updatedLayout = { ...currentCert.layoutConfig! };
-      updatedLayout[selectedElement] = { ...updatedLayout[selectedElement], x: newX, y: newY };
-      setCurrentCert({ ...currentCert, layoutConfig: updatedLayout });
+      setCurrentCert(prev => {
+          const updatedLayout = { ...prev.layoutConfig! };
+          updatedLayout[selectedElement] = { ...updatedLayout[selectedElement], x: newX, y: newY };
+          return { ...prev, layoutConfig: updatedLayout };
+      });
   };
 
   const handleMouseUp = () => {
@@ -238,17 +236,15 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       elementStartRef.current = null;
   };
 
-  // --- STYLE UPDATE ---
   const updateStyle = (field: keyof TextStyle, value: any) => {
       if (!selectedElement) return;
-      const updatedLayout = { ...currentCert.layoutConfig! };
-      updatedLayout[selectedElement] = { ...updatedLayout[selectedElement], [field]: value };
-      setCurrentCert({ ...currentCert, layoutConfig: updatedLayout });
+      setCurrentCert(prev => {
+          const updatedLayout = { ...prev.layoutConfig! };
+          updatedLayout[selectedElement] = { ...updatedLayout[selectedElement], [field]: value };
+          return { ...prev, layoutConfig: updatedLayout };
+      });
   };
 
-  // --- RENDERERS ---
-
-  // 1. LIST VIEW
   if (view === 'list') {
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
@@ -283,7 +279,6 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {certificates.map(cert => (
                         <div key={cert.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col group hover:shadow-md transition-all">
-                            {/* Preview Thumbnail */}
                             <div className="h-40 bg-slate-100 relative overflow-hidden border-b border-slate-100">
                                 {cert.backgroundData ? (
                                     <img src={cert.backgroundData} alt="bg" className="w-full h-full object-cover opacity-80" />
@@ -292,13 +287,11 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                         <ImageIcon size={32} />
                                     </div>
                                 )}
-                                {/* Overlay Actions */}
                                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={() => handleEdit(cert)} className="bg-white text-slate-700 p-2 rounded-full hover:bg-slate-100" title="Editar"><Edit2 size={16}/></button>
                                     <button onClick={() => handleDelete(cert.id)} className="bg-white text-red-600 p-2 rounded-full hover:bg-red-50" title="Excluir"><Trash2 size={16}/></button>
                                 </div>
                             </div>
-                            
                             <div className="p-5 flex-1 flex flex-col">
                                 <h3 className="font-bold text-slate-800 text-lg mb-1">{cert.title}</h3>
                                 <div className="text-xs text-slate-500 mb-4 flex flex-col gap-1">
@@ -306,7 +299,6 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                     {cert.linkedProductId && (
                                         <span className="flex items-center gap-1 text-teal-600 font-medium">
                                             <Book size={10} /> 
-                                            {/* Try to match Product ID first, if not found, assume it is a Course Name (text) */}
                                             {products.find(p => p.id === cert.linkedProductId)?.name || cert.linkedProductId}
                                         </span>
                                     )}
@@ -326,21 +318,18 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       );
   }
 
-  // 2. EDITOR VIEW
   if (view === 'editor') {
       const layout = currentCert.layoutConfig || DEFAULT_LAYOUT;
       const activeStyle = selectedElement ? layout[selectedElement] : null;
 
       return (
         <div className="h-full flex flex-col bg-slate-50">
-            {/* Header */}
             <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-4">
                     <button onClick={() => setView('list')} className="text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100"><ArrowLeft size={20} /></button>
                     <h2 className="text-lg font-bold text-slate-800">Editor de Modelo</h2>
                 </div>
                 <div className="flex items-center gap-2">
-                    {/* View Switcher */}
                     <div className="bg-slate-100 rounded-lg p-1 flex mr-4">
                         <button 
                             onClick={() => { setEditorSide('front'); setSelectedElement(null); }}
@@ -355,7 +344,6 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                             <FlipHorizontal size={14} /> Verso
                         </button>
                     </div>
-
                     <button 
                         onClick={handleSave} 
                         disabled={isSaving}
@@ -368,20 +356,16 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
             </div>
 
             <div className="flex-1 flex overflow-hidden">
-                {/* Sidebar Configuration */}
                 <div className="w-96 bg-white border-r border-slate-200 overflow-y-auto p-6 space-y-6 shadow-sm z-10 shrink-0">
-                    
-                    {/* STYLE EDITOR (Show if element selected) */}
                     {selectedElement ? (
                         <div className="animate-in fade-in slide-in-from-right-2 duration-200">
                             <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
                                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
                                     <Type size={16} className="text-amber-500" />
-                                    Estilo: {selectedElement === 'name' ? 'Nome do Aluno' : selectedElement === 'body' ? 'Texto Principal' : 'Rodapé (Cidade/Data)'}
+                                    Estilo: {selectedElement === 'name' ? 'Nome do Aluno' : selectedElement === 'body' ? 'Texto Principal' : 'Rodapé'}
                                 </h3>
                                 <button onClick={() => setSelectedElement(null)} className="text-xs text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Voltar</button>
                             </div>
-
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Fonte</label>
@@ -390,32 +374,21 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                         value={activeStyle?.fontFamily}
                                         onChange={(e) => updateStyle('fontFamily', e.target.value)}
                                     >
-                                        <option value="serif">Serifa Padrão (Times)</option>
+                                        <option value="serif">Serifa Padrão</option>
                                         <option value="sans-serif">Sans-Serif (Arial)</option>
-                                        <option value="'Great Vibes', cursive">Manuscrita (Great Vibes)</option>
+                                        <option value="'Great Vibes', cursive">Elegante (Great Vibes)</option>
                                         <option value="'Dancing Script', cursive">Manuscrita (Dancing Script)</option>
-                                        <option value="'Playfair Display', serif">Elegante (Playfair)</option>
                                     </select>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 mb-1">Tamanho (px)</label>
-                                        <input 
-                                            type="number" 
-                                            className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
-                                            value={activeStyle?.fontSize}
-                                            onChange={(e) => updateStyle('fontSize', Number(e.target.value))}
-                                        />
+                                        <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded text-sm" value={activeStyle?.fontSize} onChange={(e) => updateStyle('fontSize', Number(e.target.value))} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 mb-1">Cor</label>
                                         <div className="flex items-center gap-2">
-                                            <input 
-                                                type="color" 
-                                                className="w-8 h-9 border border-slate-300 rounded cursor-pointer p-0.5"
-                                                value={activeStyle?.color}
-                                                onChange={(e) => updateStyle('color', e.target.value)}
-                                            />
+                                            <input type="color" className="w-8 h-9 border border-slate-300 rounded cursor-pointer p-0.5" value={activeStyle?.color} onChange={(e) => updateStyle('color', e.target.value)} />
                                             <span className="text-xs text-slate-500 font-mono uppercase">{activeStyle?.color}</span>
                                         </div>
                                     </div>
@@ -424,14 +397,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Alinhamento</label>
                                     <div className="flex bg-white border border-slate-300 rounded overflow-hidden">
                                         {['left', 'center', 'right'].map((align) => (
-                                            <button 
-                                                key={align}
-                                                className={clsx(
-                                                    "flex-1 py-1.5 text-xs font-medium capitalize hover:bg-slate-50",
-                                                    activeStyle?.textAlign === align ? "bg-amber-50 text-amber-700" : "text-slate-600"
-                                                )}
-                                                onClick={() => updateStyle('textAlign', align)}
-                                            >
+                                            <button key={align} className={clsx("flex-1 py-1.5 text-xs font-medium capitalize hover:bg-slate-50", activeStyle?.textAlign === align ? "bg-amber-50 text-amber-700" : "text-slate-600")} onClick={() => updateStyle('textAlign', align)}>
                                                 {align === 'left' ? 'Esq' : align === 'center' ? 'Centro' : 'Dir'}
                                             </button>
                                         ))}
@@ -439,70 +405,27 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Largura da Área (%)</label>
-                                    <input 
-                                        type="range" min="20" max="100" 
-                                        value={activeStyle?.width} 
-                                        onChange={(e) => updateStyle('width', Number(e.target.value))}
-                                        className="w-full accent-amber-500"
-                                    />
+                                    <input type="range" min="20" max="100" value={activeStyle?.width} onChange={(e) => updateStyle('width', Number(e.target.value))} className="w-full accent-amber-500" />
                                     <div className="text-right text-[10px] text-slate-400">{activeStyle?.width}%</div>
                                 </div>
-                            </div>
-                            <div className="mt-4 p-3 bg-amber-50 text-amber-800 text-xs rounded border border-amber-100 flex gap-2">
-                                <MousePointer2 size={16} className="shrink-0" />
-                                <span>Você pode arrastar o texto na imagem para posicioná-lo.</span>
                             </div>
                         </div>
                     ) : (
                         <>
-                            {/* GENERAL CONFIGURATION */}
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Configurações Gerais</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-2"
-                                        value={currentCert.title}
-                                        onChange={e => setCurrentCert({...currentCert, title: e.target.value})}
-                                        placeholder="Nome do Modelo (Ex: Curso Pilates 2024)"
-                                    />
-                                    
-                                    <select
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-                                        value={currentCert.linkedProductId || ''}
-                                        onChange={e => setCurrentCert({...currentCert, linkedProductId: e.target.value})}
-                                    >
+                                    <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-2" value={currentCert.title} onChange={e => setCurrentCert(prev => ({...prev, title: e.target.value}))} placeholder="Nome do Modelo" />
+                                    <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={currentCert.linkedProductId || ''} onChange={e => setCurrentCert(prev => ({...prev, linkedProductId: e.target.value}))}>
                                         <option value="">-- Associar ao Curso --</option>
-                                        
-                                        <optgroup label="Cursos Presenciais">
-                                            {STANDARD_COURSES.map(course => (
-                                                <option key={course} value={course}>{course}</option>
-                                            ))}
-                                        </optgroup>
-
-                                        {products.length > 0 && (
-                                            <optgroup label="Produtos Digitais">
-                                                {products.map(p => (
-                                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                                ))}
-                                            </optgroup>
-                                        )}
+                                        <optgroup label="Presenciais">{STANDARD_COURSES.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+                                        <optgroup label="Digitais">{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>
                                     </select>
                                 </div>
-
                                 <div className="border-t border-slate-100 pt-4">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                                        Imagem de Fundo ({editorSide === 'front' ? 'Frente' : 'Verso'})
-                                    </label>
-                                    <div 
-                                        className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50 transition-colors relative cursor-pointer"
-                                    >
-                                        <input 
-                                            type="file" 
-                                            accept="image/*" 
-                                            onChange={(e) => handleImageUpload(e, editorSide)} 
-                                            className="absolute inset-0 opacity-0 cursor-pointer" 
-                                        />
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Imagem de Fundo ({editorSide === 'front' ? 'Frente' : 'Verso'})</label>
+                                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50 transition-colors relative cursor-pointer">
+                                        <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, editorSide)} className="absolute inset-0 opacity-0 cursor-pointer" />
                                         <div className="flex flex-col items-center">
                                             <ImageIcon className="text-slate-300 mb-1" size={24} />
                                             <span className="text-xs text-slate-500">Trocar Imagem</span>
@@ -510,134 +433,49 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                     </div>
                                 </div>
                             </div>
-
-                            {/* FIELDS LIST */}
                             {editorSide === 'front' && (
                                 <div className="mt-6 pt-6 border-t border-slate-200">
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Campos do Certificado</label>
-                                    
                                     <div className="space-y-3">
-                                        {/* Name Field */}
                                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 group hover:border-amber-300 transition-colors">
                                             <div className="flex justify-between items-center mb-1">
                                                 <span className="text-sm font-bold text-slate-700 flex items-center gap-1"><User size={14}/> Nome do Aluno</span>
-                                                <button onClick={() => setSelectedElement('name')} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors">
-                                                    Editar Estilo
-                                                </button>
+                                                <button onClick={() => setSelectedElement('name')} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-amber-50">Estilo</button>
                                             </div>
-                                            <p className="text-[10px] text-slate-400">Campo dinâmico (preenchido automaticamente).</p>
                                         </div>
-
-                                        {/* Body Text Field */}
                                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 group hover:border-amber-300 transition-colors">
                                             <div className="flex justify-between items-center mb-2">
                                                 <span className="text-sm font-bold text-slate-700 flex items-center gap-1"><AlignLeft size={14}/> Texto Principal</span>
-                                                <button onClick={() => setSelectedElement('body')} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors">
-                                                    Editar Estilo
-                                                </button>
+                                                <button onClick={() => setSelectedElement('body')} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-amber-50">Estilo</button>
                                             </div>
-                                            <textarea 
-                                                className="w-full px-3 py-2 border border-slate-300 rounded text-sm h-24 resize-none bg-white focus:ring-1 focus:ring-amber-500 outline-none"
-                                                value={currentCert.bodyText}
-                                                onChange={e => setCurrentCert({...currentCert, bodyText: e.target.value})}
-                                                placeholder="Digite o texto do certificado..."
-                                            ></textarea>
-                                            <p className="text-[10px] text-slate-400 mt-1">Variáveis: [NOME ALUNO], [CIDADE], [DATA].</p>
+                                            <textarea className="w-full px-3 py-2 border border-slate-300 rounded text-sm h-24 resize-none bg-white outline-none" value={currentCert.bodyText} onChange={e => setCurrentCert(prev => ({...prev, bodyText: e.target.value}))} placeholder="Texto..."></textarea>
                                         </div>
-
-                                        {/* Footer Field */}
                                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 group hover:border-amber-300 transition-colors">
                                             <div className="flex justify-between items-center mb-1">
                                                 <span className="text-sm font-bold text-slate-700 flex items-center gap-1"><MapPin size={14}/> Local e Data</span>
-                                                <button onClick={() => setSelectedElement('footer')} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors">
-                                                    Editar Estilo
-                                                </button>
+                                                <button onClick={() => setSelectedElement('footer')} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded hover:bg-amber-50">Estilo</button>
                                             </div>
-                                            <p className="text-[10px] text-slate-400">Campo dinâmico (preenchido automaticamente).</p>
                                         </div>
                                     </div>
-                                </div>
-                            )}
-                            
-                            {editorSide === 'back' && (
-                                <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-xs border border-blue-100 mt-4">
-                                    <strong>Nota:</strong> O código de autenticação (Hash) do certificado será inserido automaticamente no canto inferior direito do verso.
                                 </div>
                             )}
                         </>
                     )}
                 </div>
 
-                {/* Preview Canvas */}
-                <div 
-                    className="flex-1 bg-slate-200 p-8 overflow-auto flex items-center justify-center select-none"
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                >
-                    <div 
-                        ref={containerRef}
-                        className="bg-white shadow-2xl relative overflow-hidden transition-all duration-300 flex-shrink-0 origin-center" 
-                        style={{ 
-                            // A4 Landscape Dimensions: 297mm x 210mm
-                            width: '297mm', 
-                            height: '210mm', 
-                            // Scale down to 0.5 to ensure fit on standard screens
-                            transform: 'scale(0.5)', 
-                        }}
-                        onClick={() => setSelectedElement(null)} // Deselect if clicking background
-                    >
-                        {/* Render Based on Active Side */}
+                <div className="flex-1 bg-slate-200 p-8 overflow-auto flex items-center justify-center select-none" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+                    <div ref={containerRef} className="bg-white shadow-2xl relative overflow-hidden transition-all duration-300 flex-shrink-0 origin-center" style={{ width: '297mm', height: '210mm', transform: 'scale(0.5)' }} onClick={() => setSelectedElement(null)}>
                         {editorSide === 'front' ? (
                             <>
-                                {/* Background Front */}
-                                {currentCert.backgroundData && (
-                                    <img src={currentCert.backgroundData} alt="bg" className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none" />
-                                )}
-
-                                {/* Content Overlay Front - DRAGGABLE ELEMENTS */}
-                                <InteractableText 
-                                    text={currentCert.bodyText || "Texto do certificado..."}
-                                    style={(currentCert.layoutConfig || DEFAULT_LAYOUT).body}
-                                    isSelected={selectedElement === 'body'}
-                                    onSelect={() => setSelectedElement('body')}
-                                    onMouseDown={(e) => handleElementMouseDown(e, 'body')}
-                                    scale={0.5}
-                                />
-                                
-                                <InteractableText 
-                                    text="Nome do Aluno"
-                                    style={(currentCert.layoutConfig || DEFAULT_LAYOUT).name}
-                                    isSelected={selectedElement === 'name'}
-                                    onSelect={() => setSelectedElement('name')}
-                                    onMouseDown={(e) => handleElementMouseDown(e, 'name')}
-                                    scale={0.5}
-                                />
-
-                                <InteractableText 
-                                    text={`Cidade Exemplo, ${new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}`}
-                                    style={(currentCert.layoutConfig || DEFAULT_LAYOUT).footer}
-                                    isSelected={selectedElement === 'footer'}
-                                    onSelect={() => setSelectedElement('footer')}
-                                    onMouseDown={(e) => handleElementMouseDown(e, 'footer')}
-                                    scale={0.5}
-                                />
+                                {currentCert.backgroundData && <img src={currentCert.backgroundData} alt="bg" className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none" />}
+                                <InteractableText text={currentCert.bodyText || "..."} style={layout.body} isSelected={selectedElement === 'body'} onSelect={() => setSelectedElement('body')} onMouseDown={(e) => handleElementMouseDown(e, 'body')} scale={0.5} />
+                                <InteractableText text="Nome do Aluno" style={layout.name} isSelected={selectedElement === 'name'} onSelect={() => setSelectedElement('name')} onMouseDown={(e) => handleElementMouseDown(e, 'name')} scale={0.5} />
+                                <InteractableText text={`Cidade, ${new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}`} style={layout.footer} isSelected={selectedElement === 'footer'} onSelect={() => setSelectedElement('footer')} onMouseDown={(e) => handleElementMouseDown(e, 'footer')} scale={0.5} />
                             </>
                         ) : (
                             <>
-                                {/* Background Back */}
-                                {currentCert.backBackgroundData ? (
-                                    <img src={currentCert.backBackgroundData} alt="bg-back" className="absolute inset-0 w-full h-full object-cover z-0" />
-                                ) : (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-slate-50 text-slate-300">
-                                        <span className="text-2xl font-bold uppercase tracking-widest">Verso em Branco</span>
-                                    </div>
-                                )}
-                                
-                                {/* Hash Placeholder */}
-                                <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-sm z-10 bg-white/80 px-3 py-1 rounded border border-slate-200">
-                                    ID: 8f4b2c-example-hash-code
-                                </div>
+                                {currentCert.backBackgroundData ? <img src={currentCert.backBackgroundData} alt="bg-back" className="absolute inset-0 w-full h-full object-cover z-0" /> : <div className="absolute inset-0 flex items-center justify-center bg-slate-50 text-slate-300"><span className="text-2xl font-bold uppercase tracking-widest">Verso em Branco</span></div>}
+                                <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-sm z-10 bg-white/80 px-3 py-1 rounded border border-slate-200">ID: PREVIEW-HASH</div>
                             </>
                         )}
                     </div>
@@ -647,156 +485,34 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       );
   }
 
-  // 3. GENERATOR VIEW (Preview before print)
   if (view === 'generator') {
       const layout = currentCert.layoutConfig || DEFAULT_LAYOUT;
-
       return (
         <div className="h-full flex flex-col bg-slate-50">
-            {/* Header (Hidden on Print) */}
             <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 print:hidden">
                 <div className="flex items-center gap-4">
                     <button onClick={() => setView('list')} className="text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100"><ArrowLeft size={20} /></button>
                     <h2 className="text-lg font-bold text-slate-800">Emitir: {currentCert.title}</h2>
                 </div>
-                <button 
-                    onClick={handlePrint} 
-                    className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm"
-                >
-                    <Printer size={18} /> Imprimir / PDF
-                </button>
+                <button onClick={handlePrint} className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm"><Printer size={18} /> Imprimir / PDF</button>
             </div>
-
             <div className="flex-1 flex overflow-hidden">
-                {/* Input Sidebar (Hidden on Print) */}
                 <div className="w-80 bg-white border-r border-slate-200 overflow-y-auto p-6 space-y-6 shadow-sm z-10 print:hidden shrink-0">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2"><User size={14}/> Nome do Aluno</label>
-                        <input 
-                            type="text" 
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                            value={genName}
-                            onChange={e => setGenName(e.target.value)}
-                            placeholder="Nome completo"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2"><MapPin size={14}/> Cidade</label>
-                        <input 
-                            type="text" 
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                            value={genCity}
-                            onChange={e => setGenCity(e.target.value)}
-                            placeholder="Ex: São Paulo"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2"><Calendar size={14}/> Data</label>
-                        <input 
-                            type="text" 
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                            value={genDate}
-                            onChange={e => setGenDate(e.target.value)}
-                            placeholder="DD/MM/AAAA"
-                        />
-                    </div>
-                    
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                        <p><strong>Dica de Impressão:</strong></p>
-                        <ul className="list-disc list-inside mt-1 space-y-1">
-                            <li>Selecione "Salvar como PDF"</li>
-                            <li>Layout: <strong>Paisagem</strong></li>
-                            <li>Margens: <strong>Nenhuma</strong></li>
-                            <li>Habilitar: <strong>Gráficos de plano de fundo</strong></li>
-                        </ul>
-                    </div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2"><User size={14}/> Nome do Aluno</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={genName} onChange={e => setGenName(e.target.value)} placeholder="Nome completo" /></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2"><MapPin size={14}/> Cidade</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={genCity} onChange={e => setGenCity(e.target.value)} placeholder="Cidade" /></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2"><Calendar size={14}/> Data</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={genDate} onChange={e => setGenDate(e.target.value)} placeholder="DD/MM/AAAA" /></div>
                 </div>
-
-                {/* Final Preview (Printable Area) - SCROLLABLE FOR TWO PAGES */}
                 <div className="flex-1 bg-slate-200 p-8 overflow-auto flex flex-col items-center gap-8 print:p-0 print:bg-white print:block print:overflow-visible">
-                    
-                    {/* PAGE 1: FRONT */}
-                    <div 
-                        className="bg-white shadow-2xl relative overflow-hidden print:shadow-none print:w-full print:h-full print:absolute print:inset-0 page-break" 
-                        style={{ 
-                            width: '297mm', 
-                            height: '210mm', 
-                            pageBreakAfter: 'always'
-                        }}
-                    >
-                        {/* Background */}
-                        {currentCert.backgroundData && (
-                            <img src={currentCert.backgroundData} alt="bg" className="absolute inset-0 w-full h-full object-cover z-0" style={{printColorAdjust: 'exact'}} />
-                        )}
-
-                        {/* Content Overlay - Using Configured Layout */}
-                        <div 
-                            className="absolute z-10 whitespace-pre-wrap"
-                            style={{
-                                left: `${layout.body.x}%`,
-                                top: `${layout.body.y}%`,
-                                transform: 'translate(-50%, -50%)',
-                                width: `${layout.body.width}%`,
-                                fontSize: `${layout.body.fontSize}px`,
-                                fontFamily: layout.body.fontFamily,
-                                color: layout.body.color,
-                                fontWeight: layout.body.fontWeight,
-                                textAlign: layout.body.textAlign as any
-                            }}
-                        >
-                            {currentCert.bodyText}
-                        </div>
-
-                        <div 
-                            className="absolute z-10 whitespace-pre-wrap"
-                            style={{
-                                left: `${layout.name.x}%`,
-                                top: `${layout.name.y}%`,
-                                transform: 'translate(-50%, -50%)',
-                                width: `${layout.name.width}%`,
-                                fontSize: `${layout.name.fontSize}px`,
-                                fontFamily: layout.name.fontFamily,
-                                color: layout.name.color,
-                                fontWeight: layout.name.fontWeight,
-                                textAlign: layout.name.textAlign as any
-                            }}
-                        >
-                            {genName || 'Nome do Aluno'}
-                        </div>
-
-                        <div 
-                            className="absolute z-10 whitespace-pre-wrap"
-                            style={{
-                                left: `${layout.footer.x}%`,
-                                top: `${layout.footer.y}%`,
-                                transform: 'translate(-50%, -50%)',
-                                width: `${layout.footer.width}%`,
-                                fontSize: `${layout.footer.fontSize}px`,
-                                fontFamily: layout.footer.fontFamily,
-                                color: layout.footer.color,
-                                fontWeight: layout.footer.fontWeight,
-                                textAlign: layout.footer.textAlign as any
-                            }}
-                        >
-                            {genCity || 'Cidade'}, {genDate || 'Data'}
-                        </div>
+                    <div className="bg-white shadow-2xl relative overflow-hidden print:shadow-none print:w-full print:h-full print:absolute print:inset-0 page-break" style={{ width: '297mm', height: '210mm', pageBreakAfter: 'always' }}>
+                        {currentCert.backgroundData && <img src={currentCert.backgroundData} alt="bg" className="absolute inset-0 w-full h-full object-cover z-0" style={{printColorAdjust: 'exact'}} />}
+                        <div className="absolute z-10 whitespace-pre-wrap" style={{ left: `${layout.body.x}%`, top: `${layout.body.y}%`, transform: 'translate(-50%, -50%)', width: `${layout.body.width}%`, fontSize: `${layout.body.fontSize}px`, fontFamily: layout.body.fontFamily, color: layout.body.color, fontWeight: layout.body.fontWeight, textAlign: layout.body.textAlign as any }}>{currentCert.bodyText}</div>
+                        <div className="absolute z-10 whitespace-pre-wrap" style={{ left: `${layout.name.x}%`, top: `${layout.name.y}%`, transform: 'translate(-50%, -50%)', width: `${layout.name.width}%`, fontSize: `${layout.name.fontSize}px`, fontFamily: layout.name.fontFamily, color: layout.name.color, fontWeight: layout.name.fontWeight, textAlign: layout.name.textAlign as any }}>{genName || 'Nome do Aluno'}</div>
+                        <div className="absolute z-10 whitespace-pre-wrap" style={{ left: `${layout.footer.x}%`, top: `${layout.footer.y}%`, transform: 'translate(-50%, -50%)', width: `${layout.footer.width}%`, fontSize: `${layout.footer.fontSize}px`, fontFamily: layout.footer.fontFamily, color: layout.footer.color, fontWeight: layout.footer.fontWeight, textAlign: layout.footer.textAlign as any }}>{genCity || 'Cidade'}, {genDate || 'Data'}</div>
                     </div>
-
-                    {/* PAGE 2: BACK (Only if image exists) */}
                     {currentCert.backBackgroundData && (
-                        <div 
-                            className="bg-white shadow-2xl relative overflow-hidden print:shadow-none print:w-full print:h-full print:absolute print:m-0" 
-                            style={{ 
-                                width: '297mm', 
-                                height: '210mm',
-                            }}
-                        >
+                        <div className="bg-white shadow-2xl relative overflow-hidden print:shadow-none print:w-full print:h-full print:absolute print:m-0" style={{ width: '297mm', height: '210mm' }}>
                             <img src={currentCert.backBackgroundData} alt="bg-back" className="absolute inset-0 w-full h-full object-cover z-0" style={{printColorAdjust: 'exact'}} />
-                            
-                            {/* Hash Placeholder */}
-                            <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-sm z-10 bg-white/80 px-3 py-1 rounded border border-slate-200">
-                                ID: PREVIEW-HASH-CODE
-                            </div>
+                            <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-sm z-10 bg-white/80 px-3 py-1 rounded border border-slate-200">ID: PREVIEW-HASH</div>
                         </div>
                     )}
                 </div>

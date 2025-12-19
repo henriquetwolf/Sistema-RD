@@ -128,6 +128,40 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
 ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total settings" ON public.app_settings FOR ALL USING (true) WITH CHECK (true);
 
+-- TABELA DE CONEXÕES (SYNC JOBS) - ESSENCIAL PARA CROSS-DEVICE SYNC
+CREATE TABLE IF NOT EXISTS public.crm_sync_jobs (
+    id uuid PRIMARY KEY,
+    user_id uuid REFERENCES auth.users(id),
+    name text,
+    sheet_url text,
+    config jsonb,
+    active boolean DEFAULT true,
+    interval_minutes int DEFAULT 5,
+    last_sync timestamptz,
+    status text,
+    last_message text,
+    created_by_name text,
+    created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.crm_sync_jobs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total sync_jobs" ON public.crm_sync_jobs FOR ALL USING (true) WITH CHECK (true);
+
+-- CRM PRESETS (CREDENCIAS DE BANCOS EXTERNOS)
+CREATE TABLE IF NOT EXISTS public.app_presets (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES auth.users(id),
+    name text NOT NULL,
+    project_url text NOT NULL,
+    api_key text NOT NULL,
+    target_table_name text NOT NULL,
+    target_primary_key text,
+    interval_minutes int DEFAULT 5,
+    created_by_name text,
+    created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.app_presets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total presets" ON public.app_presets FOR ALL USING (true) WITH CHECK (true);
+
 -- CRM CERTIFICATES (MODELOS)
 CREATE TABLE IF NOT EXISTS public.crm_certificates (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,

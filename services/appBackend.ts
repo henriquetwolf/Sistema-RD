@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord } from '../types';
+import { SavedPreset, FormModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -80,6 +80,60 @@ export const appBackend = {
       }
       return supabase.auth.onAuthStateChange((_event, session) => callback(session));
     }
+  },
+
+  // --- SYNC JOBS (CONNECTIONS) ---
+  getSyncJobs: async (): Promise<SyncJob[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      sheetUrl: row.sheet_url,
+      config: row.config,
+      lastSync: row.last_sync,
+      status: row.status,
+      lastMessage: row.last_message,
+      active: row.active,
+      intervalMinutes: row.interval_minutes,
+      createdBy: row.created_by_name,
+      createdAt: row.created_at
+    }));
+  },
+
+  saveSyncJob: async (job: SyncJob): Promise<void> => {
+    if (!isConfigured) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    const payload = {
+      id: job.id,
+      user_id: user?.id,
+      name: job.name,
+      sheet_url: job.sheetUrl,
+      config: job.config,
+      active: job.active,
+      interval_minutes: job.intervalMinutes,
+      last_sync: job.lastSync,
+      status: job.status,
+      last_message: job.lastMessage,
+      created_by_name: job.createdBy,
+      created_at: job.createdAt
+    };
+    await supabase.from('crm_sync_jobs').upsert(payload);
+  },
+
+  updateJobStatus: async (jobId: string, status: string, lastSync: string | null, message: string | null): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_sync_jobs').update({
+        status,
+        last_sync: lastSync,
+        last_message: message
+    }).eq('id', jobId);
+  },
+
+  deleteSyncJob: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_sync_jobs').delete().eq('id', id);
   },
 
   getPresets: async (): Promise<SavedPreset[]> => {
@@ -164,7 +218,7 @@ export const appBackend = {
   },
 
   saveWhatsAppConfig: async (config: any): Promise<void> => {
-    await appBackend.saveAppSetting('whatsapp_config', config);
+    await appBackend.saveWhatsAppConfig(config);
   },
 
   getCompanies: async (): Promise<CompanySetting[]> => {

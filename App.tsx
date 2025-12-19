@@ -118,24 +118,12 @@ function App() {
             return;
         }
 
-        const savedJobs = localStorage.getItem('csv_syncer_jobs');
-        if (savedJobs) {
-            try {
-                const parsed = JSON.parse(savedJobs);
-                const fixed = parsed.map((j: any) => {
-                    // Proteção contra datas inválidas ao carregar conexões antigas
-                    const safeDate = (d: any) => d ? new Date(d).toISOString() : new Date().toISOString();
-                    return {
-                        ...j, 
-                        lastSync: j.lastSync ? safeDate(j.lastSync) : null, 
-                        createdAt: safeDate(j.createdAt),
-                        status: j.status === 'syncing' ? 'idle' : j.status, 
-                        lastMessage: j.status === 'syncing' ? 'Sincronização interrompida' : j.lastMessage, 
-                        intervalMinutes: j.intervalMinutes || 5 
-                    };
-                });
-                setJobs(fixed);
-            } catch (e) {}
+        // CARREGA JOBS DO BANCO
+        try {
+            const data = await appBackend.getSyncJobs();
+            setJobs(data);
+        } catch (e) {
+            console.error("Erro ao carregar conexões do banco de dados:", e);
         }
 
         appBackend.auth.getSession().then((s) => {
@@ -218,7 +206,6 @@ function App() {
 
   useEffect(() => {
     jobsRef.current = jobs; 
-    localStorage.setItem('csv_syncer_jobs', JSON.stringify(jobs));
   }, [jobs]);
 
   useEffect(() => {
@@ -262,9 +249,17 @@ function App() {
         await clearTableData(client, job.config.tableName, job.config.primaryKey || 'id');
         await new Promise(resolve => setTimeout(resolve, 3000));
         await batchUploadData(client, job.config, parsed.data, () => {});
-        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'success', lastSync: new Date().toISOString(), lastMessage: `Ciclo Completo: ${parsed.rowCount} linhas.` } : j));
+        
+        // ATUALIZA NO BANCO
+        const lastSync = new Date().toISOString();
+        const lastMsg = `Ciclo Completo: ${parsed.rowCount} linhas.`;
+        await appBackend.updateJobStatus(job.id, 'success', lastSync, lastMsg);
+
+        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'success', lastSync: lastSync, lastMessage: lastMsg } : j));
     } catch (e: any) {
-        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'error', lastSync: new Date().toISOString(), lastMessage: e.message } : j));
+        const lastSync = new Date().toISOString();
+        await appBackend.updateJobStatus(job.id, 'error', lastSync, e.message);
+        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'error', lastSync: lastSync, lastMessage: e.message } : j));
     }
   };
 
@@ -323,6 +318,7 @@ function App() {
              if (allData.length > 0) await batchUploadData(client, config, allData, () => {});
           } catch (e: any) { setErrorMessage(`Erro ao enviar dados: ${e.message}`); setStatus('error'); return; }
       }
+      
       const newJob: SyncJob = { 
           id: crypto.randomUUID(), 
           name: config.tableName || "Nova Conexão", 
@@ -336,11 +332,22 @@ function App() {
           createdBy: creator,
           createdAt: new Date().toISOString()
       };
+
+      // SALVA NO BANCO
+      await appBackend.saveSyncJob(newJob);
+      
       setJobs(prev => [...prev, newJob]);
       setStep(AppStep.DASHBOARD);
       setDashboardTab('settings');
       setStatus('idle');
       if (isAutoSync) setTimeout(() => performJobSync(newJob), 500);
+  };
+
+  const handleDeleteJob = async (id: string) => {
+      if (window.confirm("Excluir esta conexão do banco de dados?")) {
+          await appBackend.deleteSyncJob(id);
+          setJobs(prev => prev.filter(j => j.id !== id));
+      }
   };
 
   const handleLogout = async () => {
@@ -423,7 +430,7 @@ function App() {
                                 {canAccess('overview') && <button onClick={() => setDashboardTab('overview')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'overview' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LayoutDashboard size={18} /> Visão Geral</button>}
                                 {canAccess('crm') && <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Kanban size={18} /> CRM Comercial</button>}
                                 {canAccess('inventory') && <button onClick={() => setDashboardTab('inventory')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'inventory' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Package size={18} /> Controle de Estoque</button>}
-                                {canAccess('whatsapp') && <button onClick={() => setDashboardTab('whatsapp')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'whatsapp' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MessageCircle size={18} /> Atendimento</button>}
+                                {canAccess('whatsapp') && <button onClick={() => setDashboardTab('whatsapp')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'whatsapp' ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MessageCircle size={18} /> Atendimento</button>}
                                 {canAccess('analysis') && <button onClick={() => setDashboardTab('analysis')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'analysis' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><PieChart size={18} /> Análise de Vendas</button>}
                                 {canAccess('forms') && <button onClick={() => setDashboardTab('forms')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'forms' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><FileText size={18} /> Formulários</button>}
                                 {canAccess('contracts') && <button onClick={() => setDashboardTab('contracts')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'contracts' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><FileSignature size={18} /> Contratos</button>}
@@ -558,7 +565,7 @@ function App() {
                         {dashboardTab === 'crm' && <div className="h-full"><CrmBoard /></div>}
                         {dashboardTab === 'tables' && <TableViewer jobs={jobs} />}
                         {dashboardTab === 'settings' && <div className="space-y-6">
-                            <div className="flex justify-between items-end"><div><h2 className="text-2xl font-bold text-slate-800">Conexões</h2></div><button onClick={handleStartWizard} className="bg-teal-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"><Plus size={18} /> Nova Conexão</button></div>
+                            <div className="flex justify-between items-end"><div><h2 className="text-2xl font-bold text-slate-800">Conexões</h2><p className="text-sm text-slate-500">Conexões salvas na nuvem e sincronizadas em todos os seus computadores.</p></div><button onClick={handleStartWizard} className="bg-teal-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"><Plus size={18} /> Nova Conexão</button></div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {jobs.map(job => {
                                     const safeDate = (d: any) => d ? new Date(d) : new Date();
@@ -571,7 +578,7 @@ function App() {
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     {job.active ? <Play size={16} className="text-green-500" /> : <Pause size={16} className="text-slate-400" />}
-                                                    <button onClick={() => setJobs(prev => prev.filter(j => j.id !== job.id))} className="text-red-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
+                                                    <button onClick={() => handleDeleteJob(job.id)} className="text-red-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
                                                         <Trash2 size={16} />
                                                     </button>
                                                 </div>
@@ -594,6 +601,15 @@ function App() {
                                                         </span>
                                                     </div>
                                                 </div>
+                                            </div>
+
+                                            <div className="pt-2">
+                                                <span className={clsx("text-[10px] font-bold uppercase px-2 py-0.5 rounded", 
+                                                    job.status === 'success' ? "bg-green-100 text-green-700" : 
+                                                    job.status === 'error' ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-400"
+                                                )}>
+                                                    Status: {job.status === 'success' ? 'Sincronizado' : job.status === 'error' ? 'Erro' : 'Aguardando'}
+                                                </span>
                                             </div>
 
                                             {job.lastSync && (

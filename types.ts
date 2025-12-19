@@ -10,6 +10,7 @@ export interface SupabaseConfig {
 export interface SavedPreset extends SupabaseConfig {
   id: string;
   name: string; // The display name for the saved config
+  createdByName?: string; // Nome de quem salvou o preset
 }
 
 export interface CsvRow {
@@ -47,13 +48,13 @@ export interface SyncJob {
   name: string;
   sheetUrl: string;
   config: SupabaseConfig;
-  lastSync: Date | null;
+  lastSync: string | Date | null;
   status: 'idle' | 'syncing' | 'success' | 'error';
   lastMessage: string | null;
   active: boolean;
   intervalMinutes: number; // Required for the job logic
   createdBy?: string; // Nome ou email do usuário que criou a conexão
-  createdAt: Date;    // Data e hora da criação da conexão
+  createdAt: string | Date;    // Data e hora da criação da conexão
 }
 
 // --- ACCESS CONTROL ---

@@ -87,21 +87,42 @@ export const appBackend = {
     const { data, error } = await supabase.from(TABLE_NAME).select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((row: any) => ({
-      id: row.id, name: row.name, url: row.project_url, key: row.api_key, tableName: row.target_table_name, primaryKey: row.target_primary_key || '', intervalMinutes: row.interval_minutes || 5,
+      id: row.id, 
+      name: row.name, 
+      url: row.project_url, 
+      key: row.api_key, 
+      tableName: row.target_table_name, 
+      primaryKey: row.target_primary_key || '', 
+      intervalMinutes: row.interval_minutes || 5,
+      createdByName: row.created_by_name || ''
     }));
   },
 
   savePreset: async (preset: Omit<SavedPreset, 'id'>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
-    // Corrected to use camelCase intervalMinutes from preset interface
+    
     const payload = {
-      user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.intervalMinutes || 5,
+      user_id: user?.id, 
+      name: preset.name, 
+      project_url: preset.url, 
+      api_key: preset.key, 
+      target_table_name: preset.tableName, 
+      target_primary_key: preset.primaryKey || null, 
+      interval_minutes: preset.interval_minutes || 5,
+      created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
     if (error) throw error;
     return {
-      id: data.id, name: data.name, url: data.project_url, key: data.api_key, tableName: data.target_table_name, primaryKey: data.target_primary_key || '', intervalMinutes: data.interval_minutes || 5,
+      id: data.id, 
+      name: data.name, 
+      url: data.project_url, 
+      key: data.api_key, 
+      tableName: data.target_table_name, 
+      primaryKey: data.target_primary_key || '', 
+      intervalMinutes: data.interval_minutes || 5,
+      createdByName: data.created_by_name || ''
     };
   },
 
@@ -110,8 +131,6 @@ export const appBackend = {
     await supabase.from(TABLE_NAME).delete().eq('id', id);
   },
 
-  // --- CONFIGURAÇÕES GLOBAIS NO SUPABASE ---
-  
   getAppSetting: async (key: string): Promise<any | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('app_settings').select('value').eq('key', key).single();
@@ -147,8 +166,6 @@ export const appBackend = {
   saveWhatsAppConfig: async (config: any): Promise<void> => {
     await appBackend.saveAppSetting('whatsapp_config', config);
   },
-
-  // --- RESTO DO BACKEND ---
 
   getCompanies: async (): Promise<CompanySetting[]> => {
       if (!isConfigured) return [];
@@ -194,7 +211,7 @@ export const appBackend = {
       id: b.id, 
       title: b.title, 
       imageUrl: b.image_url, 
-      linkUrl: b.link_url, 
+      link_url: b.link_url, 
       targetAudience: b.target_audience, 
       active: b.active 
     }));
@@ -247,21 +264,20 @@ export const appBackend = {
       hasReformer: d.has_reformer, 
       qtyReformer: d.qty_reformer, 
       hasLadderBarrel: d.has_ladder_barrel, 
-      qtyLadderBarrel: d.qty_ladder_barrel, 
-      hasChair: d.has_chair, 
-      qtyChair: d.qty_chair, 
-      hasCadillac: d.has_cadillac, 
-      qtyCadillac: d.qty_cadillac, 
-      hasChairsForCourse: d.has_chairs_for_course, 
-      hasTv: d.has_tv, 
-      maxKitsCapacity: d.max_kits_capacity, 
+      qty_ladder_barrel: d.qty_ladder_barrel, 
+      has_chair: d.has_chair, 
+      qty_chair: d.qty_chair, 
+      has_cadillac: d.has_cadillac, 
+      qty_cadillac: d.qty_cadillac, 
+      has_chairs_for_course: d.has_chairs_for_course, 
+      has_tv: d.has_tv, 
+      max_kits_capacity: d.max_kits_capacity, 
       attachments: d.attachments
     }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
-    // Correção: name_on_site deve receber nameOnSite do objeto studio
     const payload = {
       status: studio.status, 
       responsible_name: studio.responsibleName, 
@@ -332,7 +348,7 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
+      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distribution_mode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissions_count || 0 };
       await supabase.from('crm_forms').upsert(payload);
   },
 
@@ -346,7 +362,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (!data) return null;
-      // Fixed undefined variable 'd' changed to 'data'
+      /* Fix: Changed 'd' to 'data' on line 365 to resolve "Cannot find name 'd'" error */
       return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
   },
 
@@ -412,6 +428,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (!data) return null;
+      /* Fix: Changed 'd' to 'data' on line 430 to resolve "Cannot find name 'd'" error */
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
@@ -515,7 +532,6 @@ export const appBackend = {
     const payload = { id: event.id, name: event.name, description: event.description, location: event.location, dates: event.dates, registration_open: event.registrationOpen };
     const { data, error } = await supabase.from('crm_events').upsert(payload).select().single();
     if (error) throw error;
-    // Fixed undefined variable 'd' changed to 'data'
     return { id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates || [], createdAt: data.created_at, registrationOpen: data.registration_open || false };
   },
 
@@ -581,7 +597,6 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     if (error) throw error;
-    // Corrected mapping: defined d as parameter of map, and mapped database snake_case fields to camelCase interface properties
     return (data || []).map((d: any) => ({
       id: d.id, 
       type: d.type, 

@@ -122,14 +122,18 @@ function App() {
         if (savedJobs) {
             try {
                 const parsed = JSON.parse(savedJobs);
-                const fixed = parsed.map((j: any) => ({
-                    ...j, 
-                    lastSync: j.lastSync ? new Date(j.lastSync) : null, 
-                    createdAt: j.createdAt ? new Date(j.createdAt) : new Date(),
-                    status: j.status === 'syncing' ? 'idle' : j.status, 
-                    lastMessage: j.status === 'syncing' ? 'Sincronização interrompida' : j.lastMessage, 
-                    intervalMinutes: j.intervalMinutes || 5 
-                }));
+                const fixed = parsed.map((j: any) => {
+                    // Proteção contra datas inválidas ao carregar conexões antigas
+                    const safeDate = (d: any) => d ? new Date(d).toISOString() : new Date().toISOString();
+                    return {
+                        ...j, 
+                        lastSync: j.lastSync ? safeDate(j.lastSync) : null, 
+                        createdAt: safeDate(j.createdAt),
+                        status: j.status === 'syncing' ? 'idle' : j.status, 
+                        lastMessage: j.status === 'syncing' ? 'Sincronização interrompida' : j.lastMessage, 
+                        intervalMinutes: j.intervalMinutes || 5 
+                    };
+                });
                 setJobs(fixed);
             } catch (e) {}
         }
@@ -157,7 +161,6 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Ajuste: O Dashboard deve carregar se houver session (Admin) OU currentCollaborator (Equipe)
   useEffect(() => {
     if (dashboardTab === 'overview' && (session || currentCollaborator)) {
         fetchOverviewData();
@@ -194,7 +197,7 @@ function App() {
             leadsWeek: leadsW, salesWeek: salesW.length, revenueWeek: revenueW
         });
 
-        const [teachers, studios, deals] = await Promise.all([
+        const [teachers, studios, dealsData] = await Promise.all([
             appBackend.client.from('crm_teachers').select('full_name, created_at').order('created_at', { ascending: false }).limit(3),
             appBackend.client.from('crm_partner_studios').select('fantasy_name, created_at').order('created_at', { ascending: false }).limit(3),
             appBackend.client.from('crm_deals').select('company_name, contact_name, created_at').order('created_at', { ascending: false }).limit(5)
@@ -203,7 +206,7 @@ function App() {
         const activities: any[] = [];
         teachers.data?.forEach(t => activities.push({ type: 'teacher', name: t.full_name, date: t.created_at }));
         studios.data?.forEach(s => activities.push({ type: 'studio', name: s.fantasy_name, date: s.created_at }));
-        deals.data?.forEach(d => activities.push({ type: 'deal', name: d.company_name || d.contact_name, date: d.created_at }));
+        dealsData.data?.forEach(d => activities.push({ type: 'deal', name: d.company_name || d.contact_name, date: d.created_at }));
         setRecentChanges(activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8));
 
     } catch (e) {
@@ -259,9 +262,9 @@ function App() {
         await clearTableData(client, job.config.tableName, job.config.primaryKey || 'id');
         await new Promise(resolve => setTimeout(resolve, 3000));
         await batchUploadData(client, job.config, parsed.data, () => {});
-        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'success', lastSync: new Date(), lastMessage: `Ciclo Completo: ${parsed.rowCount} linhas.` } : j));
+        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'success', lastSync: new Date().toISOString(), lastMessage: `Ciclo Completo: ${parsed.rowCount} linhas.` } : j));
     } catch (e: any) {
-        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'error', lastSync: new Date(), lastMessage: e.message } : j));
+        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'error', lastSync: new Date().toISOString(), lastMessage: e.message } : j));
     }
   };
 
@@ -280,7 +283,6 @@ function App() {
       const parsedFiles = await Promise.all(files.map(file => file.name.endsWith('.xlsx') ? parseExcelFile(file) : parseCsvFile(file)));
       setFilesData(parsedFiles);
       
-      // Auto-config based on entity
       if (selectedEntity !== 'generic') {
           const mapping: Record<string, { table: string, pk: string }> = {
               collaborators: { table: 'crm_collaborators', pk: 'email' },
@@ -328,11 +330,11 @@ function App() {
           config: { ...config }, 
           active: isAutoSync, 
           status: isAutoSync ? 'idle' : 'success', 
-          lastSync: isAutoSync ? null : new Date(), 
+          lastSync: isAutoSync ? null : new Date().toISOString(), 
           lastMessage: isAutoSync ? 'Aguardando sincronização...' : `Upload manual completo.`, 
           intervalMinutes: config.intervalMinutes || 5,
           createdBy: creator,
-          createdAt: new Date()
+          createdAt: new Date().toISOString()
       };
       setJobs(prev => [...prev, newJob]);
       setStep(AppStep.DASHBOARD);
@@ -374,6 +376,8 @@ function App() {
   if (currentStudent) return <StudentArea student={currentStudent} onLogout={handleLogout} />;
   if (currentStudio) return <PartnerStudioArea studio={currentStudio} onLogout={handleLogout} />;
 
+  const currentUserName = currentCollaborator ? currentCollaborator.name : (session?.user?.email || 'Super Admin');
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       {step !== AppStep.DASHBOARD ? (
@@ -387,7 +391,7 @@ function App() {
              <StepIndicator currentStep={step} />
              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 min-h-[400px]">
                 {step === AppStep.UPLOAD && <UploadPanel onFilesSelected={handleFilesSelected} onUrlConfirmed={setTempSheetUrl} onEntitySelected={setSelectedEntity} isLoading={status === 'parsing'} />}
-                {step === AppStep.CONFIG && <ConfigPanel config={config} setConfig={setConfig} onNext={() => setStep(AppStep.PREVIEW)} onBack={() => setStep(AppStep.UPLOAD)} />}
+                {step === AppStep.CONFIG && <ConfigPanel config={config} setConfig={setConfig} onNext={() => setStep(AppStep.PREVIEW)} onBack={() => setStep(AppStep.UPLOAD)} currentCreatorName={currentUserName} />}
                 {step === AppStep.PREVIEW && <PreviewPanel files={filesData} tableName={config.tableName} config={config} onUpdateFiles={setFilesData} onUpdateConfig={setConfig} onSync={handleCreateConnection} onBack={() => setStep(AppStep.CONFIG)} onClearTable={async () => { const client = createSupabaseClient(config.url, config.key); await clearTableData(client, config.tableName, config.primaryKey || 'id'); }} />}
              </div>
              {step === AppStep.PREVIEW && (
@@ -451,7 +455,6 @@ function App() {
                                     <div className="flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
                                 ) : (
                                     <>
-                                        {/* Row 1: Today Stats */}
                                         <section className="space-y-4">
                                             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Target size={14} /> Desempenho de Hoje</h3>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -476,7 +479,6 @@ function App() {
                                             </div>
                                         </section>
 
-                                        {/* Row 2: Weekly Stats */}
                                         <section className="space-y-4">
                                             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><BarChart3 size={14} /> Resumo da Semana</h3>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -501,7 +503,6 @@ function App() {
                                             </div>
                                         </section>
 
-                                        {/* Row 3: Recent Activity & Quick Navigation */}
                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                                             <section className="space-y-4">
                                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14} /> Últimas Alterações</h3>
@@ -559,49 +560,51 @@ function App() {
                         {dashboardTab === 'settings' && <div className="space-y-6">
                             <div className="flex justify-between items-end"><div><h2 className="text-2xl font-bold text-slate-800">Conexões</h2></div><button onClick={handleStartWizard} className="bg-teal-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"><Plus size={18} /> Nova Conexão</button></div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {jobs.map(job => (
-                                    <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h4 className="font-bold text-slate-800 leading-tight">{job.name}</h4>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{job.config.tableName}</p>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {job.active ? <Play size={16} className="text-green-500" /> : <Pause size={16} className="text-slate-400" />}
-                                                <button onClick={() => setJobs(prev => prev.filter(j => j.id !== job.id))} className="text-red-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
-                                            <div className="flex items-start gap-2">
-                                                {/* Fixed: changed 'User' to 'Users' since 'User' was not imported from lucide-react */}
-                                                <Users className="text-slate-300 shrink-0" size={14} />
-                                                <div className="flex flex-col">
-                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">Criado por</span>
-                                                    <span className="text-[11px] font-medium text-slate-600 truncate max-w-[120px]" title={job.createdBy}>{job.createdBy || 'Desconhecido'}</span>
+                                {jobs.map(job => {
+                                    const safeDate = (d: any) => d ? new Date(d) : new Date();
+                                    return (
+                                        <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h4 className="font-bold text-slate-800 leading-tight">{job.name}</h4>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{job.config.tableName}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {job.active ? <Play size={16} className="text-green-500" /> : <Pause size={16} className="text-slate-400" />}
+                                                    <button onClick={() => setJobs(prev => prev.filter(j => j.id !== job.id))} className="text-red-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
+                                                        <Trash2 size={16} />
+                                                    </button>
                                                 </div>
                                             </div>
-                                            <div className="flex items-start gap-2">
-                                                <Calendar className="text-slate-300 shrink-0" size={14} />
-                                                <div className="flex flex-col">
-                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">Data/Hora</span>
-                                                    <span className="text-[11px] font-medium text-slate-600">
-                                                        {new Date(job.createdAt).toLocaleDateString()} {new Date(job.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                    </span>
+                                            
+                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+                                                <div className="flex items-start gap-2">
+                                                    <Users className="text-slate-300 shrink-0" size={14} />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[9px] font-bold text-slate-400 uppercase">Criado por</span>
+                                                        <span className="text-[11px] font-medium text-slate-600 truncate max-w-[120px]" title={job.createdBy}>{job.createdBy || 'Desconhecido'}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2">
+                                                    <Calendar className="text-slate-300 shrink-0" size={14} />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[9px] font-bold text-slate-400 uppercase">Data/Hora</span>
+                                                        <span className="text-[11px] font-medium text-slate-600">
+                                                            {safeDate(job.createdAt).toLocaleDateString()} {safeDate(job.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        {job.lastSync && (
-                                            <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-400 bg-slate-50 px-2 py-1 rounded">
-                                                <Clock size={10} />
-                                                Última Sinc: {new Date(job.lastSync).toLocaleString()}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
+                                            {job.lastSync && (
+                                                <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-400 bg-slate-50 px-2 py-1 rounded">
+                                                    <Clock size={10} />
+                                                    Última Sinc: {safeDate(job.lastSync).toLocaleString()}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })}
                             </div>
                         </div>}
                     </div>

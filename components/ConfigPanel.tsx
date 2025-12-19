@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { SupabaseConfig, SavedPreset } from '../types';
 import { Key, Database, Link, Save, Trash2, ChevronDown, Loader2, Fingerprint, Info, Clock } from 'lucide-react';
@@ -8,9 +9,10 @@ interface ConfigPanelProps {
   setConfig: (config: SupabaseConfig) => void;
   onNext: () => void;
   onBack: () => void;
+  currentCreatorName?: string;
 }
 
-export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onNext, onBack }) => {
+export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onNext, onBack, currentCreatorName }) => {
   const [presets, setPresets] = useState<SavedPreset[]>([]);
   const [isLoadingPresets, setIsLoadingPresets] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -71,7 +73,8 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
       const newPreset = await appBackend.savePreset({
         ...config,
         name: newPresetName,
-        intervalMinutes: config.intervalMinutes || 5
+        intervalMinutes: config.intervalMinutes || 5,
+        createdByName: currentCreatorName || 'Admin'
       });
 
       setPresets([newPreset, ...presets]);
@@ -109,7 +112,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
             <div className="relative flex-1">
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                 <select 
-                    className="w-full appearance-none bg-white border border-slate-300 text-slate-700 py-2.5 pl-4 pr-8 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 font-medium"
+                    className="w-full appearance-none bg-white border border-slate-300 text-slate-700 py-2.5 pl-4 pr-8 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-50 disabled:opacity-50 font-medium"
                     onChange={handleLoadPreset}
                     defaultValue=""
                     disabled={isLoadingPresets}
@@ -127,8 +130,8 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, onN
         {presets.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
                 {presets.map(p => (
-                    <div key={p.id} className="inline-flex items-center gap-1 bg-white border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-600 font-medium">
-                        <span>{p.name}</span>
+                    <div key={p.id} className="inline-flex items-center gap-1 bg-white border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-600 font-medium group relative">
+                        <span title={`Criado por: ${p.createdByName || 'N/A'}`}>{p.name}</span>
                         <button 
                             onClick={() => handleDeletePreset(p.id)}
                             className="text-slate-400 hover:text-red-500 transition-colors ml-1"

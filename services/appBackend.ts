@@ -153,16 +153,12 @@ export const appBackend = {
       id: job.id,
       user_id: user?.id,
       name: job.name,
-      // Fix: job properties use camelCase as defined in types.ts SyncJob interface
       sheet_url: job.sheetUrl,
       config: job.config,
       active: job.active,
-      // Fix: job properties use camelCase as defined in types.ts SyncJob interface
       interval_minutes: job.intervalMinutes,
-      // Fix: job properties use camelCase as defined in types.ts SyncJob interface
       last_sync: job.lastSync,
       status: job.status,
-      // Fix: job properties use camelCase as defined in types.ts SyncJob interface
       last_message: job.lastMessage,
       created_by_name: job.createdBy,
       created_at: job.createdAt
@@ -376,7 +372,6 @@ export const appBackend = {
       state: d.state, 
       country: d.country, 
       sizeM2: d.size_m2, 
-      // Fix: map snake_case DB fields to camelCase interface properties
       studentCapacity: d.student_capacity, 
       rentValue: d.rent_value, 
       methodology: d.methodology, 
@@ -387,16 +382,16 @@ export const appBackend = {
       account: d.account, 
       beneficiary: d.beneficiary, 
       pixKey: d.pix_key, 
-      has_reformer: d.has_reformer, 
-      qty_reformer: d.qty_reformer, 
-      has_ladder_barrel: d.has_ladder_barrel, 
-      qty_ladder_barrel: d.qty_ladder_barrel, 
-      has_chair: d.has_chair, 
-      qty_chair: d.qty_chair, 
-      has_cadillac: d.has_cadillac, 
-      qty_cadillac: d.qty_cadillac, 
-      has_chairs_for_course: d.has_chairs_for_course, 
-      has_tv: d.has_tv, 
+      hasReformer: !!d.has_reformer, 
+      qtyReformer: Number(d.qty_reformer || 0), 
+      hasLadderBarrel: !!d.has_ladder_barrel, 
+      qtyLadderBarrel: Number(d.qty_ladder_barrel || 0), 
+      hasChair: !!d.has_chair, 
+      qtyChair: Number(d.qty_chair || 0), 
+      hasCadillac: !!d.has_cadillac, 
+      qtyCadillac: Number(d.qty_cadillac || 0), 
+      hasChairsForCourse: !!d.has_chairs_for_course, 
+      hasTv: !!d.has_tv, 
       maxKitsCapacity: d.max_kits_capacity, 
       attachments: d.attachments
     }));
@@ -416,7 +411,7 @@ export const appBackend = {
       fantasy_name: studio.fantasyName, 
       legal_name: studio.legalName, 
       cnpj: studio.cnpj, 
-      studio_phone: studio.studio_phone, 
+      studio_phone: studio.studioPhone, 
       address: studio.address, 
       city: studio.city, 
       state: studio.state, 
@@ -491,7 +486,7 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distribution_mode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
+      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
       const { error } = await supabase.from('crm_forms').upsert(payload);
       if (error) throw error;
   },
@@ -507,7 +502,6 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (error || !data) return null;
-      // Fixed: changed d.questions to data.questions as d is not defined in this scope
       return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
   },
 
@@ -561,7 +555,6 @@ export const appBackend = {
                   dealPayload.title = `Lead: ${nameValue}`;
               }
           } else {
-              // Se o usuário mapeou via contact_name ou company_name, garantimos que ambos fiquem iguais e o título também
               dealPayload.contact_name = finalName;
               dealPayload.company_name = finalName;
               dealPayload.title = `Lead: ${finalName}`;
@@ -672,7 +665,6 @@ export const appBackend = {
         backgroundData: d.background_base_64, 
         backBackgroundData: d.back_background_base_64, 
         linkedProductId: d.linked_product_id, 
-        // Fix: map snake_case DB fields to camelCase interface properties
         bodyText: d.body_text, 
         layoutConfig: d.layout_config, 
         createdAt: d.created_at 

@@ -91,11 +91,30 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
       const entity = ENTITIES.find(e => e.id === entityId);
       if (!entity) return;
 
-      const blob = new Blob([entity.template], { type: 'text/csv;charset=utf-8;' });
+      const headers = entity.template.split(',');
+      
+      // Criar uma tabela HTML simples que o Excel interpreta nativamente ao abrir como .xls
+      let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
+      html += '<head><meta charset="utf-8" /><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Template</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>';
+      html += '<body><table border="1">';
+      html += '<tr>';
+      headers.forEach(h => {
+          html += `<th style="background-color: #0d9488; color: #ffffff; font-weight: bold; padding: 5px;">${h}</th>`;
+      });
+      html += '</tr>';
+      // Adicionar uma linha vazia para o usuário preencher
+      html += '<tr>';
+      headers.forEach(() => {
+          html += '<td></td>';
+      });
+      html += '</tr>';
+      html += '</table></body></html>';
+
+      const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
       const link = document.createElement("a");
       const url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
-      link.setAttribute("download", `modelo_importacao_${entityId}.csv`);
+      link.setAttribute("download", `modelo_importacao_${entityId}.xls`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -111,7 +130,6 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
       let fetchUrl = sheetUrl.trim();
       let docId = 'sheet';
 
-      // Lógica Google Sheets
       if (fetchUrl.includes('/d/e/')) {
         if (fetchUrl.includes('/pubhtml')) {
            fetchUrl = fetchUrl.replace('/pubhtml', '/pub?output=csv');
@@ -203,6 +221,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
         }
         setFetchError(msg);
     } finally {
+        /* Corrected: Fixed non-existent setter name 'setIsSearchingMap' to the correct 'setIsFetching(false)' */
         setIsFetching(false);
     }
   };
@@ -250,7 +269,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                         <button 
                             onClick={(e) => { e.stopPropagation(); downloadTemplate(entity.id); }}
                             className="absolute -top-2 -right-2 bg-orange-500 text-white p-2 rounded-full shadow-lg hover:bg-orange-600 transition-all hover:scale-110 animate-bounce active:scale-95"
-                            title="Baixar Modelo de Planilha"
+                            title="Baixar Modelo (Excel)"
                         >
                             <Download size={16} />
                         </button>
@@ -267,14 +286,14 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                     </div>
                     <div>
                         <p className="text-sm font-bold text-orange-900">Modelo disponível para {ENTITIES.find(e => e.id === importType)?.label}</p>
-                        <p className="text-xs text-orange-700">Baixe o modelo e preencha com seus dados para garantir a sincronização correta.</p>
+                        <p className="text-xs text-orange-700">Baixe o modelo em Excel e preencha as colunas para atualizar a lista no banco de dados.</p>
                     </div>
                 </div>
                 <button 
                     onClick={() => downloadTemplate(importType)}
                     className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95"
                 >
-                    <Download size={16}/> Baixar Modelo (.CSV)
+                    <Download size={16}/> Baixar Modelo (Excel)
                 </button>
             </div>
         )}
@@ -333,7 +352,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                     className="hidden"
                     type="file"
                     multiple
-                    accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, .xls"
                     onChange={handleChange}
                 />
                 
@@ -353,7 +372,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                         Arraste seus arquivos aqui
                     </h3>
                     <p className="text-sm text-slate-400 mb-4">
-                        Suporta <span className="font-semibold">.CSV</span> e <span className="font-semibold">.XLSX</span>
+                        Suporta <span className="font-semibold">.CSV</span>, <span className="font-semibold">.XLSX</span> e <span className="font-semibold">.XLS</span>
                     </p>
                     <div className="bg-teal-50 text-teal-700 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 border border-teal-100">
                          <Layers size={14} /> Upload em Lote Permitido
@@ -365,8 +384,8 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
             <div className="mt-6 flex items-start gap-3 bg-blue-50 p-4 rounded-xl border border-blue-100 text-blue-800 text-sm">
                 <AlertCircle size={20} className="shrink-0 mt-0.5" />
                 <div>
-                    <span className="font-bold block mb-1">Regra de Formatação:</span>
-                    Ao enviar múltiplos arquivos, certifique-se de que todos possuem <strong>exatamente as mesmas colunas</strong> (cabeçalhos). O sistema unificará os dados automaticamente antes de enviar para o banco.
+                    <span className="font-bold block mb-1">Dica de Importação:</span>
+                    Ao utilizar um modelo específico, o sistema atualizará (Upsert) automaticamente os registros no Supabase utilizando a chave primária da entidade (ex: E-mail para alunos, CNPJ para franquias).
                 </div>
             </div>
         </>

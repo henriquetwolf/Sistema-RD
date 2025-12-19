@@ -33,6 +33,8 @@ export enum AppStep {
 
 export type UploadStatus = 'idle' | 'parsing' | 'uploading' | 'success' | 'error';
 
+export type EntityImportType = 'generic' | 'collaborators' | 'instructors' | 'students' | 'franchises' | 'studios';
+
 export interface SyncLog {
   timestamp: Date;
   status: 'success' | 'error';

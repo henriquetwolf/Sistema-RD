@@ -1,17 +1,33 @@
+
 import React, { useRef, useState } from 'react';
-import { Upload, FileType, Link, AlertCircle, FileSpreadsheet, Cloud, Layers, CheckCircle2 } from 'lucide-react';
+import { 
+    Upload, FileType, Link, AlertCircle, FileSpreadsheet, Cloud, 
+    Layers, CheckCircle2, Download, Users, School, GraduationCap, 
+    Store, Building2, LayoutGrid, Info, FileText
+} from 'lucide-react';
 import { parseExcelFile } from '../utils/excelParser';
+import { EntityImportType } from '../types';
 import clsx from 'clsx';
 
 interface UploadPanelProps {
   onFilesSelected: (files: File[]) => void;
   onUrlConfirmed?: (url: string) => void;
+  onEntitySelected?: (type: EntityImportType) => void;
   isLoading: boolean;
 }
 
-export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrlConfirmed, isLoading }) => {
+const ENTITIES = [
+    { id: 'collaborators', label: 'Colaboradores', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', template: 'full_name,email,phone,role,department,status,admission_date,cpf,rg' },
+    { id: 'instructors', label: 'Instrutores', icon: School, color: 'text-orange-600', bg: 'bg-orange-50', template: 'full_name,email,phone,teacher_level,is_active,academic_formation,city,state' },
+    { id: 'students', label: 'Alunos / Leads', icon: GraduationCap, color: 'text-purple-600', bg: 'bg-purple-50', template: 'contact_name,company_name,email,phone,cpf,product_name,stage,status,class_mod_1,class_mod_2' },
+    { id: 'franchises', label: 'Franquias', icon: Store, color: 'text-teal-600', bg: 'bg-teal-50', template: 'franchisee_name,email,phone,commercial_city,commercial_state,studio_status,cnpj' },
+    { id: 'studios', label: 'Studios Parceiros', icon: Building2, color: 'text-indigo-600', bg: 'bg-indigo-50', template: 'fantasy_name,responsible_name,email,phone,city,state,status' },
+];
+
+export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrlConfirmed, onEntitySelected, isLoading }) => {
   const [activeTab, setActiveTab] = useState<'upload' | 'sheets' | 'onedrive'>('upload');
   const [dragActive, setDragActive] = useState(false);
+  const [importType, setImportType] = useState<EntityImportType>('generic');
   
   // Google Sheets State
   const [sheetUrl, setSheetUrl] = useState('');
@@ -64,6 +80,26 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
     } else {
       alert('Por favor, selecione apenas arquivos CSV ou Excel (.xlsx).');
     }
+  };
+
+  const handleEntitySelect = (type: EntityImportType) => {
+      setImportType(type);
+      if (onEntitySelected) onEntitySelected(type);
+  };
+
+  const downloadTemplate = (entityId: string) => {
+      const entity = ENTITIES.find(e => e.id === entityId);
+      if (!entity) return;
+
+      const blob = new Blob([entity.template], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `modelo_importacao_${entityId}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
   };
 
   const processGoogleSheet = async () => {
@@ -172,9 +208,80 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-4xl mx-auto space-y-8">
+      
+      {/* 1. SELEÇÃO DE TIPO DE DADO */}
+      <section className="animate-in fade-in slide-in-from-top-4">
+        <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <LayoutGrid className="text-teal-600" size={20} />
+                O que você deseja importar hoje?
+            </h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <button 
+                onClick={() => handleEntitySelect('generic')}
+                className={clsx(
+                    "flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all group min-h-[120px]",
+                    importType === 'generic' ? "bg-teal-50 border-teal-500 shadow-sm" : "bg-white border-slate-100 hover:border-slate-200"
+                )}
+            >
+                <div className={clsx("p-2 rounded-lg mb-2 transition-colors", importType === 'generic' ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-400 group-hover:bg-slate-200")}>
+                    <LayoutGrid size={24} />
+                </div>
+                <span className={clsx("text-xs font-bold text-center leading-tight", importType === 'generic' ? "text-teal-800" : "text-slate-500")}>Tabela Genérica</span>
+            </button>
+
+            {ENTITIES.map(entity => (
+                <div key={entity.id} className="relative">
+                    <button 
+                        onClick={() => handleEntitySelect(entity.id as EntityImportType)}
+                        className={clsx(
+                            "w-full h-full flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all group min-h-[120px]",
+                            importType === entity.id ? `bg-white border-teal-500 shadow-sm ring-2 ring-teal-50 ring-offset-0` : "bg-white border-slate-100 hover:border-slate-200"
+                        )}
+                    >
+                        <div className={clsx("p-2 rounded-lg mb-2 transition-colors", importType === entity.id ? "bg-teal-600 text-white" : `${entity.bg} ${entity.color} group-hover:opacity-80`)}>
+                            <entity.icon size={24} />
+                        </div>
+                        <span className={clsx("text-xs font-bold text-center leading-tight", importType === entity.id ? "text-teal-800" : "text-slate-500")}>{entity.label}</span>
+                    </button>
+                    {importType === entity.id && (
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); downloadTemplate(entity.id); }}
+                            className="absolute -top-2 -right-2 bg-orange-500 text-white p-2 rounded-full shadow-lg hover:bg-orange-600 transition-all hover:scale-110 animate-bounce active:scale-95"
+                            title="Baixar Modelo de Planilha"
+                        >
+                            <Download size={16} />
+                        </button>
+                    )}
+                </div>
+            ))}
+        </div>
+        
+        {importType !== 'generic' && (
+            <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-xl flex items-center justify-between animate-in fade-in slide-in-from-left-2 shadow-sm">
+                <div className="flex items-center gap-3">
+                    <div className="bg-orange-100 p-2 rounded-lg text-orange-600">
+                        <FileText size={20} />
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-orange-900">Modelo disponível para {ENTITIES.find(e => e.id === importType)?.label}</p>
+                        <p className="text-xs text-orange-700">Baixe o modelo e preencha com seus dados para garantir a sincronização correta.</p>
+                    </div>
+                </div>
+                <button 
+                    onClick={() => downloadTemplate(importType)}
+                    className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95"
+                >
+                    <Download size={16}/> Baixar Modelo (.CSV)
+                </button>
+            </div>
+        )}
+      </section>
+
       {/* Tabs */}
-      <div className="flex justify-center mb-6">
+      <div className="flex justify-center mb-6 pt-4 border-t border-slate-100">
         <div className="bg-slate-100 p-1.5 rounded-xl inline-flex shadow-inner">
             <button
                 onClick={() => { setActiveTab('upload'); setFetchError(null); }}

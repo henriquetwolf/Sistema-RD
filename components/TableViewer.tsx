@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { SyncJob } from '../types';
 import { createSupabaseClient } from '../services/supabaseService';
@@ -25,8 +26,7 @@ export const TableViewer: React.FC<TableViewerProps> = ({ jobs }) => {
       setError(null);
       try {
         const client = createSupabaseClient(selectedJob.config.url, selectedJob.config.key);
-        // Attempt to order by created_at if exists, otherwise just limit
-        // We can't know columns easily without fetching. Just fetch * limit 50.
+        // Attempt to fetch data
         const { data: rows, error: err } = await client
           .from(selectedJob.config.tableName)
           .select('*')
@@ -35,8 +35,10 @@ export const TableViewer: React.FC<TableViewerProps> = ({ jobs }) => {
         if (err) throw err;
         setData(rows || []);
       } catch (e: any) {
-        console.error(e);
-        setError(e.message || 'Erro ao buscar dados.');
+        console.error("Erro detalhado no TableViewer:", e);
+        // Garante que o erro seja uma string legível
+        const errorMsg = e.message || (typeof e === 'object' ? JSON.stringify(e) : String(e));
+        setError(errorMsg);
       } finally {
         setLoading(false);
       }
@@ -116,10 +118,18 @@ export const TableViewer: React.FC<TableViewerProps> = ({ jobs }) => {
                     <AlertTriangle size={24} />
                 </div>
                 <h3 className="text-slate-800 font-medium">Erro ao carregar tabela</h3>
-                <p className="text-red-600 text-sm mt-1 bg-red-50 px-3 py-1 rounded border border-red-100">{error}</p>
+                <p className="text-red-600 text-sm mt-1 bg-red-50 px-4 py-2 rounded border border-red-100 max-w-lg break-words">
+                    {error}
+                </p>
                 <p className="text-slate-400 text-xs mt-4">Verifique se as credenciais e a tabela existem no Supabase.</p>
+                <button 
+                    onClick={() => setRefreshKey(k => k + 1)}
+                    className="mt-4 text-xs font-bold text-indigo-600 hover:underline"
+                >
+                    Tentar novamente
+                </button>
             </div>
-        ) : data.length === 0 ? (
+        ) : data.length === 0 && !loading ? (
              <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center h-full">
                 <p>A tabela está vazia ou a conexão não retornou registros.</p>
              </div>

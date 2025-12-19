@@ -28,7 +28,7 @@ import { EventsManager } from './components/EventsManager';
 import { WhatsAppInbox } from './components/WhatsAppInbox'; 
 import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
-import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession } from './types';
+import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
@@ -86,6 +86,7 @@ function App() {
   const [tempSheetUrl, setTempSheetUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedEntity, setSelectedEntity] = useState<EntityImportType>('generic');
 
   const intervalRef = useRef<number | null>(null);
   const CHECK_INTERVAL_MS = 60 * 1000; 
@@ -265,6 +266,7 @@ function App() {
     setConfig({ url: '', key: '', tableName: '', primaryKey: '', intervalMinutes: 5 });
     setTempSheetUrl(null);
     setErrorMessage(null);
+    setSelectedEntity('generic');
   };
 
   const handleFilesSelected = async (files: File[]) => {
@@ -272,7 +274,31 @@ function App() {
     try {
       const parsedFiles = await Promise.all(files.map(file => file.name.endsWith('.xlsx') ? parseExcelFile(file) : parseCsvFile(file)));
       setFilesData(parsedFiles);
-      if (!config.tableName && files.length > 0) setConfig(prev => ({ ...prev, tableName: files[0].name.replace(/\.(csv|xlsx)$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() }));
+      
+      // Auto-config based on entity
+      if (selectedEntity !== 'generic') {
+          const mapping: Record<string, { table: string, pk: string }> = {
+              collaborators: { table: 'crm_collaborators', pk: 'email' },
+              instructors: { table: 'crm_teachers', pk: 'email' },
+              students: { table: 'crm_deals', pk: 'email' },
+              franchises: { table: 'crm_franchises', pk: 'cnpj' },
+              studios: { table: 'crm_partner_studios', pk: 'email' },
+          };
+          const info = mapping[selectedEntity];
+          if (info) {
+              setConfig(prev => ({
+                  ...prev,
+                  tableName: info.table,
+                  primaryKey: info.pk
+              }));
+          }
+      } else if (!config.tableName && files.length > 0) {
+          setConfig(prev => ({ 
+              ...prev, 
+              tableName: files[0].name.replace(/\.(csv|xlsx)$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() 
+          }));
+      }
+
       setStep(AppStep.CONFIG);
       setStatus('idle');
     } catch (e: any) { setErrorMessage(e.message); setStatus('error'); }
@@ -341,7 +367,7 @@ function App() {
              </div>
              <StepIndicator currentStep={step} />
              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 min-h-[400px]">
-                {step === AppStep.UPLOAD && <UploadPanel onFilesSelected={handleFilesSelected} onUrlConfirmed={setTempSheetUrl} isLoading={status === 'parsing'} />}
+                {step === AppStep.UPLOAD && <UploadPanel onFilesSelected={handleFilesSelected} onUrlConfirmed={setTempSheetUrl} onEntitySelected={setSelectedEntity} isLoading={status === 'parsing'} />}
                 {step === AppStep.CONFIG && <ConfigPanel config={config} setConfig={setConfig} onNext={() => setStep(AppStep.PREVIEW)} onBack={() => setStep(AppStep.UPLOAD)} />}
                 {step === AppStep.PREVIEW && <PreviewPanel files={filesData} tableName={config.tableName} config={config} onUpdateFiles={setFilesData} onUpdateConfig={setConfig} onSync={handleCreateConnection} onBack={() => setStep(AppStep.CONFIG)} onClearTable={async () => { const client = createSupabaseClient(config.url, config.key); await clearTableData(client, config.tableName, config.primaryKey || 'id'); }} />}
              </div>
@@ -398,7 +424,7 @@ function App() {
                         {dashboardTab === 'overview' && (
                             <div className="space-y-8 animate-in fade-in duration-500">
                                 <div>
-                                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Sistema VOLL Pilates Group</h2>
+                                    <h2 className="text-3xl font-extrabold text-teal-600 tracking-tight">Sistema VOLL Pilates Group</h2>
                                     <p className="text-slate-500 text-sm mt-1">Bem-vindo ao sistema VOLL. Aqui está o resumo das suas operações.</p>
                                 </div>
 

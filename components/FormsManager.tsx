@@ -1,16 +1,19 @@
 
 import React, { useState, useEffect } from 'react';
-import { FormModel, FormQuestion, QuestionType, FormStyle } from '../types';
+import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer } from '../types';
 import { FormViewer } from './FormViewer';
 import { 
   FileText, Plus, MoreVertical, Trash2, Eye, Edit2, 
   ArrowLeft, Save, GripVertical, GripHorizontal, Copy, Settings,
   Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target, Share2, CheckCircle,
   LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info, Code, ExternalLink, Tag, Loader2,
-  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus
+  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
+
+// XLSX is global from CDN
+declare const XLSX: any;
 
 interface Team {
     id: string;
@@ -56,7 +59,7 @@ const QUESTION_TYPES: { id: QuestionType; label: string; icon: any }[] = [
 ];
 
 export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
-  const [view, setView] = useState<'list' | 'templates' | 'editor' | 'preview'>('list');
+  const [view, setView] = useState<'list' | 'templates' | 'editor' | 'preview' | 'responses'>('list');
   const [editorStep, setEditorStep] = useState<'editor' | 'settings'>('editor');
   const [forms, setForms] = useState<FormModel[]>([]);
   const [currentForm, setCurrentForm] = useState<FormModel>(INITIAL_FORM);
@@ -66,6 +69,10 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [sharingForm, setSharingForm] = useState<FormModel | null>(null);
   const [copiedType, setCopiedType] = useState<'link' | 'embed' | null>(null);
+
+  // Submissions State
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
 
   useEffect(() => { loadForms(); loadTeamsData(); }, []);
 
@@ -111,6 +118,44 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       setCurrentForm({ ...INITIAL_FORM, ...form }); 
       setView('editor'); 
       setEditorStep('editor'); 
+  };
+
+  const handleViewResponses = async (form: FormModel) => {
+      setCurrentForm(form);
+      setView('responses');
+      setLoadingSubmissions(true);
+      try {
+          const data = await appBackend.getFormSubmissions(form.id);
+          setSubmissions(data);
+      } catch (e) {
+          alert("Erro ao carregar respostas.");
+      } finally {
+          setLoadingSubmissions(false);
+      }
+  };
+
+  const exportToExcel = () => {
+    if (!currentForm || submissions.length === 0) return;
+
+    // Build headers from questions
+    const headers = ["Data Envio", ...currentForm.questions.map(q => q.title)];
+    
+    // Build rows
+    const dataRows = submissions.map(sub => {
+        const row: any = {};
+        row["Data Envio"] = new Date(sub.created_at).toLocaleString('pt-BR');
+        
+        currentForm.questions.forEach(q => {
+            const answer = (sub.answers as FormAnswer[]).find(a => a.questionId === q.id);
+            row[q.title] = answer?.value || "";
+        });
+        return row;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Respostas");
+    XLSX.writeFile(workbook, `respostas_${currentForm.title.replace(/\s/g, '_').toLowerCase()}.xlsx`);
   };
 
   const handleDelete = async (id: string) => { 
@@ -239,9 +284,70 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                 <h3 className="font-bold text-slate-700">Em Branco</h3>
                 <p className="text-xs text-slate-500 mt-1">Crie seu formulário do zero, sem limites de campos.</p>
             </div>
-            {/* Outros templates podem ser adicionados aqui conforme a mesma lógica */}
         </div>
     </div>
+  );
+
+  if (view === 'responses') return (
+      <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl overflow-hidden border border-slate-200 animate-in fade-in">
+          <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm z-20">
+              <div className="flex items-center gap-4">
+                  <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
+                  <div>
+                      <h2 className="text-lg font-bold text-slate-800">{currentForm.title}</h2>
+                      <p className="text-xs text-slate-400">Visualizando {submissions.length} respostas coletadas</p>
+                  </div>
+              </div>
+              <div className="flex items-center gap-3">
+                  <button 
+                    onClick={exportToExcel} 
+                    disabled={submissions.length === 0}
+                    className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all active:scale-95"
+                  >
+                      <Download size={18} /> Exportar Excel
+                  </button>
+              </div>
+          </div>
+
+          <div className="flex-1 overflow-auto bg-slate-50">
+              {loadingSubmissions ? (
+                  <div className="flex justify-center items-center h-64"><Loader2 size={32} className="animate-spin text-teal-600" /></div>
+              ) : submissions.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400 p-12">
+                      <Inbox size={64} className="opacity-10 mb-4" />
+                      <p className="font-bold">Ainda não há respostas</p>
+                      <p className="text-sm">Compartilhe o link do formulário para começar a coletar dados.</p>
+                  </div>
+              ) : (
+                  <div className="w-full">
+                      <table className="w-full text-left text-sm border-collapse bg-white">
+                          <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-black sticky top-0 z-10">
+                              <tr>
+                                  <th className="px-6 py-3 border-b border-r w-12 text-center">#</th>
+                                  <th className="px-6 py-3 border-b border-r min-w-[180px]">Data Envio</th>
+                                  {currentForm.questions.map(q => (
+                                      <th key={q.id} className="px-6 py-3 border-b border-r min-w-[200px]">{q.title}</th>
+                                  ))}
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                              {submissions.map((sub, idx) => (
+                                  <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
+                                      <td className="px-6 py-4 text-center text-slate-400 font-mono border-r">{submissions.length - idx}</td>
+                                      <td className="px-6 py-4 text-slate-500 font-medium border-r">{new Date(sub.created_at).toLocaleString('pt-BR')}</td>
+                                      {(sub.answers as FormAnswer[]).map(ans => (
+                                          <td key={ans.questionId} className="px-6 py-4 border-r max-w-xs truncate" title={ans.value}>
+                                              {ans.value || <span className="text-slate-200 italic">vazio</span>}
+                                          </td>
+                                      ))}
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                  </div>
+              )}
+          </div>
+      </div>
   );
 
   if (view === 'editor') return (
@@ -501,10 +607,14 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                 <p className="text-xs text-slate-400 mb-6">{f.questions.length} campos de entrada</p>
                 
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Submissões</p>
-                        <p className="text-2xl font-black text-slate-800">{f.submissionsCount || 0}</p>
-                    </div>
+                    <button 
+                        onClick={() => handleViewResponses(f)}
+                        className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center transition-colors"
+                    >
+                        <Table size={20} className="mb-1 text-indigo-500" />
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Respostas</p>
+                        <p className="text-xl font-black text-slate-800">{f.submissionsCount || 0}</p>
+                    </button>
                     <button onClick={() => handleShare(f)} className="bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl flex flex-col items-center justify-center transition-colors shadow-sm">
                         <Share2 size={20} />
                         <span className="text-[10px] font-black uppercase mt-1">Enviar Link</span>

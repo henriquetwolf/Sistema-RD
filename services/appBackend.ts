@@ -210,6 +210,7 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
+      // Fix: Use intervalMinutes from the preset object instead of non-existent interval_minutes
       interval_minutes: preset.intervalMinutes || 5,
       created_by_name: preset.createdByName || null
     };
@@ -324,7 +325,7 @@ export const appBackend = {
       id: b.id, 
       title: b.title, 
       imageUrl: b.image_url, 
-      linkUrl: b.link_url, 
+      link_url: b.link_url, 
       targetAudience: b.target_audience, 
       active: b.active 
     }));
@@ -514,6 +515,16 @@ export const appBackend = {
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean): Promise<void> => {
       const form = await appBackend.getFormById(formId);
       if (!form) throw new Error("Form not found");
+
+      // SAVE RAW SUBMISSION
+      if (isConfigured) {
+          const { error: subError } = await supabase.from('crm_form_submissions').insert([{
+              form_id: formId,
+              answers: answers
+          }]);
+          if (subError) console.error("Error saving raw submission:", subError);
+      }
+
       if (isLeadCapture && isConfigured) {
           const findValue = (keywords: string[]) => {
               const answer = answers.find(a => keywords.some(k => a.questionTitle.toLowerCase().includes(k)));
@@ -543,6 +554,13 @@ export const appBackend = {
           const { error } = await supabase.from('crm_forms').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
           if (error) throw error;
       }
+  },
+
+  getFormSubmissions: async (formId: string): Promise<any[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_form_submissions').select('*').eq('form_id', formId).order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
   },
 
   getFolders: async (): Promise<ContractFolder[]> => {
@@ -657,6 +675,7 @@ export const appBackend = {
   getStudentCertificate: async (hash: string): Promise<any> => {
     if (!isConfigured) return null;
     const { data: certData, error: certError } = await supabase.from('crm_student_certificates').select('*').eq('hash', hash).single();
+    // Fix: use certData instead of non-existent data
     if (certError || !certData) return null;
     const { data: dealData } = await supabase.from('crm_deals').select('contact_name, company_name, course_city').eq('id', (certData as any).student_deal_id).single();
     const { data: templateData } = await supabase.from('crm_certificates').select('*').eq('id', (certData as any).certificate_template_id).single();
@@ -707,7 +726,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('title', { ascending: true });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
+    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, max_selections: d.max_selections }));
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {

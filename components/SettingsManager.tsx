@@ -194,7 +194,15 @@ CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_ran
 CREATE TABLE IF NOT EXISTS public.crm_companies (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, legal_name text, cnpj text, product_types jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.app_banners (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, title text, image_url text, link_url text, target_audience text, active boolean DEFAULT true, created_at timestamptz DEFAULT now());
 
--- 8. HABILITAR SEGURANÇA BÁSICA (RLS) E POLÍTICAS
+-- 8. TABELA DE SUBMISSÕES DE FORMULÁRIOS
+CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    form_id uuid REFERENCES public.crm_forms(id) ON DELETE CASCADE,
+    answers jsonb NOT NULL DEFAULT '[]'::jsonb,
+    created_at timestamptz DEFAULT now()
+);
+
+-- 9. HABILITAR SEGURANÇA BÁSICA (RLS) E POLÍTICAS
 ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total" ON public.crm_certificates;
 CREATE POLICY "Acesso total" ON public.crm_certificates FOR ALL USING (true) WITH CHECK (true);
@@ -206,6 +214,10 @@ CREATE POLICY "Acesso total" ON public.crm_collaborators FOR ALL USING (true) WI
 ALTER TABLE public.crm_franchises ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total" ON public.crm_franchises;
 CREATE POLICY "Acesso total" ON public.crm_franchises FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.crm_form_submissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total" ON public.crm_form_submissions;
+CREATE POLICY "Acesso total" ON public.crm_form_submissions FOR ALL USING (true) WITH CHECK (true);
 
 NOTIFY pgrst, 'reload config';
   `.trim();
@@ -485,7 +497,7 @@ NOTIFY pgrst, 'reload config';
                 </div>
                 {editingLevel && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-sm p-6">
                             <h3 className="font-bold text-lg mb-4">Configurar Nível</h3>
                             <div className="space-y-4">
                                 <div><label className="block text-xs font-bold text-slate-500 mb-1">NOME DO NÍVEL</label><input type="text" className="w-full border rounded-lg px-3 py-2 text-sm" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} placeholder="Ex: Nível 1, Instrutor Sênior..." /></div>

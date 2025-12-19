@@ -7,7 +7,7 @@ import {
   ArrowLeft, Save, GripVertical, GripHorizontal, Copy, Settings,
   Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target, Share2, CheckCircle,
   LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info, Code, ExternalLink, Tag, Loader2,
-  Layers, Check
+  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -44,29 +44,15 @@ const INITIAL_FORM: FormModel = {
   distributionMode: 'fixed'
 };
 
-const TEMPLATES = [
-    {
-        id: 'classic',
-        title: 'Contato Geral',
-        description: 'Formulário padrão para captação de novos contatos.',
-        previewColor: 'bg-slate-200',
-        questions: [
-            { id: 't1', title: 'Nome', type: 'text', required: true, placeholder: 'Seu nome completo' },
-            { id: 't2', title: 'Email', type: 'email', required: true, placeholder: 'seu@email.com' },
-            { id: 't3', title: 'Telefone', type: 'phone', required: true, placeholder: '(00) 00000-0000' }
-        ]
-    },
-    {
-        id: 'lead',
-        title: 'Captura de Lead',
-        description: 'Focado em conversão com campo de campanha rastreável.',
-        previewColor: 'bg-indigo-100',
-        questions: [
-            { id: 't1', title: 'Nome Completo', type: 'text', required: true, placeholder: '' },
-            { id: 't2', title: 'E-mail', type: 'email', required: true, placeholder: '' },
-            { id: 't3', title: 'Interesse', type: 'text', required: false, placeholder: 'Ex: Pilates Clássico' }
-        ]
-    }
+const QUESTION_TYPES: { id: QuestionType; label: string; icon: any }[] = [
+    { id: 'text', label: 'Texto Curto', icon: Type },
+    { id: 'paragraph', label: 'Parágrafo', icon: AlignLeft },
+    { id: 'select', label: 'Múltipla Escolha', icon: List },
+    { id: 'checkbox', label: 'Caixas de Seleção', icon: CheckboxIcon },
+    { id: 'email', label: 'E-mail', icon: Mail },
+    { id: 'phone', label: 'Telefone', icon: Phone },
+    { id: 'number', label: 'Número', icon: Hash },
+    { id: 'date', label: 'Data', icon: Calendar },
 ];
 
 export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
@@ -110,8 +96,8 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       const newForm: FormModel = { 
           ...INITIAL_FORM, 
           id: crypto.randomUUID(), 
-          title: template.title, 
-          description: template.description, 
+          title: template.title || 'Formulário em Branco', 
+          description: template.description || '', 
           questions: template.id === 'blank' ? [] : template.questions.map((q: any) => ({ ...q, id: crypto.randomUUID() })), 
           createdAt: new Date().toISOString(), 
           isLeadCapture: template.id !== 'blank' 
@@ -165,23 +151,59 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   };
 
   const addQuestion = (type: QuestionType) => { 
-      const titles: Record<string, string> = { text: 'Texto Curto', email: 'Email', phone: 'Telefone', paragraph: 'Mensagem Longa', number: 'Número', date: 'Data' }; 
+      const titles: Record<string, string> = { text: 'Texto Curto', email: 'Email', phone: 'Telefone', paragraph: 'Mensagem Longa', number: 'Número', date: 'Data', select: 'Múltipla Escolha', checkbox: 'Caixa de Seleção' }; 
       const newQ: FormQuestion = { 
           id: crypto.randomUUID(), 
           title: titles[type] || 'Nova Pergunta', 
           type: type, 
           required: false, 
-          placeholder: 'Sua resposta...' 
+          placeholder: 'Sua resposta...',
+          options: (type === 'select' || type === 'checkbox') ? ['Opção 1'] : undefined
       }; 
       setCurrentForm(prev => ({ ...prev, questions: [...prev.questions, newQ] })); 
   };
 
   const updateQuestion = (id: string, field: keyof FormQuestion, value: any) => {
-      setCurrentForm(prev => ({ ...prev, questions: prev.questions.map(q => q.id === id ? { ...q, [field]: value } : q) }));
+      setCurrentForm(prev => ({ ...prev, questions: prev.questions.map(q => {
+          if (q.id === id) {
+              // Se mudar de tipo para select/checkbox e não tiver opções, inicializa
+              if ((field === 'type' && (value === 'select' || value === 'checkbox')) && !q.options) {
+                  return { ...q, [field]: value, options: ['Opção 1'] };
+              }
+              return { ...q, [field]: value };
+          }
+          return q;
+      }) }));
+  };
+
+  const duplicateQuestion = (question: FormQuestion) => {
+      const newQ = { ...question, id: crypto.randomUUID() };
+      setCurrentForm(prev => ({ ...prev, questions: [...prev.questions, newQ] }));
   };
 
   const removeQuestion = (id: string) => {
       setCurrentForm(prev => ({ ...prev, questions: prev.questions.filter(q => q.id !== id) }));
+  };
+
+  const addOption = (qId: string) => {
+      setCurrentForm(prev => ({
+          ...prev,
+          questions: prev.questions.map(q => q.id === qId ? { ...q, options: [...(q.options || []), `Opção ${(q.options?.length || 0) + 1}`] } : q)
+      }));
+  };
+
+  const updateOption = (qId: string, optIdx: number, value: string) => {
+      setCurrentForm(prev => ({
+          ...prev,
+          questions: prev.questions.map(q => q.id === qId ? { ...q, options: q.options?.map((o, idx) => idx === optIdx ? value : o) } : q)
+      }));
+  };
+
+  const removeOption = (qId: string, optIdx: number) => {
+      setCurrentForm(prev => ({
+          ...prev,
+          questions: prev.questions.map(q => q.id === qId ? { ...q, options: q.options?.filter((_, idx) => idx !== optIdx) } : q)
+      }));
   };
 
   const handleShare = (form: FormModel) => {
@@ -209,36 +231,22 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div 
                 className="group bg-white rounded-xl border-2 border-dashed border-slate-200 p-8 flex flex-col items-center justify-center text-center hover:border-teal-500 hover:bg-teal-50 transition-all cursor-pointer"
-                onClick={() => selectTemplate({ id: 'blank', title: 'Novo Formulário', description: '', questions: [] })}
+                onClick={() => selectTemplate({ id: 'blank' })}
             >
                 <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-teal-500 group-hover:text-white transition-colors">
                     <Plus size={32} />
                 </div>
                 <h3 className="font-bold text-slate-700">Em Branco</h3>
-                <p className="text-xs text-slate-500 mt-1">Crie seu formulário totalmente personalizado.</p>
+                <p className="text-xs text-slate-500 mt-1">Crie seu formulário do zero, sem limites de campos.</p>
             </div>
-            {TEMPLATES.map(tpl => (
-                <div 
-                    key={tpl.id} 
-                    className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg hover:border-teal-300 transition-all cursor-pointer flex flex-col group"
-                    onClick={() => selectTemplate(tpl)}
-                >
-                    <div className={clsx("h-32 flex items-center justify-center", tpl.previewColor)}>
-                        <FileText size={48} className="text-white/50 group-hover:scale-110 transition-transform" />
-                    </div>
-                    <div className="p-5 flex-1">
-                        <h3 className="font-bold text-slate-800">{tpl.title}</h3>
-                        <p className="text-xs text-slate-500 mt-1">{tpl.description}</p>
-                    </div>
-                </div>
-            ))}
+            {/* Outros templates podem ser adicionados aqui conforme a mesma lógica */}
         </div>
     </div>
   );
 
   if (view === 'editor') return (
-      <div className="flex flex-col h-[calc(100vh-140px)] bg-slate-50 rounded-xl overflow-hidden border border-slate-200 animate-in fade-in">
-          <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shrink-0">
+      <div className="flex flex-col h-[calc(100vh-140px)] bg-slate-100 rounded-xl overflow-hidden border border-slate-200 animate-in fade-in">
+          <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shrink-0 shadow-sm z-20">
               <div className="flex items-center gap-4">
                   <button onClick={() => setView('list')} className="text-slate-500 hover:text-slate-700 font-medium text-sm flex items-center gap-1">
                       <ArrowLeft size={16} /> Sair
@@ -262,84 +270,135 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
           <div className="flex-1 flex overflow-hidden">
               {editorStep === 'editor' ? (
                   <>
-                    <aside className="w-72 bg-white border-r border-slate-200 overflow-y-auto p-4 shrink-0">
+                    <aside className="w-72 bg-white border-r border-slate-200 overflow-y-auto p-4 shrink-0 shadow-sm">
                         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Adicionar Campo</h3>
                         <div className="grid grid-cols-1 gap-2">
-                            <button onClick={() => addQuestion('text')} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-teal-200 hover:bg-teal-50 text-sm font-medium text-slate-700 transition-all text-left">
-                                <Type size={18} className="text-teal-500" /> Texto Curto
-                            </button>
-                            <button onClick={() => addQuestion('paragraph')} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-teal-200 hover:bg-teal-50 text-sm font-medium text-slate-700 transition-all text-left">
-                                <AlignLeft size={18} className="text-teal-500" /> Mensagem Longa
-                            </button>
-                            <button onClick={() => addQuestion('email')} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-teal-200 hover:bg-teal-50 text-sm font-medium text-slate-700 transition-all text-left">
-                                <Mail size={18} className="text-teal-500" /> E-mail
-                            </button>
-                            <button onClick={() => addQuestion('phone')} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-teal-200 hover:bg-teal-50 text-sm font-medium text-slate-700 transition-all text-left">
-                                <Phone size={18} className="text-teal-500" /> Telefone
-                            </button>
-                            <button onClick={() => addQuestion('number')} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-teal-200 hover:bg-teal-50 text-sm font-medium text-slate-700 transition-all text-left">
-                                <Hash size={18} className="text-teal-500" /> Número
-                            </button>
-                            <button onClick={() => addQuestion('date')} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-teal-200 hover:bg-teal-50 text-sm font-medium text-slate-700 transition-all text-left">
-                                <Calendar size={18} className="text-teal-500" /> Data
-                            </button>
+                            {QUESTION_TYPES.map(qt => (
+                                <button 
+                                    key={qt.id}
+                                    onClick={() => addQuestion(qt.id)} 
+                                    className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-teal-200 hover:bg-teal-50 text-sm font-medium text-slate-700 transition-all text-left group"
+                                >
+                                    <qt.icon size={18} className="text-teal-500 group-hover:scale-110 transition-transform" /> {qt.label}
+                                </button>
+                            ))}
                         </div>
                     </aside>
                     <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                        <div className="max-w-2xl mx-auto space-y-6">
-                            <div className="bg-white rounded-xl border-2 border-teal-500 p-8 shadow-sm">
+                        <div className="max-w-3xl mx-auto space-y-6">
+                            {/* Card de Título */}
+                            <div className="bg-white rounded-xl border-t-[10px] border-teal-500 p-8 shadow-sm">
                                 <input 
                                     type="text" 
-                                    className="w-full text-3xl font-black text-slate-800 border-none focus:ring-0 placeholder:text-slate-200 p-0 mb-2" 
+                                    className="w-full text-3xl font-bold text-slate-800 border-b-2 border-transparent focus:border-teal-100 focus:ring-0 placeholder:text-slate-200 p-0 mb-4 transition-all" 
                                     value={currentForm.title} 
                                     onChange={e => setCurrentForm({...currentForm, title: e.target.value})}
                                     placeholder="Título do Formulário"
                                 />
                                 <textarea 
-                                    className="w-full text-slate-500 border-none focus:ring-0 placeholder:text-slate-200 p-0 resize-none" 
+                                    className="w-full text-slate-500 border-none focus:ring-0 placeholder:text-slate-200 p-0 resize-none h-12" 
                                     value={currentForm.description} 
                                     onChange={e => setCurrentForm({...currentForm, description: e.target.value})}
                                     placeholder="Descrição opcional..."
                                 />
                             </div>
 
-                            <div className="space-y-4">
+                            {/* Lista de Perguntas */}
+                            <div className="space-y-4 pb-20">
                                 {currentForm.questions.map((q, idx) => (
-                                    <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm group hover:border-teal-300 transition-all relative">
-                                        <div className="flex gap-4">
-                                            <div className="flex-1 space-y-4">
-                                                <div className="flex items-center gap-4">
-                                                    <span className="text-xs font-black text-slate-300">#{idx + 1}</span>
+                                    <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm group hover:border-teal-300 transition-all relative">
+                                        <div className="flex flex-col gap-6">
+                                            {/* Cabeçalho da Pergunta: Título e Tipo */}
+                                            <div className="flex flex-col md:flex-row gap-4 items-start">
+                                                <div className="flex-1 w-full">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-[10px] font-black text-teal-600 bg-teal-50 px-2 py-0.5 rounded uppercase tracking-widest">Pergunta {idx + 1}</span>
+                                                    </div>
                                                     <input 
                                                         type="text" 
-                                                        className="flex-1 font-bold text-slate-700 border-b border-transparent focus:border-teal-500 focus:ring-0 p-0"
+                                                        className="w-full text-lg font-bold text-slate-800 bg-slate-50 border border-transparent rounded-lg px-4 py-3 focus:bg-white focus:border-teal-500 transition-all outline-none"
                                                         value={q.title}
                                                         onChange={e => updateQuestion(q.id, 'title', e.target.value)}
+                                                        placeholder="Pergunta sem título"
                                                     />
-                                                    <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 px-2 py-1 rounded border">{q.type}</span>
                                                 </div>
-                                                <input 
-                                                    type="text" 
-                                                    className="w-full text-sm text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2"
-                                                    value={q.placeholder || ''}
-                                                    onChange={e => updateQuestion(q.id, 'placeholder', e.target.value)}
-                                                    placeholder="Dica de preenchimento (Placeholder)"
-                                                />
+                                                <div className="w-full md:w-60">
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Formato da Resposta</label>
+                                                    <div className="relative group">
+                                                        <select 
+                                                            className="w-full appearance-none bg-white border border-slate-200 text-slate-700 py-3 pl-10 pr-8 rounded-lg text-sm font-bold focus:ring-2 focus:ring-teal-500 outline-none cursor-pointer"
+                                                            value={q.type}
+                                                            onChange={e => updateQuestion(q.id, 'type', e.target.value as QuestionType)}
+                                                        >
+                                                            {QUESTION_TYPES.map(type => (
+                                                                <option key={type.id} value={type.id}>{type.label}</option>
+                                                            ))}
+                                                        </select>
+                                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500 pointer-events-none">
+                                                            {React.createElement(QUESTION_TYPES.find(t => t.id === q.type)?.icon || Type, { size: 18 })}
+                                                        </div>
+                                                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="flex flex-col items-end gap-2 shrink-0">
-                                                <button onClick={() => removeQuestion(q.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={18} /></button>
-                                                <label className="flex items-center gap-2 cursor-pointer">
-                                                    <span className="text-[10px] font-bold text-slate-400 uppercase">Obrigatório</span>
-                                                    <input type="checkbox" checked={q.required} onChange={e => updateQuestion(q.id, 'required', e.target.checked)} className="rounded text-teal-600" />
+
+                                            {/* Corpo da Pergunta: Placeholder ou Opções */}
+                                            <div className="pl-0 md:pl-2">
+                                                {(q.type === 'select' || q.type === 'checkbox') ? (
+                                                    <div className="space-y-3">
+                                                        {q.options?.map((option, optIdx) => (
+                                                            <div key={optIdx} className="flex items-center gap-3 animate-in fade-in slide-in-from-left-2">
+                                                                <div className="text-slate-300">
+                                                                    {q.type === 'select' ? <div className="w-5 h-5 rounded-full border-2 border-slate-200"></div> : <div className="w-5 h-5 rounded border-2 border-slate-200"></div>}
+                                                                </div>
+                                                                <input 
+                                                                    type="text" 
+                                                                    className="flex-1 bg-transparent border-b border-slate-100 focus:border-teal-500 outline-none py-1 text-sm font-medium text-slate-700"
+                                                                    value={option}
+                                                                    onChange={e => updateOption(q.id, optIdx, e.target.value)}
+                                                                />
+                                                                <button onClick={() => removeOption(q.id, optIdx)} className="p-1.5 text-slate-300 hover:text-red-500"><X size={14}/></button>
+                                                            </div>
+                                                        ))}
+                                                        <button onClick={() => addOption(q.id)} className="flex items-center gap-2 text-xs font-bold text-teal-600 hover:text-teal-700 mt-2 px-8 py-2 border-2 border-dashed border-teal-100 rounded-lg w-fit">
+                                                            <ListPlus size={14}/> Adicionar Outra Opção
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="relative">
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full text-sm text-slate-400 bg-white border-b-2 border-slate-100 py-2 focus:border-teal-500 transition-all outline-none"
+                                                            value={q.placeholder || ''}
+                                                            onChange={e => updateQuestion(q.id, 'placeholder', e.target.value)}
+                                                            placeholder="Texto de ajuda (Placeholder)..."
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Rodapé do Card: Ações de Pergunta */}
+                                            <div className="flex justify-end items-center gap-4 pt-4 border-t border-slate-50">
+                                                <button onClick={() => duplicateQuestion(q)} className="p-2 text-slate-400 hover:text-teal-600 transition-colors" title="Duplicar"><Copy size={18}/></button>
+                                                <button onClick={() => removeQuestion(q.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={18} /></button>
+                                                <div className="h-6 w-px bg-slate-200"></div>
+                                                <label className="flex items-center gap-2 cursor-pointer group">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter group-hover:text-slate-600 transition-colors">Obrigatório</span>
+                                                    <div onClick={() => updateQuestion(q.id, 'required', !q.required)} className={clsx("w-10 h-5 rounded-full p-1 transition-all", q.required ? "bg-teal-500" : "bg-slate-200")}>
+                                                        <div className={clsx("w-3 h-3 bg-white rounded-full transition-all", q.required ? "translate-x-5" : "translate-x-0")}></div>
+                                                    </div>
                                                 </label>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
                                 {currentForm.questions.length === 0 && (
-                                    <div className="text-center py-20 bg-slate-100/50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
-                                        <Layers className="mx-auto mb-2 opacity-20" size={48} />
-                                        <p className="font-medium">Comece adicionando um campo lateral.</p>
+                                    <div className="text-center py-24 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 shadow-inner">
+                                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <Layers className="opacity-20" size={40} />
+                                        </div>
+                                        <p className="font-bold text-lg text-slate-500">Seu formulário está vazio</p>
+                                        <p className="text-sm mt-1 max-w-xs mx-auto">Clique nos botões à esquerda para adicionar os campos que você deseja coletar.</p>
                                     </div>
                                 )}
                             </div>
@@ -350,7 +409,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                   <main className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-white">
                       <div className="max-w-2xl mx-auto space-y-10">
                           <section>
-                              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-6 border-b pb-4"><Settings size={20} className="text-teal-600"/> Comportamento e CRM</h3>
+                              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-6 border-b pb-4"><Settings size={20} className="text-teal-600"/> Comportamento e Inteligência Comercial</h3>
                               <div className="space-y-6">
                                   <label className="flex items-start gap-4 p-5 bg-teal-50 rounded-2xl border border-teal-100 cursor-pointer group">
                                       <div className={clsx("mt-1 p-2 rounded-lg transition-colors", currentForm.isLeadCapture ? "bg-teal-600 text-white" : "bg-white text-slate-300")}>
@@ -358,41 +417,41 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                       </div>
                                       <div className="flex-1">
                                           <div className="flex items-center justify-between mb-1">
-                                              <span className="font-bold text-teal-900">Habilitar Captura de Leads</span>
+                                              <span className="font-bold text-teal-900">Transformar Respostas em Leads</span>
                                               <input type="checkbox" checked={currentForm.isLeadCapture} onChange={e => setCurrentForm({...currentForm, isLeadCapture: e.target.checked})} className="w-6 h-6 rounded text-teal-600 focus:ring-teal-500" />
                                           </div>
-                                          <p className="text-xs text-teal-700 leading-relaxed">Se ativado, cada resposta criará automaticamente uma nova Negociação no CRM Comercial.</p>
+                                          <p className="text-xs text-teal-700 leading-relaxed">Se ativado, cada nova resposta enviada criará automaticamente um card de Negociação no CRM Comercial.</p>
                                       </div>
                                   </label>
 
                                   {currentForm.isLeadCapture && (
-                                      <div className="space-y-4 animate-in slide-in-from-top-2 p-6 border-2 border-slate-100 rounded-2xl bg-white shadow-sm">
+                                      <div className="space-y-6 animate-in slide-in-from-top-2 p-6 border-2 border-slate-100 rounded-2xl bg-white shadow-sm">
                                           <div>
-                                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1"><Tag size={12}/> Nome da Campanha (Rastreio)</label>
-                                              <input type="text" className="w-full px-4 py-2 border rounded-xl" placeholder="Ex: Black Friday 2024, Instagram Link Bio..." value={currentForm.campaign} onChange={e => setCurrentForm({...currentForm, campaign: e.target.value})} />
+                                              <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1"><Tag size={12}/> Nome da Campanha (Rastreio no CRM)</label>
+                                              <input type="text" className="w-full px-4 py-2.5 border rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all outline-none" placeholder="Ex: Campanha Verão 2025, Bio Instagram..." value={currentForm.campaign} onChange={e => setCurrentForm({...currentForm, campaign: e.target.value})} />
                                           </div>
                                           
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl">
                                               <div>
-                                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1"><ArrowRightLeft size={12}/> Distribuição de Leads</label>
-                                                  <select className="w-full px-3 py-2 border rounded-xl bg-white" value={currentForm.distributionMode} onChange={e => setCurrentForm({...currentForm, distributionMode: e.target.value as any})}>
-                                                      <option value="fixed">Vendedor Único Fixo</option>
-                                                      <option value="round-robin">Rodízio por Equipe (Fila)</option>
+                                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1"><ArrowRightLeft size={12}/> Modo de Distribuição</label>
+                                                  <select className="w-full px-3 py-2 border rounded-xl bg-white font-medium text-slate-700 outline-none focus:ring-2 focus:ring-teal-500" value={currentForm.distributionMode} onChange={e => setCurrentForm({...currentForm, distributionMode: e.target.value as any})}>
+                                                      <option value="fixed">Vendedor Fixo (Sempre o mesmo)</option>
+                                                      <option value="round-robin">Fila de Rodízio (Por Equipe)</option>
                                                   </select>
                                               </div>
 
                                               {currentForm.distributionMode === 'fixed' ? (
-                                                  <div>
-                                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1"><User size={12}/> Vendedor Responsável</label>
-                                                      <select className="w-full px-3 py-2 border rounded-xl bg-white" value={currentForm.fixedOwnerId || ''} onChange={e => setCurrentForm({...currentForm, fixedOwnerId: e.target.value})}>
+                                                  <div className="animate-in fade-in">
+                                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1"><User size={12}/> Escolher Vendedor</label>
+                                                      <select className="w-full px-3 py-2 border rounded-xl bg-white font-medium text-slate-700 outline-none focus:ring-2 focus:ring-teal-500" value={currentForm.fixedOwnerId || ''} onChange={e => setCurrentForm({...currentForm, fixedOwnerId: e.target.value})}>
                                                           <option value="">Selecione um vendedor...</option>
                                                           {collaborators.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
                                                       </select>
                                                   </div>
                                               ) : (
-                                                  <div>
-                                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1"><Users size={12}/> Equipe Comercial</label>
-                                                      <select className="w-full px-3 py-2 border rounded-xl bg-white" value={currentForm.teamId || ''} onChange={e => setCurrentForm({...currentForm, teamId: e.target.value})}>
+                                                  <div className="animate-in fade-in">
+                                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1"><Users size={12}/> Selecionar Equipe Comercial</label>
+                                                      <select className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white font-black text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-500" value={currentForm.teamId || ''} onChange={e => setCurrentForm({...currentForm, teamId: e.target.value})}>
                                                           <option value="">Escolha a Equipe...</option>
                                                           {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                                       </select>
@@ -400,9 +459,9 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                               )}
                                           </div>
 
-                                          <div className="mt-2 flex items-start gap-2 text-[10px] text-slate-400 bg-slate-50 p-3 rounded-lg italic">
-                                              <Info size={14} className="shrink-0 text-indigo-400" />
-                                              <span>No modo Rodízio, o sistema atribui cada novo lead ao próximo membro disponível na equipe, garantindo igualdade na distribuição.</span>
+                                          <div className="mt-2 flex items-start gap-3 text-[11px] text-slate-400 bg-blue-50/30 p-4 rounded-xl border border-blue-100">
+                                              <Info size={16} className="shrink-0 text-blue-500" />
+                                              <p>No <strong>Modo Rodízio</strong>, o sistema identifica quem é o próximo membro da equipe na fila circular e atribui o lead a ele automaticamente. Isso garante que todos os vendedores recebam oportunidades de forma equilibrada.</p>
                                           </div>
                                       </div>
                                   )}
@@ -420,70 +479,76 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
-            <div><h2 className="text-2xl font-bold text-slate-800">Formulários de Captura</h2><p className="text-slate-500 text-sm">Crie formulários e converta visitantes em alunos.</p></div>
+            <div><h2 className="text-2xl font-bold text-slate-800">Seus Formulários</h2><p className="text-slate-500 text-sm">Capte dados e leads integrados ao seu CRM.</p></div>
         </div>
-        <button onClick={() => setView('templates')} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"><Plus size={18} /> Novo Formulário</button>
+        <button onClick={() => setView('templates')} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-teal-600/20 transition-all active:scale-95"><Plus size={18} /> Criar Novo Formulário</button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? <div className="col-span-full flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={32}/></div> : forms.map(f => (
-          <div key={f.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col group">
-            <div className="p-5 flex-1">
-                <div className="flex justify-between items-start mb-3">
-                    <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide", f.isLeadCapture ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500")}>
-                        {f.isLeadCapture ? 'Lead Capture' : 'Pesquisa'}
+          <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-teal-200 transition-all flex flex-col group overflow-hidden">
+            <div className="p-6 flex-1">
+                <div className="flex justify-between items-start mb-4">
+                    <span className={clsx("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border", f.isLeadCapture ? "bg-indigo-50 text-indigo-700 border-indigo-100" : "bg-slate-50 text-slate-400 border-slate-100")}>
+                        {f.isLeadCapture ? 'Lead Capture ON' : 'Pesquisa Simples'}
                     </span>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit2 size={16} /></button>
-                        <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
+                        <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-400 hover:text-teal-600 bg-slate-100 rounded-lg"><Edit2 size={16} /></button>
+                        <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-400 hover:text-red-500 bg-slate-100 rounded-lg"><Trash2 size={16} /></button>
                     </div>
                 </div>
-                <h3 className="font-bold text-slate-800 mb-1">{f.title}</h3>
-                <p className="text-xs text-slate-400 mb-4">{f.questions.length} perguntas cadastradas</p>
+                <h3 className="font-black text-slate-800 text-lg mb-1 line-clamp-1">{f.title}</h3>
+                <p className="text-xs text-slate-400 mb-6">{f.questions.length} campos de entrada</p>
                 
-                <div className="grid grid-cols-2 gap-2 mt-auto">
-                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Respostas</p>
-                        <p className="text-lg font-black text-slate-700">{f.submissionsCount || 0}</p>
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Submissões</p>
+                        <p className="text-2xl font-black text-slate-800">{f.submissionsCount || 0}</p>
                     </div>
-                    <button onClick={() => handleShare(f)} className="bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg flex flex-col items-center justify-center transition-colors">
-                        <Share2 size={18} />
-                        <span className="text-[10px] font-bold uppercase mt-1">Compartilhar</span>
+                    <button onClick={() => handleShare(f)} className="bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl flex flex-col items-center justify-center transition-colors shadow-sm">
+                        <Share2 size={20} />
+                        <span className="text-[10px] font-black uppercase mt-1">Enviar Link</span>
                     </button>
                 </div>
             </div>
           </div>
         ))}
-        {!loading && forms.length === 0 && <div className="col-span-full text-center py-20 text-slate-400">Nenhum formulário criado.</div>}
+        {!loading && forms.length === 0 && (
+            <div className="col-span-full text-center py-24 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
+                <LayoutTemplate className="mx-auto mb-4 opacity-20" size={64}/>
+                <p className="text-lg font-bold">Nenhum formulário criado ainda</p>
+                <p className="text-sm">Clique em "Criar Novo" para começar a captar leads.</p>
+            </div>
+        )}
       </div>
 
       {sharingForm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                       <h3 className="font-bold text-slate-800 flex items-center gap-2"><Share2 size={18} className="text-teal-600"/> Compartilhar Formulário</h3>
-                      <button onClick={() => setSharingForm(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                      <button onClick={() => setSharingForm(null)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-200 rounded-full transition-all"><X size={20}/></button>
                   </div>
-                  <div className="p-8 space-y-6">
+                  <div className="p-8 space-y-8">
                       <div className="space-y-2">
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Link Direto</label>
+                          <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Link Direto (WhatsApp/Redes)</label>
                           <div className="flex gap-2">
-                              <input readOnly value={`${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}`} className="flex-1 bg-slate-50 border rounded-lg px-3 py-2 text-xs font-mono text-slate-600" />
-                              <button onClick={() => copyToClipboard(`${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}`, 'link')} className="bg-teal-600 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1 shadow-sm">
-                                  {copiedType === 'link' ? <Check size={14}/> : <Copy size={14}/>} {copiedType === 'link' ? 'Copiado' : 'Copiar'}
+                              <input readOnly value={`${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}`} className="flex-1 bg-slate-50 border rounded-lg px-3 py-3 text-xs font-mono text-slate-600 focus:outline-none" />
+                              <button onClick={() => copyToClipboard(`${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}`, 'link')} className="bg-teal-600 text-white px-5 py-3 rounded-lg font-bold text-xs flex items-center gap-2 shadow-lg transition-all active:scale-95">
+                                  {copiedType === 'link' ? <Check size={16}/> : <Copy size={16}/>} {copiedType === 'link' ? 'Copiado' : 'Copiar'}
                               </button>
                           </div>
                       </div>
                       <div className="space-y-2">
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Código para Site (IFrame)</label>
-                          <textarea readOnly value={`<iframe src="${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}&embed=true" width="100%" height="600" frameborder="0"></iframe>`} className="w-full bg-slate-50 border rounded-lg p-3 text-[10px] font-mono text-slate-500 h-24" />
-                          <button onClick={() => copyToClipboard(`<iframe src="${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}&embed=true" width="100%" height="600" frameborder="0"></iframe>`, 'embed')} className="text-xs font-bold text-teal-600 hover:underline flex items-center gap-1">
+                          <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Incorporar no Site (IFrame)</label>
+                          <textarea readOnly value={`<iframe src="${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}&embed=true" width="100%" height="600" frameborder="0"></iframe>`} className="w-full bg-slate-50 border rounded-lg p-4 text-[10px] font-mono text-slate-500 h-28 focus:outline-none" />
+                          <button onClick={() => copyToClipboard(`<iframe src="${window.location.origin}${window.location.pathname}?publicFormId=${sharingForm.id}&embed=true" width="100%" height="600" frameborder="0"></iframe>`, 'embed')} className="text-xs font-black text-teal-600 hover:underline flex items-center gap-2 mt-2">
                               {copiedType === 'embed' ? <Check size={14}/> : <Code size={14}/>} {copiedType === 'embed' ? 'Código Copiado' : 'Copiar código de incorporação'}
                           </button>
                       </div>
                   </div>
                   <div className="p-6 bg-slate-50 border-t flex justify-end">
-                      <button onClick={() => setSharingForm(null)} className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold text-sm">Fechar</button>
+                      <button onClick={() => setSharingForm(null)} className="px-8 py-3 bg-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-300 transition-colors">Fechar</button>
                   </div>
               </div>
           </div>

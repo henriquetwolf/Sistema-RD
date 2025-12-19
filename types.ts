@@ -117,6 +117,15 @@ export interface FormStyle {
   backgroundImage?: string;
   backgroundTexture?: string;
   cardTransparent?: boolean;
+  // Personalização Avançada
+  primaryColor?: string;
+  textColor?: string;
+  fontFamily?: 'sans' | 'serif' | 'modern';
+  titleAlignment?: 'left' | 'center';
+  borderRadius?: 'none' | 'small' | 'medium' | 'large' | 'full';
+  buttonText?: string;
+  logoUrl?: string;
+  shadowIntensity?: 'none' | 'soft' | 'strong';
 }
 
 export interface FormModel {

@@ -7,7 +7,7 @@ import {
   ArrowLeft, Save, GripVertical, GripHorizontal, Copy, Settings,
   Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target, Share2, CheckCircle,
   LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info, Code, ExternalLink, Tag, Loader2,
-  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2
+  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2, MousePointer2, AlignCenter, Layout
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -42,7 +42,14 @@ const INITIAL_FORM: FormModel = {
   style: {
       backgroundType: 'color',
       backgroundColor: '#f1f5f9',
-      cardTransparent: false
+      cardTransparent: false,
+      primaryColor: '#0d9488',
+      textColor: '#1e293b',
+      fontFamily: 'sans',
+      titleAlignment: 'left',
+      borderRadius: 'medium',
+      buttonText: 'Enviar Formulário',
+      shadowIntensity: 'soft'
   },
   distributionMode: 'fixed'
 };
@@ -76,7 +83,7 @@ const QUESTION_TYPES: { id: QuestionType; label: string; icon: any }[] = [
 
 export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [view, setView] = useState<'list' | 'templates' | 'editor' | 'preview' | 'responses'>('list');
-  const [editorStep, setEditorStep] = useState<'editor' | 'settings'>('editor');
+  const [editorStep, setEditorStep] = useState<'editor' | 'design' | 'settings'>('editor');
   const [forms, setForms] = useState<FormModel[]>([]);
   const [currentForm, setCurrentForm] = useState<FormModel>(INITIAL_FORM);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -211,6 +218,13 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       }
   };
 
+  const updateStyle = (field: keyof FormStyle, value: any) => {
+      setCurrentForm(prev => ({
+          ...prev,
+          style: { ...(prev.style || INITIAL_FORM.style!), [field]: value }
+      }));
+  };
+
   const addQuestion = (type: QuestionType) => { 
       const titles: Record<string, string> = { text: 'Texto Curto', email: 'Email', phone: 'Telefone', paragraph: 'Mensagem Longa', number: 'Número', date: 'Data', select: 'Múltipla Escolha', checkbox: 'Caixa de Seleção' }; 
       const newQ: FormQuestion = { 
@@ -220,7 +234,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
           required: false, 
           placeholder: 'Sua resposta...',
           options: (type === 'select' || type === 'checkbox') ? ['Opção 1'] : undefined,
-          crmMapping: '' // Default sem mapeamento
+          crmMapping: '' 
       }; 
       setCurrentForm(prev => ({ ...prev, questions: [...prev.questions, newQ] })); 
   };
@@ -228,7 +242,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const updateQuestion = (id: string, field: keyof FormQuestion, value: any) => {
       setCurrentForm(prev => ({ ...prev, questions: prev.questions.map(q => {
           if (q.id === id) {
-              // Se mudar de tipo para select/checkbox e não tiver opções, inicializa
               if ((field === 'type' && (value === 'select' || value === 'checkbox')) && !q.options) {
                   return { ...q, [field]: value, options: ['Opção 1'] };
               }
@@ -377,6 +390,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                   <div className="h-6 w-px bg-slate-200"></div>
                   <div className="flex bg-slate-100 p-1 rounded-lg">
                       <button onClick={() => setEditorStep('editor')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", editorStep === 'editor' ? "bg-white shadow text-teal-700" : "text-slate-500")}>Perguntas</button>
+                      <button onClick={() => setEditorStep('design')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", editorStep === 'design' ? "bg-white shadow text-teal-700" : "text-slate-500")}>Design & Cores</button>
                       <button onClick={() => setEditorStep('settings')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", editorStep === 'settings' ? "bg-white shadow text-teal-700" : "text-slate-500")}>Configurações</button>
                   </div>
               </div>
@@ -409,7 +423,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                     </aside>
                     <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                         <div className="max-w-3xl mx-auto space-y-6">
-                            {/* Card de Título */}
                             <div className="bg-white rounded-xl border-t-[10px] border-teal-500 p-8 shadow-sm">
                                 <input 
                                     type="text" 
@@ -426,12 +439,10 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                 />
                             </div>
 
-                            {/* Lista de Perguntas */}
                             <div className="space-y-4 pb-20">
                                 {currentForm.questions.map((q, idx) => (
                                     <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm group hover:border-teal-300 transition-all relative">
                                         <div className="flex flex-col gap-6">
-                                            {/* Cabeçalho da Pergunta: Título e Tipo */}
                                             <div className="flex flex-col md:flex-row gap-4 items-start">
                                                 <div className="flex-1 w-full">
                                                     <div className="flex items-center gap-2 mb-2">
@@ -465,7 +476,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                                 </div>
                                             </div>
 
-                                            {/* Mapeamento de Campo CRM (Apenas se Lead Capture estiver ON) */}
                                             {currentForm.isLeadCapture && (
                                                 <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 flex flex-col md:flex-row md:items-center gap-3 animate-in fade-in">
                                                     <div className="flex items-center gap-2 text-indigo-600 shrink-0">
@@ -485,7 +495,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                                 </div>
                                             )}
 
-                                            {/* Corpo da Pergunta: Placeholder ou Opções */}
                                             <div className="pl-0 md:pl-2">
                                                 {(q.type === 'select' || q.type === 'checkbox') ? (
                                                     <div className="space-y-3">
@@ -520,7 +529,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                                 )}
                                             </div>
 
-                                            {/* Rodapé do Card: Ações de Pergunta */}
                                             <div className="flex justify-end items-center gap-4 pt-4 border-t border-slate-50">
                                                 <button onClick={() => duplicateQuestion(q)} className="p-2 text-slate-400 hover:text-teal-600 transition-colors" title="Duplicar"><Copy size={18}/></button>
                                                 <button onClick={() => removeQuestion(q.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={18} /></button>
@@ -548,6 +556,116 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                         </div>
                     </main>
                   </>
+              ) : editorStep === 'design' ? (
+                  <main className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-white">
+                      <div className="max-w-4xl mx-auto">
+                          <h3 className="text-2xl font-black text-slate-800 mb-8 flex items-center gap-3 border-b pb-4"><Palette size={28} className="text-teal-600"/> Personalização Visual</h3>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                              {/* PAINEL DE CONTROLES */}
+                              <div className="space-y-10">
+                                  <section>
+                                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Layout size={14}/> Layout do Card</h4>
+                                      <div className="space-y-4">
+                                          <div>
+                                              <label className="block text-sm font-bold text-slate-700 mb-2">Alinhamento do Cabeçalho</label>
+                                              <div className="flex bg-slate-100 p-1 rounded-lg w-fit">
+                                                  <button onClick={() => updateStyle('titleAlignment', 'left')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md flex items-center gap-2", currentForm.style?.titleAlignment === 'left' ? "bg-white shadow text-teal-700" : "text-slate-500")}><AlignLeft size={14}/> Esquerda</button>
+                                                  <button onClick={() => updateStyle('titleAlignment', 'center')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md flex items-center gap-2", currentForm.style?.titleAlignment === 'center' ? "bg-white shadow text-teal-700" : "text-slate-500")}><AlignCenter size={14}/> Centralizado</button>
+                                              </div>
+                                          </div>
+                                          <div>
+                                              <label className="block text-sm font-bold text-slate-700 mb-2">Arredondamento das Bordas</label>
+                                              <div className="flex flex-wrap gap-2">
+                                                  {['none', 'small', 'medium', 'large', 'full'].map(rad => (
+                                                      <button key={rad} onClick={() => updateStyle('borderRadius', rad)} className={clsx("px-4 py-1.5 text-xs font-bold border rounded-lg capitalize transition-all", currentForm.style?.borderRadius === rad ? "bg-teal-600 border-teal-600 text-white" : "bg-white text-slate-500")}>{rad}</button>
+                                                  ))}
+                                              </div>
+                                          </div>
+                                      </div>
+                                  </section>
+
+                                  <section>
+                                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Palette size={14}/> Cores e Estilo</h4>
+                                      <div className="grid grid-cols-2 gap-6">
+                                          <div>
+                                              <label className="block text-sm font-bold text-slate-700 mb-2">Cor Principal</label>
+                                              <div className="flex items-center gap-3">
+                                                  <input type="color" className="w-10 h-10 border-none rounded-lg cursor-pointer bg-transparent" value={currentForm.style?.primaryColor} onChange={e => updateStyle('primaryColor', e.target.value)} />
+                                                  <span className="font-mono text-xs text-slate-400 uppercase">{currentForm.style?.primaryColor}</span>
+                                              </div>
+                                          </div>
+                                          <div>
+                                              <label className="block text-sm font-bold text-slate-700 mb-2">Cor do Texto</label>
+                                              <div className="flex items-center gap-3">
+                                                  <input type="color" className="w-10 h-10 border-none rounded-lg cursor-pointer bg-transparent" value={currentForm.style?.textColor} onChange={e => updateStyle('textColor', e.target.value)} />
+                                                  <span className="font-mono text-xs text-slate-400 uppercase">{currentForm.style?.textColor}</span>
+                                              </div>
+                                          </div>
+                                          <div className="col-span-2">
+                                              <label className="block text-sm font-bold text-slate-700 mb-2">Tipografia (Fonte)</label>
+                                              <select className="w-full border rounded-lg px-3 py-2 text-sm bg-white" value={currentForm.style?.fontFamily} onChange={e => updateStyle('fontFamily', e.target.value)}>
+                                                  <option value="sans">Sans-Serif (Moderna / Limpa)</option>
+                                                  <option value="serif">Serif (Clássica / Elegante)</option>
+                                                  <option value="modern">Geometric Modern (Impacto)</option>
+                                              </select>
+                                          </div>
+                                      </div>
+                                  </section>
+
+                                  <section>
+                                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><ImageIcon size={14}/> Branding e Botão</h4>
+                                      <div className="space-y-6">
+                                          <div>
+                                              <label className="block text-sm font-bold text-slate-700 mb-1">Logo URL (Opcional)</label>
+                                              <input type="text" className="w-full border rounded-lg px-3 py-2 text-xs font-mono" placeholder="https://..." value={currentForm.style?.logoUrl || ''} onChange={e => updateStyle('logoUrl', e.target.value)} />
+                                              <p className="text-[10px] text-slate-400 mt-1">Se preenchido, substitui a logo padrão da VOLL.</p>
+                                          </div>
+                                          <div>
+                                              <label className="block text-sm font-bold text-slate-700 mb-1">Texto do Botão de Envio</label>
+                                              <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Enviar Formulário" value={currentForm.style?.buttonText} onChange={e => updateStyle('buttonText', e.target.value)} />
+                                          </div>
+                                      </div>
+                                  </section>
+                              </div>
+
+                              {/* PRÉ-VISUALIZAÇÃO EM TEMPO REAL */}
+                              <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-8 sticky top-12 max-h-[600px] flex flex-col items-center justify-center overflow-hidden">
+                                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] mb-4">Preview em Tempo Real</span>
+                                  <div 
+                                    className={clsx(
+                                        "bg-white shadow-xl w-full p-8 transition-all duration-300 overflow-hidden",
+                                        currentForm.style?.borderRadius === 'none' && "rounded-none",
+                                        currentForm.style?.borderRadius === 'small' && "rounded-lg",
+                                        currentForm.style?.borderRadius === 'medium' && "rounded-2xl",
+                                        currentForm.style?.borderRadius === 'large' && "rounded-[2.5rem]",
+                                        currentForm.style?.borderRadius === 'full' && "rounded-[3.5rem]"
+                                    )}
+                                    style={{ color: currentForm.style?.textColor, fontFamily: currentForm.style?.fontFamily === 'serif' ? 'serif' : 'inherit' }}
+                                  >
+                                      {currentForm.style?.logoUrl && <img src={currentForm.style.logoUrl} className="h-8 mb-4 object-contain" alt="Logo" />}
+                                      <div style={{ textAlign: currentForm.style?.titleAlignment }}>
+                                          <h4 className="text-xl font-black mb-2">{currentForm.title}</h4>
+                                          <p className="text-xs opacity-60 mb-6">Esta é uma prévia do estilo selecionado.</p>
+                                      </div>
+                                      <div className="space-y-4">
+                                          <div className="h-3 w-1/3 bg-slate-100 rounded"></div>
+                                          <div className="h-10 w-full bg-slate-50 border rounded-lg"></div>
+                                          <button 
+                                            className="w-full py-3 text-white font-bold text-sm shadow-md transition-all active:scale-95"
+                                            style={{ 
+                                                backgroundColor: currentForm.style?.primaryColor,
+                                                borderRadius: currentForm.style?.borderRadius === 'full' ? '9999px' : undefined
+                                            }}
+                                          >
+                                              {currentForm.style?.buttonText}
+                                          </button>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </main>
               ) : (
                   <main className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-white">
                       <div className="max-w-2xl mx-auto space-y-10">
@@ -600,11 +718,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                                       </select>
                                                   </div>
                                               )}
-                                          </div>
-
-                                          <div className="mt-2 flex items-start gap-3 text-[11px] text-slate-400 bg-blue-50/30 p-4 rounded-xl border border-blue-100">
-                                              <Info size={16} className="shrink-0 text-blue-500" />
-                                              <p>No <strong>Modo Rodízio</strong>, o sistema identifica quem é o próximo membro da equipe na fila circular e atribui o lead a ele automaticamente. Isso garante que todos os vendedores recebam oportunidades de forma equilibrada.</p>
                                           </div>
                                       </div>
                                   )}

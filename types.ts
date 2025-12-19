@@ -52,6 +52,8 @@ export interface SyncJob {
   lastMessage: string | null;
   active: boolean;
   intervalMinutes: number; // Required for the job logic
+  createdBy?: string; // Nome ou email do usuário que criou a conexão
+  createdAt: Date;    // Data e hora da criação da conexão
 }
 
 // --- ACCESS CONTROL ---

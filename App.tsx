@@ -123,7 +123,12 @@ function App() {
             try {
                 const parsed = JSON.parse(savedJobs);
                 const fixed = parsed.map((j: any) => ({
-                    ...j, lastSync: j.lastSync ? new Date(j.lastSync) : null, status: j.status === 'syncing' ? 'idle' : j.status, lastMessage: j.status === 'syncing' ? 'Sincronização interrompida' : j.lastMessage, intervalMinutes: j.intervalMinutes || 5 
+                    ...j, 
+                    lastSync: j.lastSync ? new Date(j.lastSync) : null, 
+                    createdAt: j.createdAt ? new Date(j.createdAt) : new Date(),
+                    status: j.status === 'syncing' ? 'idle' : j.status, 
+                    lastMessage: j.status === 'syncing' ? 'Sincronização interrompida' : j.lastMessage, 
+                    intervalMinutes: j.intervalMinutes || 5 
                 }));
                 setJobs(fixed);
             } catch (e) {}
@@ -306,6 +311,8 @@ function App() {
 
   const handleCreateConnection = async () => {
       const isAutoSync = !!tempSheetUrl;
+      const creator = currentCollaborator ? currentCollaborator.name : (session?.user?.email || 'Super Admin');
+      
       if (!isAutoSync) {
           setStatus('uploading');
           try {
@@ -314,7 +321,19 @@ function App() {
              if (allData.length > 0) await batchUploadData(client, config, allData, () => {});
           } catch (e: any) { setErrorMessage(`Erro ao enviar dados: ${e.message}`); setStatus('error'); return; }
       }
-      const newJob: SyncJob = { id: crypto.randomUUID(), name: config.tableName || "Nova Conexão", sheetUrl: tempSheetUrl || "", config: { ...config }, active: isAutoSync, status: isAutoSync ? 'idle' : 'success', lastSync: isAutoSync ? null : new Date(), lastMessage: isAutoSync ? 'Aguardando sincronização...' : `Upload manual completo.`, intervalMinutes: config.intervalMinutes || 5 };
+      const newJob: SyncJob = { 
+          id: crypto.randomUUID(), 
+          name: config.tableName || "Nova Conexão", 
+          sheetUrl: tempSheetUrl || "", 
+          config: { ...config }, 
+          active: isAutoSync, 
+          status: isAutoSync ? 'idle' : 'success', 
+          lastSync: isAutoSync ? null : new Date(), 
+          lastMessage: isAutoSync ? 'Aguardando sincronização...' : `Upload manual completo.`, 
+          intervalMinutes: config.intervalMinutes || 5,
+          createdBy: creator,
+          createdAt: new Date()
+      };
       setJobs(prev => [...prev, newJob]);
       setStep(AppStep.DASHBOARD);
       setDashboardTab('settings');
@@ -541,9 +560,46 @@ function App() {
                             <div className="flex justify-between items-end"><div><h2 className="text-2xl font-bold text-slate-800">Conexões</h2></div><button onClick={handleStartWizard} className="bg-teal-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"><Plus size={18} /> Nova Conexão</button></div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {jobs.map(job => (
-                                    <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex items-center justify-between">
-                                        <div><h4 className="font-bold text-slate-800">{job.name}</h4><p className="text-xs text-slate-500">{job.config.tableName}</p></div>
-                                        <div className="flex items-center gap-2">{job.active ? <Play size={16} className="text-green-500" /> : <Pause size={16} className="text-slate-400" />}<button onClick={() => setJobs(prev => prev.filter(j => j.id !== job.id))} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button></div>
+                                    <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h4 className="font-bold text-slate-800 leading-tight">{job.name}</h4>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{job.config.tableName}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {job.active ? <Play size={16} className="text-green-500" /> : <Pause size={16} className="text-slate-400" />}
+                                                <button onClick={() => setJobs(prev => prev.filter(j => j.id !== job.id))} className="text-red-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+                                            <div className="flex items-start gap-2">
+                                                {/* Fixed: changed 'User' to 'Users' since 'User' was not imported from lucide-react */}
+                                                <Users className="text-slate-300 shrink-0" size={14} />
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">Criado por</span>
+                                                    <span className="text-[11px] font-medium text-slate-600 truncate max-w-[120px]" title={job.createdBy}>{job.createdBy || 'Desconhecido'}</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-start gap-2">
+                                                <Calendar className="text-slate-300 shrink-0" size={14} />
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">Data/Hora</span>
+                                                    <span className="text-[11px] font-medium text-slate-600">
+                                                        {new Date(job.createdAt).toLocaleDateString()} {new Date(job.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {job.lastSync && (
+                                            <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-400 bg-slate-50 px-2 py-1 rounded">
+                                                <Clock size={10} />
+                                                Última Sinc: {new Date(job.lastSync).toLocaleString()}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>

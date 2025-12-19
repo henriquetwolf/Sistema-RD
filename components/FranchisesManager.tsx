@@ -4,7 +4,7 @@ import {
   Store, Plus, Search, MoreVertical, MapPin, Phone, Mail, 
   ArrowLeft, Save, X, Edit2, Trash2, Loader2, Calendar, FileText, 
   CheckSquare, DollarSign, User, Building, Paperclip, Briefcase, Map as MapIcon, List,
-  Navigation, AlertTriangle, CheckCircle, Building2
+  Navigation, AlertTriangle, CheckCircle, Building2, ExternalLink, MoveRight
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -147,7 +147,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
               .order('franchisee_name', { ascending: true });
           if (error) throw error;
           setFranchises((data || []).map((d: any) => ({
-              id: d.id, saleNumber: d.sale_number, contractStartDate: d.contract_start_date, inauguration_date: d.inauguration_date, salesConsultant: d.sales_consultant, franchiseeName: d.franchisee_name, cpf: d.cpf, companyName: d.company_name, cnpj: d.cnpj, phone: d.phone, email: d.email, residentialAddress: d.residential_address, commercialState: d.commercial_state, commercialCity: d.commercial_city, commercialAddress: d.commercial_address, commercialNeighborhood: d.commercial_neighborhood, latitude: d.latitude, longitude: d.longitude, kmStreetPoint: d.km_street_point, kmCommercialBuilding: d.km_commercial_building, studioStatus: d.studio_status, studioSizeM2: d.studio_size_m2, equipmentList: d.equipment_list, royaltiesValue: d.royalties_value, bankAccountInfo: d.bank_account_info, hasSignedContract: d.has_signed_contract, contractEndDate: d.contract_end_date, isRepresentative: d.is_representative, partner1Name: d.partner_1_name, partner2Name: d.partner_2_name, franchiseeFolderLink: d.franchisee_folder_link, pathInfo: d.path_info, observations: d.observations
+              id: d.id, saleNumber: d.sale_number, contractStartDate: d.contract_start_date, inaugurationDate: d.inauguration_date, salesConsultant: d.sales_consultant, franchiseeName: d.franchisee_name, cpf: d.cpf, companyName: d.company_name, cnpj: d.cnpj, phone: d.phone, email: d.email, residentialAddress: d.residential_address, commercialState: d.commercial_state, commercialCity: d.commercial_city, commercialAddress: d.commercial_address, commercialNeighborhood: d.commercial_neighborhood, latitude: d.latitude, longitude: d.longitude, kmStreetPoint: d.km_street_point, kmCommercialBuilding: d.km_commercial_building, studioStatus: d.studio_status, studioSizeM2: d.studio_size_m2, equipmentList: d.equipment_list, royaltiesValue: d.royalties_value, bankAccountInfo: d.bank_account_info, hasSignedContract: d.has_signed_contract, contractEndDate: d.contract_end_date, isRepresentative: d.is_representative, partner1Name: d.partner_1_name, partner2Name: d.partner_2_name, franchiseeFolderLink: d.franchisee_folder_link, pathInfo: d.path_info, observations: d.observations
           })));
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
@@ -155,36 +155,79 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
   const handleSave = async () => {
       if (!formData.franchiseeName) { alert("Nome do franqueado é obrigatório."); return; }
       setIsSaving(true);
+      
+      // Ensure numeric strings are handled or sent as null to prevent DB errors
       const payload = {
-          sale_number: formData.saleNumber, contract_start_date: formData.contractStartDate || null, inauguration_date: formData.inaugurationDate || null, sales_consultant: formData.salesConsultant, franchisee_name: formData.franchiseeName, cpf: formData.cpf, company_name: formData.companyName, cnpj: formData.cnpj, phone: formData.phone, email: formData.email, residential_address: formData.residentialAddress, commercial_state: formData.commercialState, commercial_city: formData.commercialCity, commercial_address: formData.commercialAddress, commercial_neighborhood: formData.commercialNeighborhood, latitude: formData.latitude, longitude: formData.longitude, km_street_point: formData.kmStreetPoint, km_commercial_building: formData.kmCommercialBuilding, studio_status: formData.studioStatus, studio_size_m2: formData.studioSizeM2, equipment_list: formData.equipmentList, royalties_value: formData.royaltiesValue, bank_account_info: formData.bankAccountInfo, has_signed_contract: formData.hasSignedContract, contract_end_date: formData.contractEndDate || null, is_representative: formData.isRepresentative, partner_1_name: formData.partner1Name, partner_2_name: formData.partner2Name, franchisee_folder_link: formData.franchiseeFolderLink, path_info: formData.pathInfo, observations: formData.observations
+          sale_number: formData.saleNumber,
+          contract_start_date: formData.contractStartDate || null,
+          inauguration_date: formData.inaugurationDate || null,
+          sales_consultant: formData.salesConsultant,
+          franchisee_name: formData.franchiseeName,
+          cpf: formData.cpf,
+          company_name: formData.companyName,
+          cnpj: formData.cnpj,
+          phone: formData.phone,
+          email: formData.email,
+          residential_address: formData.residentialAddress,
+          commercial_state: formData.commercialState,
+          commercial_city: formData.commercialCity,
+          commercial_address: formData.commercialAddress,
+          commercial_neighborhood: formData.commercialNeighborhood,
+          latitude: formData.latitude || null,
+          longitude: formData.longitude || null,
+          km_street_point: formData.kmStreetPoint || null,
+          km_commercial_building: formData.kmCommercialBuilding || null,
+          studio_status: formData.studioStatus,
+          studio_size_m2: formData.studioSizeM2,
+          equipment_list: formData.equipmentList,
+          royalties_value: formData.royaltiesValue,
+          bank_account_info: formData.bankAccountInfo,
+          has_signed_contract: formData.hasSignedContract,
+          contract_end_date: formData.contractEndDate || null,
+          is_representative: formData.isRepresentative,
+          partner_1_name: formData.partner1Name,
+          partner_2_name: formData.partner2Name,
+          franchisee_folder_link: formData.franchiseeFolderLink,
+          path_info: formData.pathInfo,
+          observations: formData.observations
       };
+
       try {
           const isUpdate = !!formData.id;
           if (isUpdate) {
-              await appBackend.client.from('crm_franchises').update(payload).eq('id', formData.id);
+              const { error } = await appBackend.client.from('crm_franchises').update(payload).eq('id', formData.id);
+              if (error) throw error;
               await appBackend.logActivity({ action: 'update', module: 'franchises', details: `Editou unidade franqueada: ${formData.franchiseeName}`, recordId: formData.id });
           } else {
-              const { data } = await appBackend.client.from('crm_franchises').insert([payload]).select().single();
+              const { data, error } = await appBackend.client.from('crm_franchises').insert([payload]).select().single();
+              if (error) throw error;
               await appBackend.logActivity({ action: 'create', module: 'franchises', details: `Cadastrou nova unidade franqueada: ${formData.franchiseeName}`, recordId: data?.id });
           }
           await fetchFranchises();
           setShowModal(false);
           setFormData(initialFormState);
-      } catch (e: any) { alert(`Erro ao salvar: ${e.message}`); } finally { setIsSaving(false); }
+      } catch (e: any) { 
+          console.error(e);
+          alert(`Erro ao salvar: ${e.message}`); 
+      } finally { 
+          setIsSaving(false); 
+      }
   };
 
   const handleDelete = async (id: string) => {
       const target = franchises.find(f => f.id === id);
       if(window.confirm("Excluir esta franquia?")) {
-          await appBackend.client.from('crm_franchises').delete().eq('id', id);
-          await appBackend.logActivity({ action: 'delete', module: 'franchises', details: `Excluiu unidade franqueada: ${target?.franchiseeName}`, recordId: id });
-          fetchFranchises();
+          try {
+              const { error } = await appBackend.client.from('crm_franchises').delete().eq('id', id);
+              if (error) throw error;
+              await appBackend.logActivity({ action: 'delete', module: 'franchises', details: `Excluiu unidade franqueada: ${target?.franchiseeName}`, recordId: id });
+              fetchFranchises();
+          } catch(e: any) { alert(`Erro: ${e.message}`); }
       }
   };
 
   const handleEdit = (item: Franchise) => { setFormData({ ...item }); setShowModal(true); setActiveMenuId(null); };
 
-  // Fix: Adding handleInputChange which was used in JSX but not defined
   const handleInputChange = (field: keyof Franchise, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -221,9 +264,15 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
       } catch (e) { alert("Erro ao buscar endereço."); } finally { setIsSearchingMap(false); }
   };
 
-  const filtered = franchises.filter(f => f.franchiseeName.toLowerCase().includes(searchTerm.toLowerCase()) || f.commercialCity.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = franchises.filter(f => 
+    (f.franchiseeName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (f.commercialCity || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  
   const mapFranchises = filtered.filter(f => !isNaN(parseFloat(f.latitude)) && !isNaN(parseFloat(f.longitude)));
-  const mapCenter: [number, number] = mapFranchises.length > 0 ? [mapFranchises.reduce((acc, f) => acc + parseFloat(f.latitude), 0) / mapFranchises.length, mapFranchises.reduce((acc, f) => acc + parseFloat(f.longitude), 0) / mapFranchises.length] : [-14.235, -51.925];
+  const mapCenter: [number, number] = mapFranchises.length > 0 
+    ? [mapFranchises.reduce((acc, f) => acc + parseFloat(f.latitude), 0) / mapFranchises.length, mapFranchises.reduce((acc, f) => acc + parseFloat(f.longitude), 0) / mapFranchises.length] 
+    : [-14.235, -51.925];
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20 h-full flex flex-col">
@@ -240,6 +289,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                 <button onClick={() => { setFormData(initialFormState); setShowModal(true); }} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"><Plus size={18} /> Nova Franquia</button>
             </div>
         </div>
+        
         {viewMode === 'list' && (
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm shrink-0">
                 <div className="relative">
@@ -248,6 +298,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                 </div>
             </div>
         )}
+
         <div className="flex-1 overflow-hidden relative min-h-[500px]">
             {viewMode === 'list' && (
                 <div className="h-full overflow-y-auto custom-scrollbar pr-2">
@@ -269,6 +320,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                     </div>
                 </div>
             )}
+            
             {viewMode === 'map' && (
                 <div className="h-full w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm relative">
                     <div className="absolute top-4 left-4 z-[1000] w-full max-w-sm flex flex-col gap-2"><div className="bg-white rounded-lg shadow-lg border border-slate-200 flex items-center p-1"><div className="pl-3 text-slate-400"><Search size={18} /></div><input type="text" className="w-full px-3 py-2 outline-none text-sm text-slate-700 bg-transparent" placeholder="Verificar nova localização (Endereço)" value={mapSearchQuery} onChange={(e) => setMapSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}/>{mapSearchQuery && (<button onClick={() => {setMapSearchQuery(''); setPotentialLocation(null); setConflicts([]);}} className="p-2 text-slate-400 hover:text-slate-600"><X size={16} /></button>)}<button onClick={handleAddressSearch} disabled={isSearchingMap || !mapSearchQuery} className="bg-teal-600 hover:bg-teal-700 text-white rounded p-2 m-1 transition-colors disabled:opacity-50">{isSearchingMap ? <Loader2 size={16} className="animate-spin" /> : <Navigation size={16} />}</button></div>
@@ -282,13 +334,53 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                 </div>
             )}
         </div>
+
         {showModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto"><div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]"><div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl shrink-0"><div><h3 className="text-xl font-bold text-slate-800">{formData.id ? 'Editar Franquia' : 'Cadastro de Franquia'}</h3><p className="text-sm text-slate-500">Dados cadastrais da unidade e do franqueado.</p></div><button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={24}/></button></div>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto"><div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]"><div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl shrink-0"><div><h3 className="text-xl font-bold text-slate-800">{formData.id ? 'Editar Franquia' : 'Cadastro de Franquia'}</h3><p className="text-sm text-slate-500">Dados cadastrais da unidade e do franqueado.</p></div><button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={24}/></button></div>
                 <div className="p-8 overflow-y-auto custom-scrollbar space-y-8">
                     <section><h4 className="text-sm font-bold text-teal-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><Briefcase size={16} /> Dados da Venda</h4><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div><label className="block text-xs font-semibold text-slate-600 mb-1">NÚMERO DA VENDA</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.saleNumber} onChange={e => handleInputChange('saleNumber', e.target.value)} /></div><div><label className="block text-xs font-semibold text-slate-600 mb-1">Início Contrato</label><input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.contractStartDate} onChange={e => handleInputChange('contractStartDate', e.target.value)} /></div><div><label className="block text-xs font-semibold text-slate-600 mb-1">Data Inauguração</label><input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.inaugurationDate} onChange={e => handleInputChange('inaugurationDate', e.target.value)} /></div><div><label className="block text-xs font-semibold text-slate-600 mb-1">Consultor Resp.</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.salesConsultant} onChange={e => handleInputChange('salesConsultant', e.target.value)} /></div></div></section>
                     <section><h4 className="text-sm font-bold text-teal-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><User size={16} /> Identificação e Contato</h4><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"><div className="lg:col-span-2"><label className="block text-xs font-semibold text-slate-600 mb-1">NOME FRANQUEADO</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.franchiseeName} onChange={e => handleInputChange('franchiseeName', e.target.value)} /></div><div><label className="block text-xs font-semibold text-slate-600 mb-1">CPF</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cpf} onChange={e => handleInputChange('cpf', e.target.value)} /></div><div><label className="block text-xs font-semibold text-slate-600 mb-1">CNPJ</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.cnpj} onChange={e => handleInputChange('cnpj', e.target.value)} /></div><div className="lg:col-span-2"><label className="block text-xs font-semibold text-slate-600 mb-1">Razão Social</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.companyName} onChange={e => handleInputChange('companyName', e.target.value)} /></div><div><label className="block text-xs font-semibold text-slate-600 mb-1">Telefone</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.phone} onChange={e => handleInputChange('phone', e.target.value)} /></div><div><label className="block text-xs font-semibold text-slate-600 mb-1">E-mail</label><input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.email} onChange={e => handleInputChange('email', e.target.value)} /></div><div className="lg:col-span-4"><label className="block text-xs font-semibold text-slate-600 mb-1">Endereço Residencial</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.residentialAddress} onChange={e => handleInputChange('residentialAddress', e.target.value)} /></div></div></section>
+                    <section>
+                        <h4 className="text-sm font-bold text-teal-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <MapIcon size={16} /> Geolocalização e Endereço Comercial
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                             <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Estado</label>
+                                <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white" value={formData.commercialState} onChange={e => handleInputChange('commercialState', e.target.value)}>
+                                    <option value="">Selecione...</option>
+                                    {states.map(uf => <option key={uf.id} value={uf.sigla}>{uf.sigla} - {uf.nome}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Cidade</label>
+                                <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white disabled:bg-slate-50" value={formData.commercialCity} onChange={e => handleInputChange('commercialCity', e.target.value)} disabled={!formData.commercialState || isLoadingCities}>
+                                    <option value="">{isLoadingCities ? '...' : 'Selecione'}</option>
+                                    {cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                                </select>
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Bairro Comercial</label>
+                                <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={formData.commercialNeighborhood} onChange={e => handleInputChange('commercialNeighborhood', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Logradouro Comercial</label>
+                                <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={formData.commercialAddress} onChange={e => handleInputChange('commercialAddress', e.target.value)} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 md:col-span-2">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Latitude</label>
+                                    <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm font-mono" value={formData.latitude} onChange={e => handleInputChange('latitude', e.target.value)} placeholder="-23.5505" />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Longitude</label>
+                                    <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm font-mono" value={formData.longitude} onChange={e => handleInputChange('longitude', e.target.value)} placeholder="-46.6333" />
+                                </div>
+                            </div>
+                        </div>
+                    </section>
                 </div>
-                <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100"><button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button><button onClick={handleSave} disabled={isSaving} className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-sm flex items-center gap-2">{isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Franquia</button></div>
+                <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100"><button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button><button onClick={handleSave} disabled={isSaving} className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg disabled:opacity-50">{isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Franquia</button></div>
             </div></div>
         )}
     </div>

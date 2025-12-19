@@ -208,7 +208,7 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      interval_minutes: preset.intervalMinutes || 5,
+      interval_minutes: preset.interval_minutes || 5,
       created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -276,7 +276,8 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: company.id || undefined, legal_name: company.legal_name, cnpj: company.cnpj, product_types: company.product_types };
+      // FIX: Changed company.legal_name to company.legalName and company.product_types to company.productTypes to match CompanySetting interface
+      const payload = { id: company.id || undefined, legal_name: company.legalName, cnpj: company.cnpj, product_types: company.productTypes };
       await supabase.from('crm_companies').upsert(payload);
   },
 
@@ -320,7 +321,7 @@ export const appBackend = {
 
   saveBanner: async (banner: Banner): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.linkUrl, target_audience: banner.targetAudience, active: banner.active };
+    const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.link_url, target_audience: banner.targetAudience, active: banner.active };
     if (banner.id) await supabase.from('app_banners').update(payload).eq('id', banner.id);
     else await supabase.from('app_banners').insert([payload]);
   },

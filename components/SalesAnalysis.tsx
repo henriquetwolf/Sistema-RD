@@ -5,8 +5,7 @@ import {
   LineChart, Line, AreaChart, Area, PieChart, Pie, Cell 
 } from 'recharts';
 import { Calendar, Filter, Download, TrendingUp, DollarSign, Target, Briefcase, Loader2, RefreshCw, Users, LayoutGrid, ShoppingBag, Tag } from 'lucide-react';
-import { appBackend } from '../services/appBackend';
-import { MOCK_COLLABORATORS } from './CollaboratorsManager';
+import { appBackend, CompanySetting } from '../services/appBackend';
 import clsx from 'clsx';
 
 interface Team {
@@ -19,6 +18,8 @@ export const SalesAnalysis: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [deals, setDeals] = useState<any[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  // FIX: Added collaborators state to replace MOCK_COLLABORATORS
+  const [collaborators, setCollaborators] = useState<any[]>([]);
   
   // UI State
   const [activeTab, setActiveTab] = useState<'general' | 'teams'>('general');
@@ -41,16 +42,19 @@ export const SalesAnalysis: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch Deals and Teams in parallel
-      const [dealsResult, teamsResult] = await Promise.all([
+      // FIX: Fetch Deals, Teams and Collaborators in parallel
+      const [dealsResult, teamsResult, collabResult] = await Promise.all([
         appBackend.client.from('crm_deals').select('*').order('created_at', { ascending: true }),
-        appBackend.client.from('crm_teams').select('*')
+        appBackend.client.from('crm_teams').select('*'),
+        appBackend.client.from('crm_collaborators').select('id, full_name')
       ]);
 
       if (dealsResult.error) throw dealsResult.error;
+      if (collabResult.error) throw collabResult.error;
       
       setDeals(dealsResult.data || []);
       setTeams(teamsResult.data || []);
+      setCollaborators(collabResult.data || []);
 
     } catch (e) {
       console.error("Erro ao buscar dados:", e);
@@ -165,7 +169,8 @@ export const SalesAnalysis: React.FC = () => {
     const ownerSales: Record<string, number> = {};
     filtered.forEach(deal => {
         if (deal.stage === 'closed') {
-            const ownerName = MOCK_COLLABORATORS.find(c => c.id === deal.owner_id)?.fullName || 'Desconhecido';
+            // FIX: Use the dynamically fetched collaborators state and full_name property from the database
+            const ownerName = collaborators.find(c => c.id === deal.owner_id)?.full_name || 'Desconhecido';
             ownerSales[ownerName] = (ownerSales[ownerName] || 0) + Number(deal.value);
         }
     });
@@ -202,7 +207,8 @@ export const SalesAnalysis: React.FC = () => {
         metrics: { totalRevenue, totalDeals, conversionRate, avgTicket },
         charts: { salesOverTimeData, funnelData, topSellersData, teamStats }
     };
-  }, [deals, teams, dateRange, statusFilter, filterType, filterProduct]);
+    // FIX: Added collaborators to the memoization dependency array
+  }, [deals, teams, collaborators, dateRange, statusFilter, filterType, filterProduct]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -229,7 +235,7 @@ export const SalesAnalysis: React.FC = () => {
                 </button>
                 <button 
                     onClick={() => setActiveTab('teams')}
-                    className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", activeTab === 'teams' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                    className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", activeTab === 'teams' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
                 >
                     <Users size={16} /> Equipes
                 </button>

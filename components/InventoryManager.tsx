@@ -125,7 +125,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                   consumed.sacochila += presentCount;
                   consumed.lapis += presentCount;
               } else {
-                  // Variável corrigida aqui de allDeals para deals
                   const enrolled = deals.filter(d => d.class_mod_1 === cls.mod_1_code).length;
                   if (isCompleta) scheduled.nova += enrolled;
                   if (isClassico) scheduled.classico += enrolled;
@@ -150,7 +149,15 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      const isUpdate = !!formData.id;
+      const studio = studios.find(s => s.id === formData.studioId);
       await appBackend.saveInventoryRecord(formData);
+      await appBackend.logActivity({ 
+          action: isUpdate ? 'update' : 'create', 
+          module: 'inventory', 
+          details: `${isUpdate ? 'Editou' : 'Registrou'} movimentação de estoque: ${formData.type === 'entry' ? 'Entrada Fornecedor' : 'Envio para ' + studio?.fantasyName}`,
+          recordId: formData.id || undefined
+      });
       await fetchData();
       setShowModal(false);
       setFormData(initialFormState);
@@ -162,9 +169,11 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
   };
 
   const handleDelete = async (id: string) => {
+    const target = records.find(r => r.id === id);
     if (window.confirm("Excluir este registro de estoque?")) {
       try {
         await appBackend.deleteInventoryRecord(id);
+        await appBackend.logActivity({ action: 'delete', module: 'inventory', details: `Excluiu registro de movimentação do dia ${target?.registrationDate}`, recordId: id });
         setRecords(prev => prev.filter(r => r.id !== id));
       } catch (e) {
         alert("Erro ao excluir.");
@@ -348,8 +357,6 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                             { real: s.stockInHands.lapis, prog: s.scheduled.lapis },
                         ];
                         
-                        // NOVA LÓGICA DE PERIGO: 
-                        // Falta real (saldo < 0) OU Demanda iminente sem estoque (prog > 0 e saldo < margem)
                         const anyDanger = items.some(i => (i.real - i.prog < 0) || (i.prog > 0 && i.real - i.prog < securityMargin));
 
                         return (

@@ -142,7 +142,14 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
       }
       setIsSaving(true);
       try {
+          const isUpdate = !!formData.id;
           await appBackend.savePartnerStudio(formData);
+          await appBackend.logActivity({ 
+              action: isUpdate ? 'update' : 'create', 
+              module: 'partner_studios', 
+              details: `${isUpdate ? 'Editou' : 'Cadastrou'} studio parceiro: ${formData.fantasyName}`,
+              recordId: formData.id || undefined
+          });
           await fetchStudios();
           setShowModal(false);
           setFormData(INITIAL_FORM);
@@ -154,9 +161,11 @@ export const PartnerStudiosManager: React.FC<PartnerStudiosManagerProps> = ({ on
   };
 
   const handleDelete = async (id: string) => {
+      const target = studios.find(s => s.id === id);
       if (window.confirm("Excluir este studio parceiro?")) {
           try {
               await appBackend.deletePartnerStudio(id);
+              await appBackend.logActivity({ action: 'delete', module: 'partner_studios', details: `Excluiu studio parceiro: ${target?.fantasyName}`, recordId: id });
               setStudios(prev => prev.filter(s => s.id !== id));
           } catch (e: any) {
               alert(`Erro: ${e.message}`);

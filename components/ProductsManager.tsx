@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, Plus, Search, MoreVertical, Edit2, Trash2, 
@@ -84,9 +85,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           setProducts(mapped);
       } catch (e: any) {
           console.error("Erro ao buscar produtos:", e);
-          if (e.message?.includes('does not exist')) {
-              alert("A tabela 'crm_products' não existe. Vá em Configurações > Diagnóstico e execute o SQL.");
-          }
       } finally {
           setIsLoading(false);
       }
@@ -116,21 +114,17 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           url: formData.url,
           status: formData.status,
           description: formData.description,
-          certificate_template_id: formData.certificateTemplateId || null // Save template ID
+          certificate_template_id: formData.certificateTemplateId || null
       };
 
       try {
-          if (formData.id) {
-              const { error } = await appBackend.client
-                  .from('crm_products')
-                  .update(payload)
-                  .eq('id', formData.id);
-              if (error) throw error;
+          const isUpdate = !!formData.id;
+          if (isUpdate) {
+              await appBackend.client.from('crm_products').update(payload).eq('id', formData.id);
+              await appBackend.logActivity({ action: 'update', module: 'products', details: `Editou produto digital: ${formData.name}`, recordId: formData.id });
           } else {
-              const { error } = await appBackend.client
-                  .from('crm_products')
-                  .insert([payload]);
-              if (error) throw error;
+              const { data } = await appBackend.client.from('crm_products').insert([payload]).select().single();
+              await appBackend.logActivity({ action: 'create', module: 'products', details: `Cadastrou produto digital: ${formData.name}`, recordId: data?.id });
           }
           await fetchProducts();
           setShowModal(false);
@@ -143,13 +137,12 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   };
 
   const handleDelete = async (id: string) => {
+      const target = products.find(p => p.id === id);
       if (window.confirm("Tem certeza que deseja excluir este produto?")) {
           try {
-              const { error } = await appBackend.client
-                  .from('crm_products')
-                  .delete()
-                  .eq('id', id);
+              const { error } = await appBackend.client.from('crm_products').delete().eq('id', id);
               if (error) throw error;
+              await appBackend.logActivity({ action: 'delete', module: 'products', details: `Excluiu produto digital: ${target?.name}`, recordId: id });
               setProducts(prev => prev.filter(p => p.id !== id));
           } catch (e: any) {
               alert(`Erro ao excluir: ${e.message}`);
@@ -261,7 +254,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                 <span>{product.platform}</span>
                             </div>
 
-                            {/* Certificate Badge */}
                             {product.certificateTemplateId && (
                                 <div className="mb-3">
                                     <span className="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-100 font-medium">
@@ -288,11 +280,10 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
             </div>
         )}
 
-        {/* Modal */}
         {showModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
                 <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
-                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
+                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl shrink-0">
                         <h3 className="font-bold text-slate-800 flex items-center gap-2">
                             <MonitorPlay size={20} className="text-indigo-600" />
                             {formData.id ? 'Editar Produto' : 'Novo Produto Digital'}
@@ -376,7 +367,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                         <option key={cert.id} value={cert.id}>{cert.title}</option>
                                     ))}
                                 </select>
-                                <p className="text-[10px] text-slate-400 mt-1">O aluno receberá este modelo ao completar o curso.</p>
                             </div>
 
                             <div className="md:col-span-2">
@@ -405,7 +395,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 rounded-b-xl">
+                    <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 rounded-b-xl shrink-0">
                         <button onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
                         <button onClick={handleSave} disabled={isSaving} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center gap-2">
                             {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}

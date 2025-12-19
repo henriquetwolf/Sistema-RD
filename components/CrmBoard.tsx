@@ -304,6 +304,7 @@ export const CrmBoard: React.FC = () => {
     if (newIndex < 0 || newIndex >= stageOrder.length) return;
     const newStage = stageOrder[newIndex];
     const now = new Date();
+    const deal = deals.find(d => d.id === dealId);
 
     setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage, closedAt: newStage === 'closed' ? now : (currentStage === 'closed' ? undefined : d.closedAt) } : d));
 
@@ -312,6 +313,7 @@ export const CrmBoard: React.FC = () => {
         if (newStage === 'closed') updates.closed_at = now.toISOString();
         if (currentStage === 'closed' && newStage !== 'closed') updates.closed_at = null;
         await appBackend.client.from('crm_deals').update(updates).eq('id', dealId);
+        await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal?.title}" para a etapa: ${newStage}`, recordId: dealId });
     } catch (e: any) {
         handleDbError(e);
         fetchData(); 
@@ -343,6 +345,7 @@ export const CrmBoard: React.FC = () => {
         if (targetStage === 'closed') updates.closed_at = now.toISOString();
         else if (currentDeal.stage === 'closed') updates.closed_at = null;
         await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId);
+        await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para: ${targetStage}`, recordId: draggedDealId });
     } catch (e) { handleDbError(e); fetchData(); }
     setDraggedDealId(null);
   };
@@ -385,8 +388,10 @@ export const CrmBoard: React.FC = () => {
         let response;
         if (editingTeam) {
             response = await appBackend.client.from('crm_teams').update(payload).eq('id', editingTeam.id);
+            await appBackend.logActivity({ action: 'update', module: 'crm', details: `Editou equipe comercial: ${teamName}`, recordId: editingTeam.id });
         } else {
-            response = await appBackend.client.from('crm_teams').insert([payload]);
+            response = await appBackend.client.from('crm_teams').insert([payload]).select().single();
+            await appBackend.logActivity({ action: 'create', module: 'crm', details: `Criou equipe comercial: ${teamName}`, recordId: response.data?.id });
         }
 
         if (response.error) {
@@ -404,10 +409,12 @@ export const CrmBoard: React.FC = () => {
   };
 
   const handleDeleteTeam = async (id: string) => {
+      const team = teams.find(t => t.id === id);
       if (!window.confirm("Excluir esta equipe?")) return;
       try {
           const { error } = await appBackend.client.from('crm_teams').delete().eq('id', id);
           if (error) throw error;
+          await appBackend.logActivity({ action: 'delete', module: 'crm', details: `Excluiu equipe comercial: ${team?.name}`, recordId: id });
           await fetchData();
       } catch (e: any) {
           alert(`Erro ao excluir equipe: ${e.message}`);
@@ -433,7 +440,6 @@ export const CrmBoard: React.FC = () => {
       
       const dealTitle = dealFormData.companyName;
       
-      // Corrigido mapeamento de campos (React state -> Database snake_case)
       const payload = {
           title: dealTitle, 
           company_name: dealFormData.companyName, 
@@ -475,9 +481,11 @@ export const CrmBoard: React.FC = () => {
       try {
           if (editingDealId) {
               await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId);
+              await appBackend.logActivity({ action: 'update', module: 'crm', details: `Editou negócio: ${dealTitle}`, recordId: editingDealId });
           } else {
               const dealNumber = generateDealNumber();
-              await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]);
+              const { data } = await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]).select().single();
+              await appBackend.logActivity({ action: 'create', module: 'crm', details: `Criou novo negócio: ${dealTitle}`, recordId: data?.id });
           }
           await fetchData();
           setShowDealModal(false);
@@ -488,6 +496,7 @@ export const CrmBoard: React.FC = () => {
       if (editingDealId && window.confirm("Excluir esta negociação?")) {
           try {
             await appBackend.client.from('crm_deals').delete().eq('id', editingDealId);
+            await appBackend.logActivity({ action: 'delete', module: 'crm', details: `Excluiu negócio: ${dealFormData.companyName}`, recordId: editingDealId });
             await fetchData();
             setShowDealModal(false);
           } catch(e: any) { alert(`Erro ao excluir: ${e.message}`); }

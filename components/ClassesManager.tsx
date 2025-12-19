@@ -289,10 +289,12 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   };
 
   const handleDelete = async (id: string) => {
+      const target = classes.find(c => c.id === id);
       if (window.confirm("Tem certeza que deseja excluir esta turma?")) {
           try {
               const { error } = await appBackend.client.from('crm_classes').delete().eq('id', id);
               if (error) throw error;
+              await appBackend.logActivity({ action: 'delete', module: 'classes', details: `Excluiu turma: ${target?.course} (${target?.city})`, recordId: id });
               setClasses(prev => prev.filter(c => c.id !== id));
               if (selectedClassId === id) setSelectedClassId(null);
           } catch(e) {
@@ -328,7 +330,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
         hotel_mod_1: formData.hotel_mod_1,
         hotel_loc_mod_1: formData.hotel_loc_mod_1,
         cost_help_1: formData.cost_help_1,
-        date_mod_2: formData.date_mod_2 || null,
+        date_mod_2: formData.dateMod2 || null,
         mod_2_code: formData.mod2Code,
         instructor_mod_2: formData.instructor_mod_2,
         ticket_mod_2: formData.ticket_mod_2,
@@ -348,9 +350,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
         if (formData.id) {
             const { error } = await appBackend.client.from('crm_classes').update(payload).eq('id', formData.id);
             if (error) throw error;
+            await appBackend.logActivity({ action: 'update', module: 'classes', details: `Editou turma: ${formData.course} (${formData.city})`, recordId: formData.id });
         } else {
-            const { error } = await appBackend.client.from('crm_classes').insert([payload]);
+            const { data, error } = await appBackend.client.from('crm_classes').insert([payload]).select().single();
             if (error) throw error;
+            await appBackend.logActivity({ action: 'create', module: 'classes', details: `Criou nova turma: ${formData.course} (${formData.city})`, recordId: data?.id });
         }
         await fetchClasses();
         setShowModal(false);
@@ -689,11 +693,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Coffe Módulo 2</label>
-                                <div className="relative"><Coffee size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.coffeeMod2} onChange={e => handleInputChange('coffeeMod2', e.target.value)} /></div>
+                                <div className="relative"><Coffee size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.coffeeMod2} onChange={e => handleInputChange('coffeeMod2', e.target.value)} /></div>
                             </div>
                              <div className="md:col-span-2">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Hotel Módulo 2</label>
-                                <div className="relative"><Bed size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hotelMod2} onChange={e => handleInputChange('hotelMod2', e.target.value)} /></div>
+                                <div className="relative"><Bed size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hotelMod2} onChange={e => handleInputChange('hotelMod2', e.target.value)} /></div>
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">LOCALIZAÇÃO HOTEL MÓDULO 2</label>

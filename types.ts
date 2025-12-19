@@ -126,6 +126,10 @@ export interface FormStyle {
   buttonText?: string;
   logoUrl?: string;
   shadowIntensity?: 'none' | 'soft' | 'strong';
+  // Tela de Sucesso
+  successTitle?: string;
+  successMessage?: string;
+  successButtonText?: string;
 }
 
 export interface FormModel {

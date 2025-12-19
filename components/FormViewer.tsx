@@ -67,7 +67,10 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
       titleAlignment: 'left',
       borderRadius: 'medium',
       buttonText: 'Enviar Formulário',
-      shadowIntensity: 'soft'
+      shadowIntensity: 'soft',
+      successTitle: 'Enviado com Sucesso!',
+      successMessage: 'Recebemos suas informações. Entraremos em contato em breve.',
+      successButtonText: 'Enviar outra resposta'
   };
 
   const getBackgroundStyle = () => {
@@ -125,10 +128,10 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
             <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-8 animate-bounce">
                 <CheckCircle size={48} />
             </div>
-            <h2 className="text-3xl font-black mb-2">Enviado com Sucesso!</h2>
-            <p className="opacity-70 mb-10 text-lg">Recebemos suas informações. Entraremos em contato em breve.</p>
+            <h2 className="text-3xl font-black mb-2">{style.successTitle || 'Enviado com Sucesso!'}</h2>
+            <p className="opacity-70 mb-10 text-lg">{style.successMessage || 'Recebemos suas informações. Entraremos em contato em breve.'}</p>
             {!isPublic && onBack && <button onClick={onBack} className="hover:underline font-bold block mx-auto mb-2 text-sm opacity-60">Voltar ao Painel</button>}
-            {isPublic && <button onClick={() => window.location.reload()} className="text-white px-8 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all" style={{ backgroundColor: style.primaryColor }}>Enviar outra resposta</button>}
+            {isPublic && <button onClick={() => window.location.reload()} className="text-white px-8 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all" style={{ backgroundColor: style.primaryColor }}>{style.successButtonText || 'Enviar outra resposta'}</button>}
         </div>
       </div>
     );

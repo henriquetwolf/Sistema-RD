@@ -7,7 +7,7 @@ import {
   ArrowLeft, Save, GripVertical, GripHorizontal, Copy, Settings,
   Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target, Share2, CheckCircle,
   LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info, Code, ExternalLink, Tag, Loader2,
-  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2, MousePointer2, AlignCenter, Layout
+  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2, MousePointer2, AlignCenter, Layout, Sparkles
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -49,7 +49,10 @@ const INITIAL_FORM: FormModel = {
       titleAlignment: 'left',
       borderRadius: 'medium',
       buttonText: 'Enviar Formulário',
-      shadowIntensity: 'soft'
+      shadowIntensity: 'soft',
+      successTitle: 'Enviado com Sucesso!',
+      successMessage: 'Recebemos suas informações. Entraremos em contato em breve.',
+      successButtonText: 'Enviar outra resposta'
   },
   distributionMode: 'fixed'
 };
@@ -614,6 +617,24 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                   </section>
 
                                   <section>
+                                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles size={14}/> Tela de Sucesso (Pós-Envio)</h4>
+                                      <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                                          <div>
+                                              <label className="block text-xs font-bold text-slate-600 mb-1">Título da Confirmação</label>
+                                              <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm bg-white" placeholder="Enviado com Sucesso!" value={currentForm.style?.successTitle || ''} onChange={e => updateStyle('successTitle', e.target.value)} />
+                                          </div>
+                                          <div>
+                                              <label className="block text-xs font-bold text-slate-600 mb-1">Mensagem de Agradecimento</label>
+                                              <textarea className="w-full border rounded-lg px-3 py-2 text-sm bg-white h-20 resize-none" placeholder="Recebemos suas informações..." value={currentForm.style?.successMessage || ''} onChange={e => updateStyle('successMessage', e.target.value)} />
+                                          </div>
+                                          <div>
+                                              <label className="block text-xs font-bold text-slate-600 mb-1">Texto do Botão de Reinício</label>
+                                              <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm bg-white" placeholder="Enviar outra resposta" value={currentForm.style?.successButtonText || ''} onChange={e => updateStyle('successButtonText', e.target.value)} />
+                                          </div>
+                                      </div>
+                                  </section>
+
+                                  <section>
                                       <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><ImageIcon size={14}/> Branding e Botão</h4>
                                       <div className="space-y-6">
                                           <div>
@@ -784,7 +805,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
 
       {sharingForm && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                       <h3 className="font-bold text-slate-800 flex items-center gap-2"><Share2 size={18} className="text-teal-600"/> Compartilhar Formulário</h3>
                       <button onClick={() => setSharingForm(null)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-200 rounded-full transition-all"><X size={20}/></button>

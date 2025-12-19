@@ -366,3 +366,41 @@ export interface Product {
   certificateTemplateId?: string;
   createdAt: string;
 }
+
+// --- FRANCHISES ---
+
+export interface Franchise {
+  id: string;
+  saleNumber: string;
+  contractStartDate: string;
+  inaugurationDate: string;
+  salesConsultant: string;
+  franchiseeName: string;
+  cpf: string;
+  companyName: string;
+  cnpj: string;
+  phone: string;
+  email: string;
+  residentialAddress: string;
+  commercialState: string;
+  commercialCity: string;
+  commercialAddress: string;
+  commercialNeighborhood: string;
+  latitude: string;
+  longitude: string;
+  kmStreetPoint: string;
+  kmCommercialBuilding: string;
+  studioStatus: string;
+  studioSizeM2: string;
+  equipmentList: string;
+  royaltiesValue: string;
+  bankAccountInfo: string;
+  hasSignedContract: boolean;
+  contractEndDate: string;
+  isRepresentative: boolean;
+  partner1Name: string;
+  partner2Name: string;
+  franchiseeFolderLink: string;
+  pathInfo: string;
+  observations: string;
+}

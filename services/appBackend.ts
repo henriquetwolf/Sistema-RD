@@ -140,7 +140,8 @@ export const appBackend = {
       status: row.status,
       lastMessage: row.last_message,
       active: row.active,
-      interval_minutes: row.interval_minutes,
+      // Fix: intervalMinutes uses camelCase in SyncJob interface
+      intervalMinutes: row.interval_minutes,
       createdBy: row.created_by_name,
       createdAt: row.created_at
     }));
@@ -210,7 +211,7 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      interval_minutes: preset.intervalMinutes || 5,
+      interval_minutes: preset.intervalMinutes || 5, 
       created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -382,16 +383,17 @@ export const appBackend = {
       account: d.account, 
       beneficiary: d.beneficiary, 
       pixKey: d.pix_key, 
-      hasReformer: !!d.has_reformer, 
-      qtyReformer: Number(d.qty_reformer || 0), 
-      hasLadderBarrel: !!d.has_ladder_barrel, 
-      qtyLadderBarrel: Number(d.qty_ladder_barrel || 0), 
-      hasChair: !!d.has_chair, 
-      qtyChair: Number(d.qty_chair || 0), 
-      hasCadillac: !!d.has_cadillac, 
-      qtyCadillac: Number(d.qty_cadillac || 0), 
-      hasChairsForCourse: !!d.has_chairs_for_course, 
-      hasTv: !!d.has_tv, 
+      // Fix: map snake_case DB fields to camelCase interface properties
+      hasReformer: d.has_reformer, 
+      qtyReformer: d.qty_reformer, 
+      hasLadderBarrel: d.has_ladder_barrel, 
+      qtyLadderBarrel: d.qty_ladder_barrel, 
+      hasChair: d.has_chair, 
+      qtyChair: d.qty_chair, 
+      hasCadillac: d.has_cadillac, 
+      qtyCadillac: d.qty_cadillac, 
+      hasChairsForCourse: d.has_chairs_for_course, 
+      hasTv: d.has_tv, 
       maxKitsCapacity: d.max_kits_capacity, 
       attachments: d.attachments
     }));
@@ -407,10 +409,12 @@ export const appBackend = {
       email: studio.email, 
       password: studio.password, 
       second_contact_name: studio.secondContactName, 
+      // Fix: database key should be snake_case
       second_contact_phone: studio.secondContactPhone, 
       fantasy_name: studio.fantasyName, 
       legal_name: studio.legalName, 
       cnpj: studio.cnpj, 
+      // Fix: studio property is studioPhone
       studio_phone: studio.studioPhone, 
       address: studio.address, 
       city: studio.city, 
@@ -486,6 +490,7 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
+      // Fix: distributionMode uses camelCase in FormModel interface
       const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
       const { error } = await supabase.from('crm_forms').upsert(payload);
       if (error) throw error;
@@ -555,6 +560,7 @@ export const appBackend = {
                   dealPayload.title = `Lead: ${nameValue}`;
               }
           } else {
+              // Se o usuário mapeou via contact_name ou company_name, garantimos que ambos fiquem iguais e o título também
               dealPayload.contact_name = finalName;
               dealPayload.company_name = finalName;
               dealPayload.title = `Lead: ${finalName}`;

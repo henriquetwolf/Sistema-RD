@@ -9,6 +9,9 @@ import { parseExcelFile } from '../utils/excelParser';
 import { EntityImportType } from '../types';
 import clsx from 'clsx';
 
+// Declare XLSX for TS since it's loaded via CDN
+declare const XLSX: any;
+
 interface UploadPanelProps {
   onFilesSelected: (files: File[]) => void;
   onUrlConfirmed?: (url: string) => void;
@@ -17,11 +20,46 @@ interface UploadPanelProps {
 }
 
 const ENTITIES = [
-    { id: 'collaborators', label: 'Colaboradores', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', template: 'full_name,email,phone,role,department,status,admission_date,cpf,rg' },
-    { id: 'instructors', label: 'Instrutores', icon: School, color: 'text-orange-600', bg: 'bg-orange-50', template: 'full_name,email,phone,teacher_level,is_active,academic_formation,city,state' },
-    { id: 'students', label: 'Alunos / Leads', icon: GraduationCap, color: 'text-purple-600', bg: 'bg-purple-50', template: 'contact_name,company_name,email,phone,cpf,product_name,stage,status,class_mod_1,class_mod_2' },
-    { id: 'franchises', label: 'Franquias', icon: Store, color: 'text-teal-600', bg: 'bg-teal-50', template: 'franchisee_name,email,phone,commercial_city,commercial_state,studio_status,cnpj' },
-    { id: 'studios', label: 'Studios Parceiros', icon: Building2, color: 'text-indigo-600', bg: 'bg-indigo-50', template: 'fantasy_name,responsible_name,email,phone,city,state,status' },
+    { 
+        id: 'collaborators', 
+        label: 'Colaboradores', 
+        icon: Users, 
+        color: 'text-blue-600', 
+        bg: 'bg-blue-50', 
+        template: 'full_name,social_name,birth_date,marital_status,spouse_name,father_name,mother_name,gender_identity,racial_identity,education_level,photo_url,email,phone,cellphone,corporate_phone,operator,address,cep,complement,birth_state,birth_city,state,current_city,emergency_name,emergency_phone,admission_date,previous_admission_date,role,role_id,password,headquarters,department,salary,hiring_mode,hiring_company,work_hours,break_time,work_days,presential_days,superior_id,experience_period,has_other_job,status,contract_type,cpf,rg,rg_issuer,rg_issue_date,rg_state,ctps_number,ctps_series,ctps_state,ctps_issue_date,pis_number,reservist_number,docs_folder_link,legal_auth,bank_account_info,has_insalubrity,insalubrity_percent,has_danger_pay,transport_voucher_info,bus_line_home_work,bus_qty_home_work,bus_line_work_home,bus_qty_work_home,ticket_value,fuel_voucher_value,has_meal_voucher,has_food_voucher,has_home_office_aid,has_health_plan,has_dental_plan,bonus_info,bonus_value,commission_info,commission_percent,has_dependents,dependent_name,dependent_dob,dependent_kinship,dependent_cpf,resignation_date,demission_reason,demission_docs,vacation_periods,observations' 
+    },
+    { 
+        id: 'instructors', 
+        label: 'Instrutores', 
+        icon: School, 
+        color: 'text-orange-600', 
+        bg: 'bg-orange-50', 
+        template: 'full_name,email,phone,password,rg,cpf,birth_date,marital_status,mother_name,photo_url,address,district,city,state,cep,emergency_contact_name,emergency_contact_phone,profession,council_number,is_council_active,cnpj,company_name,has_cnpj_active,academic_formation,other_formation,course_type,teacher_level,level_honorarium,is_active,bank,agency,account_number,account_digit,has_pj_account,pix_key_pj,pix_key_pf,region_availability,week_availability,shirt_size,has_notebook,has_vehicle,has_studio,studio_address,additional_1,value_additional_1,date_additional_1,additional_2,value_additional_2,date_additional_2,additional_3,value_additional_3,date_additional_3' 
+    },
+    { 
+        id: 'students', 
+        label: 'Alunos / Leads', 
+        icon: GraduationCap, 
+        color: 'text-purple-600', 
+        bg: 'bg-purple-50', 
+        template: 'title,contact_name,company_name,value,payment_method,stage,owner_id,status,next_task,source,campaign,entry_value,installments,installment_value,product_type,product_name,email,phone,cpf,first_due_date,receipt_link,transaction_code,zip_code,address,address_number,registration_data,observation,course_state,course_city,class_mod_1,class_mod_2,billing_cnpj,billing_company_name' 
+    },
+    { 
+        id: 'franchises', 
+        label: 'Franquias', 
+        icon: Store, 
+        color: 'text-teal-600', 
+        bg: 'bg-teal-50', 
+        template: 'sale_number,contract_start_date,inauguration_date,sales_consultant,franchisee_name,cpf,company_name,cnpj,phone,email,residential_address,commercial_state,commercial_city,commercial_address,commercial_neighborhood,latitude,longitude,km_street_point,km_commercial_building,studio_status,studio_size_m2,equipment_list,royalties_value,bank_account_info,has_signed_contract,contract_end_date,is_representative,partner_1_name,partner_2_name,franchisee_folder_link,path_info,observations' 
+    },
+    { 
+        id: 'studios', 
+        label: 'Studios Parceiros', 
+        icon: Building2, 
+        color: 'text-indigo-600', 
+        bg: 'bg-indigo-50', 
+        template: 'status,responsible_name,cpf,phone,email,password,second_contact_name,second_contact_phone,fantasy_name,legal_name,cnpj,studio_phone,address,city,state,country,size_m2,student_capacity,rent_value,methodology,studio_type,name_on_site,bank,agency,account,beneficiary,pix_key,has_reformer,qty_reformer,has_ladder_barrel,qty_ladder_barrel,has_chair,qty_chair,has_cadillac,qty_cadillac,has_chairs_for_course,has_tv,max_kits_capacity,attachments' 
+    },
 ];
 
 export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrlConfirmed, onEntitySelected, isLoading }) => {
@@ -72,13 +110,14 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
       f.type === 'text/csv' || 
       f.name.endsWith('.csv') || 
       f.name.endsWith('.xlsx') ||
+      f.name.endsWith('.xls') ||
       f.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     );
 
     if (validFiles.length > 0) {
       onFilesSelected(validFiles);
     } else {
-      alert('Por favor, selecione apenas arquivos CSV ou Excel (.xlsx).');
+      alert('Por favor, selecione apenas arquivos CSV ou Excel (.xlsx, .xls).');
     }
   };
 
@@ -93,32 +132,14 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
 
       const headers = entity.template.split(',');
       
-      // Criar uma tabela HTML simples que o Excel interpreta nativamente ao abrir como .xls
-      let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
-      html += '<head><meta charset="utf-8" /><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Template</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>';
-      html += '<body><table border="1">';
-      html += '<tr>';
-      headers.forEach(h => {
-          html += `<th style="background-color: #0d9488; color: #ffffff; font-weight: bold; padding: 5px;">${h}</th>`;
-      });
-      html += '</tr>';
-      // Adicionar uma linha vazia para o usuário preencher
-      html += '<tr>';
-      headers.forEach(() => {
-          html += '<td></td>';
-      });
-      html += '</tr>';
-      html += '</table></body></html>';
+      // Criar o workbook e a worksheet usando SheetJS (XLSX)
+      const wsData = [headers];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Template");
 
-      const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute("download", `modelo_importacao_${entityId}.xls`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Gerar o arquivo .xlsx
+      XLSX.writeFile(wb, `modelo_importacao_${entityId}.xlsx`);
   };
 
   const processGoogleSheet = async () => {
@@ -221,7 +242,6 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
         }
         setFetchError(msg);
     } finally {
-        /* Corrected: Fixed non-existent setter name 'setIsSearchingMap' to the correct 'setIsFetching(false)' */
         setIsFetching(false);
     }
   };
@@ -269,7 +289,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                         <button 
                             onClick={(e) => { e.stopPropagation(); downloadTemplate(entity.id); }}
                             className="absolute -top-2 -right-2 bg-orange-500 text-white p-2 rounded-full shadow-lg hover:bg-orange-600 transition-all hover:scale-110 animate-bounce active:scale-95"
-                            title="Baixar Modelo (Excel)"
+                            title="Baixar Modelo (Excel .xlsx)"
                         >
                             <Download size={16} />
                         </button>
@@ -285,15 +305,15 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                         <FileText size={20} />
                     </div>
                     <div>
-                        <p className="text-sm font-bold text-orange-900">Modelo disponível para {ENTITIES.find(e => e.id === importType)?.label}</p>
-                        <p className="text-xs text-orange-700">Baixe o modelo em Excel e preencha as colunas para atualizar a lista no banco de dados.</p>
+                        <p className="text-sm font-bold text-orange-900">Modelo completo disponível para {ENTITIES.find(e => e.id === importType)?.label}</p>
+                        <p className="text-xs text-orange-700">Baixe o modelo em Excel (.xlsx) com todas as colunas da tabela para atualizar a lista no banco de dados.</p>
                     </div>
                 </div>
                 <button 
                     onClick={() => downloadTemplate(importType)}
                     className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95"
                 >
-                    <Download size={16}/> Baixar Modelo (Excel)
+                    <Download size={16}/> Baixar Modelo (.xlsx)
                 </button>
             </div>
         )}
@@ -352,7 +372,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                     className="hidden"
                     type="file"
                     multiple
-                    accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, .xls"
+                    accept=".csv, .xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                     onChange={handleChange}
                 />
                 
@@ -385,7 +405,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({ onFilesSelected, onUrl
                 <AlertCircle size={20} className="shrink-0 mt-0.5" />
                 <div>
                     <span className="font-bold block mb-1">Dica de Importação:</span>
-                    Ao utilizar um modelo específico, o sistema atualizará (Upsert) automaticamente os registros no Supabase utilizando a chave primária da entidade (ex: E-mail para alunos, CNPJ para franquias).
+                    Ao utilizar um modelo específico, o sistema atualizará (Upsert) automaticamente os registros no Supabase utilizando a chave primária da entidade (ex: E-mail para alunos, CNPJ para franquias). Certifique-se de que os dados estão nas colunas corretas.
                 </div>
             </div>
         </>

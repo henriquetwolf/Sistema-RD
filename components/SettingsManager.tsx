@@ -128,7 +128,21 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
 ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total settings" ON public.app_settings FOR ALL USING (true) WITH CHECK (true);
 
--- SCRIPTS ANTERIORES...
+-- CRM CERTIFICATES (MODELOS)
+CREATE TABLE IF NOT EXISTS public.crm_certificates (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    created_at timestamptz DEFAULT now(),
+    title text NOT NULL,
+    background_base_64 text,
+    back_background_base_64 text,
+    linked_product_id text,
+    body_text text,
+    layout_config jsonb
+);
+ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total certificates" ON public.crm_certificates FOR ALL USING (true) WITH CHECK (true);
+
+-- CRM ROLES
 CREATE TABLE IF NOT EXISTS public.crm_roles (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), name text NOT NULL, permissions jsonb DEFAULT '{}'::jsonb);
 ALTER TABLE public.crm_roles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total roles" ON public.crm_roles FOR ALL USING (true) WITH CHECK (true);
@@ -169,7 +183,7 @@ ALTER TABLE public.crm_inventory ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total inventory" ON public.crm_inventory FOR ALL USING (true) WITH CHECK (true);
 
 NOTIFY pgrst, 'reload config';
-  `;
+  `.trim();
 
   const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);

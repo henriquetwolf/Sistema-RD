@@ -102,7 +102,6 @@ export const appBackend = {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
     
-    // Fix: access intervalMinutes instead of interval_minutes to match SavedPreset interface
     const payload = {
       user_id: user?.id, 
       name: preset.name, 
@@ -349,7 +348,6 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      // Fix: access distributionMode and submissionsCount instead of distribution_mode and submissions_count to match FormModel interface
       const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
       await supabase.from('crm_forms').upsert(payload);
   },
@@ -364,7 +362,6 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (!data) return null;
-      /* Fix: Changed 'd' to 'data' on line 365 to resolve "Cannot find name 'd'" error */
       return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
   },
 
@@ -430,7 +427,6 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (!data) return null;
-      /* Fix: Changed 'd' to 'data' on line 430 to resolve "Cannot find name 'd'" error */
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
@@ -474,7 +470,15 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { id: cert.id, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId || null, body_text: cert.bodyText, layout_config: cert.layoutConfig };
+    const payload = { 
+        id: cert.id || undefined, 
+        title: cert.title, 
+        background_base_64: cert.backgroundData, 
+        back_background_base_64: cert.backBackgroundData, 
+        linked_product_id: cert.linkedProductId || null, 
+        body_text: cert.bodyText, 
+        layout_config: cert.layoutConfig 
+    };
     await supabase.from('crm_certificates').upsert(payload);
   },
 

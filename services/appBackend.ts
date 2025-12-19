@@ -280,7 +280,8 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: company.id || undefined, legal_name: company.legal_name, cnpj: company.cnpj, product_types: company.product_types };
+      // Fixed: use correct camelCase properties from CompanySetting
+      const payload = { id: company.id || undefined, legal_name: company.legalName, cnpj: company.cnpj, product_types: company.productTypes };
       const { error } = await supabase.from('crm_companies').upsert(payload);
       if (error) throw error;
   },
@@ -629,7 +630,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: d.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
@@ -681,7 +682,8 @@ export const appBackend = {
         background_base_64: cert.backgroundData, 
         back_background_base_64: cert.backBackgroundData, 
         linked_product_id: cert.linkedProductId || null, 
-        body_text: cert.body_text, 
+        // Fixed: use correct camelCase bodyText from CertificateModel
+        body_text: cert.bodyText, 
         layout_config: cert.layoutConfig 
     };
     const { error } = await supabase.from('crm_certificates').upsert(payload);

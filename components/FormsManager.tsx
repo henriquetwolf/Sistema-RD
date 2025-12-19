@@ -54,6 +54,8 @@ const CRM_FIELDS = [
     { value: 'phone', label: 'Telefone / WhatsApp' },
     { value: 'cpf', label: 'CPF' },
     { value: 'company_name', label: 'Nome da Empresa / Razão Social' },
+    { value: 'product_type', label: 'Tipo de Produto (Presencial/Digital/Evento)' },
+    { value: 'payment_method', label: 'Forma de Pagamento' },
     { value: 'zip_code', label: 'CEP' },
     { value: 'address', label: 'Endereço' },
     { value: 'address_number', label: 'Número do Endereço' },

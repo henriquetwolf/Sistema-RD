@@ -1,5 +1,5 @@
 
-import { createClient, SupabaseClient, Session } from '@supabase/supabase-js';
+import { createClient, Session } from '@supabase/supabase-js';
 import { SavedPreset, FormModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
@@ -140,8 +140,7 @@ export const appBackend = {
       status: row.status,
       lastMessage: row.last_message,
       active: row.active,
-      // Fix: return type SyncJob expects intervalMinutes
-      intervalMinutes: row.interval_minutes,
+      interval_minutes: row.interval_minutes,
       createdBy: row.created_by_name,
       createdAt: row.created_at
     }));
@@ -215,8 +214,7 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      // Fix: Property 'interval_minutes' does not exist on type 'Omit<SavedPreset, "id">'. Did you mean 'intervalMinutes'?
-      interval_minutes: preset.intervalMinutes || 5, 
+      interval_minutes: preset.intervalMinutes || 5,
       created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -378,6 +376,7 @@ export const appBackend = {
       state: d.state, 
       country: d.country, 
       sizeM2: d.size_m2, 
+      // Fix: map snake_case DB fields to camelCase interface properties
       studentCapacity: d.student_capacity, 
       rentValue: d.rent_value, 
       methodology: d.methodology, 
@@ -388,17 +387,16 @@ export const appBackend = {
       account: d.account, 
       beneficiary: d.beneficiary, 
       pixKey: d.pix_key, 
-      // Fix: changed from snake_case to camelCase to match PartnerStudio interface
-      hasReformer: d.has_reformer, 
-      qtyReformer: d.qty_reformer, 
-      hasLadderBarrel: d.has_ladder_barrel, 
-      qtyLadderBarrel: d.qty_ladder_barrel, 
-      hasChair: d.has_chair, 
-      qtyChair: d.qty_chair, 
-      hasCadillac: d.has_cadillac, 
-      qtyCadillac: d.qty_cadillac, 
-      hasChairsForCourse: d.has_chairs_for_course, 
-      hasTv: d.has_tv, 
+      has_reformer: d.has_reformer, 
+      qty_reformer: d.qty_reformer, 
+      has_ladder_barrel: d.has_ladder_barrel, 
+      qty_ladder_barrel: d.qty_ladder_barrel, 
+      has_chair: d.has_chair, 
+      qty_chair: d.qty_chair, 
+      has_cadillac: d.has_cadillac, 
+      qty_cadillac: d.qty_cadillac, 
+      has_chairs_for_course: d.has_chairs_for_course, 
+      has_tv: d.has_tv, 
       maxKitsCapacity: d.max_kits_capacity, 
       attachments: d.attachments
     }));
@@ -418,8 +416,7 @@ export const appBackend = {
       fantasy_name: studio.fantasyName, 
       legal_name: studio.legalName, 
       cnpj: studio.cnpj, 
-      // Fix: changed studio.studio_phone to studio.studioPhone
-      studio_phone: studio.studioPhone, 
+      studio_phone: studio.studio_phone, 
       address: studio.address, 
       city: studio.city, 
       state: studio.state, 
@@ -494,8 +491,7 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      // Fix: changed form.distribution_mode to form.distributionMode
-      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
+      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distribution_mode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
       const { error } = await supabase.from('crm_forms').upsert(payload);
       if (error) throw error;
   },

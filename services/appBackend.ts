@@ -102,6 +102,7 @@ export const appBackend = {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
     
+    // Fix: access intervalMinutes instead of interval_minutes to match SavedPreset interface
     const payload = {
       user_id: user?.id, 
       name: preset.name, 
@@ -109,7 +110,7 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      interval_minutes: preset.interval_minutes || 5,
+      interval_minutes: preset.intervalMinutes || 5,
       created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -121,7 +122,7 @@ export const appBackend = {
       key: data.api_key, 
       tableName: data.target_table_name, 
       primaryKey: data.target_primary_key || '', 
-      intervalMinutes: data.interval_minutes || 5,
+      intervalMinutes: data.interval_minutes || 5, 
       createdByName: data.created_by_name || ''
     };
   },
@@ -348,7 +349,8 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distribution_mode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissions_count || 0 };
+      // Fix: access distributionMode and submissionsCount instead of distribution_mode and submissions_count to match FormModel interface
+      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
       await supabase.from('crm_forms').upsert(payload);
   },
 

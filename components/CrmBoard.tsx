@@ -231,12 +231,12 @@ export const CrmBoard: React.FC = () => {
           if (dealsResult.data) {
               setDeals(dealsResult.data.map((d: any) => ({
                   id: d.id, dealNumber: d.deal_number, title: d.title || '', contactName: d.contact_name || '', companyName: d.company_name || '',
-                  value: Number(d.value || 0), payment_method: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
+                  value: Number(d.value || 0), paymentMethod: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
                   nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
-                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receipt_link: d.receipt_link,
-                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
+                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
+                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
                   classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
@@ -347,7 +347,6 @@ export const CrmBoard: React.FC = () => {
     setDraggedDealId(null);
   };
 
-  /* Fix: Added missing handleInputChange function to manage form field updates */
   const handleInputChange = (field: keyof Deal, value: any) => {
       setDealFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -431,7 +430,10 @@ export const CrmBoard: React.FC = () => {
 
   const handleSaveDeal = async () => {
       if (!dealFormData.companyName) { alert("Preencha o Nome Completo do Cliente."); return; }
+      
       const dealTitle = dealFormData.companyName;
+      
+      // Corrigido mapeamento de campos (React state -> Database snake_case)
       const payload = {
           title: dealTitle, 
           company_name: dealFormData.companyName, 
@@ -447,7 +449,7 @@ export const CrmBoard: React.FC = () => {
           entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1, 
           installment_value: Number(dealFormData.installmentValue || 0),
-          product_type: dealFormData.product_type || null, 
+          product_type: dealFormData.productType || null, 
           product_name: dealFormData.productName,
           email: dealFormData.email, 
           phone: dealFormData.phone,
@@ -678,7 +680,7 @@ export const CrmBoard: React.FC = () => {
                   </div>
                   
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
-                      <button onClick={() => setShowTeamModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                      <button onClick={() => setShowTeamModal(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
                       <button 
                         onClick={handleSaveTeam} 
                         disabled={isSavingTeam || !teamName.trim()}
@@ -816,11 +818,11 @@ export const CrmBoard: React.FC = () => {
                       <div>
                           <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><DollarSign size={16} /> Dados Financeiros</h4>
                           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-slate-50 p-4 rounded-lg border border-slate-100">
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor Total (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.value} onChange={e => setDealFormData({...dealFormData, value: parseFloat(e.target.value)})} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor de Entrada (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.entryValue} onChange={e => setDealFormData({...dealFormData, entryValue: parseFloat(e.target.value)})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor Total (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.value} onChange={e => setDealFormData({...dealFormData, value: parseFloat(e.target.value) || 0})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor de Entrada (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.entryValue} onChange={e => setDealFormData({...dealFormData, entryValue: parseFloat(e.target.value) || 0})} /></div>
                               <div><label className="block text-xs font-bold text-slate-600 mb-1">Forma de Pagamento</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.paymentMethod} onChange={e => setDealFormData({...dealFormData, paymentMethod: e.target.value})}><option value="">Selecione...</option><option value="Boleto">Boleto</option><option value="Pix">Pix</option><option value="CartaoCredito">Cartão de Crédito</option><option value="Recorrencia">Recorrência</option></select></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Nº Parcelas</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.installments} onChange={e => setDealFormData({...dealFormData, installments: parseInt(e.target.value)})}>{[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{i+1}x</option>)}</select></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor Parcelas (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.installmentValue} onChange={e => setDealFormData({...dealFormData, installmentValue: parseFloat(e.target.value)})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Nº Parcelas</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.installments} onChange={e => setDealFormData({...dealFormData, installments: parseInt(e.target.value) || 1})}>{[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{i+1}x</option>)}</select></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor Parcelas (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.installmentValue} onChange={e => setDealFormData({...dealFormData, installmentValue: parseFloat(e.target.value) || 0})} /></div>
                               <div><label className="block text-xs font-bold text-slate-600 mb-1">Dia 1º Vencimento</label><input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.firstDueDate} onChange={e => setDealFormData({...dealFormData, firstDueDate: e.target.value})} /></div>
                               <div><label className="block text-xs font-bold text-slate-600 mb-1">Cód. Transação</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.transactionCode} onChange={e => setDealFormData({...dealFormData, transactionCode: e.target.value})} /></div>
                               <div><label className="block text-xs font-bold text-slate-600 mb-1">Link Comprovante</label><div className="relative"><LinkIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.receiptLink} onChange={e => setDealFormData({...dealFormData, receiptLink: e.target.value})} /></div></div>

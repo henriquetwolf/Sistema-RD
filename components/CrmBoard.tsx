@@ -405,8 +405,8 @@ export const CrmBoard: React.FC = () => {
           product_type: dealFormData.productType || null, product_name: dealFormData.productName,
           email: dealFormData.email, phone: dealFormData.phone, cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null,
           receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode, zip_code: dealFormData.zipCode, 
-          address: dealFormData.address, address_number: dealFormData.address_number, registration_data: dealFormData.registration_data, 
-          observation: dealFormData.observation, course_state: dealFormData.course_state, course_city: dealFormData.course_city, 
+          address: dealFormData.address, address_number: dealFormData.addressNumber, registration_data: dealFormData.registrationData, 
+          observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
           class_mod_1: dealFormData.classMod1, class_mod_2: dealFormData.classMod2, pipeline: dealFormData.pipeline || 'Padrão', 
           tasks: dealFormData.tasks, billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName
       };
@@ -450,7 +450,7 @@ export const CrmBoard: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)]">
+    <div className="flex h-full flex-col">
       <div className="bg-white border-b border-slate-200 px-6 py-2 flex flex-col md:flex-row md:items-center justify-between shadow-sm z-10 gap-4 shrink-0">
         <div className="flex items-center gap-2">
             <div className="flex items-center bg-slate-100 rounded-lg p-1">
@@ -524,7 +524,7 @@ export const CrmBoard: React.FC = () => {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                               <div><label className="block text-xs font-bold text-slate-600 mb-1">Nº Negociação</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-100 text-slate-500 font-mono" value={dealFormData.dealNumber || 'Automático'} disabled readOnly /></div>
                               <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Nome Completo do Cliente *</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.companyName} onChange={e => setDealFormData({ ...dealFormData, companyName: e.target.value, title: e.target.value })} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Responsável</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.owner} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}><option value="">Selecione...</option>{collaborators.filter(c => c.department === 'Comercial').map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}</select></div>
+                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Responsável</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.owner} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}><option value="">Selecione...</option>{collaborators.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}</select></div>
                               <div><label className="block text-xs font-bold text-slate-600 mb-1">Tipo de Produto</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.productType} onChange={e => setDealFormData({...dealFormData, productType: e.target.value as any, productName: ''})}><option value="">Tipo...</option><option value="Presencial">Curso Presencial</option><option value="Digital">Produto Digital</option><option value="Evento">Evento</option></select></div>
                               <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Produto</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.productName} onChange={e => setDealFormData({...dealFormData, productName: e.target.value})} disabled={!dealFormData.productType}><option value="">Selecione...</option>{productOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select></div>
                               <div><label className="block text-xs font-bold text-slate-600 mb-1">Etapa do Funil</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.stage} onChange={e => setDealFormData({...dealFormData, stage: e.target.value as any})}>{COLUMNS.map(col => <option key={col.id} value={col.id}>{col.title}</option>)}</select></div>
@@ -556,7 +556,6 @@ export const CrmBoard: React.FC = () => {
                       <div>
                           <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><MapPin size={16} /> Endereço e Dados de Aluno</h4>
                           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                              {/* Fix: Cannot find name 'setFormData'. Did you mean 'FormData'? (Changed to setDealFormData) */}
                               <div><label className="block text-xs font-bold text-slate-500 mb-1">CEP</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.zipCode} onChange={e => setDealFormData({ ...dealFormData, zipCode: formatCEP(e.target.value) })} /></div>
                               <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-500 mb-1">Logradouro / Rua</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.address} onChange={e => setDealFormData({...dealFormData, address: e.target.value})} /></div>
                               <div><label className="block text-xs font-bold text-slate-500 mb-1">Nº Endereço</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.addressNumber} onChange={e => setDealFormData({...dealFormData, addressNumber: e.target.value})} /></div>

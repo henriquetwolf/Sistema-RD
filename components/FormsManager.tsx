@@ -7,7 +7,6 @@ import {
   ArrowLeft, Save, GripVertical, GripHorizontal, Copy, Settings,
   Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target, Share2, CheckCircle,
   LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info, Code, ExternalLink, Tag, Loader2,
-  // Added missing Layers and Check imports from lucide-react
   Layers, Check
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
@@ -103,7 +102,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
               appBackend.client.from('crm_collaborators').select('id, full_name').eq('status', 'active')
           ]); 
           if (tRes.data) setTeams(tRes.data); 
-          if (cRes.data) setCollaborators(cRes.data); 
+          if (cRes.data) setCollaborators(cRes.data.map((c: any) => ({ id: c.id, full_name: c.full_name }))); 
       } catch (e) {} 
   };
 
@@ -185,7 +184,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       setCurrentForm(prev => ({ ...prev, questions: prev.questions.filter(q => q.id !== id) }));
   };
 
-  // Added missing handleShare function
   const handleShare = (form: FormModel) => {
       setSharingForm(form);
   };
@@ -282,6 +280,9 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                             <button onClick={() => addQuestion('number')} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-teal-200 hover:bg-teal-50 text-sm font-medium text-slate-700 transition-all text-left">
                                 <Hash size={18} className="text-teal-500" /> Número
                             </button>
+                            <button onClick={() => addQuestion('date')} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-teal-200 hover:bg-teal-50 text-sm font-medium text-slate-700 transition-all text-left">
+                                <Calendar size={18} className="text-teal-500" /> Data
+                            </button>
                         </div>
                     </aside>
                     <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
@@ -315,10 +316,11 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                                         value={q.title}
                                                         onChange={e => updateQuestion(q.id, 'title', e.target.value)}
                                                     />
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 px-2 py-1 rounded border">{q.type}</span>
                                                 </div>
                                                 <input 
                                                     type="text" 
-                                                    className="w-full text-sm text-slate-400 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 cursor-not-allowed"
+                                                    className="w-full text-sm text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2"
                                                     value={q.placeholder || ''}
                                                     onChange={e => updateQuestion(q.id, 'placeholder', e.target.value)}
                                                     placeholder="Dica de preenchimento (Placeholder)"
@@ -359,44 +361,48 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                               <span className="font-bold text-teal-900">Habilitar Captura de Leads</span>
                                               <input type="checkbox" checked={currentForm.isLeadCapture} onChange={e => setCurrentForm({...currentForm, isLeadCapture: e.target.checked})} className="w-6 h-6 rounded text-teal-600 focus:ring-teal-500" />
                                           </div>
-                                          <p className="text-xs text-teal-700 leading-relaxed">Se ativado, cada resposta criará automaticamente uma nova Negociação no CRM para o Comercial.</p>
+                                          <p className="text-xs text-teal-700 leading-relaxed">Se ativado, cada resposta criará automaticamente uma nova Negociação no CRM Comercial.</p>
                                       </div>
                                   </label>
 
                                   {currentForm.isLeadCapture && (
-                                      <div className="space-y-4 animate-in slide-in-from-top-2">
+                                      <div className="space-y-4 animate-in slide-in-from-top-2 p-6 border-2 border-slate-100 rounded-2xl bg-white shadow-sm">
                                           <div>
-                                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Campanha (Rastreio)</label>
-                                              <div className="relative">
-                                                  <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                                  <input type="text" className="w-full pl-10 pr-4 py-2 border rounded-lg" placeholder="Ex: Black Friday 2024" value={currentForm.campaign} onChange={e => setCurrentForm({...currentForm, campaign: e.target.value})} />
-                                              </div>
+                                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1"><Tag size={12}/> Nome da Campanha (Rastreio)</label>
+                                              <input type="text" className="w-full px-4 py-2 border rounded-xl" placeholder="Ex: Black Friday 2024, Instagram Link Bio..." value={currentForm.campaign} onChange={e => setCurrentForm({...currentForm, campaign: e.target.value})} />
                                           </div>
-                                          <div className="grid grid-cols-2 gap-4">
+                                          
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                               <div>
-                                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Distribuição de Leads</label>
-                                                  <select className="w-full px-3 py-2 border rounded-lg bg-white" value={currentForm.distributionMode} onChange={e => setCurrentForm({...currentForm, distributionMode: e.target.value as any})}>
-                                                      <option value="fixed">Vendedor Fixo</option>
-                                                      <option value="round-robin">Rodízio entre Equipe (Fila)</option>
+                                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1"><ArrowRightLeft size={12}/> Distribuição de Leads</label>
+                                                  <select className="w-full px-3 py-2 border rounded-xl bg-white" value={currentForm.distributionMode} onChange={e => setCurrentForm({...currentForm, distributionMode: e.target.value as any})}>
+                                                      <option value="fixed">Vendedor Único Fixo</option>
+                                                      <option value="round-robin">Rodízio por Equipe (Fila)</option>
                                                   </select>
                                               </div>
+
                                               {currentForm.distributionMode === 'fixed' ? (
                                                   <div>
-                                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Vendedor Responsável</label>
-                                                      <select className="w-full px-3 py-2 border rounded-lg bg-white" value={currentForm.fixedOwnerId} onChange={e => setCurrentForm({...currentForm, fixedOwnerId: e.target.value})}>
-                                                          <option value="">Selecione...</option>
+                                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1"><User size={12}/> Vendedor Responsável</label>
+                                                      <select className="w-full px-3 py-2 border rounded-xl bg-white" value={currentForm.fixedOwnerId || ''} onChange={e => setCurrentForm({...currentForm, fixedOwnerId: e.target.value})}>
+                                                          <option value="">Selecione um vendedor...</option>
                                                           {collaborators.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
                                                       </select>
                                                   </div>
                                               ) : (
                                                   <div>
-                                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Equipe do Rodízio</label>
-                                                      <select className="w-full px-3 py-2 border rounded-lg bg-white" value={currentForm.teamId} onChange={e => setCurrentForm({...currentForm, teamId: e.target.value})}>
+                                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1"><Users size={12}/> Equipe Comercial</label>
+                                                      <select className="w-full px-3 py-2 border rounded-xl bg-white" value={currentForm.teamId || ''} onChange={e => setCurrentForm({...currentForm, teamId: e.target.value})}>
                                                           <option value="">Escolha a Equipe...</option>
                                                           {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                                       </select>
                                                   </div>
                                               )}
+                                          </div>
+
+                                          <div className="mt-2 flex items-start gap-2 text-[10px] text-slate-400 bg-slate-50 p-3 rounded-lg italic">
+                                              <Info size={14} className="shrink-0 text-indigo-400" />
+                                              <span>No modo Rodízio, o sistema atribui cada novo lead ao próximo membro disponível na equipe, garantindo igualdade na distribuição.</span>
                                           </div>
                                       </div>
                                   )}

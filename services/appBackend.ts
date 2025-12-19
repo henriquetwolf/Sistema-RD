@@ -140,7 +140,7 @@ export const appBackend = {
       status: row.status,
       lastMessage: row.last_message,
       active: row.active,
-      intervalMinutes: row.interval_minutes,
+      interval_minutes: row.interval_minutes,
       createdBy: row.created_by_name,
       createdAt: row.created_at
     }));
@@ -416,7 +416,7 @@ export const appBackend = {
       fantasy_name: studio.fantasyName, 
       legal_name: studio.legalName, 
       cnpj: studio.cnpj, 
-      studio_phone: studio.studioPhone, 
+      studio_phone: studio.studio_phone, 
       address: studio.address, 
       city: studio.city, 
       state: studio.state, 
@@ -491,7 +491,7 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
+      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distribution_mode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
       const { error } = await supabase.from('crm_forms').upsert(payload);
       if (error) throw error;
   },
@@ -507,7 +507,8 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: d.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
+      // Fixed: changed d.questions to data.questions as d is not defined in this scope
+      return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
   },
 
   deleteForm: async (id: string): Promise<void> => {

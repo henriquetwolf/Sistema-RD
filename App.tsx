@@ -38,7 +38,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History
+  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -47,6 +47,7 @@ function App() {
   const [publicContract, setPublicContract] = useState<Contract | null>(null);
   const [publicCertificateHash, setPublicCertificateHash] = useState<string | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
+  const [publicError, setPublicError] = useState<string | null>(null);
 
   const DEFAULT_LOGO = "https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png";
   const [appLogo, setAppLogo] = useState<string>(DEFAULT_LOGO);
@@ -103,18 +104,24 @@ function App() {
 
         if (publicFormId || contractId || certificateHash) {
             setIsPublicLoading(true);
+            setPublicError(null);
             try {
                 if (publicFormId) {
                     const form = await appBackend.getFormById(publicFormId);
                     if (form) setPublicForm(form);
+                    else setPublicError("O formulário solicitado não existe ou foi removido.");
                 } else if (contractId) {
                     const contract = await appBackend.getContractById(contractId);
                     if (contract) setPublicContract(contract);
+                    else setPublicError("O contrato solicitado não foi localizado.");
                 } else if (certificateHash) {
                     setPublicCertificateHash(certificateHash);
                 }
-            } catch (e) {}
-            setIsPublicLoading(false);
+            } catch (e) {
+                setPublicError("Ocorreu um erro ao tentar carregar o recurso. Verifique sua conexão.");
+            } finally {
+                setIsPublicLoading(false);
+            }
             return;
         }
 
@@ -366,11 +373,31 @@ function App() {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  if (isPublicLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
+  if (isPublicLoading) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
+
+  if (publicError) return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 text-center">
+          <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 max-w-md w-full animate-in zoom-in-95">
+              <XCircle className="text-red-500 mx-auto mb-4" size={64} />
+              <h1 className="text-2xl font-black text-slate-800 mb-2">Ops! Algo deu errado</h1>
+              <p className="text-slate-500 mb-8 leading-relaxed">{publicError}</p>
+              <button 
+                onClick={() => window.location.href = window.location.origin} 
+                className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-900 transition-all"
+              >
+                  <Home size={18} /> Ir para o Início
+              </button>
+          </div>
+          <div className="mt-8 opacity-20"><img src={DEFAULT_LOGO} alt="VOLL" className="h-8 grayscale" /></div>
+      </div>
+  );
+
   if (publicCertificateHash) return <CertificateViewer hash={publicCertificateHash} />;
   if (publicContract) return <ContractSigning contract={publicContract} />;
   if (publicForm) return <div className="min-h-screen bg-slate-50"><FormViewer form={publicForm} isPublic={true} /></div>;
-  if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
+  
+  if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
+
   if (!session && !currentInstructor && !currentStudent && !currentCollaborator && !currentStudio) {
       return <LoginPanel 
         onInstructorLogin={s => {setCurrentInstructor(s); sessionStorage.setItem('instructor_session', JSON.stringify(s));}} 

@@ -188,9 +188,9 @@ export const CrmBoard: React.FC = () => {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isSavingTeam, setIsSavingTeam] = useState(false);
 
-  const [newTaskDesc, setNewTaskDesc] = useState('');
-  const [newTaskDate, setNewTaskDate] = useState('');
-  const [newTaskType, setNewTaskType] = useState<'call' | 'email' | 'meeting' | 'todo'>('todo');
+  const [newTaskDesc, setNoTaskDesc] = useState('');
+  const [newTaskDate, setNoTaskDate] = useState('');
+  const [newTaskType, setNoTaskType] = useState<'call' | 'email' | 'meeting' | 'todo'>('todo');
 
   useEffect(() => {
     fetchData();
@@ -297,6 +297,84 @@ export const CrmBoard: React.FC = () => {
   const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   const getOwnerName = (id: string) => (collaborators || []).find(c => c.id === id)?.fullName || 'Desconhecido';
 
+  // --- PLUGA WEBHOOK INTEGRATION ---
+  const sendToPlugaWebhook = async (deal: Deal) => {
+    const ownerName = getOwnerName(deal.owner);
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Construct the "observacoes_array" structure requested
+    const obsArray = [
+        { label: "Vendedor", value: ownerName },
+        { label: "Tipo de Produto", value: deal.productType },
+        { label: "Produto", value: deal.productName },
+        { label: "Fonte", value: deal.source },
+        { label: "Campanha", value: deal.campaign },
+        { label: "Funil de Vendas", value: deal.pipeline },
+        { label: "Etapa do Funil", value: "Fechamento" },
+        { label: "Forma de Pagamento", value: deal.paymentMethod },
+        { label: "Valor de Entrada", value: formatCurrency(deal.entryValue || 0) },
+        { label: "Número de Parcelas", value: String(deal.installments || 1) },
+        { label: "Valor das Parcelas", value: formatCurrency(deal.installmentValue || 0) },
+        { label: "Dia do Primeiro Vencimento", value: deal.firstDueDate ? new Date(deal.firstDueDate).toLocaleDateString('pt-BR') : '--' },
+        { label: "Turma/Módulo", value: deal.classMod1 || deal.classMod2 || '--' },
+        { label: "Link do Comprovante", value: deal.receiptLink || '--' },
+        { label: "Código da Transação", value: deal.transactionCode || '--' },
+        { label: "Dados da Inscrição", value: deal.registrationData || '--' },
+        { label: "Observação", value: deal.observation || '--' }
+    ];
+
+    const payload = {
+        data_venda: today,
+        situacao_venda: "Aprovada",
+        numero_venda: String(deal.dealNumber || ""),
+        numero_negociacao: "Automático",
+        nome_cliente: deal.companyName || deal.contactName,
+        email_cliente: deal.email || "",
+        telefone_cliente: deal.phone || "",
+        cpf_cnpj_cliente: deal.cpf || "",
+        nome_vendedor: ownerName,
+        tipo_cliente: "Todos os tipos de pessoa",
+        tipo_item: "Serviço",
+        tipo_perfil: "Cliente",
+        tipo_produto: deal.productType || "",
+        curso_produto: deal.productName || "",
+        fonte_negociacao: deal.source || "",
+        campanha: deal.campaign || "",
+        funil_vendas: deal.pipeline || "Padrão",
+        etapa_funil: "Fechamento",
+        cep_cliente: deal.zipCode || "",
+        rua_cliente: deal.address || "",
+        numero_endereco_cliente: deal.addressNumber || "",
+        cidade_cliente: deal.courseCity || "",
+        pais_cliente: "Brasil",
+        nomes_itens: deal.productName || "",
+        quantidades_itens: "1",
+        valor_total: String(deal.value || 0),
+        itens_venda: `${deal.productName} (1 un) - ${formatCurrency(deal.value)}`,
+        forma_pagamento: deal.paymentMethod || "",
+        valor_entrada: String(deal.entryValue || 0),
+        numero_parcelas: String(deal.installments || 1),
+        valor_parcelas: String(deal.installmentValue || 0),
+        dia_primeiro_vencimento: deal.firstDueDate || "",
+        turma_modulo: deal.classMod1 || deal.classMod2 || "",
+        link_comprovante: deal.receiptLink || "",
+        codigo_transacao: deal.transactionCode || "",
+        dados_inscricao: deal.registrationData || "",
+        observacoes_array: JSON.stringify(obsArray)
+    };
+
+    try {
+        await fetch("https://hooks.pluga.co/v2/webhooks/MzkxODM1ODg4MjcxOTY2MDQ5NFQxNzY2MDAwMjY4", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        console.log("Pluga Webhook enviado com sucesso!");
+    } catch (e) {
+        console.error("Erro ao enviar Webhook para Pluga:", e);
+    }
+  };
+
   const moveDeal = async (dealId: string, currentStage: DealStage, direction: 'next' | 'prev') => {
     const stageOrder: DealStage[] = ['new', 'contacted', 'proposal', 'negotiation', 'closed'];
     const currentIndex = stageOrder.indexOf(currentStage);
@@ -306,6 +384,8 @@ export const CrmBoard: React.FC = () => {
     const now = new Date();
     const deal = deals.find(d => d.id === dealId);
 
+    if (!deal) return;
+
     setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage, closedAt: newStage === 'closed' ? now : (currentStage === 'closed' ? undefined : d.closedAt) } : d));
 
     try {
@@ -313,7 +393,12 @@ export const CrmBoard: React.FC = () => {
         if (newStage === 'closed') updates.closed_at = now.toISOString();
         if (currentStage === 'closed' && newStage !== 'closed') updates.closed_at = null;
         await appBackend.client.from('crm_deals').update(updates).eq('id', dealId);
-        await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal?.title}" para a etapa: ${newStage}`, recordId: dealId });
+        await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal.title}" para a etapa: ${newStage}`, recordId: dealId });
+        
+        // TRIGGER PLUGA WEBHOOK
+        if (newStage === 'closed') {
+            sendToPlugaWebhook({ ...deal, stage: 'closed', closedAt: now });
+        }
     } catch (e: any) {
         handleDbError(e);
         fetchData(); 
@@ -333,6 +418,7 @@ export const CrmBoard: React.FC = () => {
 
   const handleDragStart = (e: React.DragEvent, dealId: string) => { setDraggedDealId(dealId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dealId); };
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  
   const handleDrop = async (e: React.DragEvent, targetStage: DealStage) => {
     e.preventDefault();
     if (!draggedDealId) return;
@@ -346,6 +432,11 @@ export const CrmBoard: React.FC = () => {
         else if (currentDeal.stage === 'closed') updates.closed_at = null;
         await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId);
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para: ${targetStage}`, recordId: draggedDealId });
+        
+        // TRIGGER PLUGA WEBHOOK
+        if (targetStage === 'closed') {
+            sendToPlugaWebhook({ ...currentDeal, stage: 'closed', closedAt: now });
+        }
     } catch (e) { handleDbError(e); fetchData(); }
     setDraggedDealId(null);
   };
@@ -432,13 +523,14 @@ export const CrmBoard: React.FC = () => {
       if(!newTaskDesc) return;
       const newTask: DealTask = { id: crypto.randomUUID(), description: newTaskDesc, dueDate: newTaskDate, type: newTaskType, isDone: false };
       setDealFormData(prev => ({ ...prev, tasks: [newTask, ...(prev.tasks || [])] }));
-      setNewTaskDesc(''); setNewTaskDate('');
+      setNoTaskDesc(''); setNoTaskDate('');
   };
 
   const handleSaveDeal = async () => {
       if (!dealFormData.companyName) { alert("Preencha o Nome Completo do Cliente."); return; }
       
       const dealTitle = dealFormData.companyName;
+      const isClosing = dealFormData.stage === 'closed';
       
       const payload = {
           title: dealTitle, 
@@ -479,14 +571,23 @@ export const CrmBoard: React.FC = () => {
       };
 
       try {
+          let updatedDeal: any;
           if (editingDealId) {
               await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId);
               await appBackend.logActivity({ action: 'update', module: 'crm', details: `Editou negócio: ${dealTitle}`, recordId: editingDealId });
+              updatedDeal = { ...dealFormData, id: editingDealId };
           } else {
               const dealNumber = generateDealNumber();
               const { data } = await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]).select().single();
               await appBackend.logActivity({ action: 'create', module: 'crm', details: `Criou novo negócio: ${dealTitle}`, recordId: data?.id });
+              updatedDeal = { ...payload, id: data?.id, dealNumber };
           }
+
+          // TRIGGER PLUGA WEBHOOK IF STATUS IS CLOSED
+          if (isClosing) {
+              sendToPlugaWebhook(updatedDeal as Deal);
+          }
+
           await fetchData();
           setShowDealModal(false);
       } catch (e: any) { handleDbError(e); }
@@ -797,15 +898,15 @@ export const CrmBoard: React.FC = () => {
                               <div className="flex gap-2 items-end mb-4">
                                   <div className="flex-1">
                                       <label className="block text-xs font-bold text-slate-500 mb-1">Nova Tarefa</label>
-                                      <input type="text" placeholder="Ex: Ligar para confirmar..." className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={newTaskDesc} onChange={e => setNewTaskDesc(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddTask()} />
+                                      <input type="text" placeholder="Ex: Ligar para confirmar..." className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={newTaskDesc} onChange={e => setNoTaskDesc(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddTask()} />
                                   </div>
                                   <div className="w-32">
                                       <label className="block text-xs font-bold text-slate-500 mb-1">Data</label>
-                                      <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={newTaskDate} onChange={e => setNewTaskDate(e.target.value)} />
+                                      <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={newTaskDate} onChange={e => setNoTaskDate(e.target.value)} />
                                   </div>
                                   <div className="w-28">
                                       <label className="block text-xs font-bold text-slate-500 mb-1">Tipo</label>
-                                      <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={newTaskType} onChange={e => setNewTaskType(e.target.value as any)}>
+                                      <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={newTaskType} onChange={e => setNoTaskType(e.target.value as any)}>
                                           <option value="todo">Tarefa</option><option value="call">Ligação</option><option value="email">Email</option><option value="meeting">Reunião</option>
                                       </select>
                                   </div>

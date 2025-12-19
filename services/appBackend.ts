@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob } from '../types';
+import { SavedPreset, FormModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -80,6 +80,51 @@ export const appBackend = {
       }
       return supabase.auth.onAuthStateChange((_event, session) => callback(session));
     }
+  },
+
+  // --- ACTIVITY LOGS ---
+  logActivity: async (log: Omit<ActivityLog, 'id' | 'createdAt' | 'userName'>): Promise<void> => {
+      if (!isConfigured) return;
+      
+      let userName = 'Sistema';
+      
+      // Tentar pegar o nome da sessão de colaborador se existir
+      const savedCollab = sessionStorage.getItem('collaborator_session');
+      if (savedCollab) {
+          const collab = JSON.parse(savedCollab) as CollaboratorSession;
+          userName = collab.name;
+      } else {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) userName = user.email || 'Admin';
+      }
+
+      await supabase.from('crm_activity_logs').insert([{
+          user_name: userName,
+          action: log.action,
+          module: log.module,
+          details: log.details,
+          record_id: log.recordId
+      }]);
+  },
+
+  getActivityLogs: async (limit = 100): Promise<ActivityLog[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase
+          .from('crm_activity_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(limit);
+      
+      if (error) throw error;
+      return (data || []).map(d => ({
+          id: d.id,
+          userName: d.user_name,
+          action: d.action,
+          module: d.module,
+          details: d.details,
+          recordId: d.record_id,
+          createdAt: d.created_at
+      }));
   },
 
   // --- SYNC JOBS (CONNECTIONS) ---
@@ -200,6 +245,7 @@ export const appBackend = {
     return await appBackend.getAppSetting('app_logo_url');
   },
   
+  // FIXED: Removed recursion, now calling saveAppSetting
   saveAppLogo: async (url: string) => {
     await appBackend.saveAppSetting('app_logo_url', url);
   },
@@ -217,8 +263,9 @@ export const appBackend = {
     return await appBackend.getAppSetting('whatsapp_config');
   },
 
+  // FIXED: Removed recursion, now calling saveAppSetting
   saveWhatsAppConfig: async (config: any): Promise<void> => {
-    await appBackend.saveWhatsAppConfig(config);
+    await appBackend.saveAppSetting('whatsapp_config', config);
   },
 
   getCompanies: async (): Promise<CompanySetting[]> => {
@@ -229,7 +276,7 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: company.id || undefined, legal_name: company.legalName, cnpj: company.cnpj, product_types: company.productTypes };
+      const payload = { id: company.id || undefined, legal_name: company.legal_name, cnpj: company.cnpj, product_types: company.product_types };
       await supabase.from('crm_companies').upsert(payload);
   },
 
@@ -265,7 +312,7 @@ export const appBackend = {
       id: b.id, 
       title: b.title, 
       imageUrl: b.image_url, 
-      link_url: b.link_url, 
+      linkUrl: b.link_url, 
       targetAudience: b.target_audience, 
       active: b.active 
     }));
@@ -299,25 +346,25 @@ export const appBackend = {
       fantasyName: d.fantasy_name, 
       legalName: d.legal_name, 
       cnpj: d.cnpj, 
-      studioPhone: d.studio_phone, 
+      studio_phone: d.studio_phone, 
       address: d.address, 
       city: d.city, 
       state: d.state, 
       country: d.country, 
       sizeM2: d.size_m2, 
-      studentCapacity: d.student_capacity, 
-      rentValue: d.rent_value, 
+      student_capacity: d.student_capacity, 
+      rent_value: d.rent_value, 
       methodology: d.methodology, 
-      studioType: d.studio_type, 
-      nameOnSite: d.name_on_site, 
+      studio_type: d.studio_type, 
+      name_on_site: d.name_on_site, 
       bank: d.bank, 
       agency: d.agency, 
       account: d.account, 
       beneficiary: d.beneficiary, 
-      pixKey: d.pix_key, 
-      hasReformer: d.has_reformer, 
-      qtyReformer: d.qty_reformer, 
-      hasLadderBarrel: d.has_ladder_barrel, 
+      pix_key: d.pix_key, 
+      has_reformer: d.has_reformer, 
+      qty_reformer: d.qty_reformer, 
+      has_ladder_barrel: d.has_ladder_barrel, 
       qty_ladder_barrel: d.qty_ladder_barrel, 
       has_chair: d.has_chair, 
       qty_chair: d.qty_chair, 
@@ -416,6 +463,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (!data) return null;
+      /* FIXED: Changed d.distribution_mode and d.fixed_owner_id to data equivalents */
       return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
   },
 
@@ -449,6 +497,7 @@ export const appBackend = {
                       await supabase.from('crm_form_counters').upsert({ form_id: formId, last_index: nextIndex, updated_at: new Date().toISOString() });
                   }
               }
+              // FIXED: changed d.campaign to form.campaign
               await supabase.from('crm_deals').insert([{ title: `Lead: ${name}`, contact_name: name, company_name: company || 'Particular', value: 0, status: 'warm', stage: 'new', deal_number: generateDealNumber(), source: form.title, campaign: form.campaign || '', owner_id: assignedOwnerId, next_task: `Entrar em contato (${email || phone || 'sem dados'})`, created_at: new Date().toISOString() }]);
           }
       }
@@ -481,11 +530,13 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (!data) return null;
+      /* FIXED: Changed d.created_at to data.created_at */
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
       if (!isConfigured) return;
+      // FIXED: changed d.folderId to contract.folderId
       const payload = { id: contract.id, title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contractDate, status: contract.status, folder_id: contract.folderId || null, signers: contract.signers };
       await supabase.from('app_contracts').upsert(payload);
   },
@@ -524,6 +575,7 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
+    // FIXED: changed body_text: cert.body_text to cert.bodyText
     const payload = { 
         id: cert.id || undefined, 
         title: cert.title, 
@@ -589,9 +641,11 @@ export const appBackend = {
 
   saveEvent: async (event: EventModel): Promise<EventModel> => {
     if (!isConfigured) throw new Error("Backend not configured");
+    // FIXED: changed registration_open: event.registration_open to registrationOpen
     const payload = { id: event.id, name: event.name, description: event.description, location: event.location, dates: event.dates, registration_open: event.registrationOpen };
     const { data, error } = await supabase.from('crm_events').upsert(payload).select().single();
     if (error) throw error;
+    /* FIXED: Changed d.registration_open to data.registration_open */
     return { id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates || [], createdAt: data.created_at, registrationOpen: data.registration_open || false };
   },
 
@@ -664,6 +718,7 @@ export const appBackend = {
       itemApostilaClassico: d.item_apostila_classico, 
       itemSacochila: d.item_sacochila, 
       itemLapis: d.item_lapis, 
+      /* FIXED: Changed registration_date to registrationDate to match interface */
       registrationDate: d.registration_date, 
       studioId: d.studio_id, 
       trackingCode: d.tracking_code, 

@@ -57,6 +57,17 @@ export interface SyncJob {
   createdAt: string | Date;    // Data e hora da criação da conexão
 }
 
+// --- ACTIVITY LOGS ---
+export interface ActivityLog {
+  id: string;
+  userName: string;
+  action: 'create' | 'update' | 'delete' | 'login';
+  module: string;
+  details: string;
+  recordId?: string;
+  createdAt: string;
+}
+
 // --- ACCESS CONTROL ---
 
 export interface Role {

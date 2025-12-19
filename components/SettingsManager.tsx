@@ -5,10 +5,10 @@ import {
     Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, 
     Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2,
     Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
-    Loader2, Package, Tag, Layers, Palette
+    Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search
 } from 'lucide-react';
 import { appBackend, CompanySetting } from '../services/appBackend';
-import { Role, Role as UserRole, Banner, InstructorLevel } from '../types';
+import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog } from '../types';
 import clsx from 'clsx';
 
 interface SettingsManagerProps {
@@ -41,7 +41,7 @@ const MODULES = [
 const PRODUCT_TYPES = ['Presencial', 'Digital', 'Evento'];
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, currentLogo }) => {
-  const [activeTab, setActiveTab] = useState<'visual' | 'company' | 'roles' | 'database' | 'banners' | 'instructor_levels'>('visual');
+  const [activeTab, setActiveTab] = useState<'visual' | 'company' | 'roles' | 'database' | 'banners' | 'instructor_levels' | 'logs'>('visual');
   const [preview, setPreview] = useState<string | null>(currentLogo);
   const [securityMargin, setSecurityMargin] = useState<number>(5);
   const [isSaved, setIsSaved] = useState(false);
@@ -65,12 +65,18 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
   const [isLoadingLevels, setIsLoadingLevels] = useState(false);
   const [editingLevel, setEditingLevel] = useState<Partial<InstructorLevel> | null>(null);
 
+  // Logs state
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [logSearch, setLogSearch] = useState('');
+
   useEffect(() => {
       fetchGlobalSettings();
       if (activeTab === 'roles') fetchRoles();
       else if (activeTab === 'banners') fetchBanners();
       else if (activeTab === 'company') fetchCompanies();
       else if (activeTab === 'instructor_levels') fetchInstructorLevels();
+      else if (activeTab === 'logs') fetchLogs();
   }, [activeTab]);
 
   const fetchGlobalSettings = async () => {
@@ -98,6 +104,18 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogoChange, 
   const fetchInstructorLevels = async () => {
     setIsLoadingLevels(true);
     try { const data = await appBackend.getInstructorLevels(); setInstructorLevels(data); } catch(e) { console.error(e); } finally { setIsLoadingLevels(false); }
+  };
+
+  const fetchLogs = async () => {
+      setIsLoadingLogs(true);
+      try {
+          const data = await appBackend.getActivityLogs();
+          setLogs(data);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsLoadingLogs(false);
+      }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,6 +163,19 @@ CREATE TABLE IF NOT EXISTS public.crm_sync_jobs (
 );
 ALTER TABLE public.crm_sync_jobs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Acesso total sync_jobs" ON public.crm_sync_jobs FOR ALL USING (true) WITH CHECK (true);
+
+-- TABELA DE REGISTRO DE ATIVIDADES (LOGS)
+CREATE TABLE IF NOT EXISTS public.crm_activity_logs (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_name text NOT NULL,
+    action text NOT NULL,
+    module text NOT NULL,
+    details text,
+    record_id text,
+    created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.crm_activity_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso total activity_logs" ON public.crm_activity_logs FOR ALL USING (true) WITH CHECK (true);
 
 -- CRM PRESETS (CREDENCIAS DE BANCOS EXTERNOS)
 CREATE TABLE IF NOT EXISTS public.app_presets (
@@ -222,17 +253,24 @@ NOTIFY pgrst, 'reload config';
   const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+  const filteredLogs = logs.filter(l => 
+    l.userName.toLowerCase().includes(logSearch.toLowerCase()) || 
+    l.module.toLowerCase().includes(logSearch.toLowerCase()) ||
+    l.details.toLowerCase().includes(logSearch.toLowerCase())
+  );
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h2 className="text-2xl font-bold text-slate-800">Configurações do Systema</h2>
-            <p className="text-slate-500 text-sm">Personalize acessos, identidade e banco de dados.</p>
+            <p className="text-slate-500 text-sm">Personalize acessos, identidade e acompanhe atividades.</p>
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto shrink-0 max-w-full">
+        <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto shrink-0 max-w-full no-scrollbar">
             <button onClick={() => setActiveTab('visual')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Geral</button>
             <button onClick={() => setActiveTab('company')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'company' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Empresas</button>
             <button onClick={() => setActiveTab('roles')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'roles' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Acessos</button>
+            <button onClick={() => setActiveTab('logs')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'logs' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Atividades</button>
             <button onClick={() => setActiveTab('banners')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'banners' ? "bg-white text-orange-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Banners</button>
             <button onClick={() => setActiveTab('instructor_levels')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'instructor_levels' ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Níveis</button>
             <button onClick={() => setActiveTab('database')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'database' ? "bg-white text-amber-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Banco de Dados</button>
@@ -240,6 +278,90 @@ NOTIFY pgrst, 'reload config';
       </div>
       
       <div className="max-w-5xl space-y-8">
+        {/* TAB: ATIVIDADES (LOGS) */}
+        {activeTab === 'logs' && (
+            <div className="space-y-6">
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                        <div className="flex items-center gap-2">
+                            <History className="text-blue-600" size={20} />
+                            <h3 className="text-lg font-bold text-slate-800">Log de Atividades</h3>
+                        </div>
+                        <div className="relative w-full md:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <input 
+                                type="text" 
+                                placeholder="Filtrar logs..." 
+                                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                value={logSearch}
+                                onChange={e => setLogSearch(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                        {isLoadingLogs ? (
+                            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-600" /></div>
+                        ) : filteredLogs.length === 0 ? (
+                            <div className="text-center py-20 text-slate-400">Nenhuma atividade registrada ainda.</div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm border-collapse">
+                                    <thead className="bg-slate-100 text-slate-500 uppercase text-[10px] font-bold">
+                                        <tr>
+                                            <th className="px-6 py-3">Data / Hora</th>
+                                            <th className="px-6 py-3">Usuário</th>
+                                            <th className="px-6 py-3">Módulo</th>
+                                            <th className="px-6 py-3">Ação</th>
+                                            <th className="px-6 py-3">Detalhes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200">
+                                        {filteredLogs.map(log => (
+                                            <tr key={log.id} className="hover:bg-blue-50/50 transition-colors">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center gap-2 text-slate-700">
+                                                        <Clock size={14} className="text-slate-400" />
+                                                        {new Date(log.createdAt).toLocaleString('pt-BR')}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 font-bold text-slate-800">
+                                                    <div className="flex items-center gap-2">
+                                                        <User size={14} className="text-blue-500" />
+                                                        {log.userName}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px] font-bold uppercase tracking-wide">
+                                                        {MODULES.find(m => m.id === log.module)?.label || log.module}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={clsx(
+                                                        "px-2 py-0.5 rounded text-[10px] font-black uppercase",
+                                                        log.action === 'create' ? "text-green-700 bg-green-100" :
+                                                        log.action === 'update' ? "text-blue-700 bg-blue-100" :
+                                                        log.action === 'delete' ? "text-red-700 bg-red-100" : "text-slate-500 bg-slate-100"
+                                                    )}>
+                                                        {log.action === 'create' ? 'Criação' :
+                                                         log.action === 'update' ? 'Edição' :
+                                                         log.action === 'delete' ? 'Exclusão' : log.action}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-600 italic">
+                                                    {log.details}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* TAB: GERAL (IDENTIDADE + ESTOQUE) */}
         {activeTab === 'visual' && (
             <div className="space-y-6">
@@ -452,7 +574,7 @@ NOTIFY pgrst, 'reload config';
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
                 <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas</h3></div>
-                <p className="text-sm text-slate-500 mb-6">Use o script abaixo no editor de SQL do seu painel Supabase para habilitar novos módulos (como Estoque, Banners, Acessos) e corrigir o schema do banco.</p>
+                <p className="text-sm text-slate-500 mb-6">Use o script abaixo no editor de SQL do seu painel Supabase para habilitar novos módulos (como Logs de Atividade, Estoque, Banners, Acessos) e corrigir o schema do banco.</p>
                 {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Atualização</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-slate-900 text-slate-300 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50">{generateRepairSQL()}</pre>

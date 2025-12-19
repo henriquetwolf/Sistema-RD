@@ -7,7 +7,7 @@ import {
   ArrowLeft, Save, GripVertical, GripHorizontal, Copy, Settings,
   Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target, Share2, CheckCircle,
   LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info, Code, ExternalLink, Tag, Loader2,
-  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table
+  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -46,6 +46,20 @@ const INITIAL_FORM: FormModel = {
   },
   distributionMode: 'fixed'
 };
+
+const CRM_FIELDS = [
+    { value: '', label: 'Nenhum (Não enviar p/ CRM)' },
+    { value: 'contact_name', label: 'Nome Completo (Cliente)' },
+    { value: 'email', label: 'E-mail' },
+    { value: 'phone', label: 'Telefone / WhatsApp' },
+    { value: 'cpf', label: 'CPF' },
+    { value: 'company_name', label: 'Nome da Empresa / Razão Social' },
+    { value: 'zip_code', label: 'CEP' },
+    { value: 'address', label: 'Endereço' },
+    { value: 'address_number', label: 'Número do Endereço' },
+    { value: 'observation', label: 'Observações do Lead' },
+    { value: 'value', label: 'Valor Estimado (R$)' },
+];
 
 const QUESTION_TYPES: { id: QuestionType; label: string; icon: any }[] = [
     { id: 'text', label: 'Texto Curto', icon: Type },
@@ -203,7 +217,8 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
           type: type, 
           required: false, 
           placeholder: 'Sua resposta...',
-          options: (type === 'select' || type === 'checkbox') ? ['Opção 1'] : undefined
+          options: (type === 'select' || type === 'checkbox') ? ['Opção 1'] : undefined,
+          crmMapping: '' // Default sem mapeamento
       }; 
       setCurrentForm(prev => ({ ...prev, questions: [...prev.questions, newQ] })); 
   };
@@ -447,6 +462,26 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* Mapeamento de Campo CRM (Apenas se Lead Capture estiver ON) */}
+                                            {currentForm.isLeadCapture && (
+                                                <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 flex flex-col md:flex-row md:items-center gap-3 animate-in fade-in">
+                                                    <div className="flex items-center gap-2 text-indigo-600 shrink-0">
+                                                        <Link2 size={16} />
+                                                        <span className="text-xs font-black uppercase tracking-tighter">Vincular ao CRM:</span>
+                                                    </div>
+                                                    <select 
+                                                        className="flex-1 bg-white border border-indigo-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                                                        value={q.crmMapping || ''}
+                                                        onChange={e => updateQuestion(q.id, 'crmMapping', e.target.value)}
+                                                    >
+                                                        {CRM_FIELDS.map(field => (
+                                                            <option key={field.value} value={field.value}>{field.label}</option>
+                                                        ))}
+                                                    </select>
+                                                    <Info size={14} className="text-indigo-300 hidden md:block" title="Escolha qual campo da Negociação será preenchido com esta resposta." />
+                                                </div>
+                                            )}
 
                                             {/* Corpo da Pergunta: Placeholder ou Opções */}
                                             <div className="pl-0 md:pl-2">

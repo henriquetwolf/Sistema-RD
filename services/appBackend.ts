@@ -156,6 +156,7 @@ export const appBackend = {
       sheet_url: job.sheetUrl,
       config: job.config,
       active: job.active,
+      // Fix: Use intervalMinutes from the job object instead of non-existent interval_minutes
       interval_minutes: job.intervalMinutes,
       last_sync: job.lastSync,
       status: job.status,
@@ -279,7 +280,7 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: company.id || undefined, legal_name: company.legalName, cnpj: company.cnpj, product_types: company.productTypes };
+      const payload = { id: company.id || undefined, legal_name: company.legal_name, cnpj: company.cnpj, product_types: company.product_types };
       const { error } = await supabase.from('crm_companies').upsert(payload);
       if (error) throw error;
   },
@@ -526,15 +527,41 @@ export const appBackend = {
       }
 
       if (isLeadCapture && isConfigured) {
-          const findValue = (keywords: string[]) => {
-              const answer = answers.find(a => keywords.some(k => a.questionTitle.toLowerCase().includes(k)));
-              return answer ? answer.value : '';
+          // MODIFICADO: Agora usa mapeamento manual de campos
+          const dealPayload: any = {
+              title: `Lead: ${form.title}`,
+              status: 'warm',
+              stage: 'new',
+              deal_number: generateDealNumber(),
+              source: form.title,
+              campaign: form.campaign || '',
+              created_at: new Date().toISOString()
           };
-          const name = findValue(['nome', 'name', 'completo']);
-          const email = findValue(['email', 'e-mail', 'correio']);
-          const phone = findValue(['telefone', 'celular', 'whatsapp', 'fone']);
-          const company = findValue(['empresa', 'organização', 'companhia', 'loja']);
-          if (name) {
+
+          // Preencher campos baseados no mapeamento das questões
+          answers.forEach(ans => {
+              const question = form.questions.find(q => q.id === ans.questionId);
+              if (question && question.crmMapping) {
+                  // Mapear valor para o payload da negociação
+                  dealPayload[question.crmMapping] = ans.value;
+              }
+          });
+
+          // Fallback minimalista se mapeamento não existir (Garante nome do lead)
+          if (!dealPayload.contact_name) {
+              const fallbackName = answers.find(a => 
+                  ['nome', 'name', 'completo'].some(k => a.questionTitle.toLowerCase().includes(k))
+              );
+              if (fallbackName) {
+                  dealPayload.contact_name = fallbackName.value;
+                  dealPayload.title = `Lead: ${fallbackName.value}`;
+              }
+          } else {
+              dealPayload.title = `Lead: ${dealPayload.contact_name}`;
+          }
+
+          // Se tiver pelo menos um nome, processa a criação
+          if (dealPayload.contact_name) {
               let assignedOwnerId = form.fixedOwnerId || null;
               if (form.distributionMode === 'round-robin' && form.teamId) {
                   const { data: teamData } = await supabase.from('crm_teams').select('members').eq('id', form.teamId).single();
@@ -547,7 +574,16 @@ export const appBackend = {
                       await supabase.from('crm_form_counters').upsert({ form_id: formId, last_index: nextIndex, updated_at: new Date().toISOString() });
                   }
               }
-              await supabase.from('crm_deals').insert([{ title: `Lead: ${name}`, contact_name: name, company_name: company || 'Particular', value: 0, status: 'warm', stage: 'new', deal_number: generateDealNumber(), source: form.title, campaign: form.campaign || '', owner_id: assignedOwnerId, next_task: `Entrar em contato (${email || phone || 'sem dados'})`, created_at: new Date().toISOString() }]);
+              dealPayload.owner_id = assignedOwnerId;
+              
+              // Se não mapeou observação, cria uma padrão com dados básicos
+              if (!dealPayload.observation) {
+                  const email = dealPayload.email || '';
+                  const phone = dealPayload.phone || '';
+                  dealPayload.next_task = `Entrar em contato (${email || phone || 'sem dados'})`;
+              }
+
+              await supabase.from('crm_deals').insert([dealPayload]);
           }
       }
       if (isConfigured) {
@@ -645,7 +681,7 @@ export const appBackend = {
         background_base_64: cert.backgroundData, 
         back_background_base_64: cert.backBackgroundData, 
         linked_product_id: cert.linkedProductId || null, 
-        body_text: cert.bodyText, 
+        body_text: cert.body_text, 
         layout_config: cert.layoutConfig 
     };
     const { error } = await supabase.from('crm_certificates').upsert(payload);

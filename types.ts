@@ -108,6 +108,7 @@ export interface FormQuestion {
   required: boolean;
   placeholder?: string;
   options?: string[]; // Para tipos select/checkbox
+  crmMapping?: string; // NOVO: Campo de destino na Negociação do CRM
 }
 
 export interface FormStyle {

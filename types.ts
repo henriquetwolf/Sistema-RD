@@ -141,6 +141,8 @@ export interface FormModel {
   teamId?: string;
   distributionMode?: 'fixed' | 'round-robin';
   fixedOwnerId?: string;
+  targetPipeline?: string; // NOVO: Nome do funil de destino
+  targetStage?: string;    // NOVO: ID da etapa de destino
   questions: FormQuestion[];
   style?: FormStyle; 
   createdAt: string;

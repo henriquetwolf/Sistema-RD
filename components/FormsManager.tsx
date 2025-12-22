@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer } from '../types';
 import { FormViewer } from './FormViewer';
 import { 
@@ -7,9 +7,10 @@ import {
   ArrowLeft, Save, GripVertical, GripHorizontal, Copy, Settings,
   Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target, Share2, CheckCircle,
   LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info, Code, ExternalLink, Tag, Loader2,
-  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2, MousePointer2, AlignCenter, Layout, Sparkles
+  Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2, MousePointer2, AlignCenter, Layout, Sparkles,
+  Filter
 } from 'lucide-react';
-import { appBackend } from '../services/appBackend';
+import { appBackend, Pipeline } from '../services/appBackend';
 import clsx from 'clsx';
 
 // XLSX is global from CDN
@@ -54,7 +55,9 @@ const INITIAL_FORM: FormModel = {
       successMessage: 'Recebemos suas informações. Entraremos em contato em breve.',
       successButtonText: 'Enviar outra resposta'
   },
-  distributionMode: 'fixed'
+  distributionMode: 'fixed',
+  targetPipeline: 'Padrão',
+  targetStage: 'new'
 };
 
 const CRM_FIELDS = [
@@ -91,6 +94,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [currentForm, setCurrentForm] = useState<FormModel>(INITIAL_FORM);
   const [teams, setTeams] = useState<Team[]>([]);
   const [collaborators, setCollaborators] = useState<CollaboratorSimple[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [sharingForm, setSharingForm] = useState<FormModel | null>(null);
@@ -100,7 +104,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
 
-  useEffect(() => { loadForms(); loadTeamsData(); }, []);
+  useEffect(() => { loadForms(); loadMetadata(); }, []);
 
   const loadForms = async () => { 
       setLoading(true); 
@@ -114,14 +118,16 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       }
   };
 
-  const loadTeamsData = async () => { 
+  const loadMetadata = async () => { 
       try { 
-          const [tRes, cRes] = await Promise.all([
+          const [tRes, cRes, pRes] = await Promise.all([
               appBackend.client.from('crm_teams').select('*'), 
-              appBackend.client.from('crm_collaborators').select('id, full_name').eq('status', 'active')
+              appBackend.client.from('crm_collaborators').select('id, full_name').eq('status', 'active'),
+              appBackend.getPipelines()
           ]); 
           if (tRes.data) setTeams(tRes.data); 
           if (cRes.data) setCollaborators(cRes.data.map((c: any) => ({ id: c.id, full_name: c.full_name }))); 
+          if (pRes) setPipelines(pRes);
       } catch (e) {} 
   };
 
@@ -293,6 +299,11 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       setCopiedType(type);
       setTimeout(() => setCopiedType(null), 2000);
   };
+
+  // Helper for stages based on selected pipeline
+  const activePipeline = useMemo(() => {
+      return pipelines.find(p => p.name === currentForm.targetPipeline);
+  }, [pipelines, currentForm.targetPipeline]);
 
   if (view === 'preview') return <FormViewer form={currentForm} onBack={() => setView('editor')} />;
 
@@ -708,6 +719,40 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
 
                                   {currentForm.isLeadCapture && (
                                       <div className="space-y-6 animate-in slide-in-from-top-2 p-6 border-2 border-slate-100 rounded-2xl bg-white shadow-sm">
+                                          {/* DESTINO NO CRM */}
+                                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                              <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Filter size={14} className="text-teal-600"/> Destino do Lead</h4>
+                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                  <div>
+                                                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funil de Vendas</label>
+                                                      <select 
+                                                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white font-bold text-teal-800 outline-none focus:ring-2 focus:ring-teal-500"
+                                                        value={currentForm.targetPipeline}
+                                                        onChange={e => {
+                                                            const newPipe = pipelines.find(p => p.name === e.target.value);
+                                                            setCurrentForm({
+                                                                ...currentForm, 
+                                                                targetPipeline: e.target.value,
+                                                                targetStage: (newPipe?.stages || [])[0]?.id || 'new'
+                                                            });
+                                                        }}
+                                                      >
+                                                          {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                                      </select>
+                                                  </div>
+                                                  <div>
+                                                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Etapa Inicial</label>
+                                                      <select 
+                                                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white font-medium text-slate-700 outline-none focus:ring-2 focus:ring-teal-500"
+                                                        value={currentForm.targetStage}
+                                                        onChange={e => setCurrentForm({...currentForm, targetStage: e.target.value})}
+                                                      >
+                                                          {(activePipeline?.stages || []).map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                                                      </select>
+                                                  </div>
+                                              </div>
+                                          </div>
+
                                           <div>
                                               <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1"><Tag size={12}/> Nome da Campanha (Rastreio no CRM)</label>
                                               <input type="text" className="w-full px-4 py-2.5 border rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all outline-none" placeholder="Ex: Campanha Verão 2025, Bio Instagram..." value={currentForm.campaign} onChange={e => setCurrentForm({...currentForm, campaign: e.target.value})} />

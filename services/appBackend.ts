@@ -249,7 +249,6 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      // Fixed: Property 'interval_minutes' does not exist on type 'Omit<SavedPreset, "id">'. Did you mean 'intervalMinutes'?
       interval_minutes: preset.intervalMinutes || 5, 
       created_by_name: preset.createdByName || null
     };
@@ -318,7 +317,6 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      // Fixed: Property 'legal_name' does not exist on type 'CompanySetting'. Did you mean 'legalName'?
       const payload = { id: company.id || undefined, legal_name: company.legalName, cnpj: company.cnpj, product_types: company.productTypes };
       const { error } = await supabase.from('crm_companies').upsert(payload);
       if (error) throw error;
@@ -423,7 +421,6 @@ export const appBackend = {
       account: d.account, 
       beneficiary: d.beneficiary, 
       pixKey: d.pix_key, 
-      // Fix: map snake_case DB fields to camelCase interface properties
       hasReformer: d.has_reformer, 
       qtyReformer: d.qty_reformer, 
       hasLadderBarrel: d.has_ladder_barrel, 
@@ -449,18 +446,15 @@ export const appBackend = {
       email: studio.email, 
       password: studio.password, 
       second_contact_name: studio.secondContactName, 
-      // Fix: database key should be snake_case
       second_contact_phone: studio.secondContactPhone, 
       fantasy_name: studio.fantasyName, 
       legal_name: studio.legalName, 
       cnpj: studio.cnpj, 
-      // Fix: studio property is studioPhone
       studio_phone: studio.studioPhone, 
       address: studio.address, 
       city: studio.city, 
       state: studio.state, 
       country: studio.country, 
-      // Fix: Interface PartnerStudio uses camelCase for sizeM2 and qtyReformer etc., but snake_case was being used instead.
       size_m2: studio.sizeM2, 
       student_capacity: studio.studentCapacity, 
       rent_value: studio.rentValue, 
@@ -473,16 +467,12 @@ export const appBackend = {
       beneficiary: studio.beneficiary, 
       pix_key: studio.pixKey, 
       has_reformer: studio.hasReformer, 
-      // Fix: Interface PartnerStudio uses camelCase for sizeM2 and qtyReformer etc., but snake_case was being used instead.
       qty_reformer: studio.qtyReformer, 
       has_ladder_barrel: studio.hasLadderBarrel, 
-      // Fix: Interface PartnerStudio uses camelCase for sizeM2 and qtyReformer etc., but snake_case was being used instead.
       qty_ladder_barrel: studio.qtyLadderBarrel, 
       has_chair: studio.hasChair, 
-      // Fix: Interface PartnerStudio uses camelCase for sizeM2 and qtyReformer etc., but snake_case was being used instead.
       qty_chair: studio.qtyChair, 
       has_cadillac: studio.hasCadillac, 
-      // Fix: Interface PartnerStudio uses camelCase for sizeM2 and qtyReformer etc., but snake_case was being used instead.
       qty_cadillac: studio.qtyCadillac, 
       has_chairs_for_course: studio.hasChairsForCourse, 
       has_tv: studio.hasTv, 
@@ -535,8 +525,21 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      // Fix: distributionMode uses camelCase in FormModel interface
-      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
+      const payload = { 
+          id: form.id || undefined, 
+          title: form.title, 
+          description: form.description, 
+          campaign: form.campaign || null, 
+          is_lead_capture: form.isLeadCapture, 
+          questions: form.questions, 
+          style: form.style, 
+          team_id: form.teamId || null, 
+          distribution_mode: form.distributionMode || 'fixed', 
+          fixed_owner_id: form.fixedOwnerId || null,
+          target_pipeline: form.targetPipeline || 'Padrão',
+          target_stage: form.targetStage || 'new',
+          submissions_count: form.submissionsCount || 0 
+      };
       const { error } = await supabase.from('crm_forms').upsert(payload);
       if (error) throw error;
   },
@@ -545,14 +548,44 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, teamId: d.team_id, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, questions: d.questions || [], style: d.style || {}, createdAt: d.created_at, submissionsCount: d.submissions_count || 0 }));
+      return (data || []).map((d: any) => ({ 
+          id: d.id, 
+          title: d.title, 
+          description: d.description, 
+          campaign: d.campaign, 
+          isLeadCapture: d.is_lead_capture, 
+          teamId: d.team_id, 
+          distributionMode: d.distribution_mode, 
+          fixedOwnerId: d.fixed_owner_id, 
+          targetPipeline: d.target_pipeline,
+          targetStage: d.target_stage,
+          questions: d.questions || [], 
+          style: d.style || {}, 
+          createdAt: d.created_at, 
+          submissionsCount: d.submissions_count || 0 
+      }));
   },
 
   getFormById: async (id: string): Promise<FormModel | null> => {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('crm_forms').select('*').eq('id', id).single();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, teamId: data.team_id, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, questions: data.questions || [], style: data.style || {}, createdAt: data.created_at, submissionsCount: data.submissions_count || 0 };
+      return { 
+          id: data.id, 
+          title: data.title, 
+          description: data.description, 
+          campaign: data.campaign, 
+          isLeadCapture: data.is_lead_capture, 
+          teamId: data.team_id, 
+          distributionMode: data.distribution_mode, 
+          fixedOwnerId: data.fixed_owner_id, 
+          targetPipeline: data.target_pipeline,
+          targetStage: data.target_stage,
+          questions: data.questions || [], 
+          style: data.style || {}, 
+          createdAt: data.created_at, 
+          submissionsCount: data.submissions_count || 0 
+      };
   },
 
   deleteForm: async (id: string): Promise<void> => {
@@ -577,7 +610,9 @@ export const appBackend = {
           const dealPayload: any = {
               title: `Lead: ${form.title}`,
               status: 'warm',
-              stage: 'new',
+              // Use configured funnel/stage or defaults
+              pipeline: form.targetPipeline || 'Padrão',
+              stage: form.targetStage || 'new',
               deal_number: generateDealNumber(),
               source: form.title,
               campaign: form.campaign || '',
@@ -605,7 +640,6 @@ export const appBackend = {
                   dealPayload.title = `Lead: ${nameValue}`;
               }
           } else {
-              // Se o usuário mapeou via contact_name ou company_name, garantimos que ambos fiquem iguais e o título também
               dealPayload.contact_name = finalName;
               dealPayload.company_name = finalName;
               dealPayload.title = `Lead: ${finalName}`;
@@ -678,7 +712,6 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (error || !data) return null;
-      // Fixed: Cannot find name 'd'. Use 'data' variable instead.
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 

@@ -142,7 +142,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V3)
+-- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V4)
 
 -- 1. TABELA DE CONFIGURAÇÕES
 CREATE TABLE IF NOT EXISTS public.app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now());
@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS public.crm_activity_logs (id uuid DEFAULT gen_random_
 -- 4. TABELA DE CERTIFICADOS
 CREATE TABLE IF NOT EXISTS public.crm_certificates (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), title text NOT NULL, background_base_64 text, back_background_base_64 text, linked_product_id text, body_text text, layout_config jsonb);
 
--- 5. TABELA DE FUNIS DE VENDAS (PIPELINES) - COM REPARO DE COLUNAS
+-- 5. TABELA DE FUNIS DE VENDAS (PIPELINES)
 CREATE TABLE IF NOT EXISTS public.crm_pipelines (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text NOT NULL,
@@ -164,21 +164,30 @@ CREATE TABLE IF NOT EXISTS public.crm_pipelines (
     created_at timestamptz DEFAULT now()
 );
 
--- GARANTIR COLUNA STAGES (Caso a tabela tenha sido criada sem ela antes)
+-- GARANTIR COLUNA STAGES NO PIPELINE
 ALTER TABLE public.crm_pipelines ADD COLUMN IF NOT EXISTS stages jsonb DEFAULT '[]'::jsonb;
 
--- INSERIR FUNIL PADRÃO SE NÃO EXISTIR
-INSERT INTO public.crm_pipelines (name, stages)
-SELECT 'Padrão', '[
-    {"id": "new", "title": "Sem Contato", "color": "border-slate-300"},
-    {"id": "contacted", "title": "Contatado", "color": "border-blue-400"},
-    {"id": "proposal", "title": "Proposta Enviada", "color": "border-yellow-400"},
-    {"id": "negotiation", "title": "Em Negociação", "color": "border-orange-500"},
-    {"id": "closed", "title": "Fechamento", "color": "border-green-500"}
-]'::jsonb
-WHERE NOT EXISTS (SELECT 1 FROM public.crm_pipelines WHERE name = 'Padrão');
+-- 6. TABELA DE FORMULÁRIOS - COM NOVAS COLUNAS DE DESTINO
+CREATE TABLE IF NOT EXISTS public.crm_forms (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    title text NOT NULL,
+    description text,
+    campaign text,
+    is_lead_capture boolean DEFAULT false,
+    questions jsonb DEFAULT '[]'::jsonb,
+    style jsonb DEFAULT '{}'::jsonb,
+    team_id uuid,
+    distribution_mode text DEFAULT 'fixed',
+    fixed_owner_id uuid,
+    submissions_count int DEFAULT 0,
+    created_at timestamptz DEFAULT now()
+);
 
--- 6. TABELA DE COLABORADORES (VERSÃO COMPLETA)
+-- GARANTIR COLUNAS DE DESTINO LEAD NO FORMULÁRIO
+ALTER TABLE public.crm_forms ADD COLUMN IF NOT EXISTS target_pipeline text DEFAULT 'Padrão';
+ALTER TABLE public.crm_forms ADD COLUMN IF NOT EXISTS target_stage text DEFAULT 'new';
+
+-- 7. TABELA DE COLABORADORES (VERSÃO COMPLETA)
 CREATE TABLE IF NOT EXISTS public.crm_collaborators (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     full_name text, social_name text, birth_date date, marital_status text, spouse_name text, father_name text, mother_name text,
@@ -197,16 +206,10 @@ CREATE TABLE IF NOT EXISTS public.crm_collaborators (
     created_at timestamptz DEFAULT now()
 );
 
--- 7. TABELAS DE APOIO
+-- 8. TABELAS DE APOIO E POLÍTICAS
 CREATE TABLE IF NOT EXISTS public.crm_roles (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, permissions jsonb DEFAULT '{}'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, honorarium numeric DEFAULT 0, observations text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_companies (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, legal_name text, cnpj text, product_types jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now());
-CREATE TABLE IF NOT EXISTS public.app_banners (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, title text, image_url text, link_url text, target_audience text, active boolean DEFAULT true, created_at timestamptz DEFAULT now());
-
--- 8. HABILITAR RLS E POLÍTICAS
-ALTER TABLE public.crm_pipelines ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Acesso total pipelines" ON public.crm_pipelines;
-CREATE POLICY "Acesso total pipelines" ON public.crm_pipelines FOR ALL USING (true) WITH CHECK (true);
 
 -- LIMPAR CACHE DO POSTGREST
 NOTIFY pgrst, 'reload config';

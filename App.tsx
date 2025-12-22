@@ -39,7 +39,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home
+  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -278,10 +278,12 @@ function App() {
     setTempSheetUrl(null);
     setErrorMessage(null);
     setSelectedEntity('generic');
+    setStatus('idle');
   };
 
   const handleFilesSelected = async (files: File[]) => {
     setStatus('parsing');
+    setErrorMessage(null);
     try {
       const parsedFiles = await Promise.all(files.map(file => file.name.endsWith('.xlsx') ? parseExcelFile(file) : parseCsvFile(file)));
       setFilesData(parsedFiles);
@@ -311,44 +313,56 @@ function App() {
 
       setStep(AppStep.CONFIG);
       setStatus('idle');
-    } catch (e: any) { setErrorMessage(e.message); setStatus('error'); }
+    } catch (e: any) { 
+        setErrorMessage(e.message); 
+        setStatus('error'); 
+    }
   };
 
   const handleCreateConnection = async () => {
+      setErrorMessage(null);
       const isAutoSync = !!tempSheetUrl;
       const creator = currentCollaborator ? currentCollaborator.name : (session?.user?.email || 'Super Admin');
       
-      if (!isAutoSync) {
-          setStatus('uploading');
-          try {
-             const client = createSupabaseClient(config.url, config.key);
-             const allData = filesData.flatMap(f => f.data);
-             if (allData.length > 0) await batchUploadData(client, config, allData, () => {});
-          } catch (e: any) { setErrorMessage(`Erro ao enviar dados: ${e.message}`); setStatus('error'); return; }
-      }
-      
-      const newJob: SyncJob = { 
-          id: crypto.randomUUID(), 
-          name: config.tableName || "Nova Conexão", 
-          sheetUrl: tempSheetUrl || "", 
-          config: { ...config }, 
-          active: isAutoSync, 
-          status: isAutoSync ? 'idle' : 'success', 
-          lastSync: isAutoSync ? null : new Date().toISOString(), 
-          lastMessage: isAutoSync ? 'Aguardando sincronização...' : `Upload manual completo.`, 
-          intervalMinutes: config.intervalMinutes || 5,
-          createdBy: creator,
-          createdAt: new Date().toISOString()
-      };
+      try {
+          if (!isAutoSync) {
+              setStatus('uploading');
+              const client = createSupabaseClient(config.url, config.key);
+              const allData = filesData.flatMap(f => f.data);
+              if (allData.length > 0) {
+                  await batchUploadData(client, config, allData, () => {});
+              }
+          }
+          
+          const newJob: SyncJob = { 
+              id: crypto.randomUUID(), 
+              name: config.tableName || "Nova Conexão", 
+              sheetUrl: tempSheetUrl || "", 
+              config: { ...config }, 
+              active: isAutoSync, 
+              status: isAutoSync ? 'idle' : 'success', 
+              lastSync: isAutoSync ? null : new Date().toISOString(), 
+              lastMessage: isAutoSync ? 'Aguardando sincronização...' : `Upload manual completo.`, 
+              intervalMinutes: config.intervalMinutes || 5,
+              createdBy: creator,
+              createdAt: new Date().toISOString()
+          };
 
-      // SALVA NO BANCO
-      await appBackend.saveSyncJob(newJob);
-      
-      setJobs(prev => [...prev, newJob]);
-      setStep(AppStep.DASHBOARD);
-      setDashboardTab('global_settings'); // Redireciona para onde as conexões agora vivem
-      setStatus('idle');
-      if (isAutoSync) setTimeout(() => performJobSync(newJob), 500);
+          // SALVA NO BANCO
+          await appBackend.saveSyncJob(newJob);
+          
+          setJobs(prev => [...prev, newJob]);
+          setStep(AppStep.DASHBOARD);
+          setDashboardTab('global_settings'); // Redireciona para onde as conexões agora vivem
+          setStatus('idle');
+          if (isAutoSync) setTimeout(() => performJobSync(newJob), 500);
+      } catch (e: any) { 
+          console.error("Erro no processo de conexão:", e);
+          setErrorMessage(`Falha no processamento: ${e.message}`); 
+          setStatus('error'); 
+          // Scroll to top to show error
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
   };
 
   const handleDeleteJob = async (id: string) => {
@@ -424,6 +438,23 @@ function App() {
                 <img src={appLogo} alt="VOLL" className="h-8 max-w-[150px] object-contain" />
              </div>
              <StepIndicator currentStep={step} />
+
+             {errorMessage && (
+                <div className="mb-6 animate-in slide-in-from-top-2">
+                    <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm flex items-start gap-3">
+                        <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={20} />
+                        <div className="flex-1">
+                            <p className="text-sm font-bold text-red-800">Erro na Operação</p>
+                            <p className="text-xs text-red-700 mt-1 leading-relaxed">{errorMessage}</p>
+                            <div className="mt-3 flex items-center gap-4">
+                                <button onClick={() => setErrorMessage(null)} className="text-[10px] font-black uppercase text-red-600 hover:underline">Dispensar</button>
+                                <button onClick={() => { setErrorMessage(null); handleCreateConnection(); }} className="text-[10px] font-black uppercase text-indigo-600 hover:underline">Tentar Novamente</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+             )}
+
              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 min-h-[400px]">
                 {step === AppStep.UPLOAD && <UploadPanel onFilesSelected={handleFilesSelected} onUrlConfirmed={setTempSheetUrl} onEntitySelected={setSelectedEntity} isLoading={status === 'parsing'} />}
                 {step === AppStep.CONFIG && <ConfigPanel config={config} setConfig={setConfig} onNext={() => setStep(AppStep.PREVIEW)} onBack={() => setStep(AppStep.UPLOAD)} currentCreatorName={currentUserName} />}

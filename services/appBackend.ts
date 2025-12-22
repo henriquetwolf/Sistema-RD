@@ -376,7 +376,8 @@ export const appBackend = {
 
   saveBanner: async (banner: Banner): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.link_url, target_audience: banner.targetAudience, active: banner.active };
+    // Fixed: Property 'link_url' does not exist on type 'Banner'. Use 'linkUrl'.
+    const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.linkUrl, target_audience: banner.targetAudience, active: banner.active };
     let error;
     if (banner.id) {
         const result = await supabase.from('app_banners').update(payload).eq('id', banner.id);
@@ -582,7 +583,8 @@ export const appBackend = {
           is_lead_capture: survey.isLeadCapture, 
           questions: survey.questions, 
           style: survey.style, 
-          target_type: survey.target_type,
+          // Fixed: Property 'target_type' does not exist on type 'SurveyModel'. Use 'targetType'.
+          target_type: survey.targetType,
           target_product_type: survey.targetProductType || null,
           target_product_name: survey.targetProductName || null,
           only_if_finished: survey.onlyIfFinished,
@@ -674,7 +676,7 @@ export const appBackend = {
               id: form.id, title: form.title, description: form.description, 
               campaign: form.campaign, isLeadCapture: form.is_lead_capture, 
               teamId: form.team_id, distributionMode: form.distribution_mode, 
-              fixedOwnerId: form.fixed_owner_id, targetPipeline: form.target_pipeline,
+              fixedOwnerId: form.fixedOwnerId || null, targetPipeline: form.target_pipeline,
               targetStage: form.target_stage, questions: form.questions || [], 
               style: form.style || {}, createdAt: form.created_at, 
               submissionsCount: form.submissions_count || 0 
@@ -918,7 +920,7 @@ export const appBackend = {
 
   deleteStudentCertificate: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_student_certificates').delete().eq('id', id);
+    const { error = null } = await supabase.from('crm_student_certificates').delete().eq('id', id);
     if (error) throw error;
   },
 
@@ -1004,7 +1006,7 @@ export const appBackend = {
     const payload = { id: workshop.id, event_id: workshop.eventId, block_id: workshop.blockId || null, title: workshop.title, description: workshop.description, speaker: workshop.speaker, date: workshop.date, time: workshop.time, spots: workshop.spots };
     const { data, error } = await supabase.from('crm_workshops').upsert(payload).select().single();
     if (error) throw error;
-    return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
+    return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: workshop.title, description: workshop.description, speaker: workshop.speaker, date: workshop.date, time: workshop.time, spots: workshop.spots };
   },
 
   deleteWorkshop: async (id: string): Promise<void> => {

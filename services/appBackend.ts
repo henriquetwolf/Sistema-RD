@@ -538,7 +538,8 @@ export const appBackend = {
           questions: form.questions, 
           style: form.style, 
           team_id: form.teamId || null, 
-          distribution_mode: form.distribution_mode || 'fixed', 
+          // Fixed distribution_mode to distributionMode
+          distribution_mode: form.distributionMode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null,
           target_pipeline: form.targetPipeline || 'Padrão',
           target_stage: form.targetStage || 'new',
@@ -820,7 +821,8 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at };
+      // Fixed: replaced 'd' with 'data' in return statement
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
@@ -953,7 +955,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('title', { ascending: true });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
+    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, max_selections: d.max_selections }));
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
@@ -961,7 +963,8 @@ export const appBackend = {
       const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
       const { data, error } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: data.event_id, date: d.date, title: data.title, maxSelections: data.max_selections };
+      // Fixed: replaced 'd' with 'data'
+      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
   },
 
   deleteBlock: async (id: string): Promise<void> => {

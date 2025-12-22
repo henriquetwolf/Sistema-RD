@@ -523,7 +523,7 @@ export const appBackend = {
 
   deleteInstructorLevel: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_instructor_levels').delete().eq('id', id);
+    const { error = null } = await supabase.from('crm_instructor_levels').delete().eq('id', id);
     if (error) throw error;
   },
 
@@ -628,8 +628,6 @@ export const appBackend = {
       const { data: answered } = await supabase.from('crm_form_submissions').select('form_id').eq('student_id', studentDealId);
       const answeredIds = new Set((answered || []).map(a => a.form_id));
 
-      const today = new Date();
-
       const eligible = surveys.filter((survey: any) => {
           // EXCLUDE ALREADY ANSWERED
           if (answeredIds.has(survey.id)) return false;
@@ -669,7 +667,7 @@ export const appBackend = {
   getFormById: async (id: string): Promise<FormModel | null> => {
       if (!isConfigured) return null;
       // Also try surveys table if not in forms
-      const { data: form } = await supabase.from('crm_forms').select('*').eq('id', id).single();
+      const { data: form, error: formErr } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
       if (form) {
           return { 
               id: form.id, title: form.title, description: form.description, 
@@ -682,7 +680,7 @@ export const appBackend = {
           };
       }
       
-      const { data: survey } = await supabase.from('crm_surveys').select('*').eq('id', id).single();
+      const { data: survey, error: surveyErr } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
       if (survey) {
           return { 
               id: survey.id, title: survey.title, description: survey.description, 
@@ -706,12 +704,27 @@ export const appBackend = {
       if (!form) throw new Error("Form not found");
 
       if (isConfigured) {
+          // CRITICAL: Salva a resposta do formulário/pesquisa
           const { error: subError } = await supabase.from('crm_form_submissions').insert([{
               form_id: formId,
               answers: answers,
-              student_id: studentId || null // NOVO: Relaciona a resposta ao aluno
+              student_id: studentId || null
           }]);
-          if (subError) console.error("Error saving raw submission:", subError);
+          
+          if (subError) {
+              console.error("Error saving raw submission:", subError);
+              throw new Error("Falha ao salvar resposta no banco de dados.");
+          }
+
+          // Se for uma pesquisa (survey), incrementa na tabela de surveys
+          const { error: countSurveyError } = await supabase.from('crm_surveys').update({ 
+              submissions_count: (form.submissionsCount || 0) + 1 
+          }).eq('id', formId);
+          
+          // Caso seja um formulário normal
+          await supabase.from('crm_forms').update({ 
+              submissions_count: (form.submissionsCount || 0) + 1 
+          }).eq('id', formId);
       }
 
       if (isLeadCapture && isConfigured) {
@@ -777,11 +790,6 @@ export const appBackend = {
               await supabase.from('crm_deals').insert([dealPayload]);
           }
       }
-      if (isConfigured) {
-          // Update submissions count on both tables
-          await supabase.from('crm_forms').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
-          await supabase.from('crm_surveys').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
-      }
   },
 
   getFormSubmissions: async (formId: string): Promise<any[]> => {
@@ -819,9 +827,8 @@ export const appBackend = {
 
   getContractById: async (id: string): Promise<Contract | null> => {
       if (!isConfigured) return null;
-      const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle();
       if (error || !data) return null;
-      // Fixed: replaced 'd' with 'data' in return statement
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
@@ -873,7 +880,6 @@ export const appBackend = {
         title: cert.title, 
         background_base_64: cert.backgroundData, 
         back_background_base_64: cert.backBackgroundData, 
-        // Fixed: Property 'linked_product_id' does not exist on type 'CertificateModel'. Did you mean 'linkedProductId'?
         linked_product_id: cert.linkedProductId, 
         body_text: cert.bodyText, 
         layout_config: cert.layoutConfig 
@@ -904,7 +910,7 @@ export const appBackend = {
 
   getStudentCertificate: async (hash: string): Promise<any> => {
     if (!isConfigured) return null;
-    const { data: certData, error: certError } = await supabase.from('crm_student_certificates').select('*').eq('hash', hash).single();
+    const { data: certData, error: certError } = await supabase.from('crm_student_certificates').select('*').eq('hash', hash).maybeSingle();
     if (certError || !certData) return null;
     const { data: dealData } = await supabase.from('crm_deals').select('contact_name, company_name, course_city').eq('id', (certData as any).student_deal_id).single();
     const { data: templateData } = await supabase.from('crm_certificates').select('*').eq('id', (certData as any).certificate_template_id).single();
@@ -963,7 +969,6 @@ export const appBackend = {
       const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
       const { data, error } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
-      // Fixed: replaced 'd' with 'data'
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
   },
 

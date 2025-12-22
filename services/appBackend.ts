@@ -14,6 +14,23 @@ const supabase = createClient(
 
 const TABLE_NAME = 'app_presets';
 
+export interface Pipeline {
+    id: string;
+    name: string;
+    is_default: boolean;
+    created_at?: string;
+}
+
+export interface PipelineStage {
+    id: string;
+    pipeline_id: string;
+    name: string;
+    key: string;
+    color: string;
+    sort_order: number;
+    created_at?: string;
+}
+
 const MOCK_SESSION = {
   access_token: 'mock-token',
   refresh_token: 'mock-refresh-token',
@@ -124,6 +141,61 @@ export const appBackend = {
           recordId: d.record_id,
           createdAt: d.created_at
       }));
+  },
+
+  // --- CRM PIPELINES & STAGES ---
+  getPipelines: async (): Promise<Pipeline[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_pipelines').select('*').order('name', { ascending: true });
+      if (error) throw error;
+      return data || [];
+  },
+
+  getPipelineStages: async (pipelineId: string): Promise<PipelineStage[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_pipeline_stages').select('*').eq('pipeline_id', pipelineId).order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data || [];
+  },
+
+  savePipeline: async (pipeline: Partial<Pipeline>, stages: Partial<PipelineStage>[]): Promise<void> => {
+      if (!isConfigured) return;
+      
+      // 1. Salvar Pipeline
+      const { data: savedPipeline, error: pError } = await supabase.from('crm_pipelines').upsert({
+          id: pipeline.id || undefined,
+          name: pipeline.name,
+          is_default: !!pipeline.is_default
+      }).select().single();
+      
+      if (pError) throw pError;
+
+      // 2. Salvar Etapas
+      const formattedStages = stages.map((s, idx) => ({
+          id: s.id || undefined,
+          pipeline_id: savedPipeline.id,
+          name: s.name,
+          key: s.key || s.name?.toLowerCase().replace(/\s/g, '_'),
+          color: s.color || '#cbd5e1',
+          sort_order: idx
+      }));
+
+      // Primeiro remove estágios que não estão mais na lista (se for edição)
+      if (pipeline.id) {
+          const presentIds = formattedStages.filter(s => s.id).map(s => s.id);
+          if (presentIds.length > 0) {
+              await supabase.from('crm_pipeline_stages').delete().eq('pipeline_id', pipeline.id).not('id', 'in', `(${presentIds.join(',')})`);
+          }
+      }
+
+      const { error: sError } = await supabase.from('crm_pipeline_stages').upsert(formattedStages);
+      if (sError) throw sError;
+  },
+
+  deletePipeline: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_pipelines').delete().eq('id', id);
+      if (error) throw error;
   },
 
   // --- SYNC JOBS (CONNECTIONS) ---
@@ -671,7 +743,7 @@ export const appBackend = {
         backgroundData: d.background_base_64, 
         backBackgroundData: d.back_background_base_64, 
         linkedProductId: d.linked_product_id, 
-        bodyText: d.body_text, 
+        body_text: d.body_text, 
         layoutConfig: d.layout_config, 
         createdAt: d.created_at 
     }));
@@ -733,7 +805,7 @@ export const appBackend = {
             backgroundData: (templateData as any).background_base_64, 
             backBackgroundData: (templateData as any).back_background_base_64, 
             linkedProductId: (templateData as any).linked_product_id, 
-            bodyText: (templateData as any).body_text, 
+            body_text: (templateData as any).body_text, 
             layoutConfig: (templateData as any).layout_config, 
             createdAt: (templateData as any).created_at 
         } 

@@ -158,6 +158,13 @@ export const appBackend = {
       return data || [];
   },
 
+  getAllPipelineStages: async (): Promise<PipelineStage[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_pipeline_stages').select('*').order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data || [];
+  },
+
   savePipeline: async (pipeline: Partial<Pipeline>, stages: Partial<PipelineStage>[]): Promise<Pipeline> => {
       if (!isConfigured) throw new Error("Backend not configured");
       
@@ -296,7 +303,7 @@ export const appBackend = {
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
       interval_minutes: preset.intervalMinutes || 5, 
-      created_by_name: preset.createdByName || null
+      created_by_name: preset.created_by_name || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
     if (error) throw error;
@@ -711,7 +718,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: d.signers || [], createdAt: d.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
@@ -929,6 +936,7 @@ export const appBackend = {
       item_sacochila: record.itemSacochila, 
       item_lapis: record.itemLapis, 
       registration_date: record.registrationDate, 
+      /* Fix: Changed record.studio_id to record.studioId to match the interface definition */
       studio_id: record.studioId || null, 
       tracking_code: record.trackingCode, 
       observations: record.observations, 

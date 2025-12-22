@@ -6,7 +6,7 @@ import {
   AlertCircle, ChevronRight, ChevronLeft, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
   MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2,
-  ChevronDown, ChevronUp, Palette, Kanban as FunnelIcon, Settings2
+  ChevronDown, ChevronUp, Palette, Kanban as FunnelIcon, Settings2, MoreVertical
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend, CompanySetting, Pipeline, PipelineStage } from '../services/appBackend';
@@ -98,32 +98,10 @@ const STAGE_COLORS = [
     '#94a3b8', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'
 ];
 
-const formatCPF = (value: string = '') => {
-    return value
-        .replace(/\D/g, '')
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d{1,2})/, '$1-$2')
-        .replace(/(-\d{2})\d+?$/, '$1');
-};
-
-const formatCEP = (value: string = '') => {
-    return value
-        .replace(/\D/g, '')
-        .replace(/(\d{5})(\d)/, '$1-$2')
-        .replace(/(-\d{3})\d+?$/, '$1');
-};
-
 const handleDbError = (e: any) => {
     console.error("Erro de Banco de Dados:", e);
     const msg = e.message || "Erro desconhecido";
-    if (msg.includes('relation "crm_deals" does not exist')) {
-       alert("Erro Crítico: A tabela 'crm_deals' não existe no banco de dados.");
-    } else if (msg.includes('column') && (msg.includes('does not exist') || msg.includes('cache'))) {
-       alert(`Erro de Schema: O banco de dados está desatualizado ou em cache.\n\nVá em Configurações > Diagnóstico e execute o SQL de reparo.\n\nDetalhe: ${msg}`);
-    } else {
-       alert(`Erro: ${msg}`);
-    }
+    alert(`Erro: ${msg}`);
 };
 
 const generateDealNumber = () => {
@@ -159,8 +137,7 @@ export const CrmBoard: React.FC = () => {
   
   // Pipeline State
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [currentPipelineId, setCurrentPipelineId] = useState<string | null>(null);
-  const [currentStages, setCurrentStages] = useState<PipelineStage[]>([]);
+  const [allStages, setAllStages] = useState<PipelineStage[]>([]);
   const [showFunnelManager, setShowFunnelManager] = useState(false);
   const [isSavingFunnel, setIsSavingFunnel] = useState(false);
   
@@ -170,48 +147,29 @@ export const CrmBoard: React.FC = () => {
 
   const [collaborators, setCollaborators] = useState<CollaboratorSimple[]>([]);
   const [companies, setCompanies] = useState<CompanySetting[]>([]);
-  const [registeredClasses, setRegisteredClasses] = useState<RegisteredClass[]>([]);
-  const [digitalProducts, setDigitalProducts] = useState<DigitalProduct[]>([]);
-  const [eventsList, setEventsList] = useState<{id: string, name: string}[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   
   // Modals
   const [showDealModal, setShowDealModal] = useState(false);
-  const [showTeamModal, setShowTeamModal] = useState(false);
-  
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormData, setDealFormData] = useState<Partial<Deal>>(INITIAL_FORM_STATE);
   
-  // Team form
-  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
-  const [teamName, setTeamName] = useState('');
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
-  const [isSavingTeam, setIsSavingTeam] = useState(false);
-
   useEffect(() => {
     fetchData();
   }, []);
 
-  useEffect(() => {
-      if (currentPipelineId) {
-          fetchPipelineDetails(currentPipelineId);
-      }
-  }, [currentPipelineId]);
-
   const fetchData = async () => {
       setIsLoading(true);
       try {
-          const [dealsResult, teamsResult, classesResult, productsResult, eventsResult, collabResult, companiesResult, pipelinesResult] = await Promise.all([
+          const [dealsResult, teamsResult, collabResult, companiesResult, pipelinesResult, stagesResult] = await Promise.all([
               appBackend.client.from('crm_deals').select('*').order('created_at', { ascending: false }),
               appBackend.client.from('crm_teams').select('*').order('name', { ascending: true }),
-              appBackend.client.from('crm_classes').select('id, course, state, city, mod_1_code, mod_2_code'),
-              appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
-              appBackend.client.from('crm_events').select('id, name').order('created_at', { ascending: false }),
               appBackend.client.from('crm_collaborators').select('id, full_name, department').order('full_name', { ascending: true }),
               appBackend.getCompanies(),
-              appBackend.getPipelines()
+              appBackend.getPipelines(),
+              appBackend.getAllPipelineStages()
           ]);
 
           if (dealsResult.data) {
@@ -221,41 +179,23 @@ export const CrmBoard: React.FC = () => {
                   nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
                   pipeline_id: d.pipeline_id, source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
-                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
-                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
-                  registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
-                  classMod1: d.class_mod_1, class_mod_2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
+                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receipt_link: d.receipt_link,
+                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
+                  registration_data: d.registration_data, observation: d.observation, course_state: d.course_state, course_city: d.course_city,
+                  classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
               })));
           }
 
           setPipelines(pipelinesResult);
-          // Se não houver funil selecionado ou o atual não existir mais, seleciona o primeiro
-          if (pipelinesResult.length > 0) {
-              if (!currentPipelineId || !pipelinesResult.find(p => p.id === currentPipelineId)) {
-                  setCurrentPipelineId(pipelinesResult[0].id);
-              }
-          }
-
+          setAllStages(stagesResult);
           setTeams(teamsResult.data || []);
-          if (classesResult.data) setRegisteredClasses(classesResult.data);
-          setDigitalProducts(productsResult.data || []);
-          setEventsList(eventsResult.data || []);
           if (collabResult.data) setCollaborators(collabResult.data.map((c: any) => ({ id: c.id, fullName: c.full_name, department: c.department })));
           setCompanies(companiesResult || []);
       } catch (e: any) {
           console.error("Erro ao carregar dados do CRM:", e);
       } finally {
           setIsLoading(false);
-      }
-  };
-
-  const fetchPipelineDetails = async (id: string) => {
-      try {
-          const stages = await appBackend.getPipelineStages(id);
-          setCurrentStages(stages);
-      } catch (e) {
-          console.error(e);
       }
   };
 
@@ -266,12 +206,8 @@ export const CrmBoard: React.FC = () => {
     }
     setIsSavingFunnel(true);
     try {
-        const saved = await appBackend.savePipeline(editingPipeline, editingStages);
-        // Atualiza a lista e força a seleção do funil que acabou de salvar
+        await appBackend.savePipeline(editingPipeline, editingStages);
         await fetchData();
-        setCurrentPipelineId(saved.id);
-        // Força o carregamento das etapas imediatamente
-        await fetchPipelineDetails(saved.id);
         setShowFunnelManager(false);
     } catch (e: any) {
         alert(`Erro ao salvar funil: ${e.message}`);
@@ -292,8 +228,8 @@ export const CrmBoard: React.FC = () => {
         contact_name: dealFormData.contactName || dealFormData.companyName,
         company_name: dealFormData.companyName,
         value: Number(dealFormData.value || 0),
-        pipeline_id: dealFormData.pipeline_id || currentPipelineId,
-        stage: dealFormData.stage || (currentStages.length > 0 ? currentStages[0].key : 'new'),
+        pipeline_id: dealFormData.pipeline_id,
+        stage: dealFormData.stage || 'new',
         owner_id: dealFormData.owner || null,
         status: dealFormData.status || 'warm',
         next_task: dealFormData.nextTask,
@@ -329,14 +265,12 @@ export const CrmBoard: React.FC = () => {
     try {
         if (editingDealId) {
             await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId);
-            await appBackend.logActivity({ action: 'update', module: 'crm', details: `Editou negócio: ${payload.title}`, recordId: editingDealId });
         } else {
-            const { data: newDeal } = await appBackend.client.from('crm_deals').insert([{
+            await appBackend.client.from('crm_deals').insert([{
                 ...payload,
                 deal_number: generateDealNumber(),
                 created_at: new Date().toISOString()
-            }]).select().single();
-            await appBackend.logActivity({ action: 'create', module: 'crm', details: `Criou novo negócio: ${payload.title}`, recordId: newDeal?.id });
+            }]);
         }
         await fetchData();
         setShowDealModal(false);
@@ -371,47 +305,43 @@ export const CrmBoard: React.FC = () => {
 
   const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  const moveDeal = async (dealId: string, currentStageKey: string, direction: 'next' | 'prev') => {
-    const currentIndex = currentStages.findIndex(s => s.key === currentStageKey);
+  const moveDeal = async (dealId: string, currentStageKey: string, pipelineId: string, direction: 'next' | 'prev') => {
+    const pipelineStages = allStages.filter(s => s.pipeline_id === pipelineId);
+    const currentIndex = pipelineStages.findIndex(s => s.key === currentStageKey);
     let newIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
-    if (newIndex < 0 || newIndex >= currentStages.length) return;
-    const newStage = currentStages[newIndex];
+    if (newIndex < 0 || newIndex >= pipelineStages.length) return;
+    const newStage = pipelineStages[newIndex];
     const now = new Date();
     
-    setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage.key, closedAt: newStage.key === 'closed' || newStage.name.toLowerCase().includes('fechamento') ? now : d.closedAt } : d));
-
     try {
         const updates: any = { stage: newStage.key };
         if (newStage.key === 'closed' || newStage.name.toLowerCase().includes('fechamento')) updates.closed_at = now.toISOString();
         await appBackend.client.from('crm_deals').update(updates).eq('id', dealId);
+        await fetchData();
     } catch (e) { fetchData(); }
   };
 
-  const handleDrop = async (e: React.DragEvent, targetStageKey: string) => {
+  const handleDrop = async (e: React.DragEvent, targetStageKey: string, pipelineId: string) => {
     e.preventDefault();
     if (!draggedDealId) return;
-    const currentDeal = deals.find(d => d.id === draggedDealId);
-    if (!currentDeal || currentDeal.stage === targetStageKey) { setDraggedDealId(null); return; }
     
     const now = new Date();
-    const isClosing = targetStageKey === 'closed' || currentStages.find(s => s.key === targetStageKey)?.name.toLowerCase().includes('fechamento');
+    const isClosing = targetStageKey === 'closed' || allStages.find(s => s.key === targetStageKey && s.pipeline_id === pipelineId)?.name.toLowerCase().includes('fechamento');
     
-    setDeals(prev => prev.map(d => d.id === draggedDealId ? { ...d, stage: targetStageKey, closedAt: isClosing ? now : d.closedAt } : d));
     try {
-        const updates: any = { stage: targetStageKey, pipeline_id: currentPipelineId };
+        const updates: any = { stage: targetStageKey, pipeline_id: pipelineId };
         if (isClosing) updates.closed_at = now.toISOString();
         await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId);
+        await fetchData();
     } catch (e) { fetchData(); }
     setDraggedDealId(null);
   };
 
-  const filteredDeals = deals.filter(d => {
-      const matchesPipeline = d.pipeline_id === currentPipelineId || (!d.pipeline_id && currentPipelineId === pipelines[0]?.id);
-      const matchesSearch = (d.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            (d.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            (d.dealNumber?.toString().includes(searchTerm));
-      return matchesPipeline && matchesSearch;
-  });
+  const filteredDeals = deals.filter(d => 
+    (d.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (d.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (d.dealNumber?.toString().includes(searchTerm))
+  );
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)]">
@@ -419,45 +349,31 @@ export const CrmBoard: React.FC = () => {
       <div className="bg-white border-b border-slate-200 px-6 py-2 flex flex-col md:flex-row md:items-center justify-between shadow-sm z-10 gap-4 shrink-0">
         <div className="flex items-center gap-4">
             <div className="flex items-center bg-slate-100 rounded-lg p-1">
-                <button onClick={() => setActiveView('pipeline')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'pipeline' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><FunnelIcon size={16} /> Kanban</button>
+                <button onClick={() => setActiveView('pipeline')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'pipeline' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><FunnelIcon size={16} /> Kanban Geral</button>
                 <button onClick={() => setActiveView('teams')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'teams' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Users size={16} /> Equipes</button>
             </div>
-
-            {activeView === 'pipeline' && (
-                <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
-                    <select 
-                        value={currentPipelineId || ''} 
-                        onChange={e => setCurrentPipelineId(e.target.value)}
-                        className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                        {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        {pipelines.length === 0 && <option value="">Nenhum funil</option>}
-                    </select>
-                    <button 
-                        onClick={() => {
-                            const p = pipelines.find(x => x.id === currentPipelineId);
-                            setEditingPipeline(p || { name: '', is_default: false });
-                            setEditingStages(currentStages);
-                            setShowFunnelManager(true);
-                        }}
-                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Gerenciar Funis"
-                    >
-                        <Settings2 size={18} />
-                    </button>
-                </div>
-            )}
+            
+            <button 
+                onClick={() => {
+                    setEditingPipeline({ name: '', is_default: false });
+                    setEditingStages([]);
+                    setShowFunnelManager(true);
+                }}
+                className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline"
+            >
+                <Plus size={14}/> Novo Funil
+            </button>
         </div>
         
         <div className="flex items-center gap-4 flex-1 justify-end">
-            <div className="relative max-w-xs w-full hidden md:block">
+            <div className="relative max-w-xs w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input type="text" placeholder="Buscar oportunidade..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-300 rounded-full text-sm outline-none transition-all"/>
             </div>
             <button 
                 onClick={() => {
                     setEditingDealId(null);
-                    setDealFormData({ ...INITIAL_FORM_STATE, pipeline_id: currentPipelineId || undefined });
+                    setDealFormData({ ...INITIAL_FORM_STATE });
                     setShowDealModal(true);
                 }} 
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-all"
@@ -467,67 +383,112 @@ export const CrmBoard: React.FC = () => {
         </div>
       </div>
 
-      {/* PIPELINE BOARD */}
-      <div className="flex-1 overflow-x-auto bg-slate-100/50 p-6 relative custom-scrollbar">
-          {isLoading ? (
+      {/* MULTI-PIPELINE BOARD */}
+      <div className="flex-1 overflow-y-auto bg-slate-100/50 p-6 space-y-12 custom-scrollbar">
+          {isLoading && pipelines.length === 0 ? (
               <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>
           ) : activeView === 'pipeline' ? (
-              <div className="flex gap-4 h-full min-w-max">
-                  {currentStages.map(stage => {
-                      const stageDeals = filteredDeals.filter(d => d.stage === stage.key);
-                      const totalValue = stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0);
-                      
-                      return (
-                        <div 
-                            key={stage.id} 
-                            className="w-[300px] flex flex-col h-full rounded-xl bg-slate-50/50 border border-slate-200 shadow-sm"
-                            onDragOver={e => e.preventDefault()}
-                            onDrop={e => handleDrop(e, stage.key)}
-                        >
-                            <div className="p-3 bg-white rounded-t-xl border-b border-b-slate-100" style={{ borderTop: `4px solid ${stage.color}` }}>
-                                <div className="flex justify-between items-center mb-1">
-                                    <h3 className="font-bold text-slate-700 text-sm">{stage.name}</h3>
-                                    <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 rounded-full">{stageDeals.length}</span>
-                                </div>
-                                <p className="text-[10px] font-bold text-slate-400">{formatCurrency(totalValue)}</p>
+              pipelines.map(pipeline => {
+                  const pipelineStages = allStages.filter(s => s.pipeline_id === pipeline.id);
+                  return (
+                    <div key={pipeline.id} className="space-y-4">
+                        {/* HEADER DO FUNIL */}
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                                    <Target size={20} className="text-indigo-600" />
+                                    {pipeline.name}
+                                </h2>
+                                {pipeline.is_default && <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-2 py-0.5 rounded border border-blue-100 uppercase">Padrão</span>}
                             </div>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-3 custom-scrollbar">
-                                {stageDeals.map(deal => (
-                                    <div 
-                                        key={deal.id} 
-                                        draggable 
-                                        onDragStart={e => { setDraggedDealId(deal.id); e.dataTransfer.setData("text/plain", deal.id); }}
-                                        onClick={() => { setEditingDealId(deal.id); setDealFormData(deal); setShowDealModal(true); }}
-                                        className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative"
-                                    >
-                                        <div className={clsx("absolute left-0 top-3 bottom-3 w-1 rounded-r", deal.status === 'hot' ? 'bg-red-500' : deal.status === 'warm' ? 'bg-amber-400' : 'bg-blue-400')}></div>
-                                        <h4 className="font-bold text-slate-800 text-xs mb-1 line-clamp-2 leading-tight">{deal.title}</h4>
-                                        <p className="text-[10px] text-slate-400 mb-2 truncate">{deal.companyName}</p>
-                                        <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                                            <span className="font-bold text-slate-700 text-[11px]">{formatCurrency(deal.value)}</span>
-                                            <div className="flex">
-                                                <button onClick={(e) => { e.stopPropagation(); moveDeal(deal.id, deal.stage, 'prev'); }} className="p-1 text-slate-300 hover:text-slate-600 md:opacity-0 group-hover:opacity-100"><ChevronLeft size={14}/></button>
-                                                <button onClick={(e) => { e.stopPropagation(); moveDeal(deal.id, deal.stage, 'next'); }} className="p-1 text-slate-300 hover:text-indigo-600 md:opacity-0 group-hover:opacity-100"><ChevronRight size={14}/></button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => {
+                                        setEditingPipeline(pipeline);
+                                        setEditingStages(pipelineStages);
+                                        setShowFunnelManager(true);
+                                    }}
+                                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                    title="Editar Funil"
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+                                <button 
+                                    onClick={async () => {
+                                        if (window.confirm(`Excluir funil "${pipeline.name}"? Isso não apagará os negócios, mas eles ficarão sem funil.`)) {
+                                            await appBackend.deletePipeline(pipeline.id);
+                                            await fetchData();
+                                        }
+                                    }}
+                                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                    title="Excluir Funil"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
                             </div>
                         </div>
-                      );
-                  })}
-                  
-                  {currentStages.length === 0 && !isLoading && (
-                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400 italic">
-                          <FunnelIcon size={48} className="mb-4 opacity-20" />
-                          <p>Nenhuma etapa configurada para este funil.</p>
-                          <button onClick={() => setShowFunnelManager(true)} className="mt-4 text-indigo-600 font-bold hover:underline">Configurar Funil</button>
-                      </div>
-                  )}
-              </div>
+
+                        {/* KANBAN HORIZONTAL DO FUNIL */}
+                        <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+                            {pipelineStages.map(stage => {
+                                const stageDeals = filteredDeals.filter(d => d.stage === stage.key && (d.pipeline_id === pipeline.id || (!d.pipeline_id && pipeline.is_default)));
+                                const totalValue = stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0);
+                                return (
+                                    <div 
+                                        key={stage.id} 
+                                        className="w-[280px] shrink-0 flex flex-col rounded-xl bg-white border border-slate-200 shadow-sm"
+                                        onDragOver={e => e.preventDefault()}
+                                        onDrop={e => handleDrop(e, stage.key, pipeline.id)}
+                                    >
+                                        <div className="p-3 bg-slate-50/50 rounded-t-xl border-b border-b-slate-100" style={{ borderTop: `4px solid ${stage.color}` }}>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <h3 className="font-bold text-slate-700 text-xs">{stage.name}</h3>
+                                                <span className="text-[10px] font-black text-slate-400 bg-white px-1.5 rounded-full border">{stageDeals.length}</span>
+                                            </div>
+                                            <p className="text-[10px] font-bold text-slate-400">{formatCurrency(totalValue)}</p>
+                                        </div>
+                                        <div className="p-2 space-y-2 min-h-[150px]">
+                                            {stageDeals.map(deal => (
+                                                <div 
+                                                    key={deal.id} 
+                                                    draggable 
+                                                    onDragStart={e => { setDraggedDealId(deal.id); e.dataTransfer.setData("text/plain", deal.id); }}
+                                                    onClick={() => { setEditingDealId(deal.id); setDealFormData(deal); setShowDealModal(true); }}
+                                                    className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm hover:border-indigo-200 transition-all cursor-grab active:cursor-grabbing group relative"
+                                                >
+                                                    <div className={clsx("absolute left-0 top-3 bottom-3 w-1 rounded-r", deal.status === 'hot' ? 'bg-red-500' : deal.status === 'warm' ? 'bg-amber-400' : 'bg-blue-400')}></div>
+                                                    <h4 className="font-bold text-slate-800 text-[11px] mb-1 leading-tight">{deal.title}</h4>
+                                                    <div className="flex items-center justify-between mt-3">
+                                                        <span className="font-black text-slate-700 text-[10px]">{formatCurrency(deal.value)}</span>
+                                                        <div className="flex">
+                                                            <button onClick={(e) => { e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.id, 'prev'); }} className="p-0.5 text-slate-300 hover:text-slate-600 opacity-0 group-hover:opacity-100"><ChevronLeft size={14}/></button>
+                                                            <button onClick={(e) => { e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.id, 'next'); }} className="p-0.5 text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100"><ChevronRight size={14}/></button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {pipelineStages.length === 0 && (
+                                <div className="text-center py-10 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400 text-xs w-full">Nenhuma etapa configurada para este funil.</div>
+                            )}
+                        </div>
+                    </div>
+                  );
+              })
           ) : (
               <div className="max-w-6xl mx-auto animate-in fade-in">
-                  {/* ... conteúdo das equipes omitido para brevidade ... */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400">Funcionalidade de Gestão de Equipes em Desenvolvimento.</div>
+              </div>
+          )}
+          
+          {pipelines.length === 0 && !isLoading && (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400 italic">
+                  <FunnelIcon size={48} className="mb-4 opacity-20" />
+                  <p>Nenhum funil de vendas cadastrado.</p>
+                  <button onClick={() => { setShowFunnelManager(true); setEditingPipeline({name: '', is_default: false}); setEditingStages([]); }} className="mt-4 text-indigo-600 font-bold hover:underline">Cadastrar Primeiro Funil</button>
               </div>
           )}
       </div>
@@ -604,21 +565,12 @@ export const CrmBoard: React.FC = () => {
                       </div>
                   </div>
 
-                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
-                      <button onClick={async () => {
-                          if (editingPipeline.id && window.confirm("Excluir este funil permanentemente?")) {
-                              await appBackend.deletePipeline(editingPipeline.id);
-                              await fetchData();
-                              setShowFunnelManager(false);
-                          }
-                      }} className="text-xs font-bold text-red-500 hover:underline">Excluir Funil</button>
-                      <div className="flex gap-3">
-                          <button onClick={() => setShowFunnelManager(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
-                          <button onClick={handleSaveFunnel} disabled={isSavingFunnel} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2">
-                              {isSavingFunnel ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                              Salvar Configurações
-                          </button>
-                      </div>
+                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                      <button onClick={() => setShowFunnelManager(false)} className="px-6 py-2 text-slate-600 font-bold text-sm">Cancelar</button>
+                      <button onClick={handleSaveFunnel} disabled={isSavingFunnel} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2">
+                          {isSavingFunnel ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                          Salvar Funil
+                      </button>
                   </div>
               </div>
           </div>
@@ -646,14 +598,16 @@ export const CrmBoard: React.FC = () => {
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Funil de Vendas</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.pipeline_id || ''} onChange={e => setDealFormData({...dealFormData, pipeline_id: e.target.value})}>
+                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.pipeline_id || ''} onChange={e => setDealFormData({...dealFormData, pipeline_id: e.target.value, stage: ''})}>
+                                      <option value="">Selecione...</option>
                                       {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                   </select>
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Etapa do Funil</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.stage} onChange={e => setDealFormData({...dealFormData, stage: e.target.value})}>
-                                      {currentStages.map(st => <option key={st.key} value={st.key}>{st.name}</option>)}
+                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.stage || ''} onChange={e => setDealFormData({...dealFormData, stage: e.target.value})}>
+                                      <option value="">Selecione...</option>
+                                      {allStages.filter(st => st.pipeline_id === dealFormData.pipeline_id).map(st => <option key={st.key} value={st.key}>{st.name}</option>)}
                                   </select>
                               </div>
                               <div>
@@ -673,7 +627,6 @@ export const CrmBoard: React.FC = () => {
                               </div>
                           </div>
                       </div>
-                      {/* ... restante dos campos do modal ... */}
                   </div>
 
                   <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-200 shrink-0">

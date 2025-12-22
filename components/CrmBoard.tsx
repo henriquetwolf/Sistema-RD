@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend, CompanySetting, Pipeline, PipelineStage } from '../services/appBackend';
+import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 
 // --- Types ---
 interface DealTask {
@@ -137,6 +138,7 @@ export const CrmBoard: React.FC = () => {
 
   const [collaborators, setCollaborators] = useState<CollaboratorSimple[]>([]);
   const [companies, setCompanies] = useState<CompanySetting[]>([]);
+  const [availableClasses, setAvailableClasses] = useState<any[]>([]); // Ref de turmas para o modal
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
@@ -146,6 +148,11 @@ export const CrmBoard: React.FC = () => {
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormData, setDealFormData] = useState<Partial<Deal>>(INITIAL_FORM_STATE);
 
+  // IBGE State (Modal)
+  const [states, setStates] = useState<IBGEUF[]>([]);
+  const [cities, setCities] = useState<IBGECity[]>([]);
+  const [isLoadingCities, setIsLoadingCities] = useState(false);
+
   // Task Form State (Internal to modal)
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskDate, setNewTaskDate] = useState('');
@@ -153,18 +160,20 @@ export const CrmBoard: React.FC = () => {
   
   useEffect(() => {
     fetchData();
+    ibgeService.getStates().then(setStates);
   }, []);
 
   const fetchData = async () => {
       setIsLoading(true);
       try {
-          const [dealsResult, teamsResult, collabResult, companiesResult, pipelinesResult, stagesResult] = await Promise.all([
+          const [dealsResult, teamsResult, collabResult, companiesResult, pipelinesResult, stagesResult, classesResult] = await Promise.all([
               appBackend.client.from('crm_deals').select('*').order('created_at', { ascending: false }),
               appBackend.client.from('crm_teams').select('*').order('name', { ascending: true }),
               appBackend.client.from('crm_collaborators').select('id, full_name, department').order('full_name', { ascending: true }),
               appBackend.getCompanies(),
               appBackend.getPipelines(),
-              appBackend.getAllPipelineStages()
+              appBackend.getAllPipelineStages(),
+              appBackend.client.from('crm_classes').select('id, class_code, mod_1_code, mod_2_code, state, city, course')
           ]);
 
           if (dealsResult.data) {
@@ -187,12 +196,26 @@ export const CrmBoard: React.FC = () => {
           setTeams(teamsResult.data || []);
           if (collabResult.data) setCollaborators(collabResult.data.map((c: any) => ({ id: c.id, fullName: c.full_name, department: c.department })));
           setCompanies(companiesResult || []);
+          setAvailableClasses(classesResult.data || []);
       } catch (e: any) {
           console.error("Erro ao carregar dados do CRM:", e);
       } finally {
           setIsLoading(false);
       }
   };
+
+  // Carrega cidades do Modal quando o estado muda
+  useEffect(() => {
+    if (dealFormData.courseState) {
+        setIsLoadingCities(true);
+        ibgeService.getCities(dealFormData.courseState).then(data => {
+            setCities(data);
+            setIsLoadingCities(false);
+        });
+    } else {
+        setCities([]);
+    }
+  }, [dealFormData.courseState]);
 
   const handleSaveFunnel = async () => {
     if (!editingPipeline.name || editingStages.length < 2) {
@@ -325,6 +348,17 @@ export const CrmBoard: React.FC = () => {
       }));
   };
 
+  // --- LÓGICA DE PREENCHIMENTO AUTOMÁTICO ---
+  const onProductTypeChange = (type: string) => {
+      const company = companies.find(c => c.productTypes.includes(type));
+      setDealFormData(prev => ({
+          ...prev,
+          productType: type as any,
+          billingCompanyName: company ? company.legalName : '',
+          billingCnpj: company ? company.cnpj : ''
+      }));
+  };
+
   const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   const filteredDeals = deals.filter(d => 
@@ -332,6 +366,12 @@ export const CrmBoard: React.FC = () => {
     (d.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (d.dealNumber?.toString().includes(searchTerm))
   );
+
+  // Turmas filtradas para o modal com base na cidade/estado selecionados
+  const filteredClassesForModal = useMemo(() => {
+    if (!dealFormData.courseCity || !dealFormData.courseState) return [];
+    return availableClasses.filter(c => c.city === dealFormData.courseCity && c.state === dealFormData.courseState);
+  }, [availableClasses, dealFormData.courseCity, dealFormData.courseState]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)]">
@@ -464,34 +504,29 @@ export const CrmBoard: React.FC = () => {
                               </div>
                               <div>
                                   <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Tipo de Produto</label>
-                                  <select className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm outline-none" value={dealFormData.productType || ''} onChange={e => setDealFormData({...dealFormData, productType: e.target.value as any})}>
+                                  <select className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm outline-none" value={dealFormData.productType || ''} onChange={e => onProductTypeChange(e.target.value)}>
                                       <option value="">Selecione o tipo...</option>
                                       <option value="Digital">Digital</option>
-                                      <option value="Presencial">Presencial</option>
+                                      <option value="Presencial">Curso Presencial</option>
                                       <option value="Evento">Evento</option>
                                   </select>
                               </div>
                               <div className="lg:col-span-2">
-                                  <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Curso Presencial</label>
-                                  <select className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm outline-none" value={dealFormData.productName || ''} onChange={e => setDealFormData({...dealFormData, productName: e.target.value})}>
-                                      <option value="">Selecione o produto...</option>
-                                      <option value="Formação Completa">Formação Completa</option>
-                                      <option value="Pilates Clássico">Pilates Clássico</option>
-                                      <option value="MIT">MIT</option>
-                                  </select>
+                                  <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Curso / Produto</label>
+                                  <input type="text" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm outline-none" value={dealFormData.productName || ''} onChange={e => setDealFormData({...dealFormData, productName: e.target.value})} placeholder="Nome do curso ou material..." />
                               </div>
 
-                              <div className="lg:col-span-4 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100/50 flex flex-wrap gap-12">
+                              <div className="lg:col-span-4 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100/50 flex flex-wrap gap-12 animate-in fade-in">
                                    <div>
                                        <span className="block text-[10px] font-black text-indigo-400 uppercase mb-1">Empresa de Faturamento (Auto)</span>
-                                       <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
+                                       <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm h-7">
                                            <Building size={16} className="text-indigo-300" />
                                            {dealFormData.billingCompanyName || 'Nenhuma empresa vinculada'}
                                        </div>
                                    </div>
-                                   <div>
+                                   <div className="flex-1">
                                        <span className="block text-[10px] font-black text-indigo-400 uppercase mb-1">CNPJ de Venda (Auto)</span>
-                                       <input type="text" className="bg-white border border-slate-200 rounded px-3 py-1 text-sm outline-none" value={dealFormData.billingCnpj || ''} onChange={e => setDealFormData({...dealFormData, billingCnpj: e.target.value})} placeholder="Selecione um Tipo de Produto..." />
+                                       <input type="text" className="bg-white border border-indigo-200 rounded px-3 py-1 text-sm outline-none w-full font-mono text-indigo-900" value={dealFormData.billingCnpj || ''} onChange={e => setDealFormData({...dealFormData, billingCnpj: e.target.value})} placeholder="Vincule um tipo..." />
                                    </div>
                               </div>
 
@@ -520,6 +555,47 @@ export const CrmBoard: React.FC = () => {
                               </div>
                           </div>
                       </div>
+
+                      {/* SECTION: LOGÍSTICA DO CURSO (APENAS SE PRESENCIAL) */}
+                      {dealFormData.productType === 'Presencial' && (
+                          <div className="animate-in slide-in-from-top-4 duration-300">
+                             <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-3">
+                                <div className="bg-purple-600 rounded-full p-1 text-white"><MapPin size={14}/></div>
+                                <h4 className="text-sm font-bold text-purple-900 uppercase tracking-wide">LOGÍSTICA DO CURSO</h4>
+                             </div>
+                             
+                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Estado (UF)</label>
+                                    <select className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm" value={dealFormData.courseState || ''} onChange={e => setDealFormData({...dealFormData, courseState: e.target.value, courseCity: '', classMod1: '', classMod2: ''})}>
+                                        <option value="">Selecione...</option>
+                                        {states.map(uf => <option key={uf.id} value={uf.sigla}>{uf.sigla} - {uf.nome}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Cidade do Curso</label>
+                                    <select className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm disabled:opacity-50" value={dealFormData.courseCity || ''} onChange={e => setDealFormData({...dealFormData, courseCity: e.target.value, classMod1: '', classMod2: ''})} disabled={!dealFormData.courseState || isLoadingCities}>
+                                        <option value="">{isLoadingCities ? 'Carregando...' : 'Selecione...'}</option>
+                                        {cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Turma Módulo 1</label>
+                                    <select className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm disabled:opacity-50" value={dealFormData.classMod1 || ''} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})} disabled={!dealFormData.courseCity}>
+                                        <option value="">Selecione...</option>
+                                        {Array.from(new Set(filteredClassesForModal.map(c => c.mod_1_code))).filter(Boolean).map(code => <option key={code} value={code}>{code}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Turma Módulo 2</label>
+                                    <select className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm disabled:opacity-50" value={dealFormData.classMod2 || ''} onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})} disabled={!dealFormData.courseCity}>
+                                        <option value="">Selecione...</option>
+                                        {Array.from(new Set(filteredClassesForModal.map(c => c.mod_2_code))).filter(Boolean).map(code => <option key={code} value={code}>{code}</option>)}
+                                    </select>
+                                </div>
+                             </div>
+                          </div>
+                      )}
 
                       {/* SECTION 2: TAREFAS & AGENDAMENTOS */}
                       <div>

@@ -143,7 +143,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V10)
+-- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V11)
 
 -- 1. TABELA DE CONFIGURAÇÕES
 CREATE TABLE IF NOT EXISTS public.app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now());
@@ -185,21 +185,24 @@ CREATE TABLE IF NOT EXISTS public.crm_classes (
     created_at timestamptz DEFAULT now()
 );
 
--- 3. TABELA DE RESPOSTAS DE FORMULÁRIOS E PESQUISAS
--- Garantindo a existência da tabela e da coluna student_id
+-- 3. TABELA DE RESPOSTAS (CORRIGIDA)
 CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     form_id uuid NOT NULL,
+    student_id uuid, -- Criada aqui para evitar erro 42703
     answers jsonb DEFAULT '[]'::jsonb,
     created_at timestamptz DEFAULT now()
 );
 
--- REPARO CRÍTICO: Adiciona a coluna student_id caso ela não exista (Corrige Erro 42703)
+-- Fallback caso a tabela já existisse sem a coluna
 ALTER TABLE public.crm_form_submissions ADD COLUMN IF NOT EXISTS student_id uuid;
 
--- Índices para otimizar busca de pesquisas respondidas
-CREATE INDEX IF NOT EXISTS idx_form_submissions_form_id ON public.crm_form_submissions(form_id);
-CREATE INDEX IF NOT EXISTS idx_form_submissions_student_id ON public.crm_form_submissions(student_id);
+-- Habilitar RLS e criar políticas para submissões
+ALTER TABLE public.crm_form_submissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir inserção de respostas" ON public.crm_form_submissions;
+CREATE POLICY "Permitir inserção de respostas" ON public.crm_form_submissions FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir leitura de respostas" ON public.crm_form_submissions;
+CREATE POLICY "Permitir leitura de respostas" ON public.crm_form_submissions FOR SELECT USING (true);
 
 -- 4. TABELA DE CHAMADA / PRESENÇA
 CREATE TABLE IF NOT EXISTS public.crm_attendance (
@@ -212,39 +215,19 @@ CREATE TABLE IF NOT EXISTS public.crm_attendance (
     UNIQUE(class_id, student_id, date)
 );
 
--- 5. TABELA DE CONTADORES PARA ROUND-ROBIN
-CREATE TABLE IF NOT EXISTS public.crm_form_counters (
-    form_id uuid PRIMARY KEY,
-    last_index int DEFAULT -1,
-    updated_at timestamptz DEFAULT now()
-);
+ALTER TABLE public.crm_attendance ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total presença" ON public.crm_attendance;
+CREATE POLICY "Acesso total presença" ON public.crm_attendance FOR ALL USING (true) WITH CHECK (true);
 
--- 6. TABELA DE CONEXÕES
+-- 5. ÍNDICES DE PERFORMANCE
+CREATE INDEX IF NOT EXISTS idx_form_submissions_form_id ON public.crm_form_submissions(form_id);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_student_id ON public.crm_form_submissions(student_id);
+
+-- 6. DEMAIS TABELAS E COMPLEMENTOS
 CREATE TABLE IF NOT EXISTS public.crm_sync_jobs (id uuid PRIMARY KEY, user_id uuid, name text, sheet_url text, config jsonb, active boolean DEFAULT true, interval_minutes int DEFAULT 5, last_sync timestamptz, status text, last_message text, created_by_name text, created_at timestamptz DEFAULT now());
-
--- 7. TABELA DE LOGS
 CREATE TABLE IF NOT EXISTS public.crm_activity_logs (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, user_name text NOT NULL, action text NOT NULL, module text NOT NULL, details text, record_id text, created_at timestamptz DEFAULT now());
-
--- 8. TABELA DE CERTIFICADOS E EMISSÕES
 CREATE TABLE IF NOT EXISTS public.crm_certificates (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), title text NOT NULL, background_base_64 text, back_background_base_64 text, linked_product_id text, body_text text, layout_config jsonb);
-CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    student_deal_id uuid NOT NULL,
-    certificate_template_id uuid NOT NULL,
-    hash text UNIQUE NOT NULL,
-    issued_at timestamptz DEFAULT now()
-);
-
--- 9. TABELA DE FUNIS DE VENDAS
-CREATE TABLE IF NOT EXISTS public.crm_pipelines (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    name text NOT NULL,
-    stages jsonb DEFAULT '[]'::jsonb,
-    created_at timestamptz DEFAULT now()
-);
-
--- 10. TABELA DE FORMULÁRIOS E PESQUISAS
-CREATE TABLE IF NOT EXISTS public.crm_forms (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, title text NOT NULL, description text, campaign text, is_lead_capture boolean DEFAULT false, questions jsonb DEFAULT '[]'::jsonb, style jsonb DEFAULT '{}'::jsonb, team_id uuid, distribution_mode text DEFAULT 'fixed', fixed_owner_id uuid, submissions_count int DEFAULT 0, target_pipeline text DEFAULT 'Padrão', target_stage text DEFAULT 'new', created_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS public.crm_student_certificates (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, student_deal_id uuid NOT NULL, certificate_template_id uuid NOT NULL, hash text UNIQUE NOT NULL, issued_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_surveys (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, title text NOT NULL, description text, is_lead_capture boolean DEFAULT false, questions jsonb DEFAULT '[]'::jsonb, style jsonb DEFAULT '{}'::jsonb, target_type text DEFAULT 'all', target_product_type text, target_product_name text, only_if_finished boolean DEFAULT true, is_active boolean DEFAULT true, submissions_count int DEFAULT 0, created_at timestamptz DEFAULT now());
 
 -- LIMPAR CACHE DO POSTGREST

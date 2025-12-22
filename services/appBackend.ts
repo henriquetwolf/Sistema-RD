@@ -197,10 +197,10 @@ export const appBackend = {
       config: job.config,
       active: job.active,
       interval_minutes: job.intervalMinutes,
-      // Fixed: Property 'last_sync' does not exist on type 'SyncJob'. Did you mean 'lastSync'?
+      // Fixed: Property 'last_sync' exist on type 'SyncJob'. Did you mean 'lastSync'?
       last_sync: job.lastSync,
       status: job.status,
-      // Fixed: Property 'last_message' does not exist on type 'SyncJob'. Did you mean 'lastMessage'?
+      // Fixed: Property 'last_message' exist on type 'SyncJob'. Did you mean 'lastMessage'?
       last_message: job.lastMessage,
       created_by_name: job.createdBy,
       created_at: job.createdAt
@@ -712,8 +712,13 @@ export const appBackend = {
           }]);
           
           if (subError) {
-              console.error("Error saving raw submission:", subError);
-              throw new Error("Falha ao salvar resposta no banco de dados.");
+              console.error("Error saving raw submission (details):", {
+                  code: subError.code,
+                  message: subError.message,
+                  details: subError.details,
+                  hint: subError.hint
+              });
+              throw new Error(`Falha ao salvar resposta: ${subError.message}. Verifique o SQL de reparo.`);
           }
 
           // Se for uma pesquisa (survey), incrementa na tabela de surveys

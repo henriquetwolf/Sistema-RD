@@ -35,16 +35,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [activeSurvey, setActiveSurvey] = useState<SurveyModel | null>(null);
     const [surveyInitialAnswers, setSurveyInitialAnswers] = useState<Record<string, any>>({});
     
-    // Event Registration Modal
+    // Event Registration Modal (simplificado para o escopo)
     const [selectedEvent, setSelectedEvent] = useState<EventModel | null>(null);
-    const [eventWorkshops, setEventWorkshops] = useState<Workshop[]>([]);
-    const [eventBlocks, setEventBlocks] = useState<EventBlock[]>([]);
-    const [workshopCounts, setWorkshopCounts] = useState<Record<string, number>>({});
-    const [selectedWorkshops, setSelectedWorkshops] = useState<string[]>([]);
     const [isSavingReg, setIsSavingReg] = useState(false);
-
-    // My Agenda View Modal
-    const [showMyAgenda, setShowMyAgenda] = useState<EventModel | null>(null);
 
     useEffect(() => {
         loadStudentData();
@@ -71,7 +64,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         try {
             const mainDeal = student.deals[0];
             if (mainDeal) {
-                // A lógica do backend já filtra as pesquisas respondidas usando o student_id
                 const surveys = await appBackend.getEligibleSurveysForStudent(mainDeal.id);
                 setMySurveys(surveys);
             }
@@ -83,6 +75,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const loadStudentData = async () => {
         setIsLoading(true);
         try {
+            // Pegar todos os códigos de turma das negociações do aluno
             const mod1Codes = student.deals.map(d => d.class_mod_1).filter(Boolean);
             const mod2Codes = student.deals.map(d => d.class_mod_2).filter(Boolean);
             const allCodes = Array.from(new Set([...mod1Codes, ...mod2Codes]));
@@ -163,24 +156,60 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         }
     };
 
+    // --- LOGICA DE PESQUISA INTELIGENTE (CORRIGIDA) ---
     const openSurvey = (survey: SurveyModel) => {
+        // Usar a primeira negociação válida do aluno para extrair dados
         const deal = student.deals[0];
-        const studentClass = classes.find(c => c.mod_1_code === deal.class_mod_1 || c.mod_2_code === deal.class_mod_2);
+        if (!deal) return;
+
+        // Encontrar a turma vinculada à negociação no estado carregado
+        const studentClass = classes.find(c => 
+            (deal.class_mod_1 && c.mod_1_code === deal.class_mod_1) || 
+            (deal.class_mod_2 && c.mod_2_code === deal.class_mod_2)
+        );
         
         const initial: Record<string, any> = {};
         
         survey.questions.forEach(q => {
             if (q.systemMapping) {
                 switch(q.systemMapping) {
-                    case 'student_name': initial[q.id] = student.name; break;
-                    case 'product_name': initial[q.id] = deal.product_name; break;
-                    case 'state': initial[q.id] = studentClass?.state || ''; break;
-                    case 'city': initial[q.id] = studentClass?.city || ''; break;
-                    case 'class_mod1': initial[q.id] = deal.class_mod_1 || ''; break;
-                    case 'class_mod2': initial[q.id] = deal.class_mod_2 || ''; break;
-                    case 'instructor_mod1': initial[q.id] = studentClass?.instructor_mod_1 || ''; break;
-                    case 'instructor_mod2': initial[q.id] = studentClass?.instructor_mod_2 || ''; break;
-                    case 'studio': initial[q.id] = studentClass?.studio_mod_1 || ''; break;
+                    // Nome do Cliente na Negociação (Normalmente company_name no VOLL CRM)
+                    case 'student_name': 
+                        initial[q.id] = deal.company_name || deal.contact_name || student.name; 
+                        break;
+                    
+                    case 'product_name': 
+                        initial[q.id] = deal.product_name || ''; 
+                        break;
+                    
+                    case 'state': 
+                        initial[q.id] = studentClass?.state || deal.course_state || ''; 
+                        break;
+                    
+                    case 'city': 
+                        initial[q.id] = studentClass?.city || deal.course_city || ''; 
+                        break;
+                    
+                    case 'class_mod1': 
+                        initial[q.id] = deal.class_mod_1 || ''; 
+                        break;
+                    
+                    case 'class_mod2': 
+                        initial[q.id] = deal.class_mod_2 || ''; 
+                        break;
+                    
+                    case 'instructor_mod1': 
+                        // instructor_mod_1 é a chave no banco de dados (crm_classes)
+                        initial[q.id] = studentClass?.instructor_mod_1 || ''; 
+                        break;
+                    
+                    case 'instructor_mod2': 
+                        initial[q.id] = studentClass?.instructor_mod_2 || ''; 
+                        break;
+                    
+                    case 'studio': 
+                        initial[q.id] = studentClass?.studio_mod_1 || ''; 
+                        break;
                 }
             }
         });
@@ -191,10 +220,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
     const handleSurveyFinish = () => {
         setActiveSurvey(null);
-        loadSurveys(); // Isso fará a pesquisa sumir da lista pois agora estará no banco como respondida
+        loadSurveys(); 
     };
-
-    const myProducts = student.deals.filter(d => d.product_type === 'Digital');
 
     if (activeSurvey) return (
         <FormViewer 
@@ -300,10 +327,33 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                             )}
                         </div>
                     )}
-                    {/* Demais abas simplificadas para evitar erro de build */}
-                    {activeTab === 'products' && <div className="text-center py-12 text-slate-400">Produtos digitais carregados.</div>}
-                    {activeTab === 'events' && <div className="text-center py-12 text-slate-400">Eventos em breve.</div>}
-                    {activeTab === 'certificates' && <div className="text-center py-12 text-slate-400">Certificados disponíveis para download.</div>}
+                    {activeTab === 'products' && (
+                        <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500">
+                            Acesso aos materiais digitais disponível em sua plataforma de estudos.
+                        </div>
+                    )}
+                    {activeTab === 'events' && (
+                        <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500">
+                            Nenhum evento com inscrições abertas no momento.
+                        </div>
+                    )}
+                    {activeTab === 'certificates' && (
+                        <div className="space-y-4">
+                            {certificates.length === 0 ? (
+                                <div className="text-center py-12 text-slate-400">Nenhum certificado emitido.</div>
+                            ) : (
+                                certificates.map(cert => (
+                                    <div key={cert.id} className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-amber-50 p-2 rounded-lg text-amber-600"><Award size={24}/></div>
+                                            <div><h4 className="font-bold text-slate-800">{cert.crm_certificates?.title}</h4><p className="text-xs text-slate-400">Emitido em {new Date(cert.issued_at).toLocaleDateString()}</p></div>
+                                        </div>
+                                        <a href={`/?certificateHash=${cert.hash}`} target="_blank" rel="noreferrer" className="text-indigo-600 hover:bg-indigo-50 p-2 rounded-lg transition-colors"><ExternalLink size={20}/></a>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
                 </div>
             </main>
         </div>

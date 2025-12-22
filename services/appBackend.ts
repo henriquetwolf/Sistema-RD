@@ -704,21 +704,19 @@ export const appBackend = {
       if (!form) throw new Error("Form not found");
 
       if (isConfigured) {
-          // CRITICAL: Salva a resposta do formulário/pesquisa
+          // CRITICAL: Garante que o student_id seja null se for string vazia para evitar erro de UUID no PostgreSQL
+          const cleanStudentId = (studentId && studentId.trim() !== '') ? studentId : null;
+
+          // Salva a resposta do formulário/pesquisa
           const { error: subError } = await supabase.from('crm_form_submissions').insert([{
               form_id: formId,
               answers: answers,
-              student_id: studentId || null
+              student_id: cleanStudentId
           }]);
           
           if (subError) {
-              console.error("Error saving raw submission (details):", {
-                  code: subError.code,
-                  message: subError.message,
-                  details: subError.details,
-                  hint: subError.hint
-              });
-              throw new Error(`Falha ao salvar resposta: ${subError.message}. Verifique o SQL de reparo.`);
+              console.error("Error saving submission:", subError);
+              throw new Error(`Falha no banco de dados (Código ${subError.code}): ${subError.message}. Execute o SQL de reparo V12.`);
           }
 
           // Se for uma pesquisa (survey), incrementa na tabela de surveys
@@ -1071,7 +1069,7 @@ export const appBackend = {
 
   deleteInventoryRecord: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_inventory').delete().eq('id', id);
+    const { error = null } = await supabase.from('crm_inventory').delete().eq('id', id);
     if (error) throw error;
   },
 };

@@ -143,7 +143,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V8)
+-- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V9)
 
 -- 1. TABELA DE CONFIGURAÇÕES
 CREATE TABLE IF NOT EXISTS public.app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now());
@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS public.crm_classes (
     created_at timestamptz DEFAULT now()
 );
 
--- 3. TABELA DE RESPOSTAS DE FORMULÁRIOS E PESQUISAS (FALTANTE)
+-- 3. TABELA DE RESPOSTAS DE FORMULÁRIOS E PESQUISAS
 CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     form_id uuid NOT NULL,
@@ -194,7 +194,11 @@ CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
     created_at timestamptz DEFAULT now()
 );
 
--- 4. TABELA DE CHAMADA / PRESENÇA (FALTANTE)
+-- Índices para otimizar busca de pesquisas respondidas
+CREATE INDEX IF NOT EXISTS idx_form_submissions_form_id ON public.crm_form_submissions(form_id);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_student_id ON public.crm_form_submissions(student_id);
+
+-- 4. TABELA DE CHAMADA / PRESENÇA
 CREATE TABLE IF NOT EXISTS public.crm_attendance (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     class_id uuid NOT NULL,

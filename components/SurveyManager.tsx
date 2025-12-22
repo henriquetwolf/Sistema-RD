@@ -8,7 +8,7 @@ import {
   Type, AlignLeft, Mail, Phone, Calendar, Hash, Target, Share2, 
   Monitor, Palette, X, Image as ImageIcon, Users, User, ArrowRightLeft, Tag, Loader2,
   Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2, Layout, Sparkles,
-  Filter, CheckCircle2, AlertTriangle, Briefcase, ShoppingBag, PieChart, Sparkle, Info
+  Filter, CheckCircle2, AlertTriangle, Briefcase, ShoppingBag, PieChart, Sparkle, Info, RefreshCw
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -108,7 +108,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
       setLoadingSubmissions(true);
       try {
           const data = await appBackend.getFormSubmissions(survey.id);
-          setSubmissions(data);
+          setSubmissions(data || []);
       } catch (e) {
           alert("Erro ao carregar respostas.");
       } finally {
@@ -188,6 +188,22 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
       setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const exportToExcel = () => {
+      if (!currentSurvey || submissions.length === 0) return;
+      const dataRows = submissions.map(sub => {
+          const row: any = { "Data Envio": new Date(sub.created_at).toLocaleString('pt-BR') };
+          currentSurvey.questions.forEach(q => {
+              const answer = (sub.answers as FormAnswer[]).find(a => a.questionId === q.id);
+              row[q.title] = answer?.value || "";
+          });
+          return row;
+      });
+      const worksheet = XLSX.utils.json_to_sheet(dataRows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Respostas");
+      XLSX.writeFile(workbook, `pesquisa_${currentSurvey.title.replace(/\s/g, '_').toLowerCase()}.xlsx`);
+  };
+
   if (view === 'preview') return <FormViewer form={currentSurvey} onBack={() => setView('editor')} />;
 
   if (view === 'responses') return (
@@ -197,6 +213,10 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                   <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
                   <div><h2 className="text-lg font-bold text-slate-800">{currentSurvey.title}</h2><p className="text-xs text-slate-400">Visualizando {submissions.length} respostas</p></div>
               </div>
+              <div className="flex items-center gap-2">
+                  <button onClick={() => handleViewResponses(currentSurvey)} className="p-2 text-slate-400 hover:text-teal-600 transition-colors" title="Atualizar"><RefreshCw size={18} className={clsx(loadingSubmissions && "animate-spin")} /></button>
+                  <button onClick={exportToExcel} disabled={submissions.length === 0} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"><Download size={18} /> Exportar Excel</button>
+              </div>
           </div>
           <div className="flex-1 overflow-auto bg-slate-50">
               {loadingSubmissions ? (
@@ -204,24 +224,34 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
               ) : submissions.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-slate-400 p-12"><Inbox size={64} className="opacity-10 mb-4" /><p className="font-bold">Ainda não há respostas</p></div>
               ) : (
-                  <table className="w-full text-left text-sm border-collapse bg-white">
-                      <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-black sticky top-0 z-10">
-                          <tr>
-                              <th className="px-6 py-3 border-b border-r w-12 text-center">#</th>
-                              <th className="px-6 py-3 border-b border-r min-w-[180px]">Data Envio</th>
-                              {currentSurvey.questions.map(q => <th key={q.id} className="px-6 py-3 border-b border-r min-w-[200px]">{q.title}</th>)}
-                          </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                          {submissions.map((sub, idx) => (
-                              <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
-                                  <td className="px-6 py-4 text-center text-slate-400 border-r">{submissions.length - idx}</td>
-                                  <td className="px-6 py-4 text-slate-500 border-r">{new Date(sub.created_at).toLocaleString('pt-BR')}</td>
-                                  {(sub.answers as FormAnswer[]).map(ans => <td key={ans.questionId} className="px-6 py-4 border-r max-w-xs truncate">{ans.value}</td>)}
+                  <div className="w-full min-w-max">
+                      <table className="w-full text-left text-sm border-collapse bg-white">
+                          <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-black sticky top-0 z-10">
+                              <tr>
+                                  <th className="px-6 py-3 border-b border-r w-12 text-center">#</th>
+                                  <th className="px-6 py-3 border-b border-r min-w-[180px]">Data Envio</th>
+                                  {currentSurvey.questions.map(q => <th key={q.id} className="px-6 py-3 border-b border-r min-w-[200px]">{q.title}</th>)}
                               </tr>
-                          ))}
-                      </tbody>
-                  </table>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                              {submissions.map((sub, idx) => (
+                                  <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
+                                      <td className="px-6 py-4 text-center text-slate-400 border-r">{submissions.length - idx}</td>
+                                      <td className="px-6 py-4 text-slate-500 border-r">{new Date(sub.created_at).toLocaleString('pt-BR')}</td>
+                                      {/* CORREÇÃO: Busca dinâmica da resposta pelo ID da pergunta para garantir alinhamento */}
+                                      {currentSurvey.questions.map(q => {
+                                          const ans = (sub.answers as FormAnswer[] || []).find(a => a.questionId === q.id);
+                                          return (
+                                              <td key={q.id} className="px-6 py-4 border-r max-w-xs truncate" title={ans?.value || ''}>
+                                                  {ans?.value || <span className="text-slate-200 italic">--</span>}
+                                              </td>
+                                          );
+                                      })}
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                  </div>
               )}
           </div>
       </div>

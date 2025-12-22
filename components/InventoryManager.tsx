@@ -4,7 +4,8 @@ import {
   Package, Plus, Search, MoreVertical, Edit2, Trash2, 
   ArrowLeft, Save, X, Loader2, Calendar, FileText, 
   Truck, AlertCircle, RefreshCw, LayoutList, Building, ArrowUpCircle, ArrowDownCircle, Paperclip,
-  CheckCircle2, Info, TrendingUp, Inbox, Clock, MapPin, AlertTriangle, BarChart3, List, History
+  CheckCircle2, Info, TrendingUp, Inbox, Clock, MapPin, AlertTriangle, BarChart3, List, History,
+  TrendingDown, CheckSquare, MessageSquare
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';

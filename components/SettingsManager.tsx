@@ -155,8 +155,6 @@ CREATE TABLE IF NOT EXISTS public.crm_activity_logs (id uuid DEFAULT gen_random_
 
 -- 4. TABELA DE CERTIFICADOS
 CREATE TABLE IF NOT EXISTS public.crm_certificates (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), title text NOT NULL, background_base_64 text, back_background_base_64 text, linked_product_id text, body_text text, layout_config jsonb);
-ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS background_base_64 text;
-ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS back_background_base_64 text;
 
 -- 5. TABELA DE COLABORADORES (VERSÃO COMPLETA)
 CREATE TABLE IF NOT EXISTS public.crm_collaborators (
@@ -188,36 +186,47 @@ CREATE TABLE IF NOT EXISTS public.crm_franchises (
     created_at timestamptz DEFAULT now()
 );
 
--- 7. TABELAS DE APOIO
+-- 7. TABELA DE ESTOQUE (NOVO)
+CREATE TABLE IF NOT EXISTS public.crm_inventory (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    type text CHECK (type IN ('entry', 'exit')),
+    item_apostila_nova int DEFAULT 0,
+    item_apostila_classico int DEFAULT 0,
+    item_sacochila int DEFAULT 0,
+    item_lapis int DEFAULT 0,
+    registration_date date DEFAULT current_date,
+    studio_id uuid REFERENCES public.crm_partner_studios(id) ON DELETE SET NULL,
+    tracking_code text,
+    observations text,
+    conference_date date,
+    attachments text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- 8. TABELA DE PRESENÇAS (NOVO)
+CREATE TABLE IF NOT EXISTS public.crm_attendance (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    class_id uuid REFERENCES public.crm_classes(id) ON DELETE CASCADE,
+    student_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
+    date date NOT NULL,
+    present boolean DEFAULT false,
+    created_at timestamptz DEFAULT now(),
+    UNIQUE(class_id, student_id, date)
+);
+
+-- 9. TABELAS DE APOIO
 CREATE TABLE IF NOT EXISTS public.crm_roles (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, permissions jsonb DEFAULT '{}'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, honorarium numeric DEFAULT 0, observations text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_companies (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, legal_name text, cnpj text, product_types jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.app_banners (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, title text, image_url text, link_url text, target_audience text, active boolean DEFAULT true, created_at timestamptz DEFAULT now());
 
--- 8. TABELA DE SUBMISSÕES DE FORMULÁRIOS
-CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    form_id uuid REFERENCES public.crm_forms(id) ON DELETE CASCADE,
-    answers jsonb NOT NULL DEFAULT '[]'::jsonb,
-    created_at timestamptz DEFAULT now()
-);
-
--- 9. HABILITAR SEGURANÇA BÁSICA (RLS) E POLÍTICAS
-ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Acesso total" ON public.crm_certificates;
-CREATE POLICY "Acesso total" ON public.crm_certificates FOR ALL USING (true) WITH CHECK (true);
-
-ALTER TABLE public.crm_collaborators ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Acesso total" ON public.crm_collaborators;
-CREATE POLICY "Acesso total" ON public.crm_collaborators FOR ALL USING (true) WITH CHECK (true);
-
-ALTER TABLE public.crm_franchises ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Acesso total" ON public.crm_franchises;
-CREATE POLICY "Acesso total" ON public.crm_franchises FOR ALL USING (true) WITH CHECK (true);
-
-ALTER TABLE public.crm_form_submissions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Acesso total" ON public.crm_form_submissions;
-CREATE POLICY "Acesso total" ON public.crm_form_submissions FOR ALL USING (true) WITH CHECK (true);
+-- 10. HABILITAR RLS E POLÍTICAS
+ALTER TABLE public.crm_inventory ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crm_attendance ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total inventory" ON public.crm_inventory;
+CREATE POLICY "Acesso total inventory" ON public.crm_inventory FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Acesso total attendance" ON public.crm_attendance;
+CREATE POLICY "Acesso total attendance" ON public.crm_attendance FOR ALL USING (true) WITH CHECK (true);
 
 NOTIFY pgrst, 'reload config';
   `.trim();

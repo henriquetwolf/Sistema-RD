@@ -7,8 +7,8 @@ import {
   Briefcase, DollarSign, Award, GraduationCap, Calendar, 
   Building, CreditCard, Truck, Info, CheckCircle2, AlertCircle, Smartphone, Map
 } from 'lucide-react';
-import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
+import clsx from 'clsx';
 
 export interface Teacher {
     id: string; fullName: string; email: string; phone: string; photoUrl: string;
@@ -49,8 +49,58 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
       if (error) throw error;
       
       setTeachers((data || []).map((d: any) => ({
-        id: d.id, fullName: d.full_name, email: d.email, phone: d.phone, photoUrl: d.photo_url,
-        rg: d.rg, cpf: d.cpf, birthDate: d.birth_date, maritalStatus: d.marital_status, motherName: d.mother_name, address: d.address, district: d.district, city: d.city, state: d.state, cep: d.cep, emergency_contact_name: d.emergency_contact_name, emergency_contact_phone: d.emergency_contact_phone, profession: d.profession, council_number: d.council_number, is_council_active: d.is_council_active, cnpj: d.cnpj, company_name: d.company_name, has_cnpj_active: d.has_cnpj_active, academic_formation: d.academic_formation, other_formation: d.other_formation, course_type: d.course_type, teacher_level: d.teacher_level, levelHonorarium: Number(d.level_honorarium || 0), isActive: d.is_active, bank: d.bank, agency: d.agency, account_number: d.account_number, account_digit: d.account_digit, has_pj_account: d.has_pj_account, pix_key_pj: d.pix_key_pj, pix_key_pf: d.pix_key_pf, region_availability: d.region_availability, week_availability: d.week_availability, shirt_size: d.shirt_size, has_notebook: d.has_notebook, has_vehicle: d.has_vehicle, has_studio: d.has_studio, studio_address: d.studio_address, additional_1: d.additional_1, value_additional_1: d.value_additional_1, date_additional_1: d.date_additional_1, additional_2: d.additional_2, value_additional_2: d.value_additional_2, date_additional_2: d.date_additional_2, additional_3: d.additional_3, value_additional_3: d.value_additional_3, date_additional_3: d.date_additional_3
+        id: d.id, 
+        fullName: d.full_name || '', 
+        email: d.email || '', 
+        phone: d.phone || '', 
+        photoUrl: d.photo_url || '',
+        rg: d.rg || '', 
+        cpf: d.cpf || '', 
+        birthDate: d.birth_date || '', 
+        maritalStatus: d.marital_status || '', 
+        motherName: d.mother_name || '', 
+        address: d.address || '', 
+        district: d.district || '', 
+        city: d.city || '', 
+        state: d.state || '', 
+        cep: d.cep || '', 
+        emergencyContactName: d.emergency_contact_name || '', 
+        emergencyContactPhone: d.emergency_contact_phone || '', 
+        profession: d.profession || '', 
+        councilNumber: d.council_number || '', 
+        isCouncilActive: !!d.is_council_active, 
+        cnpj: d.cnpj || '', 
+        companyName: d.company_name || '', 
+        hasCnpjActive: !!d.has_cnpj_active, 
+        academicFormation: d.academic_formation || '', 
+        otherFormation: d.other_formation || '', 
+        courseType: d.course_type || '', 
+        teacherLevel: d.teacher_level || '', 
+        levelHonorarium: Number(d.level_honorarium || 0), 
+        isActive: !!d.is_active, 
+        bank: d.bank || '', 
+        agency: d.agency || '', 
+        accountNumber: d.account_number || '', 
+        accountDigit: d.account_digit || '', 
+        hasPjAccount: !!d.has_pj_account, 
+        pixKeyPj: d.pix_key_pj || '', 
+        pixKeyPf: d.pix_key_pf || '', 
+        regionAvailability: d.region_availability || '', 
+        weekAvailability: d.week_availability || '', 
+        shirtSize: d.shirt_size || '', 
+        hasNotebook: !!d.has_notebook, 
+        hasVehicle: !!d.has_vehicle, 
+        hasStudio: !!d.has_studio, 
+        studioAddress: d.studio_address || '', 
+        additional1: d.additional_1 || '', 
+        valueAdditional1: d.value_additional_1 || '', 
+        dateAdditional1: d.date_additional_1 || '', 
+        additional2: d.additional_2 || '', 
+        valueAdditional2: d.value_additional_2 || '', 
+        dateAdditional2: d.date_additional_2 || '', 
+        additional3: d.additional_3 || '', 
+        valueAdditional3: d.value_additional_3 || '', 
+        dateAdditional3: d.date_additional_3 || ''
       })));
     } catch (e) {
       console.error(e);
@@ -111,8 +161,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
   };
 
   const filtered = teachers.filter(t => 
-    t.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.email.toLowerCase().includes(searchTerm.toLowerCase())
+    (t.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (t.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -142,7 +192,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
             <div key={teacher.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-5 flex flex-col group relative">
                 <div className="flex justify-between items-start mb-4">
                     <div className="w-14 h-14 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xl overflow-hidden border-2 border-white shadow-sm">
-                        {teacher.photoUrl ? <img src={teacher.photoUrl} alt="" className="w-full h-full object-cover" /> : teacher.fullName.charAt(0)}
+                        {teacher.photoUrl ? <img src={teacher.photoUrl} alt="" className="w-full h-full object-cover" /> : (teacher.fullName || '?').charAt(0)}
                     </div>
                     <div className="flex gap-1">
                         <button onClick={() => { setFormData(teacher); setShowModal(true); }} className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"><Edit2 size={16} /></button>

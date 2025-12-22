@@ -164,38 +164,38 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           
           const mapped = (data || []).map((d: any) => ({
             id: d.id,
-            status: d.status,
-            state: d.state,
-            city: d.city,
-            classCode: d.class_code,
-            extraClass: d.extra_class,
-            course: d.course,
-            createdAt: d.created_at,
+            status: d.status || 'Confirmado',
+            state: d.state || '',
+            city: d.city || '',
+            classCode: d.class_code || '',
+            extraClass: d.extra_class || '',
+            course: d.course || '',
+            createdAt: d.created_at || '',
             dateMod1: d.date_mod_1 || '',
             mod1Code: d.mod_1_code || '',
-            material: d.material,
-            studioMod1: d.studio_mod_1,
-            instructorMod1: d.instructor_mod_1,
-            ticketMod1: d.ticket_mod_1,
-            infrastructure: d.infrastructure,
-            coffeeMod1: d.coffee_mod_1,
-            hotelMod1: d.hotel_mod_1,
-            hotelLocMod1: d.hotel_loc_mod_1,
-            costHelp1: d.cost_help_1,
+            material: d.material || '',
+            studioMod1: d.studio_mod_1 || '',
+            instructorMod1: d.instructor_mod_1 || '', // Mapping Corrected
+            ticketMod1: d.ticket_mod_1 || '',
+            infrastructure: d.infrastructure || '',
+            coffeeMod1: d.coffee_mod_1 || '',
+            hotelMod1: d.hotel_mod_1 || '',
+            hotelLocMod1: d.hotel_loc_mod_1 || '',
+            costHelp1: d.cost_help_1 || '',
             dateMod2: d.date_mod_2 || '',
             mod2Code: d.mod_2_code || '',
-            instructorMod2: d.instructor_mod_2,
-            ticketMod2: d.ticket_mod_2,
-            coffeeMod2: d.coffee_mod_2,
-            hotelMod2: d.hotel_mod_2,
-            hotelLocMod2: d.hotel_loc_mod_2,
-            costHelp2: d.cost_help_2,
+            instructorMod2: d.instructor_mod_2 || '', // Mapping Corrected
+            ticketMod2: d.ticket_mod_2 || '',
+            coffeeMod2: d.coffee_mod_2 || '',
+            hotelMod2: d.hotel_mod_2 || '',
+            hotelLocMod2: d.hotel_loc_mod_2 || '',
+            costHelp2: d.cost_help_2 || '',
             studioRent: Number(d.studio_rent || 0),
-            contaAzulRD: d.conta_azul_rd,
+            contaAzulRD: d.conta_azul_rd || '',
             isReady: !!d.is_ready,
             onSite: !!d.on_site,
             onCRM: !!d.on_crm,
-            observations: d.observations,
+            observations: d.observations || '',
             attachments: [] 
           }));
           setClasses(mapped);
@@ -323,21 +323,21 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
         mod_1_code: formData.mod1Code,
         material: formData.material,
         studio_mod_1: formData.studioMod1,
-        instructor_mod_1: formData.instructor_mod_1,
-        ticket_mod_1: formData.ticket_mod_1,
+        instructor_mod_1: formData.instructorMod1,
+        ticket_mod_1: formData.ticketMod1,
         infrastructure: formData.infrastructure,
-        coffee_mod_1: formData.coffee_mod_1,
-        hotel_mod_1: formData.hotel_mod_1,
-        hotel_loc_mod_1: formData.hotel_loc_mod_1,
-        cost_help_1: formData.cost_help_1,
+        coffee_mod_1: formData.coffeeMod1,
+        hotel_mod_1: formData.hotelMod1,
+        hotel_loc_mod_1: formData.hotelLocMod1,
+        cost_help_1: formData.costHelp1,
         date_mod_2: formData.dateMod2 || null,
         mod_2_code: formData.mod2Code,
-        instructor_mod_2: formData.instructor_mod_2,
-        ticket_mod_2: formData.ticket_mod_2,
-        coffee_mod_2: formData.coffee_mod_2,
-        hotel_mod_2: formData.hotel_mod_2,
-        hotel_loc_mod_2: formData.hotel_loc_mod_2,
-        cost_help_2: formData.cost_help_2,
+        instructor_mod_2: formData.instructorMod2,
+        ticket_mod_2: formData.ticketMod2,
+        coffee_mod_2: formData.coffeeMod2,
+        hotel_mod_2: formData.hotelMod2,
+        hotel_loc_mod_2: formData.hotelLocMod2,
+        cost_help_2: formData.costHelp2,
         studio_rent: formData.studioRent,
         conta_azul_rd: formData.contaAzulRD,
         is_ready: formData.isReady,
@@ -410,7 +410,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             </div>
         </div>
         <div className="flex items-center gap-3">
-            <div className="bg-slate-100 p-1 rounded-lg flex items-center">
+            <div className="bg-slate-100 p-1 rounded-lg flex items-center mr-2">
                 <button 
                     onClick={() => setViewMode('list')}
                     className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
@@ -693,11 +693,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Coffe Módulo 2</label>
-                                <div className="relative"><Coffee size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.coffeeMod2} onChange={e => handleInputChange('coffeeMod2', e.target.value)} /></div>
+                                <div className="relative"><Coffee size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.coffeeMod2} onChange={e => handleInputChange('coffeeMod2', e.target.value)} /></div>
                             </div>
                              <div className="md:col-span-2">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Hotel Módulo 2</label>
-                                <div className="relative"><Bed size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.hotelMod2} onChange={e => handleInputChange('hotelMod2', e.target.value)} /></div>
+                                <div className="relative"><Bed size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Nome do Hotel" value={formData.hotelMod2} onChange={e => handleInputChange('hotelMod2', e.target.value)} /></div>
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">LOCALIZAÇÃO HOTEL MÓDULO 2</label>

@@ -143,21 +143,58 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V6)
+-- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V7)
 
 -- 1. TABELA DE CONFIGURAÇÕES
 CREATE TABLE IF NOT EXISTS public.app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now());
 
--- 2. TABELA DE CONEXÕES
+-- 2. TABELA DE TURMAS (CRM CLASSES) - CORRIGIDA
+CREATE TABLE IF NOT EXISTS public.crm_classes (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    status text,
+    state text,
+    city text,
+    class_code text,
+    extra_class text,
+    course text,
+    date_mod_1 date,
+    mod_1_code text,
+    material text,
+    studio_mod_1 text,
+    instructor_mod_1 text,
+    ticket_mod_1 text,
+    infrastructure text,
+    coffee_mod_1 text,
+    hotel_mod_1 text,
+    hotel_loc_mod_1 text,
+    cost_help_1 text,
+    date_mod_2 date,
+    mod_2_code text,
+    instructor_mod_2 text,
+    ticket_mod_2 text,
+    coffee_mod_2 text,
+    hotel_mod_2 text,
+    hotel_loc_mod_2 text,
+    cost_help_2 text,
+    studio_rent numeric DEFAULT 0,
+    conta_azul_rd text,
+    is_ready boolean DEFAULT false,
+    on_site boolean DEFAULT false,
+    on_crm boolean DEFAULT false,
+    observations text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- 3. TABELA DE CONEXÕES
 CREATE TABLE IF NOT EXISTS public.crm_sync_jobs (id uuid PRIMARY KEY, user_id uuid, name text, sheet_url text, config jsonb, active boolean DEFAULT true, interval_minutes int DEFAULT 5, last_sync timestamptz, status text, last_message text, created_by_name text, created_at timestamptz DEFAULT now());
 
--- 3. TABELA DE LOGS
+-- 4. TABELA DE LOGS
 CREATE TABLE IF NOT EXISTS public.crm_activity_logs (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, user_name text NOT NULL, action text NOT NULL, module text NOT NULL, details text, record_id text, created_at timestamptz DEFAULT now());
 
--- 4. TABELA DE CERTIFICADOS
+-- 5. TABELA DE CERTIFICADOS
 CREATE TABLE IF NOT EXISTS public.crm_certificates (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), title text NOT NULL, background_base_64 text, back_background_base_64 text, linked_product_id text, body_text text, layout_config jsonb);
 
--- 5. TABELA DE FUNIS DE VENDAS
+-- 6. TABELA DE FUNIS DE VENDAS
 CREATE TABLE IF NOT EXISTS public.crm_pipelines (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text NOT NULL,
@@ -165,73 +202,15 @@ CREATE TABLE IF NOT EXISTS public.crm_pipelines (
     created_at timestamptz DEFAULT now()
 );
 
--- 6. TABELA DE FORMULÁRIOS
-CREATE TABLE IF NOT EXISTS public.crm_forms (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    title text NOT NULL,
-    description text,
-    campaign text,
-    is_lead_capture boolean DEFAULT false,
-    questions jsonb DEFAULT '[]'::jsonb,
-    style jsonb DEFAULT '{}'::jsonb,
-    team_id uuid,
-    distribution_mode text DEFAULT 'fixed',
-    fixed_owner_id uuid,
-    submissions_count int DEFAULT 0,
-    target_pipeline text DEFAULT 'Padrão',
-    target_stage text DEFAULT 'new',
-    created_at timestamptz DEFAULT now()
-);
+-- 7. TABELA DE FORMULÁRIOS E PESQUISAS
+CREATE TABLE IF NOT EXISTS public.crm_forms (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, title text NOT NULL, description text, campaign text, is_lead_capture boolean DEFAULT false, questions jsonb DEFAULT '[]'::jsonb, style jsonb DEFAULT '{}'::jsonb, team_id uuid, distribution_mode text DEFAULT 'fixed', fixed_owner_id uuid, submissions_count int DEFAULT 0, target_pipeline text DEFAULT 'Padrão', target_stage text DEFAULT 'new', created_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS public.crm_surveys (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, title text NOT NULL, description text, is_lead_capture boolean DEFAULT false, questions jsonb DEFAULT '[]'::jsonb, style jsonb DEFAULT '{}'::jsonb, target_type text DEFAULT 'all', target_product_type text, target_product_name text, only_if_finished boolean DEFAULT true, is_active boolean DEFAULT true, submissions_count int DEFAULT 0, created_at timestamptz DEFAULT now());
 
--- 7. TABELA DE PESQUISAS
-CREATE TABLE IF NOT EXISTS public.crm_surveys (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    title text NOT NULL,
-    description text,
-    is_lead_capture boolean DEFAULT false,
-    questions jsonb DEFAULT '[]'::jsonb,
-    style jsonb DEFAULT '{}'::jsonb,
-    target_type text DEFAULT 'all',
-    target_product_type text,
-    target_product_name text,
-    only_if_finished boolean DEFAULT true,
-    is_active boolean DEFAULT true,
-    submissions_count int DEFAULT 0,
-    created_at timestamptz DEFAULT now()
-);
+-- 8. TABELA DE COLABORADORES E INSTRUTORES
+CREATE TABLE IF NOT EXISTS public.crm_collaborators (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, full_name text, social_name text, birth_date date, email text UNIQUE, role_id uuid, status text DEFAULT 'active', created_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS public.crm_teachers (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, full_name text, email text UNIQUE, phone text, photo_url text, is_active boolean DEFAULT true, level_honorarium numeric DEFAULT 0, created_at timestamptz DEFAULT now());
 
--- 8. TABELA DE SUBMISSÕES (ATUALIZADA)
-CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    form_id uuid,
-    student_id uuid,
-    answers jsonb DEFAULT '[]'::jsonb,
-    created_at timestamptz DEFAULT now()
-);
-
--- GARANTIR COLUNA STUDENT_ID
-ALTER TABLE public.crm_form_submissions ADD COLUMN IF NOT EXISTS student_id uuid;
-
--- 9. TABELA DE COLABORADORES
-CREATE TABLE IF NOT EXISTS public.crm_collaborators (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    full_name text, social_name text, birth_date date, marital_status text, spouse_name text, father_name text, mother_name text,
-    gender_identity text, racial_identity text, education_level text, photo_url text, email text UNIQUE, phone text, cellphone text,
-    corporate_phone text, operator text, address text, cep text, complement text, birth_state text, birth_city text, state text, current_city text,
-    emergency_name text, emergency_phone text, admission_date date, previous_admission_date date, role text, role_id uuid, password text,
-    headquarters text, department text, salary text, hiring_mode text, hiring_company text, work_hours text, break_time text, work_days text,
-    presential_days text, superior_id text, experience_period text, has_other_job text, status text DEFAULT 'active', contract_type text,
-    cpf text, rg text, rg_issuer text, rg_issue_date date, rg_state text, ctps_number text, ctps_series text, ctps_state text, ctps_issue_date date,
-    pis_number text, reservist_number text, docs_folder_link text, legal_auth boolean DEFAULT false, bank_account_info text,
-    has_insalubrity text, insalubrity_percent text, has_danger_pay text, transport_voucher_info text, bus_line_home_work text, bus_qty_home_work text,
-    bus_line_work_home text, bus_qty_work_home text, ticket_value text, fuel_voucher_value text, has_meal_voucher text, has_food_voucher text,
-    has_home_office_aid text, has_health_plan text, has_dental_plan text, bonus_info text, bonus_value text, commission_info text,
-    commission_percent text, has_dependents text, dependent_name text, dependent_dob date, dependent_kinship text, dependent_cpf text,
-    resignation_date date, demission_reason text, demission_docs text, vacation_periods text, observations text,
-    created_at timestamptz DEFAULT now()
-);
-
--- 10. TABELAS DE APOIO
+-- 9. TABELAS DE APOIO
 CREATE TABLE IF NOT EXISTS public.crm_roles (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, permissions jsonb DEFAULT '{}'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, honorarium numeric DEFAULT 0, observations text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_companies (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, legal_name text, cnpj text, product_types jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now());
@@ -268,7 +247,6 @@ NOTIFY pgrst, 'reload config';
       </div>
       
       <div className="max-w-5xl space-y-8">
-
         {activeTab === 'visual' && (
             <div className="space-y-6">
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 space-y-6">
@@ -310,8 +288,6 @@ NOTIFY pgrst, 'reload config';
                 </div>
             </div>
         )}
-
-        {/* ... (Rest of SettingsManager tabs) */}
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">

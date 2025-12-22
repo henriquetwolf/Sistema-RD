@@ -707,6 +707,8 @@ export const appBackend = {
           // CRITICAL: Garante que o student_id seja null se for string vazia para evitar erro de UUID no PostgreSQL
           const cleanStudentId = (studentId && studentId.trim() !== '') ? studentId : null;
 
+          console.log("Submitting form with data:", { form_id: formId, student_id: cleanStudentId });
+
           // Salva a resposta do formulário/pesquisa
           const { error: subError } = await supabase.from('crm_form_submissions').insert([{
               form_id: formId,
@@ -715,12 +717,17 @@ export const appBackend = {
           }]);
           
           if (subError) {
-              console.error("Error saving submission:", subError);
-              throw new Error(`Falha no banco de dados (Código ${subError.code}): ${subError.message}. Execute o SQL de reparo V12.`);
+              console.error("Critical Error saving submission:", {
+                  code: subError.code,
+                  message: subError.message,
+                  details: subError.details,
+                  hint: subError.hint
+              });
+              throw new Error(`Erro de Banco de Dados (${subError.code}): ${subError.message}. Execute o SQL de reparo V13 nas configurações.`);
           }
 
           // Se for uma pesquisa (survey), incrementa na tabela de surveys
-          const { error: countSurveyError } = await supabase.from('crm_surveys').update({ 
+          await supabase.from('crm_surveys').update({ 
               submissions_count: (form.submissionsCount || 0) + 1 
           }).eq('id', formId);
           

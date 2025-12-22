@@ -152,14 +152,14 @@ export const appBackend = {
   },
 
   getPipelineStages: async (pipelineId: string): Promise<PipelineStage[]> => {
-      if (!isConfigured) return [];
+      if (!isConfigured || !pipelineId) return [];
       const { data, error } = await supabase.from('crm_pipeline_stages').select('*').eq('pipeline_id', pipelineId).order('sort_order', { ascending: true });
       if (error) throw error;
       return data || [];
   },
 
-  savePipeline: async (pipeline: Partial<Pipeline>, stages: Partial<PipelineStage>[]): Promise<void> => {
-      if (!isConfigured) return;
+  savePipeline: async (pipeline: Partial<Pipeline>, stages: Partial<PipelineStage>[]): Promise<Pipeline> => {
+      if (!isConfigured) throw new Error("Backend not configured");
       
       // 1. Salvar Pipeline
       const pipelinePayload: any = {
@@ -189,6 +189,7 @@ export const appBackend = {
           return stagePayload;
       });
 
+      // Se for edição, remove estágios que não estão mais na lista
       if (pipeline.id) {
           const presentIds = formattedStages.filter(s => s.id).map(s => s.id);
           if (presentIds.length > 0) {
@@ -200,6 +201,8 @@ export const appBackend = {
 
       const { error: sError } = await supabase.from('crm_pipeline_stages').upsert(formattedStages);
       if (sError) throw sError;
+
+      return savedPipeline;
   },
 
   deletePipeline: async (id: string): Promise<void> => {
@@ -235,7 +238,7 @@ export const appBackend = {
       id: job.id,
       user_id: user?.id,
       name: job.name,
-      sheet_url: job.sheet_url,
+      sheet_url: job.sheetUrl,
       config: job.config,
       active: job.active,
       interval_minutes: job.intervalMinutes,
@@ -448,33 +451,33 @@ export const appBackend = {
       fantasyName: d.fantasy_name, 
       legalName: d.legal_name, 
       cnpj: d.cnpj, 
-      studio_phone: d.studio_phone, 
+      studioPhone: d.studio_phone, 
       address: d.address, 
       city: d.city, 
       state: d.state, 
       country: d.country, 
-      size_m2: d.size_m2, 
-      student_capacity: d.student_capacity, 
-      rent_value: d.rent_value, 
+      sizeM2: d.size_m2, 
+      studentCapacity: d.student_capacity, 
+      rentValue: d.rent_value, 
       methodology: d.methodology, 
-      studio_type: d.studio_type, 
-      name_on_site: d.name_on_site, 
+      studioType: d.studio_type, 
+      nameOnSite: d.name_on_site, 
       bank: d.bank, 
       agency: d.agency, 
       account: d.account, 
       beneficiary: d.beneficiary, 
-      pix_key: d.pix_key, 
-      has_reformer: d.has_reformer, 
-      qty_reformer: d.qty_reformer, 
-      has_ladder_barrel: d.has_ladder_barrel, 
-      qty_ladder_barrel: d.qty_ladder_barrel, 
-      has_chair: d.has_chair, 
-      qty_chair: d.qty_chair, 
-      has_cadillac: d.has_cadillac, 
-      qty_cadillac: d.qty_cadillac, 
-      has_chairs_for_course: d.has_chairs_for_course, 
-      has_tv: d.has_tv, 
-      max_kits_capacity: d.max_kits_capacity, 
+      pixKey: d.pix_key, 
+      hasReformer: d.has_reformer, 
+      qtyReformer: d.qty_reformer, 
+      hasLadderBarrel: d.has_ladder_barrel, 
+      qtyLadderBarrel: d.qty_ladder_barrel, 
+      hasChair: d.has_chair, 
+      qtyChair: d.qty_chair, 
+      hasCadillac: d.has_cadillac, 
+      qtyCadillac: d.qty_cadillac, 
+      hasChairsForCourse: d.has_chairs_for_course, 
+      hasTv: d.has_tv, 
+      maxKitsCapacity: d.max_kits_capacity, 
       attachments: d.attachments
     }));
   },
@@ -568,7 +571,7 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distribution_mode || 'fixed', fixed_owner_id: form.fixed_owner_id || null, submissions_count: form.submissionsCount || 0 };
+      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
       const { error } = await supabase.from('crm_forms').upsert(payload);
       if (error) throw error;
   },
@@ -708,7 +711,6 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (error || !data) return null;
-      // Corrected: changed 'd.contract_date' to 'data.contract_date'
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 

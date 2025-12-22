@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
-  // Add missing ChevronLeft import
   AlertCircle, ChevronRight, ChevronLeft, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
   MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2,
@@ -191,10 +190,6 @@ export const CrmBoard: React.FC = () => {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isSavingTeam, setIsSavingTeam] = useState(false);
 
-  const [newTaskDesc, setNoTaskDesc] = useState('');
-  const [newTaskDate, setNoTaskDate] = useState('');
-  const [newTaskType, setNoTaskType] = useState<'call' | 'email' | 'meeting' | 'todo'>('todo');
-
   useEffect(() => {
     fetchData();
   }, []);
@@ -229,16 +224,17 @@ export const CrmBoard: React.FC = () => {
                   email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
                   transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
-                  classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
+                  classMod1: d.class_mod_1, class_mod_2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
               })));
           }
 
           setPipelines(pipelinesResult);
-          if (pipelinesResult.length > 0 && !currentPipelineId) {
-              setCurrentPipelineId(pipelinesResult[0].id);
-          } else if (pipelinesResult.length === 0) {
-              // Se não houver funis, criamos o padrão inicial via gerenciador na primeira execução
+          // Se não houver funil selecionado ou o atual não existir mais, seleciona o primeiro
+          if (pipelinesResult.length > 0) {
+              if (!currentPipelineId || !pipelinesResult.find(p => p.id === currentPipelineId)) {
+                  setCurrentPipelineId(pipelinesResult[0].id);
+              }
           }
 
           setTeams(teamsResult.data || []);
@@ -270,8 +266,12 @@ export const CrmBoard: React.FC = () => {
     }
     setIsSavingFunnel(true);
     try {
-        await appBackend.savePipeline(editingPipeline, editingStages);
+        const saved = await appBackend.savePipeline(editingPipeline, editingStages);
+        // Atualiza a lista e força a seleção do funil que acabou de salvar
         await fetchData();
+        setCurrentPipelineId(saved.id);
+        // Força o carregamento das etapas imediatamente
+        await fetchPipelineDetails(saved.id);
         setShowFunnelManager(false);
     } catch (e: any) {
         alert(`Erro ao salvar funil: ${e.message}`);
@@ -280,7 +280,6 @@ export const CrmBoard: React.FC = () => {
     }
   };
 
-  // Add missing handleSaveDeal function
   const handleSaveDeal = async () => {
     if (!dealFormData.companyName) {
         alert("O nome do cliente é obrigatório.");
@@ -289,21 +288,21 @@ export const CrmBoard: React.FC = () => {
 
     setIsLoading(true);
     const payload = {
-        title: dealFormData.title,
-        contact_name: dealFormData.contactName,
+        title: dealFormData.title || dealFormData.companyName,
+        contact_name: dealFormData.contactName || dealFormData.companyName,
         company_name: dealFormData.companyName,
-        value: dealFormData.value,
+        value: Number(dealFormData.value || 0),
         pipeline_id: dealFormData.pipeline_id || currentPipelineId,
-        stage: dealFormData.stage,
+        stage: dealFormData.stage || (currentStages.length > 0 ? currentStages[0].key : 'new'),
         owner_id: dealFormData.owner || null,
-        status: dealFormData.status,
+        status: dealFormData.status || 'warm',
         next_task: dealFormData.nextTask,
         source: dealFormData.source,
         campaign: dealFormData.campaign,
-        entry_value: dealFormData.entryValue,
+        entry_value: Number(dealFormData.entryValue || 0),
         payment_method: dealFormData.paymentMethod,
-        installments: dealFormData.installments,
-        installment_value: dealFormData.installmentValue,
+        installments: Number(dealFormData.installments || 1),
+        installment_value: Number(dealFormData.installmentValue || 0),
         product_type: dealFormData.productType,
         product_name: dealFormData.productName,
         billing_cnpj: dealFormData.billingCnpj,
@@ -330,14 +329,14 @@ export const CrmBoard: React.FC = () => {
     try {
         if (editingDealId) {
             await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId);
-            await appBackend.logActivity({ action: 'update', module: 'crm', details: `Editou negócio: ${dealFormData.title}`, recordId: editingDealId });
+            await appBackend.logActivity({ action: 'update', module: 'crm', details: `Editou negócio: ${payload.title}`, recordId: editingDealId });
         } else {
             const { data: newDeal } = await appBackend.client.from('crm_deals').insert([{
                 ...payload,
                 deal_number: generateDealNumber(),
                 created_at: new Date().toISOString()
             }]).select().single();
-            await appBackend.logActivity({ action: 'create', module: 'crm', details: `Criou novo negócio: ${dealFormData.title}`, recordId: newDeal?.id });
+            await appBackend.logActivity({ action: 'create', module: 'crm', details: `Criou novo negócio: ${payload.title}`, recordId: newDeal?.id });
         }
         await fetchData();
         setShowDealModal(false);
@@ -371,7 +370,6 @@ export const CrmBoard: React.FC = () => {
   };
 
   const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-  const getOwnerName = (id: string) => collaborators.find(c => c.id === id)?.fullName || 'Desconhecido';
 
   const moveDeal = async (dealId: string, currentStageKey: string, direction: 'next' | 'prev') => {
     const currentIndex = currentStages.findIndex(s => s.key === currentStageKey);
@@ -519,7 +517,7 @@ export const CrmBoard: React.FC = () => {
                       );
                   })}
                   
-                  {currentStages.length === 0 && (
+                  {currentStages.length === 0 && !isLoading && (
                       <div className="flex-1 flex flex-col items-center justify-center text-slate-400 italic">
                           <FunnelIcon size={48} className="mb-4 opacity-20" />
                           <p>Nenhuma etapa configurada para este funil.</p>
@@ -528,9 +526,8 @@ export const CrmBoard: React.FC = () => {
                   )}
               </div>
           ) : (
-              /* EQUIPES VIEW (Mantida do anterior) */
               <div className="max-w-6xl mx-auto animate-in fade-in">
-                {/* ... conteúdo das equipes ... */}
+                  {/* ... conteúdo das equipes omitido para brevidade ... */}
               </div>
           )}
       </div>
@@ -539,7 +536,7 @@ export const CrmBoard: React.FC = () => {
       {showFunnelManager && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                       <h3 className="font-bold text-slate-800 flex items-center gap-2"><FunnelIcon size={20} className="text-indigo-600" /> Editor de Funil de Vendas</h3>
                       <button onClick={() => setShowFunnelManager(false)} className="p-1 rounded-full hover:bg-slate-200 text-slate-400"><X size={20}/></button>
                   </div>
@@ -581,7 +578,7 @@ export const CrmBoard: React.FC = () => {
                                           <input 
                                             type="text" 
                                             className="flex-1 px-3 py-1.5 border rounded-lg text-sm font-bold" 
-                                            value={stage.name} 
+                                            value={stage.name || ''} 
                                             onChange={e => updateEditingStage(idx, 'name', e.target.value)} 
                                             placeholder="Ex: Novo Lead"
                                           />
@@ -627,11 +624,10 @@ export const CrmBoard: React.FC = () => {
           </div>
       )}
 
-      {/* DEAL MODAL (Adaptado para estágios dinâmicos) */}
+      {/* DEAL MODAL */}
       {showDealModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                  {/* ... Cabeçalho do modal ... */}
                   <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                       <div className="flex flex-col">
                           <h3 className="font-bold text-slate-800 flex items-center gap-2"><Briefcase size={20} className="text-indigo-600" /> {editingDealId ? 'Editar Negociação' : 'Nova Oportunidade'}</h3>
@@ -646,7 +642,7 @@ export const CrmBoard: React.FC = () => {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                               <div className="md:col-span-2">
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Nome Completo do Cliente *</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Nome do Cliente/Empresa" value={dealFormData.companyName} onChange={e => setDealFormData({ ...dealFormData, companyName: e.target.value, title: e.target.value })} />
+                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Nome do Cliente/Empresa" value={dealFormData.companyName || ''} onChange={e => setDealFormData({ ...dealFormData, companyName: e.target.value, title: e.target.value })} />
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Funil de Vendas</label>
@@ -670,16 +666,14 @@ export const CrmBoard: React.FC = () => {
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Responsável</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.owner} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}>
+                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.owner || ''} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}>
                                       <option value="">Selecione...</option>
                                       {collaborators.filter(c => c.department === 'Comercial').map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
                                   </select>
                               </div>
-
-                              {/* Restante dos campos mantidos do anterior ... */}
                           </div>
                       </div>
-                      {/* ... Outras seções do modal de Deal (Financeiro, Contato, etc) ... */}
+                      {/* ... restante dos campos do modal ... */}
                   </div>
 
                   <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-200 shrink-0">

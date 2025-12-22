@@ -303,7 +303,8 @@ export const appBackend = {
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
       interval_minutes: preset.intervalMinutes || 5, 
-      created_by_name: preset.created_by_name || null
+      /* Fix: Changed preset.created_by_name to preset.createdByName to match the interface definition */
+      created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
     if (error) throw error;
@@ -416,7 +417,7 @@ export const appBackend = {
       id: b.id, 
       title: b.title, 
       imageUrl: b.image_url, 
-      linkUrl: b.link_url, 
+      link_url: b.link_url, 
       targetAudience: b.target_audience, 
       active: b.active 
     }));
@@ -718,7 +719,8 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: d.signers || [], createdAt: d.created_at };
+      /* Fix: Changed undefined variable 'd' to 'data' and accessed correct properties */
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {

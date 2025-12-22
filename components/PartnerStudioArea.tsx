@@ -77,8 +77,13 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const validInventory = inventory || [];
+    const validClasses = classes || [];
+    const validAttendance = attendance || [];
+    const validDeals = allDeals || [];
+
     // 1. Total Recebido (Físico vindo da Matriz)
-    const received = inventory.reduce((acc, curr) => ({
+    const received = validInventory.reduce((acc, curr) => ({
         nova: acc.nova + (curr.itemApostilaNova || 0),
         classico: acc.classico + (curr.itemApostilaClassico || 0),
         sacochila: acc.sacochila + (curr.itemSacochila || 0),
@@ -88,12 +93,12 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
     const consumed = { nova: 0, classico: 0, sacochila: 0, lapis: 0 };
     const scheduled = { nova: 0, classico: 0, sacochila: 0, lapis: 0 };
 
-    classes.forEach(cls => {
+    validClasses.forEach(cls => {
         if (cls.status !== 'Confirmado' && cls.status !== 'Concluído') return;
 
         const dateMod2 = cls.date_mod_2 ? new Date(cls.date_mod_2) : null;
         // Gatilho: 3 dias após o fim do Mod 2
-        const isFinalizedForStock = dateMod2 
+        const isFinalizedForStock = (dateMod2 && !isNaN(dateMod2.getTime()))
             ? (new Date(dateMod2.getTime() + 3 * 24 * 60 * 60 * 1000) < today) 
             : false;
 
@@ -102,7 +107,7 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
 
         if (isFinalizedForStock) {
             // BAIXA REAL: Alunos com presença no Módulo 1
-            const classAttendance = attendance.filter(a => a.class_id === cls.id);
+            const classAttendance = validAttendance.filter(a => a.class_id === cls.id);
             const presentCount = new Set(classAttendance.map(a => a.student_id)).size;
             
             if (isCompleta) consumed.nova += presentCount;
@@ -111,7 +116,7 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
             consumed.lapis += presentCount;
         } else {
             // SAÍDA PROGRAMADA: Todos os matriculados
-            const enrolled = allDeals.filter(d => d.class_mod_1 === cls.mod_1_code).length;
+            const enrolled = validDeals.filter(d => d.class_mod_1 === cls.mod_1_code).length;
 
             if (isCompleta) scheduled.nova += enrolled;
             if (isClassico) scheduled.classico += enrolled;

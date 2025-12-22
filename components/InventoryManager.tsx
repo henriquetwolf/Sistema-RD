@@ -78,13 +78,13 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
   };
 
   const matrizStock = useMemo(() => {
-    return records.reduce((acc, curr) => {
+    return (records || []).reduce((acc, curr) => {
       const multiplier = curr.type === 'entry' ? 1 : -1;
       return {
-        nova: acc.nova + (curr.itemApostilaNova * multiplier),
-        classico: acc.classico + (curr.itemApostilaClassico * multiplier),
-        sacochila: acc.sacochila + (curr.itemSacochila * multiplier),
-        lapis: acc.lapis + (curr.itemLapis * multiplier)
+        nova: acc.nova + ((curr.itemApostilaNova || 0) * multiplier),
+        classico: acc.classico + ((curr.itemApostilaClassico || 0) * multiplier),
+        sacochila: acc.sacochila + ((curr.itemSacochila || 0) * multiplier),
+        lapis: acc.lapis + ((curr.itemLapis || 0) * multiplier)
       };
     }, { nova: 0, classico: 0, sacochila: 0, lapis: 0 });
   }, [records]);
@@ -93,8 +93,14 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      return studios.filter(st => st.fantasyName !== 'VOLL MATRIZ').map(studio => {
-          const received = records
+      const validStudios = (studios || []).filter(st => st.fantasyName && st.fantasyName !== 'VOLL MATRIZ');
+      const validRecords = records || [];
+      const validClasses = classes || [];
+      const validDeals = deals || [];
+      const validAttendance = attendance || [];
+
+      return validStudios.map(studio => {
+          const received = validRecords
             .filter(r => r.studioId === studio.id && r.type === 'exit')
             .reduce((acc, curr) => ({
                 nova: acc.nova + (curr.itemApostilaNova || 0),
@@ -106,13 +112,13 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
           const consumed = { nova: 0, classico: 0, sacochila: 0, lapis: 0 };
           const scheduled = { nova: 0, classico: 0, sacochila: 0, lapis: 0 };
 
-          const studioClasses = classes.filter(c => c.studio_mod_1 === studio.fantasyName);
+          const studioClasses = validClasses.filter(c => c.studio_mod_1 === studio.fantasyName);
 
           studioClasses.forEach(cls => {
               if (cls.status !== 'Confirmado' && cls.status !== 'Concluído') return;
 
               const dateMod2 = cls.date_mod_2 ? new Date(cls.date_mod_2) : null;
-              const isFinalized = dateMod2 
+              const isFinalized = (dateMod2 && !isNaN(dateMod2.getTime()))
                 ? (new Date(dateMod2.getTime() + 3 * 24 * 60 * 60 * 1000) < today) 
                 : false;
 
@@ -120,13 +126,13 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
               const isClassico = cls.course?.toLowerCase().includes('clássico');
 
               if (isFinalized) {
-                  const presentCount = new Set(attendance.filter(a => a.class_id === cls.id).map(a => a.student_id)).size;
+                  const presentCount = new Set(validAttendance.filter(a => a.class_id === cls.id).map(a => a.student_id)).size;
                   if (isCompleta) consumed.nova += presentCount;
                   if (isClassico) consumed.classico += presentCount;
                   consumed.sacochila += presentCount;
                   consumed.lapis += presentCount;
               } else {
-                  const enrolled = deals.filter(d => d.class_mod_1 === cls.mod_1_code).length;
+                  const enrolled = validDeals.filter(d => d.class_mod_1 === cls.mod_1_code).length;
                   if (isCompleta) scheduled.nova += enrolled;
                   if (isClassico) scheduled.classico += enrolled;
                   scheduled.sacochila += enrolled;
@@ -156,7 +162,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
       await appBackend.logActivity({ 
           action: isUpdate ? 'update' : 'create', 
           module: 'inventory', 
-          details: `${isUpdate ? 'Editou' : 'Registrou'} movimentação de estoque: ${formData.type === 'entry' ? 'Entrada Fornecedor' : 'Envio para ' + studio?.fantasyName}`,
+          details: `${isUpdate ? 'Editou' : 'Registrou'} movimentação de estoque: ${formData.type === 'entry' ? 'Entrada Fornecedor' : 'Envio para ' + (studio?.fantasyName || 'Studio Desconhecido')}`,
           recordId: formData.id || undefined
       });
       await fetchData();
@@ -188,17 +194,24 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
     setActiveMenuId(null);
   };
 
-  const filteredMovements = records.filter(r => 
-    r.trackingCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.observations.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    studios.find(s => s.id === r.studioId)?.fantasyName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredMovements = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    return records.filter(r => {
+        const studioName = (studios.find(s => s.id === r.studioId)?.fantasyName || '').toLowerCase();
+        return (r.trackingCode || '').toLowerCase().includes(search) ||
+               (r.observations || '').toLowerCase().includes(search) ||
+               studioName.includes(search);
+    });
+  }, [records, studios, searchTerm]);
 
-  const filteredStudiosReport = studiosStockReport.filter(s => 
-      s.fantasyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.state.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStudiosReport = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    return studiosStockReport.filter(s => 
+        (s.fantasyName || '').toLowerCase().includes(search) ||
+        (s.city || '').toLowerCase().includes(search) ||
+        (s.state || '').toLowerCase().includes(search)
+    );
+  }, [studiosStockReport, searchTerm]);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20 h-full flex flex-col">
@@ -352,10 +365,10 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ onBack }) =>
                 <tbody className="divide-y divide-slate-100">
                     {filteredStudiosReport.map(s => {
                         const items = [
-                            { real: s.stockInHands.nova, prog: s.scheduled.nova },
-                            { real: s.stockInHands.classico, prog: s.scheduled.classico },
-                            { real: s.stockInHands.sacochila, prog: s.scheduled.sacochila },
-                            { real: s.stockInHands.lapis, prog: s.scheduled.lapis },
+                            { real: s.stockInHands?.nova || 0, prog: s.scheduled?.nova || 0 },
+                            { real: s.stockInHands?.classico || 0, prog: s.scheduled?.classico || 0 },
+                            { real: s.stockInHands?.sacochila || 0, prog: s.scheduled?.sacochila || 0 },
+                            { real: s.stockInHands?.lapis || 0, prog: s.scheduled?.lapis || 0 },
                         ];
                         
                         const anyDanger = items.some(i => (i.real - i.prog < 0) || (i.prog > 0 && i.real - i.prog < securityMargin));

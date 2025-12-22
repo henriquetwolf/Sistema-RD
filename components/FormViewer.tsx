@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { FormModel, FormAnswer } from '../types';
-import { CheckCircle, ArrowLeft, Loader2, Send, Lock } from 'lucide-react';
+import { CheckCircle, ArrowLeft, Loader2, Send, Lock, AlertTriangle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
 
@@ -19,6 +19,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isEmbed, setIsEmbed] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
       const params = new URLSearchParams(window.location.search);
@@ -33,6 +34,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
 
   const handleInputChange = (questionId: string, value: any) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
+    setErrorMessage(null); // Limpa erro ao digitar
   };
 
   const handleCheckboxChange = (questionId: string, option: string, checked: boolean) => {
@@ -44,6 +46,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       const formattedAnswers: FormAnswer[] = form.questions.map(q => {
@@ -61,8 +64,9 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
       if (onSuccess) {
           setTimeout(onSuccess, 2000);
       }
-    } catch (err) {
-      alert("Erro ao enviar formulário. Tente novamente.");
+    } catch (err: any) {
+      console.error("Submission Error:", err);
+      setErrorMessage(err.message || "Erro desconhecido ao enviar. Tente novamente.");
     } finally {
       setIsSubmitting(false);
     }
@@ -175,6 +179,17 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
             </div>
 
             <form onSubmit={handleSubmit} className={clsx("p-10 space-y-10", (style.cardTransparent || isEmbed) ? "bg-white/80 backdrop-blur-sm shadow-sm mt-1" : "bg-white", borderRadiusClass)}>
+                {errorMessage && (
+                    <div className="bg-red-50 border-2 border-red-100 p-4 rounded-xl flex items-start gap-3 text-red-700 animate-in shake duration-300">
+                        <AlertTriangle className="shrink-0 mt-0.5" size={18} />
+                        <div className="text-sm">
+                            <p className="font-bold">Erro ao enviar:</p>
+                            <p className="font-mono text-[11px] leading-tight">{errorMessage}</p>
+                            <p className="mt-2 text-[10px] text-red-500">Rode o script V14 em Configurações para tentar corrigir automaticamente.</p>
+                        </div>
+                    </div>
+                )}
+
                 {form.questions.map(q => {
                     const isSystemAuto = !!q.systemMapping;
                     

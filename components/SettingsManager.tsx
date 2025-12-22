@@ -6,7 +6,7 @@ import {
     Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2,
     Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
     Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search,
-    Play, Pause, Calendar, Smartphone, Link as LinkIcon, ChevronDown
+    Play, Pause, Calendar, Smartphone, Link as LinkIcon, ChevronDown, Award
 } from 'lucide-react';
 import { appBackend, CompanySetting } from '../services/appBackend';
 import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob } from '../types';
@@ -122,13 +122,13 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V13)
--- CORREÇÃO DE PERMISSÕES E ESTRUTURA DE PESQUISAS
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V14)
+-- FOCO TOTAL EM LIBERAR O ENVIO DE PESQUISAS
 
--- 1. GARANTIR EXTENSÃO DE UUID
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- 1. GARANTIR PERMISSÃO DE SCHEMA (MUITO IMPORTANTE)
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
 
--- 2. TABELA DE SUBMISSÕES (REPARAÇÃO PROFUNDA)
+-- 2. REPARAR TABELA DE SUBMISSÕES
 CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     form_id uuid NOT NULL,
@@ -137,42 +137,45 @@ CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
     created_at timestamptz DEFAULT now()
 );
 
--- Forçar criação de coluna caso não exista e tabela já esteja lá
-DO $$ 
-BEGIN 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_form_submissions' AND column_name='student_id') THEN
-        ALTER TABLE public.crm_form_submissions ADD COLUMN student_id uuid;
-    END IF;
-END $$;
+-- Forçar tipos e colunas corretas
+ALTER TABLE public.crm_form_submissions ALTER COLUMN student_id TYPE uuid USING student_id::uuid;
+ALTER TABLE public.crm_form_submissions ALTER COLUMN answers TYPE jsonb USING answers::jsonb;
 
--- 3. PERMISSÕES DE ACESSO (GRANT) - ESSENCIAL PARA RESOLVER O ERRO DE ENVIO
--- Isso dá permissão para o PostgREST (API) manipular os dados mesmo sem login se necessário
+-- 3. PERMISSÕES DE ACESSO GLOBAIS (GRANT)
+-- Garante que as roles do Supabase podem ver e escrever na tabela
 GRANT ALL ON public.crm_form_submissions TO anon, authenticated, service_role;
-
--- 4. POLÍTICAS DE SEGURANÇA (RLS)
-ALTER TABLE public.crm_form_submissions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permitir inserção de respostas" ON public.crm_form_submissions;
-CREATE POLICY "Permitir inserção de respostas" ON public.crm_form_submissions FOR INSERT WITH CHECK (true);
-DROP POLICY IF EXISTS "Permitir leitura de respostas" ON public.crm_form_submissions;
-CREATE POLICY "Permitir leitura de respostas" ON public.crm_form_submissions FOR SELECT USING (true);
-
--- 5. TABELA DE PRESENÇA (RLS)
-ALTER TABLE public.crm_attendance ENABLE ROW LEVEL SECURITY;
-GRANT ALL ON public.crm_attendance TO anon, authenticated, service_role;
-DROP POLICY IF EXISTS "Acesso total presença" ON public.crm_attendance;
-CREATE POLICY "Acesso total presença" ON public.crm_attendance FOR ALL USING (true) WITH CHECK (true);
-
--- 6. DEMAIS TABELAS DE CONFIGURAÇÃO (RLS)
-ALTER TABLE public.crm_surveys ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON public.crm_surveys TO anon, authenticated, service_role;
+GRANT ALL ON public.crm_forms TO anon, authenticated, service_role;
+
+-- 4. POLÍTICAS DE SEGURANÇA (REFAZER DO ZERO)
+-- Desabilita RLS temporariamente para limpar políticas antigas
+ALTER TABLE public.crm_form_submissions DISABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir inserção de respostas" ON public.crm_form_submissions;
+DROP POLICY IF EXISTS "Permitir leitura de respostas" ON public.crm_form_submissions;
+
+-- Cria política ultra-permissiva para INSERT (Essencial para o Aluno enviar)
+CREATE POLICY "Permitir inserção de respostas" 
+ON public.crm_form_submissions 
+FOR INSERT 
+WITH CHECK (true);
+
+-- Cria política para leitura (Essencial para o Admin ver os resultados)
+CREATE POLICY "Permitir leitura de respostas" 
+ON public.crm_form_submissions 
+FOR SELECT 
+USING (true);
+
+-- Reabilita RLS com as novas políticas
+ALTER TABLE public.crm_form_submissions ENABLE ROW LEVEL SECURITY;
+
+-- 5. REPARAR TABELA DE PESQUISAS (CRM_SURVEYS)
+-- Garante que o contador de submissões possa ser atualizado
+ALTER TABLE public.crm_surveys DISABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total surveys" ON public.crm_surveys;
 CREATE POLICY "Acesso total surveys" ON public.crm_surveys FOR ALL USING (true) WITH CHECK (true);
+ALTER TABLE public.crm_surveys ENABLE ROW LEVEL SECURITY;
 
--- 7. ÍNDICES DE BUSCA RÁPIDA
-CREATE INDEX IF NOT EXISTS idx_form_submissions_form_id ON public.crm_form_submissions(form_id);
-CREATE INDEX IF NOT EXISTS idx_form_submissions_student_id ON public.crm_form_submissions(student_id);
-
--- 8. RELOAD
+-- 6. RELOAD E NOTIFICAÇÃO
 NOTIFY pgrst, 'reload config';
   `.trim();
 
@@ -267,6 +270,91 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
+        {/* CRUD BANNERS */}
+        {activeTab === 'banners' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-800">Banners de Promoção</h3>
+                    <button onClick={() => setEditingBanner({ title: '', imageUrl: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Banner</button>
+                </div>
+                {editingBanner && (
+                    <form onSubmit={handleSaveBanner} className="bg-slate-50 p-6 rounded-xl border mb-8 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-bold mb-1">Título Interno</label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} required />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1">URL da Imagem</label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.imageUrl} onChange={e => setEditingBanner({...editingBanner, imageUrl: e.target.value})} required />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1">Link de Destino</label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1">Público</label>
+                                <select className="w-full p-2 border rounded text-sm" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
+                                    <option value="student">Área do Aluno</option>
+                                    <option value="instructor">Área do Instrutor</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingBanner(null)} className="px-4 py-2 text-sm">Cancelar</button><button type="submit" className="bg-orange-600 text-white px-6 py-2 rounded-lg font-bold text-sm">Salvar Banner</button></div>
+                    </form>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {banners.map(b => (
+                        <div key={b.id} className="p-3 border rounded-xl flex items-center gap-4 bg-white group">
+                            <div className="w-20 h-12 bg-slate-100 rounded overflow-hidden flex-shrink-0"><img src={b.imageUrl} className="w-full h-full object-cover" /></div>
+                            <div className="flex-1 truncate"><h4 className="font-bold text-sm text-slate-800">{b.title}</h4><p className="text-[10px] text-slate-400 uppercase">{b.targetAudience}</p></div>
+                            <div className="flex gap-1"><button onClick={() => setEditingBanner(b)} className="p-1.5 text-slate-400 hover:text-orange-600"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteBanner(b.id).then(fetchBanners)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {/* CRUD NÍVEIS DE INSTRUTORES */}
+        {activeTab === 'instructor_levels' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-800">Níveis e Honorários Docentes</h3>
+                    <button onClick={() => setEditingLevel({ name: '', honorarium: 0, observations: '' })} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Nível</button>
+                </div>
+                {editingLevel && (
+                    <form onSubmit={handleSaveLevel} className="bg-slate-50 p-6 rounded-xl border mb-8 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold mb-1">Nome do Nível</label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} placeholder="Ex: Master II" required />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1">Honorário Padrão (R$)</label>
+                                <input type="number" className="w-full p-2 border rounded text-sm" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value)})} required />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-bold mb-1">Observações / Regras</label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingLevel.observations} onChange={e => setEditingLevel({...editingLevel, observations: e.target.value})} />
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingLevel(null)} className="px-4 py-2 text-sm">Cancelar</button><button type="submit" className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold text-sm">Salvar Nível</button></div>
+                    </form>
+                )}
+                <div className="space-y-2">
+                    {instructorLevels.map(lvl => (
+                        <div key={lvl.id} className="p-4 border rounded-xl flex justify-between items-center bg-white hover:border-purple-200 transition-all">
+                            <div className="flex items-center gap-4">
+                                <div className="bg-purple-50 p-2 rounded-lg text-purple-600"><Award size={20}/></div>
+                                <div><h4 className="font-bold text-slate-800">{lvl.name}</h4><p className="text-xs text-slate-500">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lvl.honorarium)}</p></div>
+                            </div>
+                            <div className="flex gap-2"><button onClick={() => setEditingLevel(lvl)} className="p-2 text-slate-400 hover:text-purple-600"><Edit2 size={18}/></button><button onClick={() => appBackend.deleteInstructorLevel(lvl.id).then(fetchInstructorLevels)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={18}/></button></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
         {activeTab === 'connections' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-6">
@@ -296,9 +384,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V13)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para liberar o envio das pesquisas na Área do Aluno.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V13</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V14)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script se o envio de pesquisas ainda der erro.</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V14</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>
@@ -307,7 +395,6 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
-        {/* CRUD EMPRESAS */}
         {activeTab === 'company' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-bold text-slate-800">Empresas do Grupo</h3><button onClick={() => setEditingCompany({ legalName: '', cnpj: '', productTypes: [] })} className="bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ Nova Empresa</button></div>
@@ -324,7 +411,6 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
-        {/* CRUD ACESSOS */}
         {activeTab === 'roles' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-bold text-slate-800">Perfis de Acesso</h3><button onClick={() => setEditingRole({ id: '', name: '', permissions: {} })} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ Novo Perfil</button></div>
@@ -343,7 +429,6 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
-        {/* LOGS DE ATIVIDADES */}
         {activeTab === 'logs' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col h-[600px]">
                 <div className="flex items-center justify-between mb-4 shrink-0"><h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><History className="text-blue-600" size={20}/> Registro de Auditoria</h3><div className="relative w-64"><Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="text" className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs" placeholder="Buscar no histórico..." value={logSearch} onChange={e => setLogSearch(e.target.value)} /></div></div>

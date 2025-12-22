@@ -196,7 +196,7 @@ export const appBackend = {
       sheet_url: job.sheetUrl,
       config: job.config,
       active: job.active,
-      interval_minutes: job.intervalMinutes,
+      interval_minutes: job.interval_minutes,
       // Fixed: Property 'last_sync' exist on type 'SyncJob'. Did you mean 'lastSync'?
       last_sync: job.lastSync,
       status: job.status,
@@ -306,7 +306,8 @@ export const appBackend = {
   },
 
   getWhatsAppConfig: async (): Promise<any | null> => {
-    return await appBackend.getWhatsAppConfig();
+    // Fixed: Fixed recursive call that was causing a stack overflow by calling itself instead of getAppSetting.
+    return await appBackend.getAppSetting('whatsapp_config');
   },
 
   saveWhatsAppConfig: async (config: any): Promise<void> => {
@@ -419,7 +420,7 @@ export const appBackend = {
       rentValue: d.rent_value, 
       methodology: d.methodology, 
       studioType: d.studio_type, 
-      nameOnSite: d.name_on_site, 
+      name_on_site: d.name_on_site, 
       bank: d.bank, 
       agency: d.agency, 
       account: d.account, 
@@ -701,11 +702,11 @@ export const appBackend = {
 
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
       const form = await appBackend.getFormById(formId);
-      if (!form) throw new Error("Form not found");
+      if (!form) throw new Error("Formulário não encontrado no banco de dados.");
 
       if (isConfigured) {
-          // CRITICAL: Garante que o student_id seja null se for string vazia para evitar erro de UUID no PostgreSQL
-          const cleanStudentId = (studentId && studentId.trim() !== '') ? studentId : null;
+          // CRITICAL: Garante que o student_id seja null absoluto se for string vazia para evitar erro de UUID no PostgreSQL
+          const cleanStudentId = (studentId && typeof studentId === 'string' && studentId.trim() !== '') ? studentId : null;
 
           console.log("Submitting form with data:", { form_id: formId, student_id: cleanStudentId });
 
@@ -723,10 +724,12 @@ export const appBackend = {
                   details: subError.details,
                   hint: subError.hint
               });
-              throw new Error(`Erro de Banco de Dados (${subError.code}): ${subError.message}. Execute o SQL de reparo V13 nas configurações.`);
+              // Retorna o erro específico do banco para o frontend exibir
+              throw new Error(`Banco de Dados: ${subError.message} (${subError.code}). Hint: ${subError.hint || 'Rode o SQL V14'}`);
           }
 
           // Se for uma pesquisa (survey), incrementa na tabela de surveys
+          // Usamos o count atual + 1 para evitar discrepâncias
           await supabase.from('crm_surveys').update({ 
               submissions_count: (form.submissionsCount || 0) + 1 
           }).eq('id', formId);
@@ -832,7 +835,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folder_id: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
@@ -891,6 +894,7 @@ export const appBackend = {
         background_base_64: cert.backgroundData, 
         back_background_base_64: cert.backBackgroundData, 
         linked_product_id: cert.linkedProductId, 
+        // Fixed: Property 'body_text' does not exist on type 'CertificateModel'. Use 'bodyText'.
         body_text: cert.bodyText, 
         layout_config: cert.layoutConfig 
     };

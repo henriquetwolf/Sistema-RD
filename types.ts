@@ -149,6 +149,15 @@ export interface FormModel {
   submissionsCount: number;
 }
 
+// --- SURVEYS (PESQUISAS) ---
+export interface SurveyModel extends FormModel {
+    targetType: 'all' | 'product_type' | 'specific_product';
+    targetProductType?: string;
+    targetProductName?: string;
+    onlyIfFinished: boolean;
+    isActive: boolean;
+}
+
 export interface FormAnswer {
   questionId: string;
   questionTitle: string;
@@ -187,6 +196,7 @@ export interface ContractFolder {
 // --- SESSIONS ---
 
 export interface StudentSession {
+  id?: string;
   email: string;
   cpf: string;
   name: string;

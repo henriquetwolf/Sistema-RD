@@ -14,6 +14,23 @@ const supabase = createClient(
 
 const TABLE_NAME = 'app_presets';
 
+export interface Pipeline {
+    id: string;
+    name: string;
+    is_default: boolean;
+    created_at?: string;
+}
+
+export interface PipelineStage {
+    id: string;
+    pipeline_id: string;
+    name: string;
+    key: string;
+    color: string;
+    sort_order: number;
+    created_at?: string;
+}
+
 const MOCK_SESSION = {
   access_token: 'mock-token',
   refresh_token: 'mock-refresh-token',
@@ -126,7 +143,82 @@ export const appBackend = {
       }));
   },
 
-  // --- SYNC JOBS (CONNECTIONS) ---
+  // --- CRM PIPELINES & STAGES ---
+  getPipelines: async (): Promise<Pipeline[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_pipelines').select('*').order('name', { ascending: true });
+      if (error) throw error;
+      return data || [];
+  },
+
+  getPipelineStages: async (pipelineId: string): Promise<PipelineStage[]> => {
+      if (!isConfigured || !pipelineId) return [];
+      const { data, error } = await supabase.from('crm_pipeline_stages').select('*').eq('pipeline_id', pipelineId).order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data || [];
+  },
+
+  getAllPipelineStages: async (): Promise<PipelineStage[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_pipeline_stages').select('*').order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data || [];
+  },
+
+  savePipeline: async (pipeline: Partial<Pipeline>, stages: Partial<PipelineStage>[]): Promise<Pipeline> => {
+      if (!isConfigured) throw new Error("Backend not configured");
+      
+      // 1. Salvar Pipeline
+      const pipelinePayload: any = {
+          name: pipeline.name,
+          is_default: !!pipeline.is_default
+      };
+      if (pipeline.id && pipeline.id.trim() !== '') {
+          pipelinePayload.id = pipeline.id;
+      }
+
+      const { data: savedPipeline, error: pError } = await supabase.from('crm_pipelines').upsert(pipelinePayload).select().single();
+      
+      if (pError) throw pError;
+
+      // 2. Salvar Etapas
+      const formattedStages = stages.map((s, idx) => {
+          const stagePayload: any = {
+              pipeline_id: savedPipeline.id,
+              name: s.name,
+              key: s.key || s.name?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s/g, '_'),
+              color: s.color || '#cbd5e1',
+              sort_order: idx
+          };
+          if (s.id && s.id.trim() !== '') {
+              stagePayload.id = s.id;
+          }
+          return stagePayload;
+      });
+
+      // Se for edição, remove estágios que não estão mais na lista
+      if (pipeline.id) {
+          const presentIds = formattedStages.filter(s => s.id).map(s => s.id);
+          if (presentIds.length > 0) {
+              await supabase.from('crm_pipeline_stages').delete().eq('pipeline_id', pipeline.id).not('id', 'in', `(${presentIds.join(',')})`);
+          } else {
+              await supabase.from('crm_pipeline_stages').delete().eq('pipeline_id', pipeline.id);
+          }
+      }
+
+      const { error: sError } = await supabase.from('crm_pipeline_stages').upsert(formattedStages);
+      if (sError) throw sError;
+
+      return savedPipeline;
+  },
+
+  deletePipeline: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_pipelines').delete().eq('id', id);
+      if (error) throw error;
+  },
+
+  // --- SYNC JOBS ---
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
@@ -140,7 +232,6 @@ export const appBackend = {
       status: row.status,
       lastMessage: row.last_message,
       active: row.active,
-      // Fix: intervalMinutes uses camelCase in SyncJob interface
       intervalMinutes: row.interval_minutes,
       createdBy: row.created_by_name,
       createdAt: row.created_at
@@ -212,6 +303,7 @@ export const appBackend = {
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
       interval_minutes: preset.intervalMinutes || 5, 
+      /* Fix: Changed preset.created_by_name to preset.createdByName to match the interface definition */
       created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -325,7 +417,7 @@ export const appBackend = {
       id: b.id, 
       title: b.title, 
       imageUrl: b.image_url, 
-      linkUrl: b.link_url, 
+      link_url: b.link_url, 
       targetAudience: b.target_audience, 
       active: b.active 
     }));
@@ -383,7 +475,6 @@ export const appBackend = {
       account: d.account, 
       beneficiary: d.beneficiary, 
       pixKey: d.pix_key, 
-      // Fix: map snake_case DB fields to camelCase interface properties
       hasReformer: d.has_reformer, 
       qtyReformer: d.qty_reformer, 
       hasLadderBarrel: d.has_ladder_barrel, 
@@ -409,12 +500,10 @@ export const appBackend = {
       email: studio.email, 
       password: studio.password, 
       second_contact_name: studio.secondContactName, 
-      // Fix: database key should be snake_case
       second_contact_phone: studio.secondContactPhone, 
       fantasy_name: studio.fantasyName, 
       legal_name: studio.legalName, 
       cnpj: studio.cnpj, 
-      // Fix: studio property is studioPhone
       studio_phone: studio.studioPhone, 
       address: studio.address, 
       city: studio.city, 
@@ -490,7 +579,6 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      // Fix: distributionMode uses camelCase in FormModel interface
       const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, submissions_count: form.submissionsCount || 0 };
       const { error } = await supabase.from('crm_forms').upsert(payload);
       if (error) throw error;
@@ -546,7 +634,6 @@ export const appBackend = {
               }
           });
 
-          // CORREÇÃO: Sincroniza o Nome do Cliente em todos os campos necessários do CRM
           const finalName = dealPayload.company_name || dealPayload.contact_name;
           
           if (!finalName) {
@@ -560,7 +647,6 @@ export const appBackend = {
                   dealPayload.title = `Lead: ${nameValue}`;
               }
           } else {
-              // Se o usuário mapeou via contact_name ou company_name, garantimos que ambos fiquem iguais e o título também
               dealPayload.contact_name = finalName;
               dealPayload.company_name = finalName;
               dealPayload.title = `Lead: ${finalName}`;
@@ -633,6 +719,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (error || !data) return null;
+      /* Fix: Changed undefined variable 'd' to 'data' and accessed correct properties */
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
@@ -851,6 +938,7 @@ export const appBackend = {
       item_sacochila: record.itemSacochila, 
       item_lapis: record.itemLapis, 
       registration_date: record.registrationDate, 
+      /* Fix: Changed record.studio_id to record.studioId to match the interface definition */
       studio_id: record.studioId || null, 
       tracking_code: record.trackingCode, 
       observations: record.observations, 

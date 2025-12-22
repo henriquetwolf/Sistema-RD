@@ -1,4 +1,3 @@
-
 import { createClient, Session } from '@supabase/supabase-js';
 import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession } from '../types';
 
@@ -196,7 +195,8 @@ export const appBackend = {
       sheet_url: job.sheetUrl,
       config: job.config,
       active: job.active,
-      interval_minutes: job.interval_minutes,
+      // Fixed: Property 'interval_minutes' does not exist on type 'SyncJob'. Did you mean 'intervalMinutes'?
+      interval_minutes: job.intervalMinutes,
       // Fixed: Property 'last_sync' exist on type 'SyncJob'. Did you mean 'lastSync'?
       last_sync: job.lastSync,
       status: job.status,
@@ -376,7 +376,7 @@ export const appBackend = {
 
   saveBanner: async (banner: Banner): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.linkUrl, target_audience: banner.targetAudience, active: banner.active };
+    const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.link_url, target_audience: banner.targetAudience, active: banner.active };
     let error;
     if (banner.id) {
         const result = await supabase.from('app_banners').update(payload).eq('id', banner.id);
@@ -582,7 +582,7 @@ export const appBackend = {
           is_lead_capture: survey.isLeadCapture, 
           questions: survey.questions, 
           style: survey.style, 
-          target_type: survey.targetType,
+          target_type: survey.target_type,
           target_product_type: survey.targetProductType || null,
           target_product_name: survey.targetProductName || null,
           only_if_finished: survey.onlyIfFinished,
@@ -983,7 +983,7 @@ export const appBackend = {
       const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
       const { data, error } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
+      return { id: data.id, eventId: data.event_id, date: data.date, title: block.title, maxSelections: data.max_selections };
   },
 
   deleteBlock: async (id: string): Promise<void> => {

@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS public.crm_franchises (
     created_at timestamptz DEFAULT now()
 );
 
--- 7. TABELA DE ESTOQUE
+-- 7. TABELA DE ESTOQUE (NOVO)
 CREATE TABLE IF NOT EXISTS public.crm_inventory (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     type text CHECK (type IN ('entry', 'exit')),
@@ -203,7 +203,7 @@ CREATE TABLE IF NOT EXISTS public.crm_inventory (
     created_at timestamptz DEFAULT now()
 );
 
--- 8. TABELA DE PRESENÇAS
+-- 8. TABELA DE PRESENÇAS (NOVO)
 CREATE TABLE IF NOT EXISTS public.crm_attendance (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     class_id uuid REFERENCES public.crm_classes(id) ON DELETE CASCADE,
@@ -214,44 +214,19 @@ CREATE TABLE IF NOT EXISTS public.crm_attendance (
     UNIQUE(class_id, student_id, date)
 );
 
--- 9. TABELAS DE FUNIS DE VENDAS (CRM DINÂMICO)
-CREATE TABLE IF NOT EXISTS public.crm_pipelines (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    name text NOT NULL,
-    is_default boolean DEFAULT false,
-    created_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.crm_pipeline_stages (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    pipeline_id uuid REFERENCES public.crm_pipelines(id) ON DELETE CASCADE,
-    name text NOT NULL,
-    key text NOT NULL,
-    color text DEFAULT '#cbd5e1',
-    sort_order int DEFAULT 0,
-    created_at timestamptz DEFAULT now()
-);
-
--- 10. TABELAS DE APOIO
+-- 9. TABELAS DE APOIO
 CREATE TABLE IF NOT EXISTS public.crm_roles (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, permissions jsonb DEFAULT '{}'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, honorarium numeric DEFAULT 0, observations text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_companies (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, legal_name text, cnpj text, product_types jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.app_banners (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, title text, image_url text, link_url text, target_audience text, active boolean DEFAULT true, created_at timestamptz DEFAULT now());
 
--- 11. HABILITAR RLS E POLÍTICAS
+-- 10. HABILITAR RLS E POLÍTICAS
 ALTER TABLE public.crm_inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_attendance ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.crm_pipelines ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.crm_pipeline_stages ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "Acesso total inventory" ON public.crm_inventory;
 CREATE POLICY "Acesso total inventory" ON public.crm_inventory FOR ALL USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "Acesso total attendance" ON public.crm_attendance;
 CREATE POLICY "Acesso total attendance" ON public.crm_attendance FOR ALL USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "Acesso total pipelines" ON public.crm_pipelines;
-CREATE POLICY "Acesso total pipelines" ON public.crm_pipelines FOR ALL USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "Acesso total pipeline_stages" ON public.crm_pipeline_stages;
-CREATE POLICY "Acesso total pipeline_stages" ON public.crm_pipeline_stages FOR ALL USING (true) WITH CHECK (true);
 
 NOTIFY pgrst, 'reload config';
   `.trim();

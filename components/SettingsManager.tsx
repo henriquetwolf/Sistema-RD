@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS public.crm_franchises (
     created_at timestamptz DEFAULT now()
 );
 
--- 7. TABELA DE ESTOQUE (NOVO)
+-- 7. TABELA DE ESTOQUE
 CREATE TABLE IF NOT EXISTS public.crm_inventory (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     type text CHECK (type IN ('entry', 'exit')),
@@ -203,7 +203,7 @@ CREATE TABLE IF NOT EXISTS public.crm_inventory (
     created_at timestamptz DEFAULT now()
 );
 
--- 8. TABELA DE PRESENÇAS (NOVO)
+-- 8. TABELA DE PRESENÇAS
 CREATE TABLE IF NOT EXISTS public.crm_attendance (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     class_id uuid REFERENCES public.crm_classes(id) ON DELETE CASCADE,
@@ -214,19 +214,42 @@ CREATE TABLE IF NOT EXISTS public.crm_attendance (
     UNIQUE(class_id, student_id, date)
 );
 
--- 9. TABELAS DE APOIO
+-- 9. TABELA DE FUNIS DE VENDAS (PIPELINES)
+CREATE TABLE IF NOT EXISTS public.crm_pipelines (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    name text NOT NULL,
+    stages jsonb DEFAULT '[]'::jsonb,
+    created_at timestamptz DEFAULT now()
+);
+
+-- INSERIR FUNIL PADRÃO SE NÃO EXISTIR
+INSERT INTO public.crm_pipelines (name, stages)
+SELECT 'Padrão', '[
+    {"id": "new", "title": "Sem Contato", "color": "border-slate-300"},
+    {"id": "contacted", "title": "Contatado", "color": "border-blue-400"},
+    {"id": "proposal", "title": "Proposta Enviada", "color": "border-yellow-400"},
+    {"id": "negotiation", "title": "Em Negociação", "color": "border-orange-500"},
+    {"id": "closed", "title": "Fechamento", "color": "border-green-500"}
+]'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM public.crm_pipelines WHERE name = 'Padrão');
+
+-- 10. TABELAS DE APOIO
 CREATE TABLE IF NOT EXISTS public.crm_roles (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, permissions jsonb DEFAULT '{}'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, honorarium numeric DEFAULT 0, observations text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_companies (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, legal_name text, cnpj text, product_types jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.app_banners (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, title text, image_url text, link_url text, target_audience text, active boolean DEFAULT true, created_at timestamptz DEFAULT now());
 
--- 10. HABILITAR RLS E POLÍTICAS
+-- 11. HABILITAR RLS E POLÍTICAS
 ALTER TABLE public.crm_inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crm_pipelines ENABLE ROW LEVEL SECURITY;
+
 DROP POLICY IF EXISTS "Acesso total inventory" ON public.crm_inventory;
 CREATE POLICY "Acesso total inventory" ON public.crm_inventory FOR ALL USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "Acesso total attendance" ON public.crm_attendance;
 CREATE POLICY "Acesso total attendance" ON public.crm_attendance FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Acesso total pipelines" ON public.crm_pipelines;
+CREATE POLICY "Acesso total pipelines" ON public.crm_pipelines FOR ALL USING (true) WITH CHECK (true);
 
 NOTIFY pgrst, 'reload config';
   `.trim();

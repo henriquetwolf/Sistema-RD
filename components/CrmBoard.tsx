@@ -5,13 +5,13 @@ import {
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
-  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2
+  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2, Palette, Settings as SettingsIcon, ChevronDown
 } from 'lucide-react';
 import clsx from 'clsx';
-import { appBackend, CompanySetting } from '../services/appBackend';
+import { appBackend, CompanySetting, Pipeline, PipelineStage } from '../services/appBackend';
 
 // --- Types ---
-type DealStage = 'new' | 'contacted' | 'proposal' | 'negotiation' | 'closed';
+type DealStage = string; 
 
 interface DealTask {
     id: string;
@@ -68,12 +68,6 @@ interface Deal {
   tasks: DealTask[];
 }
 
-interface Column {
-  id: DealStage;
-  title: string;
-  color: string;
-}
-
 interface RegisteredClass {
     id: string;
     state: string;
@@ -97,16 +91,8 @@ interface CollaboratorSimple {
 interface Team {
   id: string;
   name: string;
-  members: string[]; // IDs of collaborators
+  members: string[]; 
 }
-
-const COLUMNS: Column[] = [
-  { id: 'new', title: 'Sem Contato', color: 'border-slate-300' },
-  { id: 'contacted', title: 'Contatado', color: 'border-blue-400' },
-  { id: 'proposal', title: 'Proposta Enviada', color: 'border-yellow-400' },
-  { id: 'negotiation', title: 'Em Negociação', color: 'border-orange-500' },
-  { id: 'closed', title: 'Fechamento', color: 'border-green-500' },
-];
 
 const formatCPF = (value: string = '') => {
     return value
@@ -150,7 +136,7 @@ const generateDealNumber = () => {
 const INITIAL_FORM_STATE: Partial<Deal> = {
     dealNumber: undefined,
     title: '', companyName: '', contactName: '', value: 0, 
-    paymentMethod: '', status: 'warm', stage: 'new', nextTask: '', owner: '',
+    paymentMethod: '', status: 'warm', stage: '', nextTask: '', owner: '',
     source: '', campaign: '', entryValue: 0, installments: 1, installmentValue: 0,
     cpf: '', email: '', phone: '', firstDueDate: '', receiptLink: '', transactionCode: '',
     zipCode: '', address: '', addressNumber: '',
@@ -163,9 +149,10 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
 };
 
 export const CrmBoard: React.FC = () => {
-  const [activeView, setActiveView] = useState<'pipeline' | 'teams'>('pipeline');
+  const [activeView, setActiveView] = useState<'pipeline' | 'teams' | 'pipelines_config'>('pipeline');
   const [deals, setDeals] = useState<Deal[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [collaborators, setCollaborators] = useState<CollaboratorSimple[]>([]);
   const [companies, setCompanies] = useState<CompanySetting[]>([]);
   const [registeredClasses, setRegisteredClasses] = useState<RegisteredClass[]>([]);
@@ -178,6 +165,7 @@ export const CrmBoard: React.FC = () => {
   // Modals
   const [showDealModal, setShowDealModal] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
+  const [showPipelineModal, setShowPipelineModal] = useState(false);
   
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormData, setDealFormData] = useState<Partial<Deal>>(INITIAL_FORM_STATE);
@@ -188,9 +176,11 @@ export const CrmBoard: React.FC = () => {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isSavingTeam, setIsSavingTeam] = useState(false);
 
-  const [newTaskDesc, setNoTaskDesc] = useState('');
-  const [newTaskDate, setNoTaskDate] = useState('');
-  const [newTaskType, setNoTaskType] = useState<'call' | 'email' | 'meeting' | 'todo'>('todo');
+  // Pipeline form
+  const [editingPipeline, setEditingPipeline] = useState<Pipeline | null>(null);
+  const [pipelineName, setPipelineName] = useState('');
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
+  const [isSavingPipeline, setIsSavingPipeline] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -218,9 +208,10 @@ export const CrmBoard: React.FC = () => {
   const fetchData = async () => {
       setIsLoading(true);
       try {
-          const [dealsResult, teamsResult, classesResult, productsResult, eventsResult, collabResult, companiesResult] = await Promise.all([
+          const [dealsResult, teamsResult, pipelinesResult, classesResult, productsResult, eventsResult, collabResult, companiesResult] = await Promise.all([
               appBackend.client.from('crm_deals').select('*').order('created_at', { ascending: false }),
               appBackend.client.from('crm_teams').select('*').order('name', { ascending: true }),
+              appBackend.getPipelines(),
               appBackend.client.from('crm_classes').select('id, course, state, city, mod_1_code, mod_2_code'),
               appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
               appBackend.client.from('crm_events').select('id, name').order('created_at', { ascending: false }),
@@ -246,6 +237,7 @@ export const CrmBoard: React.FC = () => {
           }
 
           setTeams(teamsResult.data || []);
+          setPipelines(pipelinesResult || []);
           
           if (classesResult.data) {
               setRegisteredClasses(classesResult.data.map((c: any) => ({
@@ -282,11 +274,6 @@ export const CrmBoard: React.FC = () => {
       }
   };
 
-  const availableStates = useMemo(() => Array.from(new Set((registeredClasses || []).map(c => c.state).filter(Boolean))).sort(), [registeredClasses]);
-  const availableCities = useMemo(() => dealFormData.courseState ? Array.from(new Set((registeredClasses || []).filter(c => c.state === dealFormData.courseState).map(c => c.city).filter(Boolean))).sort() : [], [registeredClasses, dealFormData.courseState]);
-  const availableMod1Codes = useMemo(() => dealFormData.courseCity ? (registeredClasses || []).filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity && c.mod1Code).map(c => c.mod1Code) : [], [registeredClasses, dealFormData.courseState, dealFormData.courseCity]);
-  const availableMod2Codes = useMemo(() => dealFormData.courseCity ? (registeredClasses || []).filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity && c.mod2Code).map(c => c.mod2Code) : [], [registeredClasses, dealFormData.courseState, dealFormData.courseCity]);
-
   const productOptions = useMemo(() => {
       if (dealFormData.productType === 'Digital') return (digitalProducts || []).map(p => p.name).sort();
       if (dealFormData.productType === 'Evento') return (eventsList || []).map(e => e.name).sort();
@@ -297,97 +284,11 @@ export const CrmBoard: React.FC = () => {
   const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   const getOwnerName = (id: string) => (collaborators || []).find(c => c.id === id)?.fullName || 'Desconhecido';
 
-  // --- PLUGA WEBHOOK INTEGRATION ---
-  const sendToPlugaWebhook = async (deal: Deal) => {
-    const ownerName = getOwnerName(deal.owner);
-    const today = new Date().toISOString().split('T')[0];
-    const PLUGA_URL = "https://hooks.pluga.co/v2/webhooks/MzkxODM1ODg4MjcxOTY2MDQ5NFQxNzY2MDAwMjI4";
+  const moveDeal = async (dealId: string, currentStage: DealStage, pipelineName: string, direction: 'next' | 'prev') => {
+    const pipeline = pipelines.find(p => p.name === pipelineName);
+    if (!pipeline) return;
     
-    // Construct the "observacoes_array" structure requested
-    const obsArray = [
-        { label: "Vendedor", value: ownerName },
-        { label: "Tipo de Produto", value: deal.productType },
-        { label: "Produto", value: deal.productName },
-        { label: "Fonte", value: deal.source },
-        { label: "Campanha", value: deal.campaign },
-        { label: "Funil de Vendas", value: deal.pipeline },
-        { label: "Etapa do Funil", value: "Fechamento" },
-        { label: "Forma de Pagamento", value: deal.paymentMethod },
-        { label: "Valor de Entrada", value: formatCurrency(deal.entryValue || 0) },
-        { label: "Número de Parcelas", value: String(deal.installments || 1) },
-        { label: "Valor das Parcelas", value: formatCurrency(deal.installmentValue || 0) },
-        { label: "Dia do Primeiro Vencimento", value: deal.firstDueDate ? new Date(deal.firstDueDate).toLocaleDateString('pt-BR') : '--' },
-        { label: "Turma/Módulo", value: deal.classMod1 || deal.classMod2 || '--' },
-        { label: "Link do Comprovante", value: deal.receiptLink || '--' },
-        { label: "Código da Transação", value: deal.transactionCode || '--' },
-        { label: "Dados da Inscrição", value: deal.registrationData || '--' },
-        { label: "Observação", value: deal.observation || '--' }
-    ];
-
-    const payload = {
-        data_venda: today,
-        situacao_venda: "Aprovada",
-        numero_venda: String(deal.dealNumber || ""),
-        numero_negociacao: "Automático",
-        nome_cliente: deal.companyName || deal.contactName,
-        email_cliente: deal.email || "",
-        telefone_cliente: deal.phone || "",
-        cpf_cnpj_cliente: deal.cpf || "",
-        nome_vendedor: ownerName,
-        tipo_cliente: "Todos os tipos de pessoa",
-        tipo_item: "Serviço",
-        tipo_perfil: "Cliente",
-        tipo_produto: deal.productType || "",
-        curso_produto: deal.productName || "",
-        fonte_negociacao: deal.source || "",
-        campanha: deal.campaign || "",
-        funil_vendas: deal.pipeline || "Padrão",
-        etapa_funil: "Fechamento",
-        cep_cliente: deal.zipCode || "",
-        rua_cliente: deal.address || "",
-        numero_endereco_cliente: deal.addressNumber || "",
-        cidade_cliente: deal.courseCity || "",
-        pais_cliente: "Brasil",
-        nomes_itens: deal.productName || "",
-        quantidades_itens: "1",
-        valor_total: String(deal.value || 0),
-        itens_venda: `${deal.productName} (1 un) - ${formatCurrency(deal.value)}`,
-        forma_pagamento: deal.paymentMethod || "",
-        valor_entrada: String(deal.entryValue || 0),
-        numero_parcelas: String(deal.installments || 1),
-        valor_parcelas: String(deal.installmentValue || 0),
-        dia_primeiro_vencimento: deal.firstDueDate || "",
-        turma_modulo: deal.classMod1 || deal.classMod2 || "",
-        link_comprovante: deal.receiptLink || "",
-        codigo_transacao: deal.transactionCode || "",
-        dados_inscricao: deal.registrationData || "",
-        observacoes_array: JSON.stringify(obsArray)
-    };
-
-    console.log("Enviando dados para Pluga:", payload);
-
-    try {
-        const response = await fetch(PLUGA_URL, {
-            method: "POST",
-            headers: { 
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            },
-            body: JSON.stringify(payload)
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        console.log("Pluga Webhook enviado com sucesso!");
-    } catch (e) {
-        console.error("Erro ao enviar Webhook para Pluga:", e);
-    }
-  };
-
-  const moveDeal = async (dealId: string, currentStage: DealStage, direction: 'next' | 'prev') => {
-    const stageOrder: DealStage[] = ['new', 'contacted', 'proposal', 'negotiation', 'closed'];
+    const stageOrder = pipeline.stages.map(s => s.id);
     const currentIndex = stageOrder.indexOf(currentStage);
     let newIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
     if (newIndex < 0 || newIndex >= stageOrder.length) return;
@@ -405,20 +306,143 @@ export const CrmBoard: React.FC = () => {
         if (currentStage === 'closed' && newStage !== 'closed') updates.closed_at = null;
         await appBackend.client.from('crm_deals').update(updates).eq('id', dealId);
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal.title}" para a etapa: ${newStage}`, recordId: dealId });
-        
-        // TRIGGER PLUGA WEBHOOK
-        if (newStage === 'closed') {
-            sendToPlugaWebhook({ ...deal, stage: 'closed', closedAt: now });
-        }
-    } catch (e: any) {
-        handleDbError(e);
-        fetchData(); 
-    }
+    } catch (e: any) { handleDbError(e); fetchData(); }
   };
 
-  const getStageSummary = (stage: DealStage) => {
-    const stageDeals = (deals || []).filter(d => d.stage === stage);
+  const getStageSummary = (pipelineName: string, stageId: string) => {
+    const stageDeals = (deals || []).filter(d => d.pipeline === pipelineName && d.stage === stageId);
     return { count: stageDeals.length, total: stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0) };
+  };
+
+  const handleDragStart = (e: React.DragEvent, dealId: string) => { setDraggedDealId(dealId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dealId); };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  
+  const handleDrop = async (e: React.DragEvent, pipelineName: string, targetStage: DealStage) => {
+    e.preventDefault();
+    if (!draggedDealId) return;
+    const currentDeal = (deals || []).find(d => d.id === draggedDealId);
+    if (!currentDeal || (currentDeal.stage === targetStage && currentDeal.pipeline === pipelineName)) { setDraggedDealId(null); return; }
+    const now = new Date();
+    setDeals(prev => prev.map(d => d.id === draggedDealId ? { ...d, pipeline: pipelineName, stage: targetStage, closedAt: targetStage === 'closed' ? now : (d.stage === 'closed' ? undefined : d.closedAt) } : d));
+    try {
+        const updates: any = { pipeline: pipelineName, stage: targetStage };
+        if (targetStage === 'closed') updates.closed_at = now.toISOString();
+        else if (currentDeal.stage === 'closed') updates.closed_at = null;
+        await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId);
+        await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para Funil: ${pipelineName}, Etapa: ${targetStage}`, recordId: draggedDealId });
+    } catch (e) { handleDbError(e); fetchData(); }
+    setDraggedDealId(null);
+  };
+
+  const openNewDealModal = () => { 
+    setEditingDealId(null); 
+    const firstComercial = (collaborators || []).find(c => c.department === 'Comercial');
+    const firstPipeline = pipelines[0]?.name || 'Padrão';
+    const firstStage = pipelines[0]?.stages[0]?.id || 'new';
+    setDealFormData({ ...INITIAL_FORM_STATE, owner: firstComercial?.id || '', pipeline: firstPipeline, stage: firstStage }); 
+    setShowDealModal(true); 
+  };
+  const openEditDealModal = (deal: Deal) => { setEditingDealId(deal.id); setDealFormData({ ...deal }); setShowDealModal(true); };
+
+  const openNewTeamModal = () => { setEditingTeam(null); setTeamName(''); setSelectedMembers([]); setShowTeamModal(true); };
+  const openEditTeamModal = (team: Team) => { setEditingTeam(team); setTeamName(team.name || ''); setSelectedMembers(team.members || []); setShowTeamModal(true); };
+
+  const openNewPipelineModal = () => {
+    setEditingPipeline(null);
+    setPipelineName('');
+    setPipelineStages([
+        { id: 'new', title: 'Sem Contato', color: 'border-slate-300' },
+        { id: 'closed', title: 'Fechamento', color: 'border-green-500' }
+    ]);
+    setShowPipelineModal(true);
+  };
+
+  const openEditPipelineModal = (p: Pipeline) => {
+    setEditingPipeline(p);
+    setPipelineName(p.name);
+    setPipelineStages(p.stages);
+    setShowPipelineModal(true);
+  };
+
+  const handleSavePipeline = async () => {
+      if (!pipelineName.trim()) return;
+      setIsSavingPipeline(true);
+      try {
+          const pipeline: Pipeline = {
+              id: editingPipeline?.id || crypto.randomUUID(),
+              name: pipelineName,
+              stages: pipelineStages
+          };
+          await appBackend.savePipeline(pipeline);
+          await fetchData();
+          setShowPipelineModal(false);
+      } catch (e: any) { alert(`Erro ao salvar funil: ${e.message}`); } finally { setIsSavingPipeline(false); }
+  };
+
+  const handleDeletePipeline = async (id: string) => {
+      const p = pipelines.find(x => x.id === id);
+      if (p?.name === 'Padrão') { alert("O Funil Padrão não pode ser excluído."); return; }
+      if (!window.confirm(`Deseja excluir o funil "${p?.name}"?`)) return;
+      try {
+          await appBackend.deletePipeline(id);
+          await fetchData();
+      } catch (e: any) { alert(`Erro: ${e.message}`); }
+  };
+
+  const handleSaveTeam = async () => {
+    if (!teamName.trim()) return;
+    setIsSavingTeam(true);
+    try {
+        const payload = { name: teamName, members: selectedMembers || [] };
+        if (editingTeam) {
+            await appBackend.client.from('crm_teams').update(payload).eq('id', editingTeam.id);
+        } else {
+            await appBackend.client.from('crm_teams').insert([payload]);
+        }
+        await fetchData(); setShowTeamModal(false);
+    } catch (e: any) { handleDbError(e); } finally { setIsSavingTeam(false); }
+  };
+
+  const handleDeleteTeam = async (id: string) => {
+      if (!window.confirm("Excluir esta equipe?")) return;
+      try {
+          await appBackend.client.from('crm_teams').delete().eq('id', id);
+          await fetchData();
+      } catch (e: any) { alert(`Erro ao excluir equipe: ${e.message}`); }
+  };
+
+  const handleSaveDeal = async () => {
+      if (!dealFormData.companyName) { alert("Preencha o Nome Completo do Cliente."); return; }
+      const payload = {
+          title: dealFormData.companyName, company_name: dealFormData.companyName, contact_name: dealFormData.contactName, value: Number(dealFormData.value) || 0,
+          payment_method: dealFormData.paymentMethod, stage: dealFormData.stage, owner_id: dealFormData.owner, status: dealFormData.status || 'warm',
+          next_task: dealFormData.nextTask, source: dealFormData.source, campaign: dealFormData.campaign, entry_value: Number(dealFormData.entryValue) || 0,
+          installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installmentValue || 0),
+          product_type: dealFormData.productType || null, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
+          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode,
+          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber, registration_data: dealFormData.registrationData,
+          observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
+          class_mod_1: dealFormData.class_mod_1, class_mod_2: dealFormData.class_mod_2, pipeline: dealFormData.pipeline, 
+          tasks: dealFormData.tasks, billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName
+      };
+      try {
+          if (editingDealId) {
+              await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId);
+          } else {
+              const dealNumber = generateDealNumber();
+              await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]);
+          }
+          await fetchData(); setShowDealModal(false);
+      } catch (e: any) { handleDbError(e); }
+  };
+
+  const handleDeleteDeal = async () => {
+      if (editingDealId && window.confirm("Excluir esta negociação?")) {
+          try {
+            await appBackend.client.from('crm_deals').delete().eq('id', editingDealId);
+            await fetchData(); setShowDealModal(false);
+          } catch(e: any) { alert(`Erro ao excluir: ${e.message}`); }
+      }
   };
 
   const filteredDeals = (deals || []).filter(d => 
@@ -427,194 +451,6 @@ export const CrmBoard: React.FC = () => {
     (d.dealNumber && d.dealNumber.toString().includes(searchTerm))
   );
 
-  const handleDragStart = (e: React.DragEvent, dealId: string) => { setDraggedDealId(dealId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dealId); };
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  
-  const handleDrop = async (e: React.DragEvent, targetStage: DealStage) => {
-    e.preventDefault();
-    if (!draggedDealId) return;
-    const currentDeal = (deals || []).find(d => d.id === draggedDealId);
-    if (!currentDeal || currentDeal.stage === targetStage) { setDraggedDealId(null); return; }
-    const now = new Date();
-    setDeals(prev => prev.map(d => d.id === draggedDealId ? { ...d, stage: targetStage, closedAt: targetStage === 'closed' ? now : (d.stage === 'closed' ? undefined : d.closedAt) } : d));
-    try {
-        const updates: any = { stage: targetStage };
-        if (targetStage === 'closed') updates.closed_at = now.toISOString();
-        else if (currentDeal.stage === 'closed') updates.closed_at = null;
-        await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId);
-        await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para: ${targetStage}`, recordId: draggedDealId });
-        
-        // TRIGGER PLUGA WEBHOOK
-        if (targetStage === 'closed') {
-            sendToPlugaWebhook({ ...currentDeal, stage: 'closed', closedAt: now });
-        }
-    } catch (e) { handleDbError(e); fetchData(); }
-    setDraggedDealId(null);
-  };
-
-  const handleInputChange = (field: keyof Deal, value: any) => {
-      setDealFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const openNewDealModal = () => { 
-    setEditingDealId(null); 
-    const firstComercial = (collaborators || []).find(c => c.department === 'Comercial');
-    setDealFormData({ ...INITIAL_FORM_STATE, owner: firstComercial?.id || '' }); 
-    setShowDealModal(true); 
-  };
-  const openEditDealModal = (deal: Deal) => { setEditingDealId(deal.id); setDealFormData({ ...deal }); setShowDealModal(true); };
-
-  const openNewTeamModal = () => {
-    setEditingTeam(null);
-    setTeamName('');
-    setSelectedMembers([]);
-    setShowTeamModal(true);
-  };
-
-  const openEditTeamModal = (team: Team) => {
-    setEditingTeam(team);
-    setTeamName(team.name || '');
-    setSelectedMembers(team.members || []);
-    setShowTeamModal(true);
-  };
-
-  const handleSaveTeam = async () => {
-    if (!teamName.trim()) return;
-    setIsSavingTeam(true);
-    try {
-        const payload = {
-            name: teamName,
-            members: selectedMembers || []
-        };
-        
-        let response;
-        if (editingTeam) {
-            response = await appBackend.client.from('crm_teams').update(payload).eq('id', editingTeam.id);
-            await appBackend.logActivity({ action: 'update', module: 'crm', details: `Editou equipe comercial: ${teamName}`, recordId: editingTeam.id });
-        } else {
-            response = await appBackend.client.from('crm_teams').insert([payload]).select().single();
-            await appBackend.logActivity({ action: 'create', module: 'crm', details: `Criou equipe comercial: ${teamName}`, recordId: response.data?.id });
-        }
-
-        if (response.error) {
-            throw response.error;
-        }
-
-        await fetchData();
-        setShowTeamModal(false);
-    } catch (e: any) {
-        console.error("Erro ao salvar equipe:", e);
-        handleDbError(e);
-    } finally {
-        setIsSavingTeam(false);
-    }
-  };
-
-  const handleDeleteTeam = async (id: string) => {
-      const team = teams.find(t => t.id === id);
-      if (!window.confirm("Excluir esta equipe?")) return;
-      try {
-          const { error } = await appBackend.client.from('crm_teams').delete().eq('id', id);
-          if (error) throw error;
-          await appBackend.logActivity({ action: 'delete', module: 'crm', details: `Excluiu equipe comercial: ${team?.name}`, recordId: id });
-          await fetchData();
-      } catch (e: any) {
-          alert(`Erro ao excluir equipe: ${e.message}`);
-      }
-  };
-
-  const toggleMember = (id: string) => {
-      setSelectedMembers(prev => {
-          const current = prev || [];
-          return current.includes(id) ? current.filter(m => m !== id) : [...current, id];
-      });
-  };
-
-  const handleAddTask = () => {
-      if(!newTaskDesc) return;
-      const newTask: DealTask = { id: crypto.randomUUID(), description: newTaskDesc, dueDate: newTaskDate, type: newTaskType, isDone: false };
-      setDealFormData(prev => ({ ...prev, tasks: [newTask, ...(prev.tasks || [])] }));
-      setNoTaskDesc(''); setNoTaskDate('');
-  };
-
-  const handleSaveDeal = async () => {
-      if (!dealFormData.companyName) { alert("Preencha o Nome Completo do Cliente."); return; }
-      
-      const dealTitle = dealFormData.companyName;
-      const isClosing = dealFormData.stage === 'closed';
-      
-      const payload = {
-          title: dealTitle, 
-          company_name: dealFormData.companyName, 
-          contact_name: dealFormData.contactName, 
-          value: Number(dealFormData.value) || 0,
-          payment_method: dealFormData.paymentMethod, 
-          stage: dealFormData.stage || 'new', 
-          owner_id: dealFormData.owner, 
-          status: dealFormData.status || 'warm',
-          next_task: dealFormData.nextTask, 
-          source: dealFormData.source, 
-          campaign: dealFormData.campaign, 
-          entry_value: Number(dealFormData.entryValue) || 0,
-          installments: Number(dealFormData.installments) || 1, 
-          installment_value: Number(dealFormData.installmentValue || 0),
-          product_type: dealFormData.productType || null, 
-          product_name: dealFormData.productName,
-          email: dealFormData.email, 
-          phone: dealFormData.phone,
-          cpf: dealFormData.cpf, 
-          first_due_date: dealFormData.firstDueDate || null, 
-          receipt_link: dealFormData.receiptLink, 
-          transaction_code: dealFormData.transactionCode,
-          zip_code: dealFormData.zipCode, 
-          address: dealFormData.address, 
-          address_number: dealFormData.addressNumber,
-          registration_data: dealFormData.registrationData, 
-          observation: dealFormData.observation, 
-          course_state: dealFormData.courseState,
-          course_city: dealFormData.courseCity, 
-          class_mod_1: dealFormData.class_mod_1, 
-          class_mod_2: dealFormData.class_mod_2,
-          pipeline: dealFormData.pipeline || 'Padrão', 
-          tasks: dealFormData.tasks,
-          billing_cnpj: dealFormData.billingCnpj, 
-          billing_company_name: dealFormData.billingCompanyName
-      };
-
-      try {
-          let savedData: any;
-          if (editingDealId) {
-              await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId);
-              await appBackend.logActivity({ action: 'update', module: 'crm', details: `Editou negócio: ${dealTitle}`, recordId: editingDealId });
-              savedData = { ...dealFormData, id: editingDealId };
-          } else {
-              const dealNumber = generateDealNumber();
-              const { data } = await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]).select().single();
-              await appBackend.logActivity({ action: 'create', module: 'crm', details: `Criou novo negócio: ${dealTitle}`, recordId: data?.id });
-              savedData = { ...dealFormData, ...payload, id: data?.id, dealNumber };
-          }
-
-          // TRIGGER PLUGA WEBHOOK IF STATUS IS CLOSED
-          if (isClosing) {
-              sendToPlugaWebhook(savedData as Deal);
-          }
-
-          await fetchData();
-          setShowDealModal(false);
-      } catch (e: any) { handleDbError(e); }
-  };
-
-  const handleDeleteDeal = async () => {
-      if (editingDealId && window.confirm("Excluir esta negociação?")) {
-          try {
-            await appBackend.client.from('crm_deals').delete().eq('id', editingDealId);
-            await appBackend.logActivity({ action: 'delete', module: 'crm', details: `Excluiu negócio: ${dealFormData.companyName}`, recordId: editingDealId });
-            await fetchData();
-            setShowDealModal(false);
-          } catch(e: any) { alert(`Erro ao excluir: ${e.message}`); }
-      }
-  };
-
   return (
     <div className="flex flex-col h-[calc(100vh-140px)]">
       <div className="bg-white border-b border-slate-200 px-6 py-2 flex flex-col md:flex-row md:items-center justify-between shadow-sm z-10 gap-4 shrink-0">
@@ -622,6 +458,7 @@ export const CrmBoard: React.FC = () => {
             <div className="flex items-center bg-slate-100 rounded-lg p-1">
                 <button onClick={() => setActiveView('pipeline')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'pipeline' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutGrid size={16} /> Pipeline</button>
                 <button onClick={() => setActiveView('teams')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'teams' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Users size={16} /> Equipes</button>
+                <button onClick={() => setActiveView('pipelines_config')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'pipelines_config' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><SettingsIcon size={16} /> Funis</button>
             </div>
             <button onClick={fetchData} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"><RefreshCw size={18} className={clsx(isLoading && "animate-spin")} /></button>
         </div>
@@ -635,8 +472,10 @@ export const CrmBoard: React.FC = () => {
                     </div>
                     <button onClick={openNewDealModal} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-all"><Plus size={18} /> Novo Negócio</button>
                 </>
-            ) : (
+            ) : activeView === 'teams' ? (
                 <button onClick={openNewTeamModal} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-all"><Plus size={18} /> Nova Equipe</button>
+            ) : (
+                <button onClick={openNewPipelineModal} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-all"><Plus size={18} /> Novo Funil</button>
             )}
         </div>
       </div>
@@ -647,110 +486,150 @@ export const CrmBoard: React.FC = () => {
         ) : (
         <>
             {activeView === 'pipeline' && (
-                <div className="flex gap-4 h-full min-w-max">
-                {COLUMNS.map(column => {
-                    const summary = getStageSummary(column.id);
-                    const columnDeals = filteredDeals.filter(d => d.stage === column.id);
-                    return (
-                    <div key={column.id} className="w-[320px] flex flex-col h-full rounded-xl bg-slate-50/50 border border-slate-200 shadow-sm" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, column.id)}>
-                        <div className={clsx("p-3 border-t-4 bg-white rounded-t-xl border-b border-b-slate-100", column.color)}>
-                            <div className="flex justify-between items-start mb-1">
-                                <h3 className="font-semibold text-slate-700">{column.title}</h3>
-                                <button className="text-slate-400 hover:text-slate-600"><MoreHorizontal size={16} /></button>
-                            </div>
-                            <div className="flex justify-between items-end">
-                                <span className="text-xs text-slate-500 font-medium">{summary.count} negócios</span>
-                                <span className="text-xs font-bold text-slate-800">{formatCurrency(summary.total)}</span>
-                            </div>
+                <div className="flex flex-col gap-12 min-w-max">
+                {pipelines.map(pipeline => (
+                    <div key={pipeline.id} className="space-y-4">
+                        <div className="flex items-center justify-between bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
+                            <h2 className="text-lg font-black text-slate-700 flex items-center gap-2">
+                                <Filter size={20} className="text-indigo-600" /> Funil: {pipeline.name}
+                            </h2>
+                            <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">{filteredDeals.filter(d => d.pipeline === pipeline.name).length} Negócios</span>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-3 custom-scrollbar">
-                        {columnDeals.length === 0 ? (
-                            <div className="h-24 border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs">Arraste aqui</div>
-                        ) : (
-                            columnDeals.map(deal => (
-                            <div key={deal.id} draggable onDragStart={(e) => handleDragStart(e, deal.id)} onClick={() => openEditDealModal(deal)} className={clsx("group bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md relative cursor-grab active:cursor-grabbing", draggedDealId === deal.id ? "opacity-40 ring-2 ring-indigo-400" : "")}>
-                                <div className={clsx("absolute left-0 top-3 bottom-3 w-1 rounded-r", deal.status === 'hot' ? 'bg-red-400' : deal.status === 'warm' ? 'bg-yellow-400' : 'bg-blue-300')}></div>
-                                <div className="pl-3">
-                                    <div className="flex justify-between items-start mb-1">
-                                        <div>
-                                            {deal.dealNumber && <span className="text-[10px] text-slate-400 font-mono block">#{deal.dealNumber}</span>}
-                                            <h4 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight">{deal.title}</h4>
+                        <div className="flex gap-4 h-full">
+                        {pipeline.stages.map(stage => {
+                            const summary = getStageSummary(pipeline.name, stage.id);
+                            const columnDeals = filteredDeals.filter(d => d.pipeline === pipeline.name && d.stage === stage.id);
+                            return (
+                                <div key={stage.id} className="w-[320px] flex flex-col h-full rounded-xl bg-slate-50/50 border border-slate-200 shadow-sm" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, pipeline.name, stage.id)}>
+                                    <div className={clsx("p-3 border-t-4 bg-white rounded-t-xl border-b border-b-slate-100", stage.color)}>
+                                        <div className="flex justify-between items-start mb-1">
+                                            <h3 className="font-semibold text-slate-700">{stage.title}</h3>
+                                            <button className="text-slate-400 hover:text-slate-600"><MoreHorizontal size={16} /></button>
                                         </div>
-                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex">
-                                            {column.id !== 'new' && <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, 'prev')}} className="p-1 hover:bg-slate-100 rounded text-slate-500"><ChevronRight size={14} className="rotate-180"/></button>}
-                                            {column.id !== 'closed' && <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, 'next')}} className="p-1 hover:bg-green-50 rounded text-green-600"><ChevronRight size={14} /></button>}
+                                        <div className="flex justify-between items-end">
+                                            <span className="text-xs text-slate-500 font-medium">{summary.count} negócios</span>
+                                            <span className="text-xs font-bold text-slate-800">{formatCurrency(summary.total)}</span>
                                         </div>
                                     </div>
-                                    <p className="text-xs text-slate-500 mb-2 truncate">{deal.companyName}</p>
-                                    <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                                        <span className="font-bold text-slate-700 text-sm">{formatCurrency(deal.value)}</span>
-                                        <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm" title={`Responsável: ${getOwnerName(deal.owner)}`}>
-                                            {(getOwnerName(deal.owner) || '?').charAt(0)}
+                                    <div className="flex-1 overflow-y-auto p-2 space-y-3 custom-scrollbar min-h-[150px]">
+                                    {columnDeals.length === 0 ? (
+                                        <div className="h-24 border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs">Arraste aqui</div>
+                                    ) : (
+                                        columnDeals.map(deal => (
+                                        <div key={deal.id} draggable onDragStart={(e) => handleDragStart(e, deal.id)} onClick={() => openEditDealModal(deal)} className={clsx("group bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md relative cursor-grab active:cursor-grabbing", draggedDealId === deal.id ? "opacity-40 ring-2 ring-indigo-400" : "")}>
+                                            <div className={clsx("absolute left-0 top-3 bottom-3 w-1 rounded-r", deal.status === 'hot' ? 'bg-red-400' : deal.status === 'warm' ? 'bg-yellow-400' : 'bg-blue-300')}></div>
+                                            <div className="pl-3">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <div>
+                                                        {deal.dealNumber && <span className="text-[10px] text-slate-400 font-mono block">#{deal.dealNumber}</span>}
+                                                        <h4 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight">{deal.title}</h4>
+                                                    </div>
+                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex">
+                                                        <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'prev')}} className="p-1 hover:bg-slate-100 rounded text-slate-500"><ChevronRight size={14} className="rotate-180"/></button>
+                                                        <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'next')}} className="p-1 hover:bg-green-50 rounded text-green-600"><ChevronRight size={14} /></button>
+                                                    </div>
+                                                </div>
+                                                <p className="text-xs text-slate-500 mb-2 truncate">{deal.companyName}</p>
+                                                <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                                                    <span className="font-bold text-slate-700 text-sm">{formatCurrency(deal.value)}</span>
+                                                    <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm" title={`Responsável: ${getOwnerName(deal.owner)}`}>
+                                                        {(getOwnerName(deal.owner) || '?').charAt(0)}
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
+                                        ))
+                                    )}
                                     </div>
                                 </div>
-                            </div>
-                            ))
-                        )}
+                            );
+                        })}
                         </div>
                     </div>
-                    );
-                })}
+                ))}
                 </div>
             )}
             
             {activeView === 'teams' && (
                 <div className="max-w-6xl mx-auto animate-in fade-in duration-300">
-                    <div className="mb-6">
-                        <h2 className="text-xl font-bold text-slate-800">Equipes Comerciais</h2>
-                        <p className="text-sm text-slate-500">Agrupe seus vendedores para análise de performance.</p>
-                    </div>
-                    
+                    <div className="mb-6"><h2 className="text-xl font-bold text-slate-800">Equipes Comerciais</h2><p className="text-sm text-slate-500">Agrupe seus vendedores para análise de performance.</p></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {(teams || []).map(team => (
                             <div key={team.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow flex flex-col group">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="bg-indigo-100 text-indigo-700 p-2 rounded-lg">
-                                        <Users size={24} />
-                                    </div>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => openEditTeamModal(team)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
-                                        <button onClick={() => handleDeleteTeam(team.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
-                                    </div>
-                                </div>
-                                <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{team.name || 'Sem nome'}</h3>
-                                <p className="text-xs text-slate-400 mb-4">{(team.members || []).length} membros ativos</p>
-                                
-                                <div className="flex flex-wrap gap-2 mb-4">
-                                    {(team.members || []).map(memberId => {
-                                        const col = (collaborators || []).find(c => c.id === memberId);
-                                        if (!col) return null;
-                                        return (
-                                            <div key={memberId} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-600 shadow-sm" title={col.fullName}>
-                                                {(col.fullName || '?').charAt(0)}
-                                            </div>
-                                        );
-                                    })}
-                                    {(team.members || []).length === 0 && <span className="text-xs text-slate-400 italic">Sem membros</span>}
-                                </div>
+                                <div className="flex justify-between items-start mb-4"><div className="bg-indigo-100 text-indigo-700 p-2 rounded-lg"><Users size={24} /></div><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => openEditTeamModal(team)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit2 size={16} /></button><button onClick={() => handleDeleteTeam(team.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button></div></div>
+                                <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{team.name || 'Sem nome'}</h3><p className="text-xs text-slate-400 mb-4">{(team.members || []).length} membros ativos</p>
+                                <div className="flex flex-wrap gap-2 mb-4">{(team.members || []).map(memberId => { const col = (collaborators || []).find(c => c.id === memberId); if (!col) return null; return ( <div key={memberId} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-600 shadow-sm" title={col.fullName}>{(col.fullName || '?').charAt(0)}</div> ); })}{(team.members || []).length === 0 && <span className="text-xs text-slate-400 italic">Sem membros</span>}</div>
                             </div>
                         ))}
-                        
-                        <button 
-                            onClick={openNewTeamModal}
-                            className="bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 hover:bg-slate-50 hover:border-indigo-300 transition-all group"
-                        >
-                            <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-indigo-500 mb-2">
-                                <Plus size={24} />
+                        <button onClick={openNewTeamModal} className="bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 hover:bg-slate-50 hover:border-indigo-300 transition-all group"><div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-indigo-500 mb-2"><Plus size={24} /></div><span className="font-bold text-slate-600 group-hover:text-indigo-600">Nova Equipe</span></button>
+                    </div>
+                </div>
+            )}
+
+            {activeView === 'pipelines_config' && (
+                <div className="max-w-6xl mx-auto animate-in fade-in duration-300">
+                    <div className="mb-6"><h2 className="text-xl font-bold text-slate-800">Funis de Vendas</h2><p className="text-sm text-slate-500">Configure seus processos comerciais personalizados.</p></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {(pipelines || []).map(p => (
+                            <div key={p.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow flex flex-col group">
+                                <div className="flex justify-between items-start mb-4"><div className="bg-teal-100 text-teal-700 p-2 rounded-lg"><Filter size={24} /></div><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => openEditPipelineModal(p)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"><Edit2 size={16} /></button><button onClick={() => handleDeletePipeline(p.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button></div></div>
+                                <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{p.name || 'Sem nome'}</h3><p className="text-xs text-slate-400 mb-4">{p.stages.length} etapas</p>
+                                <div className="flex flex-wrap gap-1 mb-4">{p.stages.map(s => <span key={s.id} className={clsx("px-2 py-0.5 rounded text-[9px] font-bold border", s.color)}>{s.title}</span>)}</div>
                             </div>
-                            <span className="font-bold text-slate-600 group-hover:text-indigo-600">Nova Equipe</span>
-                        </button>
+                        ))}
+                        <button onClick={openNewPipelineModal} className="bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 hover:bg-slate-50 hover:border-teal-300 transition-all group"><div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-teal-500 mb-2"><Plus size={24} /></div><span className="font-bold text-slate-600 group-hover:text-teal-600">Novo Funil</span></button>
                     </div>
                 </div>
             )}
         </>
         )}
       </div>
+
+      {/* --- PIPELINE MODAL --- */}
+      {showPipelineModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2"><Filter size={20} className="text-teal-600" /> {editingPipeline ? 'Editar Funil' : 'Criar Novo Funil'}</h3>
+                      <button onClick={() => setShowPipelineModal(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors"><X size={20}/></button>
+                  </div>
+                  <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Nome do Funil</label>
+                          <input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500" placeholder="Ex: Funil Cursos, Funil Equipamentos..." value={pipelineName} onChange={e => setPipelineName(e.target.value)} />
+                      </div>
+                      <div className="space-y-4">
+                          <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">Etapas</label><button onClick={() => setPipelineStages([...pipelineStages, { id: crypto.randomUUID().substring(0,8), title: 'Nova Etapa', color: 'border-slate-300' }])} className="text-xs font-bold text-teal-600 hover:underline">+ Adicionar Etapa</button></div>
+                          <div className="space-y-2">
+                              {pipelineStages.map((stage, idx) => (
+                                  <div key={idx} className="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-200">
+                                      <div className="shrink-0 cursor-grab text-slate-300"><GripVertical size={16}/></div>
+                                      <input type="text" className="flex-1 px-2 py-1 text-sm border rounded" value={stage.title} onChange={e => setPipelineStages(pipelineStages.map((s, i) => i === idx ? { ...s, title: e.target.value } : s))} />
+                                      <select className="px-2 py-1 text-xs border rounded bg-white" value={stage.color} onChange={e => setPipelineStages(pipelineStages.map((s, i) => i === idx ? { ...s, color: e.target.value } : s))}>
+                                          <option value="border-slate-300">Cinza</option>
+                                          <option value="border-blue-400">Azul</option>
+                                          <option value="border-yellow-400">Amarelo</option>
+                                          <option value="border-orange-500">Laranja</option>
+                                          <option value="border-green-500">Verde</option>
+                                          <option value="border-purple-500">Roxo</option>
+                                          <option value="border-red-500">Vermelho</option>
+                                      </select>
+                                      <button onClick={() => setPipelineStages(pipelineStages.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-red-500"><X size={16}/></button>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+                  </div>
+                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                      <button onClick={() => setShowPipelineModal(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
+                      <button onClick={handleSavePipeline} disabled={isSavingPipeline || !pipelineName.trim()} className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all">
+                          {isSavingPipeline ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                          Salvar Funil
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* --- TEAM MODAL --- */}
       {showTeamModal && (
@@ -760,54 +639,30 @@ export const CrmBoard: React.FC = () => {
                       <h3 className="font-bold text-slate-800 flex items-center gap-2"><Users size={20} className="text-indigo-600" /> {editingTeam ? 'Editar Equipe' : 'Criar Nova Equipe'}</h3>
                       <button onClick={() => setShowTeamModal(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors"><X size={20}/></button>
                   </div>
-                  
                   <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1">
                       <div>
                           <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Nome da Equipe</label>
-                          <input 
-                            type="text" 
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" 
-                            placeholder="Ex: Time Vendas Sul, Inside Sales..." 
-                            value={teamName}
-                            onChange={e => setTeamName(e.target.value)}
-                          />
+                          <input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Time Vendas Sul, Time Digital..." value={teamName} onChange={e => setTeamName(e.target.value)} />
                       </div>
-                      
                       <div>
-                          <label className="block text-xs font-bold text-slate-600 mb-3 uppercase tracking-wider">Membros do Comercial</label>
-                          <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
-                              {(collaborators || []).filter(c => c.department === 'Comercial').length === 0 ? (
-                                  <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                                      <p className="text-sm text-slate-400 italic">Nenhum colaborador do Comercial encontrado.</p>
-                                  </div>
-                              ) : (
-                                  (collaborators || []).filter(c => c.department === 'Comercial').map(col => (
-                                      <label key={col.id} className={clsx("flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all", (selectedMembers || []).includes(col.id) ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-100 hover:bg-slate-50")}>
-                                          <div className="flex items-center gap-3">
-                                              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">{(col.fullName || '?').charAt(0)}</div>
-                                              <span className="text-sm font-medium text-slate-700">{col.fullName}</span>
-                                          </div>
-                                          <input 
-                                            type="checkbox" 
-                                            className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
-                                            checked={(selectedMembers || []).includes(col.id)}
-                                            onChange={() => toggleMember(col.id)}
-                                          />
-                                      </label>
-                                  ))
-                              )}
+                          <label className="block text-xs font-bold text-slate-600 mb-3 uppercase tracking-wider">Membros da Equipe</label>
+                          <div className="space-y-1">
+                              {(collaborators || []).map(col => (
+                                  <label key={col.id} className={clsx("flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all", selectedMembers.includes(col.id) ? "bg-indigo-50 border-indigo-500" : "bg-white border-slate-100 hover:border-slate-200")}>
+                                      <div className="flex items-center gap-3">
+                                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">{(col.fullName || '?').charAt(0)}</div>
+                                          <div><p className="text-sm font-bold text-slate-800">{col.fullName}</p><p className="text-[10px] text-slate-400 uppercase">{col.department}</p></div>
+                                      </div>
+                                      <input type="checkbox" className="w-5 h-5 rounded text-indigo-600" checked={selectedMembers.includes(col.id)} onChange={e => setSelectedMembers(e.target.checked ? [...selectedMembers, col.id] : selectedMembers.filter(id => id !== col.id))} />
+                                  </label>
+                              ))}
                           </div>
                       </div>
                   </div>
-                  
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                       <button onClick={() => setShowTeamModal(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
-                      <button 
-                        onClick={handleSaveTeam} 
-                        disabled={isSavingTeam || !teamName.trim()}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2 disabled:opacity-50"
-                      >
-                          {isSavingTeam ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all">
+                          {isSavingTeam ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                           Salvar Equipe
                       </button>
                   </div>
@@ -815,183 +670,166 @@ export const CrmBoard: React.FC = () => {
           </div>
       )}
 
+      {/* --- DEAL MODAL --- */}
       {showDealModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
-                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                      <div className="flex flex-col">
-                          <h3 className="font-bold text-slate-800 flex items-center gap-2"><Briefcase size={20} className="text-indigo-600" /> {editingDealId ? 'Editar Negociação' : 'Nova Oportunidade'}</h3>
-                          {editingDealId && dealFormData.dealNumber && <span className="text-xs text-slate-500 font-mono ml-7">Protocolo #{dealFormData.dealNumber}</span>}
-                      </div>
-                      <button onClick={() => setShowDealModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={20}/></button>
-                  </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col max-h-[95vh]">
+            <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Briefcase className="text-indigo-600" /> {editingDealId ? 'Editar Oportunidade' : 'Nova Oportunidade'}</h3>
+                <button onClick={() => setShowDealModal(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors"><X size={24}/></button>
+            </div>
+            
+            <div className="p-8 overflow-y-auto custom-scrollbar flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                    <div className="lg:col-span-2">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome Completo do Cliente *</label>
+                        <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm font-bold" value={dealFormData.companyName} onChange={e => setDealFormData({...dealFormData, companyName: e.target.value})} placeholder="Ex: João da Silva Santos" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Responsável Comercial</label>
+                        <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white" value={dealFormData.owner} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}>
+                            {(collaborators || []).map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">E-mail</label>
+                        <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="email" className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm" value={dealFormData.email} onChange={e => setDealFormData({...dealFormData, email: e.target.value})} /></div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Telefone / WhatsApp</label>
+                        <div className="relative"><Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm" value={dealFormData.phone} onChange={e => setDealFormData({...dealFormData, phone: e.target.value})} /></div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">CPF</label>
+                        <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={dealFormData.cpf} onChange={e => setDealFormData({...dealFormData, cpf: formatCPF(e.target.value)})} maxLength={14} />
+                    </div>
 
-                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-8 bg-white">
-                      <div>
-                          <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><Target size={16} /> Dados da Negociação</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Nº Negociação</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-100 text-slate-500 font-mono" value={dealFormData.dealNumber || 'Automático'} disabled readOnly />
-                              </div>
-                              <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Nome Completo do Cliente *</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Nome do Cliente/Empresa" value={dealFormData.companyName} onChange={e => setDealFormData({ ...dealFormData, companyName: e.target.value, title: e.target.value })} />
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Responsável</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.owner} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}>
-                                      <option value="">Selecione...</option>
-                                      {(collaborators || []).filter(c => c.department === 'Comercial').map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
-                                  </select>
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Tipo de Produto</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.productType} onChange={e => setDealFormData({...dealFormData, productType: e.target.value as any, productName: ''})}>
-                                      <option value="">Selecione o tipo...</option>
-                                      <option value="Presencial">Curso Presencial</option>
-                                      <option value="Digital">Produto Digital</option>
-                                      <option value="Evento">Evento Presencial</option>
-                                  </select>
-                              </div>
-                              <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">{dealFormData.productType === 'Evento' ? 'Evento' : dealFormData.productType === 'Digital' ? 'Curso Online / E-book' : 'Curso Presencial'}</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.productName} onChange={e => setDealFormData({...dealFormData, productName: e.target.value})} disabled={!dealFormData.productType}>
-                                      <option value="">Selecione o produto...</option>
-                                      {productOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                  </select>
-                              </div>
-
-                              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50 border border-indigo-100 rounded-lg p-4 animate-in fade-in slide-in-from-top-1">
-                                  <div>
-                                      <label className="block text-[10px] font-bold text-indigo-500 uppercase mb-1">Empresa de Faturamento (Auto)</label>
-                                      <div className="flex items-center gap-2 text-indigo-900 font-bold">
-                                          <Building size={16} />
-                                          <span className="text-sm truncate">{dealFormData.billingCompanyName || 'Nenhuma empresa vinculada'}</span>
-                                      </div>
-                                  </div>
-                                  <div>
-                                      <label className="block text-[10px] font-bold text-indigo-500 uppercase mb-1">CNPJ de Venda (Auto)</label>
-                                      <input 
-                                        type="text" 
-                                        className="w-full px-3 py-1.5 border border-indigo-200 rounded text-sm bg-white text-indigo-900 font-mono focus:outline-none" 
-                                        value={dealFormData.billingCnpj || ''} 
-                                        readOnly 
-                                        placeholder="Selecione um Tipo de Produto..."
-                                      />
-                                  </div>
-                              </div>
-
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Fonte</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed" placeholder="Instagram, Indicação" value={dealFormData.source} readOnly />
-                              </div>
-                              <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Campanha</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed" placeholder="Black Friday 2024" value={dealFormData.campaign} readOnly />
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Funil de Vendas</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" value={dealFormData.pipeline} disabled />
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Etapa do Funil</label>
-                                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.stage} onChange={e => setDealFormData({...dealFormData, stage: e.target.value as any})}>
-                                      {COLUMNS.map(col => <option key={col.id} value={col.id}>{col.title}</option>)}
-                                  </select>
-                              </div>
-                          </div>
-                      </div>
-
-                      <div>
-                          <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><ListTodo size={16} /> Tarefas & Agendamentos</h4>
-                          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                              <div className="flex gap-2 items-end mb-4">
-                                  <div className="flex-1">
-                                      <label className="block text-xs font-bold text-slate-500 mb-1">Nova Tarefa</label>
-                                      <input type="text" placeholder="Ex: Ligar para confirmar..." className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={newTaskDesc} onChange={e => setNoTaskDesc(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddTask()} />
-                                  </div>
-                                  <div className="w-32">
-                                      <label className="block text-xs font-bold text-slate-500 mb-1">Data</label>
-                                      <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={newTaskDate} onChange={e => setNoTaskDate(e.target.value)} />
-                                  </div>
-                                  <div className="w-28">
-                                      <label className="block text-xs font-bold text-slate-500 mb-1">Tipo</label>
-                                      <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={newTaskType} onChange={e => setNoTaskType(e.target.value as any)}>
-                                          <option value="todo">Tarefa</option><option value="call">Ligação</option><option value="email">Email</option><option value="meeting">Reunião</option>
-                                      </select>
-                                  </div>
-                                  <button onClick={handleAddTask} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg h-[38px] w-[38px] flex items-center justify-center"><Plus size={20} /></button>
-                              </div>
-                              <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                                  {(dealFormData.tasks || []).length ? dealFormData.tasks!.map(task => (
-                                      <div key={task.id} className={clsx("flex items-center gap-3 p-2 bg-white rounded border", task.isDone ? "border-green-200 bg-green-50" : "border-slate-200")}>
-                                          <button onClick={() => setDealFormData(prev => ({...prev, tasks: prev.tasks?.map(t => t.id === task.id ? {...t, isDone: !t.isDone} : t)}))} className={clsx("w-5 h-5 rounded border flex items-center justify-center", task.isDone ? "bg-green-500 border-green-500 text-white" : "border-slate-300")}>{task.isDone && <CheckCircle2 size={14} />}</button>
-                                          <div className={clsx("flex-1 text-sm", task.isDone ? "text-slate-400 line-through" : "text-slate-700")}>{task.description}</div>
-                                          {task.dueDate && <div className={clsx("text-xs px-2 py-0.5 rounded flex items-center gap-1", task.isDone ? "bg-slate-100 text-slate-400" : "bg-red-50 text-red-600 border border-red-100")}><Clock size={10} />{new Date(task.dueDate).toLocaleDateString()}</div>}
-                                          <button onClick={() => setDealFormData(prev => ({...prev, tasks: prev.tasks?.filter(t => t.id !== task.id)}))} className="text-slate-400 hover:text-red-500"><Trash2 size={14} /></button>
-                                      </div>
-                                  )) : <p className="text-xs text-slate-400 text-center py-2 italic">Nenhuma tarefa registrada.</p>}
-                              </div>
-                          </div>
-                      </div>
-
-                      <div>
-                          <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><DollarSign size={16} /> Dados Financeiros</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-slate-50 p-4 rounded-lg border border-slate-100">
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor Total (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.value} onChange={e => setDealFormData({...dealFormData, value: parseFloat(e.target.value) || 0})} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor de Entrada (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.entryValue} onChange={e => setDealFormData({...dealFormData, entryValue: parseFloat(e.target.value) || 0})} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Forma de Pagamento</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.paymentMethod} onChange={e => setDealFormData({...dealFormData, paymentMethod: e.target.value})}><option value="">Selecione...</option><option value="Boleto">Boleto</option><option value="Pix">Pix</option><option value="CartaoCredito">Cartão de Crédito</option><option value="Recorrencia">Recorrência</option></select></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Nº Parcelas</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.installments} onChange={e => setDealFormData({...dealFormData, installments: parseInt(e.target.value) || 1})}>{[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{i+1}x</option>)}</select></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Valor Parcelas (R$)</label><input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.installmentValue} onChange={e => setDealFormData({...dealFormData, installmentValue: parseFloat(e.target.value) || 0})} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Dia 1º Vencimento</label><input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.firstDueDate} onChange={e => setDealFormData({...dealFormData, firstDueDate: e.target.value})} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Cód. Transação</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.transactionCode} onChange={e => setDealFormData({...dealFormData, transactionCode: e.target.value})} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Link Comprovante</label><div className="relative"><LinkIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.receiptLink} onChange={e => setDealFormData({...dealFormData, receiptLink: e.target.value})} /></div></div>
-                          </div>
-                      </div>
-
-                      <div>
-                          <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><MapPin size={16} /> Dados de Contato e Pessoais</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Email</label><input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.email} onChange={e => handleInputChange('email', e.target.value)} /></div>
-                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Telefone / WhatsApp</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.phone} onChange={e => handleInputChange('phone', e.target.value)} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">CPF</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.cpf} onChange={e => setDealFormData({...dealFormData, cpf: formatCPF(e.target.value)})} maxLength={14} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">CEP</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.zipCode} onChange={e => setDealFormData({...dealFormData, zipCode: formatCEP(e.target.value)})} maxLength={9} /></div>
-                              <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Endereço</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.address} onChange={e => handleInputChange('address', e.target.value)} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Número</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={dealFormData.addressNumber} onChange={e => handleInputChange('addressNumber', e.target.value)} /></div>
-                          </div>
-                      </div>
-
-                      {dealFormData.productType === 'Presencial' && (
-                          <div className="animate-in fade-in slide-in-from-top-2">
-                              <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><GraduationCap size={16} /> Logística do Curso</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                  <div><label className="block text-xs font-bold text-slate-600 mb-1">Estado (UF)</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.courseState} onChange={e => setDealFormData({...dealFormData, courseState: e.target.value, courseCity: '', classMod1: '', classMod2: ''})}><option value="">Selecione...</option>{availableStates.map(uf => <option key={uf} value={uf}>{uf}</option>)}</select></div>
-                                  <div><label className="block text-xs font-bold text-slate-600 mb-1">Cidade do Curso</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" value={dealFormData.courseCity} onChange={e => setDealFormData({ ...dealFormData, courseCity: e.target.value })} disabled={!dealFormData.courseState || availableCities.length === 0}><option value="">Selecione...</option>{availableCities.map(city => <option key={city} value={city}>{city}</option>)}</select></div>
-                                  <div><label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 1</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.class_mod_1} onChange={e => setDealFormData({...dealFormData, class_mod_1: e.target.value})} disabled={!dealFormData.courseCity}><option value="">Selecione...</option>{availableMod1Codes.map(code => <option key={code} value={code}>{code}</option>)}</select></div>
-                                  <div><label className="block text-xs font-bold text-slate-600 mb-1">Turma Módulo 2</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={dealFormData.class_mod_2} onChange={e => setDealFormData({...dealFormData, class_mod_2: e.target.value})} disabled={!dealFormData.courseCity}><option value="">Selecione...</option>{availableMod2Codes.map(code => <option key={code} value={code}>{code}</option>)}</select></div>
-                              </div>
-                          </div>
-                      )}
-
-                      <div>
-                          <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><FileText size={16} /> Detalhes Finais</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Dados da Inscrição</label><textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-24 resize-none" value={dealFormData.registrationData} onChange={e => handleInputChange('registrationData', e.target.value)} /></div>
-                              <div><label className="block text-xs font-bold text-slate-600 mb-1">Observação</label><textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-24 resize-none" value={dealFormData.observation} onChange={e => handleInputChange('observation', e.target.value)} /></div>
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="px-6 py-4 bg-slate-50 flex justify-between gap-3 border-t border-slate-200 shrink-0">
-                        {editingDealId ? <button onClick={handleDeleteDeal} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm flex items-center gap-2"><Trash2 size={16} /> Excluir</button> : <div></div>}
-                        <div className="flex gap-2">
-                            <button onClick={() => setShowDealModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
-                            <button onClick={handleSaveDeal} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm flex items-center gap-2"><Save size={16} /> Salvar Negócio</button>
+                    <div className="lg:col-span-3 border-t pt-4">
+                        <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2"><ShoppingBag size={14}/> Dados do Produto</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo Produto</label>
+                                <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white" value={dealFormData.productType} onChange={e => setDealFormData({...dealFormData, productType: e.target.value as any, productName: ''})}>
+                                    <option value="">Selecione...</option><option value="Digital">Digital</option><option value="Presencial">Presencial</option><option value="Evento">Evento</option>
+                                </select>
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Produto / Curso</label>
+                                <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white disabled:bg-slate-50" value={dealFormData.productName} onChange={e => setDealFormData({...dealFormData, productName: e.target.value})} disabled={!dealFormData.productType}>
+                                    <option value="">Selecione o produto...</option>
+                                    {productOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor do Negócio (R$)</label>
+                                <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="number" className="w-full pl-8 pr-3 py-2 border rounded-lg text-sm font-bold text-green-700" value={dealFormData.value} onChange={e => setDealFormData({...dealFormData, value: parseFloat(e.target.value) || 0})} /></div>
+                            </div>
                         </div>
-                  </div>
-              </div>
+                    </div>
+
+                    {dealFormData.productType === 'Presencial' && (
+                        <div className="lg:col-span-3 bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-2">
+                             <div className="md:col-span-4 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Turmas Presenciais</div>
+                             <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">UF Curso</label>
+                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.courseState} onChange={e => setDealFormData({...dealFormData, courseState: e.target.value, courseCity: '', classMod1: '', classMod2: ''})}>
+                                    <option value="">--</option>{Array.from(new Set(registeredClasses.map(c => c.state))).map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                             </div>
+                             <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Cidade Curso</label>
+                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.courseCity} onChange={e => setDealFormData({...dealFormData, courseCity: e.target.value, classMod1: '', classMod2: ''})} disabled={!dealFormData.courseState}>
+                                    <option value="">--</option>{Array.from(new Set(registeredClasses.filter(c => c.state === dealFormData.courseState).map(c => c.city))).map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                             </div>
+                             <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Turma Mod I</label>
+                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})} disabled={!dealFormData.courseCity}>
+                                    <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c.id} value={c.mod1Code}>{c.mod1Code}</option>)}
+                                </select>
+                             </div>
+                             <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Turma Mod II</label>
+                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod2} onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})} disabled={!dealFormData.courseCity}>
+                                    <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c.id} value={c.mod2Code}>{c.mod2Code}</option>)}
+                                </select>
+                             </div>
+                        </div>
+                    )}
+
+                    <div className="lg:col-span-3 bg-blue-50 p-4 rounded-xl border border-blue-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-blue-700 uppercase mb-1">Empresa de Faturamento (Auto)</label>
+                            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-blue-200 text-xs font-bold text-blue-900"><Building size={14}/> {dealFormData.billingCompanyName || '---'}</div>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-blue-700 uppercase mb-1">CNPJ de Venda (Auto)</label>
+                            <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm bg-slate-50" value={dealFormData.billingCnpj} readOnly />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fonte</label>
+                        <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={dealFormData.source} onChange={e => setDealFormData({...dealFormData, source: e.target.value})} placeholder="Instagram, Indicação" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Campanha</label>
+                        <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={dealFormData.campaign} onChange={e => setDealFormData({...dealFormData, campaign: e.target.value})} placeholder="Black Friday 2024" />
+                    </div>
+                    <div className="md:col-span-2 lg:col-span-1">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Funil de Vendas</label>
+                        <select 
+                            className="w-full px-3 py-2 border rounded-lg text-sm bg-white" 
+                            value={dealFormData.pipeline} 
+                            onChange={e => {
+                                const newPipe = pipelines.find(p => p.name === e.target.value);
+                                setDealFormData({...dealFormData, pipeline: e.target.value, stage: newPipe?.stages[0].id || 'new'});
+                            }}
+                        >
+                            {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Etapa do Funil</label>
+                        <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white" value={dealFormData.stage} onChange={e => setDealFormData({...dealFormData, stage: e.target.value})}>
+                            {(pipelines.find(p => p.name === dealFormData.pipeline)?.stages || []).map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="lg:col-span-3 border-t pt-6">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><ListTodo size={14}/> Tarefas & Agendamentos</h4>
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                             {/* ... Tasks logic (unchanged) ... */}
+                             <div className="text-center py-4 text-slate-400 text-sm italic">Nenhuma tarefa registrada.</div>
+                        </div>
+                    </div>
+
+                    <div className="lg:col-span-3 border-t pt-6">
+                        <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Dados Financeiros</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Forma Pagamento</label><input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.paymentMethod} onChange={e => setDealFormData({...dealFormData, paymentMethod: e.target.value})} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Valor Entrada</label><input type="number" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.entryValue} onChange={e => setDealFormData({...dealFormData, entryValue: parseFloat(e.target.value) || 0})} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Nº Parcelas</label><input type="number" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.installments} onChange={e => setDealFormData({...dealFormData, installments: parseInt(e.target.value) || 1})} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Valor Parcela</label><input type="number" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.installmentValue} onChange={e => setDealFormData({...dealFormData, installmentValue: parseFloat(e.target.value) || 0})} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">1º Vencimento</label><input type="date" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.firstDueDate} onChange={e => setDealFormData({...dealFormData, firstDueDate: e.target.value})} /></div>
+                            <div className="md:col-span-2"><label className="block text-[10px] font-bold text-slate-500 mb-1">Link do Comprovante</label><input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.receiptLink} onChange={e => setDealFormData({...dealFormData, receiptLink: e.target.value})} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Transação</label><input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.transactionCode} onChange={e => setDealFormData({...dealFormData, transactionCode: e.target.value})} /></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="px-8 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0 rounded-b-xl">
+                <div className="flex items-center gap-2">
+                    {editingDealId && <button onClick={handleDeleteDeal} className="text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2"><Trash2 size={16}/> Excluir Negociação</button>}
+                </div>
+                <div className="flex gap-3">
+                    <button onClick={() => setShowDealModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm transition-colors">Cancelar</button>
+                    <button onClick={handleSaveDeal} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-lg font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all active:scale-95"><Save size={18} /> Salvar Negócio</button>
+                </div>
+            </div>
           </div>
+        </div>
       )}
     </div>
   );

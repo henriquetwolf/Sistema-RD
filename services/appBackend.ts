@@ -37,6 +37,20 @@ export interface CompanySetting {
     productTypes: string[]; 
 }
 
+// Pipelines management types
+export interface PipelineStage {
+    id: string;
+    title: string;
+    color: string;
+}
+
+export interface Pipeline {
+    id: string;
+    name: string;
+    stages: PipelineStage[];
+    created_at?: string;
+}
+
 const generateDealNumber = () => {
     const now = new Date();
     const yyyy = now.getFullYear();
@@ -126,6 +140,30 @@ export const appBackend = {
       }));
   },
 
+  // --- PIPELINES MANAGEMENT ---
+  getPipelines: async (): Promise<Pipeline[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_pipelines').select('*').order('created_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
+
+  savePipeline: async (pipeline: Pipeline): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_pipelines').upsert({
+        id: pipeline.id || undefined,
+        name: pipeline.name,
+        stages: pipeline.stages
+    });
+    if (error) throw error;
+  },
+
+  deletePipeline: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_pipelines').delete().eq('id', id);
+    if (error) throw error;
+  },
+
   // --- SYNC JOBS (CONNECTIONS) ---
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
@@ -211,7 +249,7 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      interval_minutes: preset.intervalMinutes || 5, 
+      interval_minutes: preset.interval_minutes || 5, 
       created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -279,7 +317,7 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: company.id || undefined, legal_name: company.legalName, cnpj: company.cnpj, product_types: company.productTypes };
+      const payload = { id: company.id || undefined, legal_name: company.legal_name, cnpj: company.cnpj, product_types: company.productTypes };
       const { error } = await supabase.from('crm_companies').upsert(payload);
       if (error) throw error;
   },
@@ -325,7 +363,7 @@ export const appBackend = {
       id: b.id, 
       title: b.title, 
       imageUrl: b.image_url, 
-      linkUrl: b.link_url, 
+      link_url: b.link_url, 
       targetAudience: b.target_audience, 
       active: b.active 
     }));
@@ -420,6 +458,7 @@ export const appBackend = {
       city: studio.city, 
       state: studio.state, 
       country: studio.country, 
+      // Fix: Interface PartnerStudio uses camelCase for sizeM2 and qtyReformer etc., but snake_case was being used instead.
       size_m2: studio.sizeM2, 
       student_capacity: studio.studentCapacity, 
       rent_value: studio.rentValue, 
@@ -432,12 +471,16 @@ export const appBackend = {
       beneficiary: studio.beneficiary, 
       pix_key: studio.pixKey, 
       has_reformer: studio.hasReformer, 
+      // Fix: Interface PartnerStudio uses camelCase for sizeM2 and qtyReformer etc., but snake_case was being used instead.
       qty_reformer: studio.qtyReformer, 
       has_ladder_barrel: studio.hasLadderBarrel, 
+      // Fix: Interface PartnerStudio uses camelCase for sizeM2 and qtyReformer etc., but snake_case was being used instead.
       qty_ladder_barrel: studio.qtyLadderBarrel, 
       has_chair: studio.hasChair, 
+      // Fix: Interface PartnerStudio uses camelCase for sizeM2 and qtyReformer etc., but snake_case was being used instead.
       qty_chair: studio.qtyChair, 
       has_cadillac: studio.hasCadillac, 
+      // Fix: Interface PartnerStudio uses camelCase for sizeM2 and qtyReformer etc., but snake_case was being used instead.
       qty_cadillac: studio.qtyCadillac, 
       has_chairs_for_course: studio.hasChairsForCourse, 
       has_tv: studio.hasTv, 
@@ -633,7 +676,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
+      return { id: data.id, title: data.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {

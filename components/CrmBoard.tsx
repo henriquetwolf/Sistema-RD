@@ -103,17 +103,15 @@ const formatCPF = (value: string = '') => {
         .replace(/(-\d{2})\d+?$/, '$1');
 };
 
-const formatCEP = (value: string = '') => {
-    return value
-        .replace(/\D/g, '')
-        .replace(/(\d{5})(\d)/, '$1-$2')
-        .replace(/(-\d{3})\d+?$/, '$1');
-};
-
 const handleDbError = (e: any) => {
     console.error("Erro de Banco de Dados:", e);
     const msg = e.message || "Erro desconhecido";
-    alert(`Erro: ${msg}`);
+    
+    if (msg.includes('stages') && msg.includes('column')) {
+        alert("Erro Estrutural: A coluna 'stages' não foi encontrada. Vá em 'Configurações' > 'Banco de Dados' e rode o script de reparo para atualizar as tabelas do CRM.");
+    } else {
+        alert(`Erro: ${msg}`);
+    }
 };
 
 const generateDealNumber = () => {
@@ -327,8 +325,6 @@ export const CrmBoard: React.FC = () => {
   const openNewDealModal = () => { 
     setEditingDealId(null); 
     const firstComercial = (collaborators || []).find(c => c.department === 'Comercial');
-    
-    // Fix: Safer initialization of pipeline and stage
     const firstPipeObj = pipelines.length > 0 ? pipelines[0] : null;
     const firstPipeline = firstPipeObj?.name || 'Padrão';
     const firstStage = firstPipeObj?.stages?.[0]?.id || 'new';
@@ -376,7 +372,11 @@ export const CrmBoard: React.FC = () => {
           await appBackend.savePipeline(pipeline);
           await fetchData();
           setShowPipelineModal(false);
-      } catch (e: any) { alert(`Erro ao salvar funil: ${e.message}`); } finally { setIsSavingPipeline(false); }
+      } catch (e: any) { 
+          handleDbError(e);
+      } finally { 
+          setIsSavingPipeline(false); 
+      }
   };
 
   const handleDeletePipeline = async (id: string) => {
@@ -419,7 +419,7 @@ export const CrmBoard: React.FC = () => {
           next_task: dealFormData.nextTask, source: dealFormData.source, campaign: dealFormData.campaign, entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installmentValue || 0),
           product_type: dealFormData.productType || null, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
-          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receipt_link, transaction_code: dealFormData.transaction_code,
+          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receipt_link, transaction_code: dealFormData.transactionCode,
           zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.address_number, registration_data: dealFormData.registration_data,
           observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
           class_mod_1: dealFormData.class_mod_1, class_mod_2: dealFormData.class_mod_2, pipeline: dealFormData.pipeline, 
@@ -584,7 +584,7 @@ export const CrmBoard: React.FC = () => {
                                 <div className="flex flex-wrap gap-1 mb-4">{(p.stages || []).map(s => <span key={s.id} className={clsx("px-2 py-0.5 rounded text-[9px] font-bold border", s.color)}>{s.title}</span>)}</div>
                             </div>
                         ))}
-                        <button onClick={openNewPipelineModal} className="bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 hover:bg-slate-50 hover:border-teal-300 transition-all group"><div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-teal-500 mb-2"><Plus size={24} /></div><span className="font-bold text-slate-600 group-hover:text-indigo-600">Novo Funil</span></button>
+                        <button onClick={openNewPipelineModal} className="bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 hover:bg-slate-50 hover:border-teal-300 transition-all group"><div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-indigo-500 mb-2"><Plus size={24} /></div><span className="font-bold text-slate-600 group-hover:text-indigo-600">Novo Funil</span></button>
                     </div>
                 </div>
             )}
@@ -730,7 +730,6 @@ export const CrmBoard: React.FC = () => {
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor do Negócio (R$)</label>
-                                {/* Fixed duplicate size attribute on DollarSign component */}
                                 <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="number" className="w-full pl-8 pr-3 py-2 border rounded-lg text-sm font-bold text-green-700" value={dealFormData.value} onChange={e => setDealFormData({...dealFormData, value: parseFloat(e.target.value) || 0})} /></div>
                             </div>
                         </div>
@@ -753,14 +752,14 @@ export const CrmBoard: React.FC = () => {
                              </div>
                              <div>
                                 <label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Turma Mod I</label>
-                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})} disabled={!formData.city}>
-                                    <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c} value={c.mod1Code}>{c.mod1Code}</option>)}
+                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})} disabled={!dealFormData.courseCity}>
+                                    <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c.id} value={c.mod1Code}>{c.mod1Code}</option>)}
                                 </select>
                              </div>
                              <div>
                                 <label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Turma Mod II</label>
-                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod2} onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})} disabled={!formData.city}>
-                                    <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c} value={c.mod2Code}>{c.mod2Code}</option>)}
+                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod2} onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})} disabled={!dealFormData.courseCity}>
+                                    <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c.id} value={c.mod2Code}>{c.mod2Code}</option>)}
                                 </select>
                              </div>
                         </div>

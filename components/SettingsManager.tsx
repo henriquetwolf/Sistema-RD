@@ -6,7 +6,7 @@ import {
     Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2,
     Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
     Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search,
-    Play, Pause, Calendar, Smartphone, Link as LinkIcon
+    Play, Pause, Calendar, Smartphone, Link as LinkIcon, ChevronDown
 } from 'lucide-react';
 import { appBackend, CompanySetting } from '../services/appBackend';
 import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob } from '../types';
@@ -142,7 +142,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM
+-- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V3)
 
 -- 1. TABELA DE CONFIGURAÇÕES
 CREATE TABLE IF NOT EXISTS public.app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now());
@@ -156,7 +156,29 @@ CREATE TABLE IF NOT EXISTS public.crm_activity_logs (id uuid DEFAULT gen_random_
 -- 4. TABELA DE CERTIFICADOS
 CREATE TABLE IF NOT EXISTS public.crm_certificates (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), title text NOT NULL, background_base_64 text, back_background_base_64 text, linked_product_id text, body_text text, layout_config jsonb);
 
--- 5. TABELA DE COLABORADORES (VERSÃO COMPLETA)
+-- 5. TABELA DE FUNIS DE VENDAS (PIPELINES) - COM REPARO DE COLUNAS
+CREATE TABLE IF NOT EXISTS public.crm_pipelines (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    name text NOT NULL,
+    stages jsonb DEFAULT '[]'::jsonb,
+    created_at timestamptz DEFAULT now()
+);
+
+-- GARANTIR COLUNA STAGES (Caso a tabela tenha sido criada sem ela antes)
+ALTER TABLE public.crm_pipelines ADD COLUMN IF NOT EXISTS stages jsonb DEFAULT '[]'::jsonb;
+
+-- INSERIR FUNIL PADRÃO SE NÃO EXISTIR
+INSERT INTO public.crm_pipelines (name, stages)
+SELECT 'Padrão', '[
+    {"id": "new", "title": "Sem Contato", "color": "border-slate-300"},
+    {"id": "contacted", "title": "Contatado", "color": "border-blue-400"},
+    {"id": "proposal", "title": "Proposta Enviada", "color": "border-yellow-400"},
+    {"id": "negotiation", "title": "Em Negociação", "color": "border-orange-500"},
+    {"id": "closed", "title": "Fechamento", "color": "border-green-500"}
+]'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM public.crm_pipelines WHERE name = 'Padrão');
+
+-- 6. TABELA DE COLABORADORES (VERSÃO COMPLETA)
 CREATE TABLE IF NOT EXISTS public.crm_collaborators (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     full_name text, social_name text, birth_date date, marital_status text, spouse_name text, father_name text, mother_name text,
@@ -175,82 +197,18 @@ CREATE TABLE IF NOT EXISTS public.crm_collaborators (
     created_at timestamptz DEFAULT now()
 );
 
--- 6. TABELA DE FRANQUIAS
-CREATE TABLE IF NOT EXISTS public.crm_franchises (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    sale_number text, contract_start_date date, inauguration_date date, sales_consultant text, franchisee_name text, cpf text, company_name text, cnpj text,
-    phone text, email text, residential_address text, commercial_state text, commercial_city text, commercial_address text, commercial_neighborhood text,
-    latitude numeric, longitude numeric, km_street_point numeric, km_commercial_building numeric, studio_status text, studio_size_m2 text,
-    equipment_list text, royalties_value text, bank_account_info text, has_signed_contract boolean DEFAULT false, contract_end_date date,
-    is_representative boolean DEFAULT false, partner_1_name text, partner_2_name text, franchisee_folder_link text, path_info text, observations text,
-    created_at timestamptz DEFAULT now()
-);
-
--- 7. TABELA DE ESTOQUE
-CREATE TABLE IF NOT EXISTS public.crm_inventory (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    type text CHECK (type IN ('entry', 'exit')),
-    item_apostila_nova int DEFAULT 0,
-    item_apostila_classico int DEFAULT 0,
-    item_sacochila int DEFAULT 0,
-    item_lapis int DEFAULT 0,
-    registration_date date DEFAULT current_date,
-    studio_id uuid REFERENCES public.crm_partner_studios(id) ON DELETE SET NULL,
-    tracking_code text,
-    observations text,
-    conference_date date,
-    attachments text,
-    created_at timestamptz DEFAULT now()
-);
-
--- 8. TABELA DE PRESENÇAS
-CREATE TABLE IF NOT EXISTS public.crm_attendance (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    class_id uuid REFERENCES public.crm_classes(id) ON DELETE CASCADE,
-    student_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
-    date date NOT NULL,
-    present boolean DEFAULT false,
-    created_at timestamptz DEFAULT now(),
-    UNIQUE(class_id, student_id, date)
-);
-
--- 9. TABELA DE FUNIS DE VENDAS (PIPELINES)
-CREATE TABLE IF NOT EXISTS public.crm_pipelines (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    name text NOT NULL,
-    stages jsonb DEFAULT '[]'::jsonb,
-    created_at timestamptz DEFAULT now()
-);
-
--- INSERIR FUNIL PADRÃO SE NÃO EXISTIR
-INSERT INTO public.crm_pipelines (name, stages)
-SELECT 'Padrão', '[
-    {"id": "new", "title": "Sem Contato", "color": "border-slate-300"},
-    {"id": "contacted", "title": "Contatado", "color": "border-blue-400"},
-    {"id": "proposal", "title": "Proposta Enviada", "color": "border-yellow-400"},
-    {"id": "negotiation", "title": "Em Negociação", "color": "border-orange-500"},
-    {"id": "closed", "title": "Fechamento", "color": "border-green-500"}
-]'::jsonb
-WHERE NOT EXISTS (SELECT 1 FROM public.crm_pipelines WHERE name = 'Padrão');
-
--- 10. TABELAS DE APOIO
+-- 7. TABELAS DE APOIO
 CREATE TABLE IF NOT EXISTS public.crm_roles (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, permissions jsonb DEFAULT '{}'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, honorarium numeric DEFAULT 0, observations text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_companies (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, legal_name text, cnpj text, product_types jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.app_banners (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, title text, image_url text, link_url text, target_audience text, active boolean DEFAULT true, created_at timestamptz DEFAULT now());
 
--- 11. HABILITAR RLS E POLÍTICAS
-ALTER TABLE public.crm_inventory ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.crm_attendance ENABLE ROW LEVEL SECURITY;
+-- 8. HABILITAR RLS E POLÍTICAS
 ALTER TABLE public.crm_pipelines ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Acesso total inventory" ON public.crm_inventory;
-CREATE POLICY "Acesso total inventory" ON public.crm_inventory FOR ALL USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "Acesso total attendance" ON public.crm_attendance;
-CREATE POLICY "Acesso total attendance" ON public.crm_attendance FOR ALL USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "Acesso total pipelines" ON public.crm_pipelines;
 CREATE POLICY "Acesso total pipelines" ON public.crm_pipelines FOR ALL USING (true) WITH CHECK (true);
 
+-- LIMPAR CACHE DO POSTGREST
 NOTIFY pgrst, 'reload config';
   `.trim();
 
@@ -379,7 +337,7 @@ NOTIFY pgrst, 'reload config';
                                         <h4 className="font-bold text-slate-800 uppercase tracking-tight">{c.legalName}</h4>
                                         <p className="text-xs text-slate-500 font-mono mb-2">CNPJ: {c.cnpj}</p>
                                         <div className="flex flex-wrap gap-1">
-                                            {c.productTypes.map(t => <span key={t} className="px-1.5 py-0.5 bg-white border text-[9px] font-bold text-teal-600 rounded">{t}</span>)}
+                                            {(c.productTypes || []).map(t => <span key={t} className="px-1.5 py-0.5 bg-white border text-[9px] font-bold text-teal-600 rounded">{t}</span>)}
                                         </div>
                                     </div>
                                     <div className="flex gap-1">
@@ -584,7 +542,7 @@ NOTIFY pgrst, 'reload config';
                 <p className="text-sm text-slate-500 mb-6">Script de reparo para resolver erros de "colunas ausentes".</p>
                 {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
-                        <pre className="bg-slate-900 text-slate-300 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50">{generateRepairSQL()}</pre>
+                        <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>
                     </div>
                 )}

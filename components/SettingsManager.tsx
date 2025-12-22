@@ -143,7 +143,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V9)
+-- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V10)
 
 -- 1. TABELA DE CONFIGURAÇÕES
 CREATE TABLE IF NOT EXISTS public.app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now());
@@ -186,13 +186,16 @@ CREATE TABLE IF NOT EXISTS public.crm_classes (
 );
 
 -- 3. TABELA DE RESPOSTAS DE FORMULÁRIOS E PESQUISAS
+-- Garantindo a existência da tabela e da coluna student_id
 CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     form_id uuid NOT NULL,
-    student_id uuid,
     answers jsonb DEFAULT '[]'::jsonb,
     created_at timestamptz DEFAULT now()
 );
+
+-- REPARO CRÍTICO: Adiciona a coluna student_id caso ela não exista (Corrige Erro 42703)
+ALTER TABLE public.crm_form_submissions ADD COLUMN IF NOT EXISTS student_id uuid;
 
 -- Índices para otimizar busca de pesquisas respondidas
 CREATE INDEX IF NOT EXISTS idx_form_submissions_form_id ON public.crm_form_submissions(form_id);
@@ -222,8 +225,15 @@ CREATE TABLE IF NOT EXISTS public.crm_sync_jobs (id uuid PRIMARY KEY, user_id uu
 -- 7. TABELA DE LOGS
 CREATE TABLE IF NOT EXISTS public.crm_activity_logs (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, user_name text NOT NULL, action text NOT NULL, module text NOT NULL, details text, record_id text, created_at timestamptz DEFAULT now());
 
--- 8. TABELA DE CERTIFICADOS
+-- 8. TABELA DE CERTIFICADOS E EMISSÕES
 CREATE TABLE IF NOT EXISTS public.crm_certificates (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, created_at timestamptz DEFAULT now(), title text NOT NULL, background_base_64 text, back_background_base_64 text, linked_product_id text, body_text text, layout_config jsonb);
+CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    student_deal_id uuid NOT NULL,
+    certificate_template_id uuid NOT NULL,
+    hash text UNIQUE NOT NULL,
+    issued_at timestamptz DEFAULT now()
+);
 
 -- 9. TABELA DE FUNIS DE VENDAS
 CREATE TABLE IF NOT EXISTS public.crm_pipelines (

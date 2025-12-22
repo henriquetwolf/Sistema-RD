@@ -221,7 +221,7 @@ export const CrmBoard: React.FC = () => {
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
                   email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
-                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
+                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
                   classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
@@ -278,7 +278,7 @@ export const CrmBoard: React.FC = () => {
     const pipeline = pipelines.find(p => p.name === pipelineName);
     if (!pipeline) return;
     
-    const stageOrder = pipeline.stages.map(s => s.id);
+    const stageOrder = (pipeline.stages || []).map(s => s.id);
     const currentIndex = stageOrder.indexOf(currentStage);
     let newIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
     if (newIndex < 0 || newIndex >= stageOrder.length) return;
@@ -327,9 +327,18 @@ export const CrmBoard: React.FC = () => {
   const openNewDealModal = () => { 
     setEditingDealId(null); 
     const firstComercial = (collaborators || []).find(c => c.department === 'Comercial');
-    const firstPipeline = pipelines[0]?.name || 'Padrão';
-    const firstStage = pipelines[0]?.stages[0]?.id || 'new';
-    setDealFormData({ ...INITIAL_FORM_STATE, owner: firstComercial?.id || '', pipeline: firstPipeline, stage: firstStage }); 
+    
+    // Fix: Safer initialization of pipeline and stage
+    const firstPipeObj = pipelines.length > 0 ? pipelines[0] : null;
+    const firstPipeline = firstPipeObj?.name || 'Padrão';
+    const firstStage = firstPipeObj?.stages?.[0]?.id || 'new';
+    
+    setDealFormData({ 
+        ...INITIAL_FORM_STATE, 
+        owner: firstComercial?.id || '', 
+        pipeline: firstPipeline, 
+        stage: firstStage 
+    }); 
     setShowDealModal(true); 
   };
 
@@ -351,7 +360,7 @@ export const CrmBoard: React.FC = () => {
   const openEditPipelineModal = (p: Pipeline) => {
     setEditingPipeline(p);
     setPipelineName(p.name);
-    setPipelineStages(p.stages);
+    setPipelineStages(p.stages || []);
     setShowPipelineModal(true);
   };
 
@@ -410,8 +419,8 @@ export const CrmBoard: React.FC = () => {
           next_task: dealFormData.nextTask, source: dealFormData.source, campaign: dealFormData.campaign, entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installmentValue || 0),
           product_type: dealFormData.productType || null, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
-          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode,
-          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber, registration_data: dealFormData.registrationData,
+          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receipt_link, transaction_code: dealFormData.transaction_code,
+          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.address_number, registration_data: dealFormData.registration_data,
           observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
           class_mod_1: dealFormData.class_mod_1, class_mod_2: dealFormData.class_mod_2, pipeline: dealFormData.pipeline, 
           tasks: dealFormData.tasks, billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName
@@ -499,7 +508,7 @@ export const CrmBoard: React.FC = () => {
                             const columnDeals = filteredDeals.filter(d => d.pipeline === pipeline.name && d.stage === stage.id);
                             return (
                                 <div key={stage.id} className="w-[320px] flex flex-col h-full rounded-xl bg-slate-50/50 border border-slate-200 shadow-sm" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, pipeline.name, stage.id)}>
-                                    <div className={clsx("p-3 border-t-4 bg-white rounded-t-xl border-b border-b-slate-100", stage.color)}>
+                                    <div className={clsx("p-3 border-t-4 bg-white rounded-t-xl border-b border-b-slate-100", stage.color || "border-slate-200")}>
                                         <div className="flex justify-between items-start mb-1">
                                             <h3 className="font-semibold text-slate-700">{stage.title}</h3>
                                             <button className="text-slate-400 hover:text-slate-600"><MoreHorizontal size={16} /></button>
@@ -571,8 +580,8 @@ export const CrmBoard: React.FC = () => {
                         {(pipelines || []).map(p => (
                             <div key={p.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow flex flex-col group">
                                 <div className="flex justify-between items-start mb-4"><div className="bg-teal-100 text-teal-700 p-2 rounded-lg"><Filter size={24} /></div><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => openEditPipelineModal(p)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"><Edit2 size={16} /></button><button onClick={() => handleDeletePipeline(p.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button></div></div>
-                                <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{p.name || 'Sem nome'}</h3><p className="text-xs text-slate-400 mb-4">{p.stages.length} etapas</p>
-                                <div className="flex flex-wrap gap-1 mb-4">{p.stages.map(s => <span key={s.id} className={clsx("px-2 py-0.5 rounded text-[9px] font-bold border", s.color)}>{s.title}</span>)}</div>
+                                <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{p.name || 'Sem nome'}</h3><p className="text-xs text-slate-400 mb-4">{(p.stages || []).length} etapas</p>
+                                <div className="flex flex-wrap gap-1 mb-4">{(p.stages || []).map(s => <span key={s.id} className={clsx("px-2 py-0.5 rounded text-[9px] font-bold border", s.color)}>{s.title}</span>)}</div>
                             </div>
                         ))}
                         <button onClick={openNewPipelineModal} className="bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 hover:bg-slate-50 hover:border-teal-300 transition-all group"><div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-teal-500 mb-2"><Plus size={24} /></div><span className="font-bold text-slate-600 group-hover:text-indigo-600">Novo Funil</span></button>
@@ -597,7 +606,7 @@ export const CrmBoard: React.FC = () => {
                           <input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500" placeholder="Ex: Funil Cursos, Funil Equipamentos..." value={pipelineName} onChange={e => setPipelineName(e.target.value)} />
                       </div>
                       <div className="space-y-4">
-                          <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">Etapas</label><button onClick={() => setPipelineStages([...pipelineStages, { id: crypto.randomUUID().substring(0,8), title: 'Nova Etapa', color: 'border-slate-300' }])} className="text-xs font-bold text-teal-600 hover:underline">+ Adicionar Etapa</button></div>
+                          <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-600 uppercase tracking-widest">Etapas</label><button onClick={() => setPipelineStages([...pipelineStages, { id: crypto.randomUUID().substring(0,8), title: 'Nova Etapa', color: 'border-slate-300' }])} className="text-xs font-bold text-teal-600 hover:underline">+ Adicionar Etapa</button></div>
                           <div className="space-y-2">
                               {pipelineStages.map((stage, idx) => (
                                   <div key={idx} className="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-200">
@@ -721,6 +730,7 @@ export const CrmBoard: React.FC = () => {
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor do Negócio (R$)</label>
+                                {/* Fixed duplicate size attribute on DollarSign component */}
                                 <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="number" className="w-full pl-8 pr-3 py-2 border rounded-lg text-sm font-bold text-green-700" value={dealFormData.value} onChange={e => setDealFormData({...dealFormData, value: parseFloat(e.target.value) || 0})} /></div>
                             </div>
                         </div>
@@ -743,14 +753,14 @@ export const CrmBoard: React.FC = () => {
                              </div>
                              <div>
                                 <label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Turma Mod I</label>
-                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})} disabled={!dealFormData.courseCity}>
-                                    <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c.id} value={c.mod1Code}>{c.mod1Code}</option>)}
+                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})} disabled={!formData.city}>
+                                    <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c} value={c.mod1Code}>{c.mod1Code}</option>)}
                                 </select>
                              </div>
                              <div>
                                 <label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Turma Mod II</label>
-                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod2} onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})} disabled={!dealFormData.courseCity}>
-                                    <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c.id} value={c.mod2Code}>{c.mod2Code}</option>)}
+                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod2} onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})} disabled={!formData.city}>
+                                    <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c} value={c.mod2Code}>{c.mod2Code}</option>)}
                                 </select>
                              </div>
                         </div>
@@ -785,7 +795,7 @@ export const CrmBoard: React.FC = () => {
                                 setDealFormData({
                                     ...dealFormData, 
                                     pipeline: e.target.value, 
-                                    stage: newPipe?.stages[0]?.id || 'new'
+                                    stage: (newPipe?.stages || [])[0]?.id || 'new'
                                 });
                             }}
                         >

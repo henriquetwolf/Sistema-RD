@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { FormModel, FormAnswer } from '../types';
-import { CheckCircle, ArrowLeft, Loader2, Send } from 'lucide-react';
+import { CheckCircle, ArrowLeft, Loader2, Send, Lock } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
 
@@ -9,10 +9,13 @@ interface FormViewerProps {
   form: FormModel;
   onBack?: () => void;
   isPublic?: boolean;
+  studentId?: string; // NOVO
+  initialAnswers?: Record<string, any>; // NOVO
+  onSuccess?: () => void; // NOVO
 }
 
-export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic = false }) => {
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic = false, studentId, initialAnswers = {}, onSuccess }) => {
+  const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isEmbed, setIsEmbed] = useState(false);
@@ -22,7 +25,11 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
       if (params.get('embed') === 'true') {
           setIsEmbed(true);
       }
-  }, []);
+      // Se tiver respostas iniciais, atualiza o estado
+      if (Object.keys(initialAnswers).length > 0) {
+          setAnswers(initialAnswers);
+      }
+  }, [initialAnswers]);
 
   const handleInputChange = (questionId: string, value: any) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
@@ -49,8 +56,11 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
           };
       });
 
-      await appBackend.submitForm(form.id, formattedAnswers, form.isLeadCapture);
+      await appBackend.submitForm(form.id, formattedAnswers, form.isLeadCapture, studentId);
       setIsSuccess(true);
+      if (onSuccess) {
+          setTimeout(onSuccess, 2000);
+      }
     } catch (err) {
       alert("Erro ao enviar formulário. Tente novamente.");
     } finally {
@@ -131,7 +141,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
             <h2 className="text-3xl font-black mb-2">{style.successTitle || 'Enviado com Sucesso!'}</h2>
             <p className="opacity-70 mb-10 text-lg">{style.successMessage || 'Recebemos suas informações. Entraremos em contato em breve.'}</p>
             {!isPublic && onBack && <button onClick={onBack} className="hover:underline font-bold block mx-auto mb-2 text-sm opacity-60">Voltar ao Painel</button>}
-            {isPublic && <button onClick={() => window.location.reload()} className="text-white px-8 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all" style={{ backgroundColor: style.primaryColor }}>{style.successButtonText || 'Enviar outra resposta'}</button>}
+            {isPublic && !onSuccess && <button onClick={() => window.location.reload()} className="text-white px-8 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all" style={{ backgroundColor: style.primaryColor }}>{style.successButtonText || 'Enviar outra resposta'}</button>}
         </div>
       </div>
     );
@@ -165,33 +175,37 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
             </div>
 
             <form onSubmit={handleSubmit} className={clsx("p-10 space-y-10", (style.cardTransparent || isEmbed) ? "bg-white/80 backdrop-blur-sm shadow-sm mt-1" : "bg-white", borderRadiusClass)}>
-                {form.questions.map(q => (
-                <div key={q.id} className="space-y-4">
-                    <label className="block text-lg font-bold" style={{ color: style.textColor }}>
-                    {q.title} {q.required && <span className="text-red-500">*</span>}
-                    </label>
+                {form.questions.map(q => {
+                    const isSystemAuto = !!q.systemMapping;
                     
-                    {q.type === 'paragraph' ? (
-                        <textarea required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 p-4 min-h-[140px] transition-all bg-slate-50/50 text-base", inputRadiusClass)} style={{ focusRingColor: style.primaryColor, focusBorderColor: style.primaryColor }} placeholder="Escreva sua resposta longa aqui..." value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)} />
-                    ) : q.type === 'select' ? (
-                        <select required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 px-4 py-3.5 transition-all bg-slate-50/50 text-base font-medium", inputRadiusClass)} value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)}>
-                            <option value="">Escolha uma opção...</option>
-                            {q.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                        </select>
-                    ) : q.type === 'checkbox' ? (
-                        <div className="space-y-2">
-                            {q.options?.map((opt, i) => (
-                                <label key={i} className={clsx("flex items-center gap-3 p-3 bg-slate-50/50 border-2 border-slate-100 cursor-pointer hover:bg-white transition-all", inputRadiusClass)}>
-                                    <input type="checkbox" className="w-5 h-5 rounded" style={{ color: style.primaryColor }} checked={((answers[q.id] as string[]) || []).includes(opt)} onChange={e => handleCheckboxChange(q.id, opt, e.target.checked)} />
-                                    <span className="font-medium text-slate-700">{opt}</span>
-                                </label>
-                            ))}
-                        </div>
-                    ) : (
-                        <input type={q.type === 'email' ? 'email' : q.type === 'phone' ? 'tel' : q.type === 'number' ? 'number' : q.type === 'date' ? 'date' : 'text'} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 px-4 py-3.5 transition-all bg-slate-50/50 text-base", inputRadiusClass)} placeholder={q.placeholder || "Sua resposta..."} value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)} />
-                    )}
-                </div>
-                ))}
+                    return (
+                    <div key={q.id} className="space-y-4">
+                        <label className="block text-lg font-bold flex items-center gap-2" style={{ color: style.textColor }}>
+                        {q.title} {q.required && <span className="text-red-500">*</span>}
+                        {isSystemAuto && <Lock size={14} className="text-slate-400" title="Informação automática do sistema" />}
+                        </label>
+                        
+                        {q.type === 'paragraph' ? (
+                            <textarea readOnly={isSystemAuto} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 p-4 min-h-[140px] transition-all bg-slate-50/50 text-base", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70")} style={{ focusRingColor: style.primaryColor, focusBorderColor: style.primaryColor }} placeholder="Escreva sua resposta longa aqui..." value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)} />
+                        ) : q.type === 'select' ? (
+                            <select disabled={isSystemAuto} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 px-4 py-3.5 transition-all bg-slate-50/50 text-base font-medium", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70")} value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)}>
+                                <option value="">Escolha uma opção...</option>
+                                {q.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                            </select>
+                        ) : q.type === 'checkbox' ? (
+                            <div className="space-y-2">
+                                {q.options?.map((opt, i) => (
+                                    <label key={i} className={clsx("flex items-center gap-3 p-3 bg-slate-50/50 border-2 border-slate-100 cursor-pointer hover:bg-white transition-all", inputRadiusClass, isSystemAuto && "pointer-events-none opacity-70")}>
+                                        <input type="checkbox" disabled={isSystemAuto} className="w-5 h-5 rounded" style={{ color: style.primaryColor }} checked={((answers[q.id] as string[]) || []).includes(opt)} onChange={e => handleCheckboxChange(q.id, opt, e.target.checked)} />
+                                        <span className="font-medium text-slate-700">{opt}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        ) : (
+                            <input readOnly={isSystemAuto} type={q.type === 'email' ? 'email' : q.type === 'phone' ? 'tel' : q.type === 'number' ? 'number' : q.type === 'date' ? 'date' : 'text'} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 px-4 py-3.5 transition-all bg-slate-50/50 text-base", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70 font-bold")} placeholder={q.placeholder || "Sua resposta..."} value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)} />
+                        )}
+                    </div>
+                )})}
 
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-6 border-t border-slate-50">
                     <button 
@@ -202,7 +216,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
                     >
                         {isSubmitting ? <Loader2 size={24} className="animate-spin"/> : <Send size={24} />} {style.buttonText || 'Enviar Formulário'}
                     </button>
-                    <button type="button" onClick={() => setAnswers({})} className="text-slate-400 text-sm font-bold hover:text-slate-600 transition-colors uppercase tracking-widest">Limpar Tudo</button>
+                    {!onSuccess && <button type="button" onClick={() => setAnswers({})} className="text-slate-400 text-sm font-bold hover:text-slate-600 transition-colors uppercase tracking-widest">Limpar Tudo</button>}
                 </div>
             </form>
         </div>

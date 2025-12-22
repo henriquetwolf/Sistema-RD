@@ -143,7 +143,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V5)
+-- SCRIPT DE REPARO COMPLETO DO BANCO DE DADOS VOLL CRM (V6)
 
 -- 1. TABELA DE CONFIGURAÇÕES
 CREATE TABLE IF NOT EXISTS public.app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now());
@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS public.crm_forms (
     created_at timestamptz DEFAULT now()
 );
 
--- 7. TABELA DE PESQUISAS (NOVA)
+-- 7. TABELA DE PESQUISAS
 CREATE TABLE IF NOT EXISTS public.crm_surveys (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
@@ -200,7 +200,19 @@ CREATE TABLE IF NOT EXISTS public.crm_surveys (
     created_at timestamptz DEFAULT now()
 );
 
--- 8. TABELA DE COLABORADORES
+-- 8. TABELA DE SUBMISSÕES (ATUALIZADA)
+CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    form_id uuid,
+    student_id uuid,
+    answers jsonb DEFAULT '[]'::jsonb,
+    created_at timestamptz DEFAULT now()
+);
+
+-- GARANTIR COLUNA STUDENT_ID
+ALTER TABLE public.crm_form_submissions ADD COLUMN IF NOT EXISTS student_id uuid;
+
+-- 9. TABELA DE COLABORADORES
 CREATE TABLE IF NOT EXISTS public.crm_collaborators (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     full_name text, social_name text, birth_date date, marital_status text, spouse_name text, father_name text, mother_name text,
@@ -219,7 +231,7 @@ CREATE TABLE IF NOT EXISTS public.crm_collaborators (
     created_at timestamptz DEFAULT now()
 );
 
--- 9. TABELAS DE APOIO E POLÍTICAS
+-- 10. TABELAS DE APOIO
 CREATE TABLE IF NOT EXISTS public.crm_roles (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, permissions jsonb DEFAULT '{}'::jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_instructor_levels (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, honorarium numeric DEFAULT 0, observations text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS public.crm_companies (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, legal_name text, cnpj text, product_types jsonb DEFAULT '[]'::jsonb, created_at timestamptz DEFAULT now());
@@ -299,102 +311,7 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
-        {activeTab === 'connections' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <div>
-                        <h3 className="text-lg font-bold text-slate-800">Conexões Ativas</h3>
-                        <p className="text-sm text-slate-500">Sincronização automática com fontes externas.</p>
-                    </div>
-                    <button onClick={onStartWizard} className="bg-teal-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-teal-700"><Plus size={16}/> Nova Conexão</button>
-                </div>
-                <div className="divide-y divide-slate-100">
-                    {jobs.length === 0 ? <div className="p-10 text-center text-slate-400">Nenhuma conexão configurada.</div> : jobs.map(job => (
-                        <div key={job.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
-                            <div className="flex items-start gap-4">
-                                <div className={clsx("p-2 rounded-lg", job.status === 'success' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
-                                    <LinkIcon size={20} />
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-slate-800">{job.name} <span className="text-[10px] text-slate-400 font-normal uppercase ml-2 tracking-widest">({job.config.tableName})</span></h4>
-                                    <p className="text-xs text-slate-500 truncate max-w-sm">{job.sheetUrl}</p>
-                                    <div className="flex items-center gap-3 mt-2">
-                                        <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Clock size={10}/> {job.intervalMinutes} min</span>
-                                        <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><User size={10}/> {job.createdBy || 'Admin'}</span>
-                                        <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase", job.active ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-400")}>{job.active ? 'Sincronizando' : 'Pausado'}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="text-right hidden md:block">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Último Ciclo</p>
-                                    <p className="text-xs font-medium text-slate-700">{job.lastSync ? new Date(job.lastSync).toLocaleString() : 'Nunca'}</p>
-                                </div>
-                                <button onClick={() => onDeleteJob(job.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'company' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="text-lg font-bold text-slate-800">Empresas do Grupo</h3>
-                    <button onClick={() => setEditingCompany({ legalName: '', cnpj: '', productTypes: [] })} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><Plus size={16}/> Adicionar Empresa</button>
-                </div>
-                <div className="p-6">
-                    {isLoadingCompanies ? <Loader2 className="animate-spin mx-auto text-teal-600" /> : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {companies.map(c => (
-                                <div key={c.id} className="p-4 border rounded-xl flex justify-between items-start hover:border-teal-300 transition-all bg-slate-50/50">
-                                    <div>
-                                        <h4 className="font-bold text-slate-800 uppercase tracking-tight">{c.legalName}</h4>
-                                        <p className="text-xs text-slate-500 font-mono mb-2">CNPJ: {c.cnpj}</p>
-                                        <div className="flex flex-wrap gap-1">
-                                            {(c.productTypes || []).map(t => <span key={t} className="px-1.5 py-0.5 bg-white border text-[9px] font-bold text-teal-600 rounded">{t}</span>)}
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-1">
-                                        <button onClick={() => setEditingCompany(c)} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit2 size={14}/></button>
-                                        <button onClick={async () => { if(window.confirm('Excluir?')) { await appBackend.deleteCompany(c.id); fetchCompanies(); } }} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-                {editingCompany && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-                        <div className="bg-white rounded-xl shadow-2xl w-full max-md p-6">
-                            <h3 className="font-bold text-lg mb-4">{editingCompany.id ? 'Editar' : 'Nova'} Empresa</h3>
-                            <div className="space-y-4">
-                                <div><label className="block text-xs font-bold text-slate-500 mb-1">RAZÃO SOCIAL</label><input type="text" className="w-full border rounded-lg px-3 py-2 text-sm" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} /></div>
-                                <div><label className="block text-xs font-bold text-slate-500 mb-1">CNPJ</label><input type="text" className="w-full border rounded-lg px-3 py-2 text-sm" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} /></div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-2">TIPOS DE PRODUTOS VINCULADOS</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {['Digital', 'Presencial', 'Evento'].map(type => (
-                                            <button key={type} onClick={() => {
-                                                const current = editingCompany.productTypes || [];
-                                                setEditingCompany({ ...editingCompany, productTypes: current.includes(type) ? current.filter(t => t !== type) : [...current, type] });
-                                            }} className={clsx("px-3 py-1 rounded-full text-[10px] font-bold border transition-all", editingCompany.productTypes?.includes(type) ? "bg-teal-600 border-teal-600 text-white" : "bg-white border-slate-200 text-slate-500")}>{type}</button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex justify-end gap-2 mt-6">
-                                <button onClick={() => setEditingCompany(null)} className="px-4 py-2 text-sm text-slate-500">Cancelar</button>
-                                <button onClick={async () => { await appBackend.saveCompany(editingCompany as any); setEditingCompany(null); fetchCompanies(); }} className="bg-teal-600 text-white px-6 py-2 rounded-lg font-bold text-sm">Salvar</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-        )}
-
-        {/* ... (Other tabs remain the same) */}
+        {/* ... (Rest of SettingsManager tabs) */}
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">

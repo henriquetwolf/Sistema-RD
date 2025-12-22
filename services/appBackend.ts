@@ -252,7 +252,8 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      interval_minutes: preset.interval_minutes || 5, 
+      // Fixed: Property 'interval_minutes' does not exist on type 'Omit<SavedPreset, "id">'. Did you mean 'intervalMinutes'?
+      interval_minutes: preset.intervalMinutes || 5, 
       created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -305,7 +306,7 @@ export const appBackend = {
   },
 
   getWhatsAppConfig: async (): Promise<any | null> => {
-    return await appBackend.getAppSetting('whatsapp_config');
+    return await appBackend.getWhatsAppConfig();
   },
 
   saveWhatsAppConfig: async (config: any): Promise<void> => {
@@ -388,7 +389,7 @@ export const appBackend = {
 
   deleteBanner: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('app_banners').delete().eq('id', id);
+    const { error = null } = await supabase.from('app_banners').delete().eq('id', id);
     if (error) throw error;
   },
 
@@ -427,7 +428,7 @@ export const appBackend = {
       hasReformer: d.has_reformer, 
       qtyReformer: d.qty_reformer, 
       hasLadderBarrel: d.has_ladder_barrel, 
-      qtyLadderBarrel: d.qty_ladder_barrel, 
+      qty_ladder_barrel: d.qty_ladder_barrel, 
       hasChair: d.has_chair, 
       qtyChair: d.qty_chair, 
       hasCadillac: d.has_cadillac, 
@@ -611,54 +612,45 @@ export const appBackend = {
       }));
   },
 
-  getEligibleSurveysForStudent: async (studentId: string): Promise<SurveyModel[]> => {
+  getEligibleSurveysForStudent: async (studentDealId: string): Promise<SurveyModel[]> => {
       if (!isConfigured) return [];
       
-      // 1. Get student deals to check their products
-      const { data: deals } = await supabase.from('crm_deals').select('*').eq('id', studentId);
-      if (!deals || deals.length === 0) return [];
+      // 1. Get student deal to check products
+      const { data: deal } = await supabase.from('crm_deals').select('*').eq('id', studentDealId).single();
+      if (!deal) return [];
 
       // 2. Get active surveys
       const { data: surveys } = await supabase.from('crm_surveys').select('*').eq('is_active', true);
       if (!surveys || surveys.length === 0) return [];
 
+      // 3. Get student submissions to exclude already answered ones
+      const { data: answered } = await supabase.from('crm_form_submissions').select('form_id').eq('student_id', studentDealId);
+      const answeredIds = new Set((answered || []).map(a => a.form_id));
+
       const today = new Date();
 
       const eligible = surveys.filter((survey: any) => {
+          // EXCLUDE ALREADY ANSWERED
+          if (answeredIds.has(survey.id)) return false;
+
           // Check product matches
           let matchesProduct = false;
           if (survey.target_type === 'all') {
               matchesProduct = true;
           } else {
-              matchesProduct = deals.some((deal: any) => {
-                  const typeMatch = survey.target_type === 'product_type' && deal.product_type === survey.target_product_type;
-                  const specificMatch = survey.target_type === 'specific_product' && deal.product_name === survey.target_product_name;
-                  return typeMatch || specificMatch;
-              });
+              const typeMatch = survey.target_type === 'product_type' && deal.product_type === survey.target_product_type;
+              const specificMatch = survey.target_type === 'specific_product' && deal.product_name === survey.target_product_name;
+              matchesProduct = typeMatch || specificMatch;
           }
 
           if (!matchesProduct) return false;
 
           // Check "finished" condition
           if (survey.only_if_finished) {
-              const hasFinished = deals.some((deal: any) => {
-                  const dealTypeMatch = (survey.target_type === 'all' || 
-                                       (survey.target_type === 'product_type' && deal.product_type === survey.target_product_type) ||
-                                       (survey.target_type === 'specific_product' && deal.product_name === survey.target_product_name));
-                  
-                  if (!dealTypeMatch) return false;
-
-                  if (deal.product_type === 'Presencial') {
-                      // Fetch class to check mod 2 date
-                      // This is simplified: in a real world scenario we'd join deals and classes
-                      // For now we check if there's any finished mod 2 date in the future/past logic
-                      // For simplicity, let's assume we can't check easily without more queries
-                      // or we rely on a deal status 'concluido'
-                      return deal.stage === 'closed'; // Fallback: matricula fechada
-                  }
-                  return true; // For Digital, assume immediately if toggle off, or add progress logic
-              });
-              if (!hasFinished) return false;
+              if (deal.product_type === 'Presencial') {
+                  return deal.stage === 'closed'; // Fallback: matricula fechada
+              }
+              return true; 
           }
 
           return true;
@@ -708,14 +700,15 @@ export const appBackend = {
       await supabase.from('crm_surveys').delete().eq('id', id);
   },
 
-  submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean): Promise<void> => {
+  submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
       const form = await appBackend.getFormById(formId);
       if (!form) throw new Error("Form not found");
 
       if (isConfigured) {
           const { error: subError } = await supabase.from('crm_form_submissions').insert([{
               form_id: formId,
-              answers: answers
+              answers: answers,
+              student_id: studentId || null // NOVO: Relaciona a resposta ao aluno
           }]);
           if (subError) console.error("Error saving raw submission:", subError);
       }
@@ -827,7 +820,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
+      return { id: data.id, title: data.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
@@ -878,10 +871,9 @@ export const appBackend = {
         title: cert.title, 
         background_base_64: cert.backgroundData, 
         back_background_base_64: cert.backBackgroundData, 
-        linked_product_id: cert.linkedProductId || null, 
-        // Fixed: Property 'body_text' does not exist on type 'CertificateModel'. Did you mean 'bodyText'?
+        // Fixed: Property 'linked_product_id' does not exist on type 'CertificateModel'. Did you mean 'linkedProductId'?
+        linked_product_id: cert.linkedProductId, 
         body_text: cert.bodyText, 
-        // Fixed: Property 'layout_config' does not exist on type 'CertificateModel'. Did you mean 'layoutConfig'?
         layout_config: cert.layoutConfig 
     };
     const { error } = await supabase.from('crm_certificates').upsert(payload);
@@ -969,7 +961,7 @@ export const appBackend = {
       const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
       const { data, error } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
+      return { id: data.id, eventId: data.event_id, date: d.date, title: data.title, maxSelections: data.max_selections };
   },
 
   deleteBlock: async (id: string): Promise<void> => {
@@ -1008,11 +1000,11 @@ export const appBackend = {
 
   saveEventRegistrations: async (eventId: string, studentId: string, studentName: string, studentEmail: string, workshopIds: string[]): Promise<void> => {
     if (!isConfigured) throw new Error("Backend not configured");
-    const { error: delError } = await supabase.from('crm_event_registrations').delete().eq('event_id', eventId).eq('student_id', studentId);
+    const { error: delError = null } = await supabase.from('crm_event_registrations').delete().eq('event_id', eventId).eq('student_id', studentId);
     if (delError) throw delError;
     if (workshopIds.length > 0) {
       const payload = workshopIds.map(wId => ({ event_id: eventId, workshop_id: wId, student_id: studentId, student_name: studentName, student_email: studentEmail }));
-      const { error: insError } = await supabase.from('crm_event_registrations').insert(payload);
+      const { error: insError = null } = await supabase.from('crm_event_registrations').insert(payload);
       if (insError) throw insError;
     }
   },

@@ -8,7 +8,7 @@ import {
   Type, AlignLeft, Mail, Phone, Calendar, Hash, Target, Share2, 
   Monitor, Palette, X, Image as ImageIcon, Users, User, ArrowRightLeft, Tag, Loader2,
   Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2, Layout, Sparkles,
-  Filter, CheckCircle2, AlertTriangle, Briefcase, ShoppingBag, PieChart
+  Filter, CheckCircle2, AlertTriangle, Briefcase, ShoppingBag, PieChart, Sparkle, Info
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -48,11 +48,24 @@ const INITIAL_SURVEY: SurveyModel = {
   }
 };
 
+const SYSTEM_MAPPINGS = [
+    { value: '', label: 'Nenhum (Campo Manual)' },
+    { value: 'student_name', label: 'Nome do Aluno (Auto)' },
+    { value: 'product_name', label: 'Nome do Curso (Auto)' },
+    { value: 'state', label: 'Estado (Auto)' },
+    { value: 'city', label: 'Cidade (Auto)' },
+    { value: 'class_mod1', label: 'Cód. Turma Módulo 1 (Auto)' },
+    { value: 'class_mod2', label: 'Cód. Turma Módulo 2 (Auto)' },
+    { value: 'instructor_mod1', label: 'Instrutor Módulo 1 (Auto)' },
+    { value: 'instructor_mod2', label: 'Instrutor Módulo 2 (Auto)' },
+    { value: 'studio', label: 'Studio Parceiro (Auto)' },
+];
+
 const QUESTION_TYPES: { id: QuestionType; label: string; icon: any }[] = [
     { id: 'text', label: 'Pergunta Curta', icon: Type },
     { id: 'paragraph', label: 'Feedback Longo', icon: AlignLeft },
     { id: 'select', label: 'Múltipla Escolha', icon: List },
-    { id: 'checkbox', label: 'Múltipla Escolha', icon: CheckboxIcon },
+    { id: 'checkbox', label: 'Caixas de Seleção', icon: CheckboxIcon },
     { id: 'number', label: 'Nota / Número', icon: Hash },
 ];
 
@@ -170,6 +183,28 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
       setCurrentSurvey(prev => ({ ...prev, questions: prev.questions.filter(q => q.id !== id) }));
   };
 
+  // --- OPTION MANAGEMENT ---
+  const addOption = (qId: string) => {
+      setCurrentSurvey(prev => ({
+          ...prev,
+          questions: prev.questions.map(q => q.id === qId ? { ...q, options: [...(q.options || []), `Nova Opção`] } : q)
+      }));
+  };
+
+  const updateOption = (qId: string, optIdx: number, value: string) => {
+      setCurrentSurvey(prev => ({
+          ...prev,
+          questions: prev.questions.map(q => q.id === qId ? { ...q, options: q.options?.map((o, idx) => idx === optIdx ? value : o) } : q)
+      }));
+  };
+
+  const removeOption = (qId: string, optIdx: number) => {
+      setCurrentSurvey(prev => ({
+          ...prev,
+          questions: prev.questions.map(q => q.id === qId ? { ...q, options: q.options?.filter((_, idx) => idx !== optIdx) } : q)
+      }));
+  };
+
   const copyToClipboard = (id: string) => {
       const link = `${window.location.origin}${window.location.pathname}?publicFormId=${id}`;
       navigator.clipboard.writeText(link);
@@ -259,14 +294,52 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                             <div className="space-y-4 pb-20">
                                 {currentSurvey.questions.map((q, idx) => (
                                     <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm group hover:border-amber-300 transition-all relative">
-                                        <div className="flex flex-col gap-4">
-                                            <div className="flex items-center gap-2 mb-2"><span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase tracking-widest">Pergunta {idx + 1}</span></div>
+                                        <div className="flex flex-col gap-6">
+                                            <div className="flex items-center justify-between"><span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase tracking-widest">Pergunta {idx + 1}</span><button onClick={() => removeQuestion(q.id)} className="p-1.5 text-slate-300 hover:text-red-500"><Trash2 size={16} /></button></div>
                                             <input type="text" className="w-full text-lg font-bold text-slate-800 bg-slate-50 border border-transparent rounded-lg px-4 py-3 focus:bg-white focus:border-amber-500 transition-all outline-none" value={q.title} onChange={e => updateQuestion(q.id, 'title', e.target.value)} />
-                                            <div className="flex justify-end pt-2"><button onClick={() => removeQuestion(q.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={16} /></button></div>
+                                            
+                                            {/* CAMPO AUTOMÁTICO - SYSTEM MAPPING */}
+                                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col md:flex-row md:items-center gap-4">
+                                                <div className="flex items-center gap-2 text-blue-700 shrink-0">
+                                                    <Sparkle size={16} className="animate-pulse" />
+                                                    <span className="text-[10px] font-black uppercase tracking-wider">Campo Inteligente:</span>
+                                                </div>
+                                                <select 
+                                                    className="flex-1 bg-white border border-blue-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                                                    value={q.systemMapping || ''}
+                                                    onChange={e => updateQuestion(q.id, 'systemMapping', e.target.value)}
+                                                >
+                                                    {SYSTEM_MAPPINGS.map(sm => <option key={sm.value} value={sm.value}>{sm.label}</option>)}
+                                                </select>
+                                                {/* Fixed: Cannot find name 'Info' */}
+                                                <Info size={14} className="text-blue-300 hidden md:block" title="Se selecionado, o sistema preencherá este campo automaticamente para o aluno." />
+                                            </div>
+
+                                            {/* EDICÃO DE OPÇÕES */}
+                                            {(q.type === 'select' || q.type === 'checkbox') && (
+                                                <div className="space-y-3 pl-2 border-l-2 border-slate-100 ml-2">
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Escolhas Disponíveis</label>
+                                                    {q.options?.map((opt, optIdx) => (
+                                                        <div key={optIdx} className="flex items-center gap-2 group/opt animate-in fade-in">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-slate-200"></div>
+                                                            <input 
+                                                                type="text" 
+                                                                className="flex-1 bg-transparent border-b border-slate-100 py-1 text-sm font-medium focus:border-amber-400 outline-none"
+                                                                value={opt}
+                                                                onChange={e => updateOption(q.id, optIdx, e.target.value)}
+                                                            />
+                                                            <button onClick={() => removeOption(q.id, optIdx)} className="p-1 opacity-0 group-hover/opt:opacity-100 text-slate-300 hover:text-red-500"><X size={14}/></button>
+                                                        </div>
+                                                    ))}
+                                                    <button onClick={() => addOption(q.id)} className="text-[10px] font-black text-amber-600 uppercase flex items-center gap-1 hover:underline mt-2"><Plus size={12}/> Adicionar Escolha</button>
+                                                </div>
+                                            )}
+
+                                            <div className="flex justify-end pt-2 border-t border-slate-50"><label className="flex items-center gap-2 cursor-pointer group"><span className="text-[10px] font-bold text-slate-400 uppercase group-hover:text-slate-600">Obrigatório</span><div onClick={() => updateQuestion(q.id, 'required', !q.required)} className={clsx("w-10 h-5 rounded-full p-1 transition-all", q.required ? "bg-amber-500" : "bg-slate-200")}><div className={clsx("w-3 h-3 bg-white rounded-full transition-all", q.required ? "translate-x-5" : "translate-x-0")}></div></div></label></div>
                                         </div>
                                     </div>
                                 ))}
-                                {currentSurvey.questions.length === 0 && <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">Adicione perguntas à sua pesquisa usando the menu lateral.</div>}
+                                {currentSurvey.questions.length === 0 && <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">Adicione perguntas à sua pesquisa usando o menu lateral.</div>}
                             </div>
                         </div>
                     </main>
@@ -333,7 +406,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                           <label className="flex items-center gap-3 p-4 bg-white rounded-xl border border-teal-100 cursor-pointer group hover:bg-teal-50 transition-all shadow-sm">
                                               <input type="checkbox" className="w-6 h-6 rounded text-teal-600 focus:ring-teal-500" checked={currentSurvey.isActive} onChange={e => setCurrentSurvey({...currentSurvey, isActive: e.target.checked})} />
                                               <div>
-                                                  <span className="font-bold text-teal-900 block">Pesquisa Ativa?</span>
+                                                  <span className="font-bold text-indigo-900 block">Pesquisa Ativa?</span>
                                                   <p className="text-[10px] text-teal-500 uppercase tracking-tighter">Se desmarcado, a pesquisa deixará de aparecer para novos alunos.</p>
                                               </div>
                                           </label>

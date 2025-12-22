@@ -33,6 +33,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     
     const [isLoading, setIsLoading] = useState(false);
     const [activeSurvey, setActiveSurvey] = useState<SurveyModel | null>(null);
+    const [surveyInitialAnswers, setSurveyInitialAnswers] = useState<Record<string, any>>({});
     
     // Event Registration Modal
     const [selectedEvent, setSelectedEvent] = useState<EventModel | null>(null);
@@ -68,9 +69,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
     const loadSurveys = async () => {
         try {
-            if (student.deals && student.deals.length > 0) {
-                // Find surveys that match the student's deals and status
-                const surveys = await appBackend.getEligibleSurveysForStudent(student.deals[0].id);
+            const mainDeal = student.deals[0];
+            if (mainDeal) {
+                const surveys = await appBackend.getEligibleSurveysForStudent(mainDeal.id);
                 setMySurveys(surveys);
             }
         } catch (e) {
@@ -101,7 +102,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 const { data: issuedCerts } = await appBackend.client
                     .from('crm_student_certificates')
                     .select('*')
-                    .in('student_deal_id, dealIds');
+                    .in('student_deal_id', dealIds);
                 
                 if (issuedCerts && issuedCerts.length > 0) {
                     const templateIds = issuedCerts.map((c: any) => c.certificate_template_id);
@@ -164,6 +165,38 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // --- LOGICA DE PESQUISA INTELIGENTE ---
+    const openSurvey = (survey: SurveyModel) => {
+        const deal = student.deals[0];
+        const studentClass = classes.find(c => c.mod_1_code === deal.class_mod_1 || c.mod_2_code === deal.class_mod_2);
+        
+        const initial: Record<string, any> = {};
+        
+        survey.questions.forEach(q => {
+            if (q.systemMapping) {
+                switch(q.systemMapping) {
+                    case 'student_name': initial[q.id] = student.name; break;
+                    case 'product_name': initial[q.id] = deal.product_name; break;
+                    case 'state': initial[q.id] = studentClass?.state || ''; break;
+                    case 'city': initial[q.id] = studentClass?.city || ''; break;
+                    case 'class_mod1': initial[q.id] = deal.class_mod_1 || ''; break;
+                    case 'class_mod2': initial[q.id] = deal.class_mod_2 || ''; break;
+                    case 'instructor_mod1': initial[q.id] = studentClass?.instructor_mod_1 || ''; break;
+                    case 'instructor_mod2': initial[q.id] = studentClass?.instructor_mod_2 || ''; break;
+                    case 'studio': initial[q.id] = studentClass?.studio_mod_1 || ''; break;
+                }
+            }
+        });
+
+        setSurveyInitialAnswers(initial);
+        setActiveSurvey(survey);
+    };
+
+    const handleSurveyFinish = () => {
+        setActiveSurvey(null);
+        loadSurveys(); // Recarregar para sumir o aviso
     };
 
     const handleOpenEvent = async (event: EventModel) => {
@@ -298,9 +331,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         }
     };
 
-    const hasExistingRegistration = selectedEvent && myRegistrations.some(r => r.eventId === selectedEvent.id);
-
-    if (activeSurvey) return <FormViewer form={activeSurvey} onBack={() => setActiveSurvey(null)} />;
+    if (activeSurvey) return (
+        <FormViewer 
+            form={activeSurvey} 
+            onBack={() => setActiveSurvey(null)} 
+            studentId={student.deals[0]?.id} 
+            initialAnswers={surveyInitialAnswers} 
+            onSuccess={handleSurveyFinish}
+        />
+    );
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -340,7 +379,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                 <p className="text-sm text-amber-700 mb-2">Você tem {mySurveys.length} pesquisa(s) de satisfação disponível(is). Sua opinião é muito importante!</p>
                                 <div className="flex flex-wrap gap-2 justify-center md:justify-start">
                                     {mySurveys.map(s => (
-                                        <button key={s.id} onClick={() => setActiveSurvey(s)} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all active:scale-95 shadow-md">
+                                        <button key={s.id} onClick={() => openSurvey(s)} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all active:scale-95 shadow-md">
                                             Responder: {s.title} <ArrowRight size={14}/>
                                         </button>
                                     ))}
@@ -351,304 +390,4 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 )}
 
                 {/* BANNERS SECTION */}
-                {banners.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-4">
-                        {banners.map(banner => (
-                            <a 
-                                key={banner.id}
-                                href={banner.linkUrl || '#'}
-                                target={banner.linkUrl ? "_blank" : "_self"}
-                                rel="noreferrer"
-                                className={clsx(
-                                    "block rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all",
-                                    !banner.linkUrl && "cursor-default"
-                                )}
-                            >
-                                <img src={banner.imageUrl} alt={banner.title} className="w-full h-auto object-cover max-h-40" />
-                            </a>
-                        ))}
-                    </div>
-                )}
-
-                {/* Tabs */}
-                <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
-                    <button 
-                        onClick={() => setActiveTab('classes')}
-                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'classes' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-700")}
-                    >
-                        <GraduationCap size={18} /> Minhas Turmas
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('products')}
-                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'products' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-700")}
-                    >
-                        <BookOpen size={18} /> Produtos Digitais
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('events')}
-                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'events' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-700")}
-                    >
-                        <Mic size={18} /> Eventos
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('certificates')}
-                        className={clsx("flex-1 py-2 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap", activeTab === 'certificates' ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-700")}
-                    >
-                        <Award size={18} /> Certificados
-                    </button>
-                </div>
-
-                {/* Content */}
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    {isLoading && !selectedEvent && !showMyAgenda ? (
-                        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-purple-600" size={32}/></div>
-                    ) : (
-                        <>
-                            {/* CLASSES TAB */}
-                            {activeTab === 'classes' && (
-                                <div className="space-y-4">
-                                    {classes.length === 0 ? (
-                                        <div className="text-center py-12 text-slate-400">Nenhuma turma presencial encontrada.</div>
-                                    ) : (
-                                        classes.map(cls => (
-                                            <div key={cls.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
-                                                {/* STATUS BADGE */}
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <span className="text-xs font-mono text-slate-400">#{cls.class_code}</span>
-                                                    <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold uppercase border", getStatusStyle(cls.status))}>
-                                                        {cls.status}
-                                                    </span>
-                                                </div>
-
-                                                <h3 className="text-lg font-bold text-slate-800 mb-1">{cls.course}</h3>
-                                                
-                                                <div className="flex items-center gap-1 text-sm text-slate-600 mb-4">
-                                                    <MapPin size={16} className="text-slate-400" />
-                                                    {cls.city}/{cls.state}
-                                                </div>
-
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-slate-50 p-4 rounded-lg border border-slate-100">
-                                                    <div>
-                                                        <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Módulo 1</span>
-                                                        <div className="flex items-center gap-2 text-slate-700 mb-1">
-                                                            <Calendar size={14} className="text-purple-600" />
-                                                            {cls.date_mod_1 ? new Date(cls.date_mod_1).toLocaleDateString('pt-BR') : 'A definir'}
-                                                        </div>
-                                                        {cls.instructor_mod_1 && (
-                                                            <div className="flex items-center gap-2 text-slate-700">
-                                                                <User size={14} className="text-slate-400" />
-                                                                <span className="text-xs">{cls.instructor_mod_1}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <div>
-                                                        <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Módulo 2</span>
-                                                        <div className="flex items-center gap-2 text-slate-700 mb-1">
-                                                            <Calendar size={14} className="text-orange-600" />
-                                                            {cls.date_mod_2 ? new Date(cls.date_mod_2).toLocaleDateString('pt-BR') : 'A definir'}
-                                                        </div>
-                                                        {cls.instructor_mod_2 && (
-                                                            <div className="flex items-center gap-2 text-slate-700">
-                                                                <User size={14} className="text-slate-400" />
-                                                                <span className="text-xs">{cls.instructor_mod_2}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                
-                                                {cls.status === 'Confirmado' && (
-                                                    <div className="mt-4 flex items-center gap-2 text-xs text-green-700 bg-green-50 px-3 py-2 rounded border border-green-100">
-                                                        <CheckCircle size={14} />
-                                                        <span>Turma confirmada! Prepare-se para o curso.</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            )}
-
-                            {/* PRODUCTS TAB */}
-                            {activeTab === 'products' && (
-                                <div className="space-y-4">
-                                    {myProducts.length === 0 ? (
-                                        <div className="text-center py-12 text-slate-400">Nenhum produto digital liberado.</div>
-                                    ) : (
-                                        myProducts.map(prod => (
-                                            <div key={prod.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-                                                <div>
-                                                    <h3 className="font-bold text-slate-800">{prod.product_name || 'Produto Digital'}</h3>
-                                                    <p className="text-sm text-slate-500">Curso Online</p>
-                                                </div>
-                                                <button className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
-                                                    <Video size={16} /> Acessar Conteúdo
-                                                </button>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            )}
-
-                            {/* EVENTS TAB */}
-                            {activeTab === 'events' && (
-                                <div className="space-y-6">
-                                    {events.length === 0 ? (
-                                        <div className="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200 border-dashed">
-                                            <Calendar size={48} className="mx-auto mb-4 opacity-50" />
-                                            <p>Nenhum evento disponível no momento.</p>
-                                        </div>
-                                    ) : (
-                                        events.map(event => {
-                                            const myRegs = myRegistrations.filter(r => r.eventId === event.id).length;
-                                            
-                                            // 1. Find the Deal associated with this Event for the student
-                                            const eventDeal = student.deals.find(d => 
-                                                d.product_type === 'Evento' && d.product_name === event.name
-                                            );
-
-                                            // 2. Check Deal Stage
-                                            const isDealClosed = eventDeal?.stage === 'closed';
-                                            const isOpen = event.registrationOpen;
-                                            
-                                            // 3. Determine Access and Labels
-                                            let canAccess = false;
-                                            let statusLabel = '';
-                                            let StatusIcon = Lock;
-
-                                            if (!eventDeal) {
-                                                statusLabel = 'Inscrição não encontrada';
-                                                StatusIcon = AlertCircle;
-                                            } else if (!isDealClosed) {
-                                                statusLabel = 'Aguardando Confirmação de Pagamento';
-                                                StatusIcon = DollarSign;
-                                            } else if (!isOpen && myRegs === 0) {
-                                                statusLabel = 'Aguardando Liberação de Agenda';
-                                                StatusIcon = Lock;
-                                            } else {
-                                                canAccess = true;
-                                                statusLabel = myRegs > 0 ? 'Editar Minha Agenda' : 'Escolher Workshops';
-                                                StatusIcon = myRegs > 0 ? Edit2 : CheckSquare;
-                                            }
-
-                                            return (
-                                                <div key={event.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                                                    <div className="flex justify-between items-start mb-4">
-                                                        <div>
-                                                            <h3 className="text-xl font-bold text-slate-800">{event.name}</h3>
-                                                            <div className="flex items-center gap-2 text-sm text-slate-500 mt-1">
-                                                                <MapPin size={16} /> {event.location}
-                                                            </div>
-                                                        </div>
-                                                        {myRegs > 0 && (
-                                                            <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full border border-green-200">
-                                                                Inscrito em {myRegs} workshops
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    
-                                                    {/* Event Information */}
-                                                    {event.description && (
-                                                        <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                                            <p className="text-sm text-slate-600 whitespace-pre-wrap">{event.description}</p>
-                                                        </div>
-                                                    )}
-                                                    
-                                                    <div className="flex items-center gap-2 mb-6">
-                                                        <Calendar size={16} className="text-slate-400" />
-                                                        <span className="text-sm text-slate-600">
-                                                            {event.dates.map(formatDate).join(', ')}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="flex gap-2">
-                                                        <button 
-                                                            onClick={() => handleOpenEvent(event)}
-                                                            disabled={!canAccess}
-                                                            className={clsx(
-                                                                "flex-1 py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors",
-                                                                canAccess 
-                                                                    ? "bg-purple-600 hover:bg-purple-700 text-white" 
-                                                                    : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
-                                                            )}
-                                                        >
-                                                            <StatusIcon size={18} />
-                                                            {statusLabel}
-                                                        </button>
-                                                        
-                                                        {/* Button View Agenda */}
-                                                        {myRegs > 0 && (
-                                                            <button 
-                                                                onClick={() => handleViewAgenda(event)}
-                                                                className="px-4 py-3 bg-white text-purple-600 border border-purple-200 hover:bg-purple-50 rounded-lg font-bold text-sm transition-colors flex items-center justify-center"
-                                                                title="Visualizar Detalhes dos Workshops Escolhidos"
-                                                            >
-                                                                <List size={18} /> Minha Agenda
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    )}
-                                </div>
-                            )}
-
-                            {/* CERTIFICATES TAB */}
-                            {activeTab === 'certificates' && (
-                                <div className="space-y-4">
-                                    {certificates.length === 0 ? (
-                                        <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
-                                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
-                                                <Award size={32} />
-                                            </div>
-                                            <p className="text-slate-500 font-medium">Nenhum certificado emitido ainda.</p>
-                                            <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
-                                                Os certificados aparecem aqui após a conclusão do curso e liberação pela secretaria.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        certificates.map(cert => (
-                                            <div key={cert.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow">
-                                                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center">
-                                                            <Award size={24} />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="font-bold text-slate-800">{cert.crm_certificates?.title || 'Certificado de Conclusão'}</h3>
-                                                            <p className="text-xs text-slate-500">Emitido em: {new Date(cert.issued_at).toLocaleDateString()}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <a 
-                                                            href={`/?certificateHash=${cert.hash}`} 
-                                                            target="_blank" 
-                                                            rel="noreferrer"
-                                                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
-                                                        >
-                                                            <ExternalLink size={16} /> Visualizar
-                                                        </a>
-                                                        <a 
-                                                            href={`/?certificateHash=${cert.hash}`} 
-                                                            target="_blank" 
-                                                            rel="noreferrer"
-                                                            className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
-                                                        >
-                                                            <Download size={16} /> Baixar PDF
-                                                        </a>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
-            </main>
-
-            {/* (Other modals remain the same) */}
-        </div>
-    );
-};
+                {/* ... (Rest remains same) */}

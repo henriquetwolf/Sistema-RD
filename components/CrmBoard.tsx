@@ -113,13 +113,7 @@ const formatCEP = (value: string = '') => {
 const handleDbError = (e: any) => {
     console.error("Erro de Banco de Dados:", e);
     const msg = e.message || "Erro desconhecido";
-    if (msg.includes('relation "crm_deals" does not exist')) {
-       alert("Erro Crítico: A tabela 'crm_deals' não existe no banco de dados.");
-    } else if (msg.includes('column') && (msg.includes('does not exist') || msg.includes('cache'))) {
-       alert(`Erro de Schema: O banco de dados está desatualizado ou em cache.\n\nVá em Configurações > Diagnóstico e execute o SQL de reparo.\n\nDetalhe: ${msg}`);
-    } else {
-       alert(`Erro: ${msg}`);
-    }
+    alert(`Erro: ${msg}`);
 };
 
 const generateDealNumber = () => {
@@ -248,8 +242,6 @@ export const CrmBoard: React.FC = () => {
                   mod1Code: c.mod_1_code,
                   mod2Code: c.mod_2_code
               })));
-          } else {
-              setRegisteredClasses([]);
           }
 
           setDigitalProducts(productsResult.data || []);
@@ -261,8 +253,6 @@ export const CrmBoard: React.FC = () => {
                 fullName: c.full_name || 'Sem Nome',
                 department: c.department || 'Geral'
             })));
-          } else {
-            setCollaborators([]);
           }
 
           setCompanies(companiesResult || []);
@@ -342,6 +332,7 @@ export const CrmBoard: React.FC = () => {
     setDealFormData({ ...INITIAL_FORM_STATE, owner: firstComercial?.id || '', pipeline: firstPipeline, stage: firstStage }); 
     setShowDealModal(true); 
   };
+
   const openEditDealModal = (deal: Deal) => { setEditingDealId(deal.id); setDealFormData({ ...deal }); setShowDealModal(true); };
 
   const openNewTeamModal = () => { setEditingTeam(null); setTeamName(''); setSelectedMembers([]); setShowTeamModal(true); };
@@ -481,12 +472,19 @@ export const CrmBoard: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-x-auto bg-slate-100/50 p-6 relative custom-scrollbar">
-        {isLoading && deals.length === 0 ? (
+        {isLoading && deals.length === 0 && pipelines.length === 0 ? (
             <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>
         ) : (
         <>
             {activeView === 'pipeline' && (
                 <div className="flex flex-col gap-12 min-w-max">
+                {pipelines.length === 0 && !isLoading && (
+                    <div className="text-center py-20 text-slate-400 bg-white rounded-xl border-2 border-dashed border-slate-200 w-full max-w-3xl mx-auto">
+                        <Filter size={48} className="mx-auto mb-4 opacity-20" />
+                        <p className="font-bold">Nenhum Funil Cadastrado</p>
+                        <p className="text-sm">Vá em "Configurar Funis" para criar seu primeiro processo de vendas.</p>
+                    </div>
+                )}
                 {pipelines.map(pipeline => (
                     <div key={pipeline.id} className="space-y-4">
                         <div className="flex items-center justify-between bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
@@ -496,7 +494,7 @@ export const CrmBoard: React.FC = () => {
                             <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">{filteredDeals.filter(d => d.pipeline === pipeline.name).length} Negócios</span>
                         </div>
                         <div className="flex gap-4 h-full">
-                        {pipeline.stages.map(stage => {
+                        {(pipeline.stages || []).map(stage => {
                             const summary = getStageSummary(pipeline.name, stage.id);
                             const columnDeals = filteredDeals.filter(d => d.pipeline === pipeline.name && d.stage === stage.id);
                             return (
@@ -577,7 +575,7 @@ export const CrmBoard: React.FC = () => {
                                 <div className="flex flex-wrap gap-1 mb-4">{p.stages.map(s => <span key={s.id} className={clsx("px-2 py-0.5 rounded text-[9px] font-bold border", s.color)}>{s.title}</span>)}</div>
                             </div>
                         ))}
-                        <button onClick={openNewPipelineModal} className="bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 hover:bg-slate-50 hover:border-teal-300 transition-all group"><div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-teal-500 mb-2"><Plus size={24} /></div><span className="font-bold text-slate-600 group-hover:text-teal-600">Novo Funil</span></button>
+                        <button onClick={openNewPipelineModal} className="bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 hover:bg-slate-50 hover:border-teal-300 transition-all group"><div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-teal-500 mb-2"><Plus size={24} /></div><span className="font-bold text-slate-600 group-hover:text-indigo-600">Novo Funil</span></button>
                     </div>
                 </div>
             )}
@@ -688,6 +686,7 @@ export const CrmBoard: React.FC = () => {
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Responsável Comercial</label>
                         <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white" value={dealFormData.owner} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}>
+                            <option value="">Selecione...</option>
                             {(collaborators || []).map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
                         </select>
                     </div>
@@ -779,11 +778,15 @@ export const CrmBoard: React.FC = () => {
                     <div className="md:col-span-2 lg:col-span-1">
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Funil de Vendas</label>
                         <select 
-                            className="w-full px-3 py-2 border rounded-lg text-sm bg-white" 
+                            className="w-full px-3 py-2 border rounded-lg text-sm bg-white font-bold text-indigo-700" 
                             value={dealFormData.pipeline} 
                             onChange={e => {
                                 const newPipe = pipelines.find(p => p.name === e.target.value);
-                                setDealFormData({...dealFormData, pipeline: e.target.value, stage: newPipe?.stages[0].id || 'new'});
+                                setDealFormData({
+                                    ...dealFormData, 
+                                    pipeline: e.target.value, 
+                                    stage: newPipe?.stages[0]?.id || 'new'
+                                });
                             }}
                         >
                             {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
@@ -798,9 +801,8 @@ export const CrmBoard: React.FC = () => {
 
                     <div className="lg:col-span-3 border-t pt-6">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><ListTodo size={14}/> Tarefas & Agendamentos</h4>
-                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                             {/* ... Tasks logic (unchanged) ... */}
-                             <div className="text-center py-4 text-slate-400 text-sm italic">Nenhuma tarefa registrada.</div>
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 text-center">
+                             <div className="text-slate-400 text-sm italic">O módulo de gerenciamento individual de tarefas para este negócio será habilitado em breve.</div>
                         </div>
                     </div>
 

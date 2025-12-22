@@ -249,7 +249,8 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      interval_minutes: preset.interval_minutes || 5, 
+      // Fixed: Property 'interval_minutes' does not exist on type 'Omit<SavedPreset, "id">'. Did you mean 'intervalMinutes'?
+      interval_minutes: preset.intervalMinutes || 5, 
       created_by_name: preset.createdByName || null
     };
     const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -317,7 +318,8 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: company.id || undefined, legal_name: company.legal_name, cnpj: company.cnpj, product_types: company.productTypes };
+      // Fixed: Property 'legal_name' does not exist on type 'CompanySetting'. Did you mean 'legalName'?
+      const payload = { id: company.id || undefined, legal_name: company.legalName, cnpj: company.cnpj, product_types: company.productTypes };
       const { error } = await supabase.from('crm_companies').upsert(payload);
       if (error) throw error;
   },
@@ -363,7 +365,7 @@ export const appBackend = {
       id: b.id, 
       title: b.title, 
       imageUrl: b.image_url, 
-      link_url: b.link_url, 
+      linkUrl: b.link_url, 
       targetAudience: b.target_audience, 
       active: b.active 
     }));
@@ -676,7 +678,8 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).single();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at };
+      // Fixed: Cannot find name 'd'. Use 'data' variable instead.
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {

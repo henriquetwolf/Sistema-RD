@@ -116,7 +116,6 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
       }
   };
 
-  // Fixed: Added missing handleDelete function
   const handleDelete = async (id: string) => { 
       const target = surveys.find(s => s.id === id); 
       if(window.confirm(`Excluir a pesquisa "${target?.title}"?`)) { 
@@ -140,6 +139,10 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
       } catch (e: any) { alert("Erro ao salvar pesquisa."); } finally { setIsSaving(false); }
   };
 
+  const updateQuestion = (id: string, field: keyof FormQuestion, value: any) => {
+      setCurrentSurvey(prev => ({ ...prev, questions: prev.questions.map(q => q.id === id ? { ...q, [field]: value } : q) }));
+  };
+
   const addQuestion = (type: QuestionType) => { 
       const titles: Record<string, string> = { text: 'Pergunta Curta', paragraph: 'Feedback Longo', number: 'Nota (0-10)', select: 'Escolha uma opção', checkbox: 'Múltipla Escolha' }; 
       const newQ: FormQuestion = { 
@@ -147,10 +150,6 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
           options: (type === 'select' || type === 'checkbox') ? ['Excelente', 'Bom', 'Regular', 'Ruim'] : undefined
       }; 
       setCurrentSurvey(prev => ({ ...prev, questions: [...prev.questions, newQ] })); 
-  };
-
-  const updateQuestion = (id: string, field: keyof FormQuestion, value: any) => {
-      setCurrentSurvey(prev => ({ ...prev, questions: prev.questions.map(q => q.id === id ? { ...q, [field]: value } : q) }));
   };
 
   const removeQuestion = (id: string) => {
@@ -178,6 +177,10 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
       }));
   };
 
+  const updateStyle = (field: keyof FormStyle, value: any) => {
+      setCurrentSurvey(prev => ({ ...prev, style: { ...(prev.style || INITIAL_SURVEY.style!), [field]: value } }));
+  };
+
   const copyToClipboard = (id: string) => {
       const link = `${window.location.origin}${window.location.pathname}?publicFormId=${id}`;
       navigator.clipboard.writeText(link);
@@ -189,7 +192,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
 
   if (view === 'responses') return (
       <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl overflow-hidden border border-slate-200 animate-in fade-in">
-          <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm">
+          <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm z-20">
               <div className="flex items-center gap-4">
                   <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
                   <div><h2 className="text-lg font-bold text-slate-800">{currentSurvey.title}</h2><p className="text-xs text-slate-400">Visualizando {submissions.length} respostas</p></div>
@@ -232,12 +235,16 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                   <div className="h-6 w-px bg-slate-200"></div>
                   <div className="flex bg-slate-100 p-1 rounded-lg">
                       <button onClick={() => setEditorStep('editor')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", editorStep === 'editor' ? "bg-white shadow text-teal-700" : "text-slate-500")}>Perguntas</button>
+                      <button onClick={() => setEditorStep('design')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", editorStep === 'design' ? "bg-white shadow text-teal-700" : "text-slate-500")}>Design</button>
                       <button onClick={() => setEditorStep('targeting')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", editorStep === 'targeting' ? "bg-white shadow text-teal-700" : "text-slate-500")}>Público & Alvo</button>
                   </div>
               </div>
-              <button onClick={handleSaveSurvey} disabled={isSaving} className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2">
-                  {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Pesquisa
-              </button>
+              <div className="flex items-center gap-3">
+                  <button onClick={() => setView('preview')} className="text-slate-600 hover:text-teal-600 font-bold text-sm flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50"><Eye size={18} /> Prévia</button>
+                  <button onClick={handleSaveSurvey} disabled={isSaving} className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2">
+                      {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Pesquisa
+                  </button>
+              </div>
           </div>
 
           <div className="flex-1 flex overflow-hidden">
@@ -300,6 +307,16 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                         </div>
                     </main>
                   </>
+              ) : editorStep === 'design' ? (
+                  <main className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-white">
+                      <div className="max-w-xl mx-auto space-y-8">
+                          <h3 className="text-xl font-bold flex items-center gap-2"><Palette className="text-teal-600"/> Personalização do Aluno</h3>
+                          <div className="space-y-6 bg-slate-50 p-6 rounded-2xl border">
+                              <div><label className="block text-sm font-bold mb-1">Cor Principal</label><input type="color" className="w-full h-10 border-none bg-transparent" value={currentSurvey.style?.primaryColor} onChange={e => updateStyle('primaryColor', e.target.value)} /></div>
+                              <div><label className="block text-sm font-bold mb-1">Texto do Botão</label><input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={currentSurvey.style?.buttonText} onChange={e => updateStyle('buttonText', e.target.value)} /></div>
+                          </div>
+                      </div>
+                  </main>
               ) : (
                   <main className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-white">
                       <div className="max-w-2xl mx-auto space-y-10">
@@ -309,15 +326,60 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                   <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 space-y-6">
                                       <div>
                                           <label className="block text-xs font-black text-indigo-700 uppercase mb-2">Público Alvo</label>
-                                          <select className="w-full px-4 py-2.5 border rounded-xl bg-white font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500" value={currentSurvey.targetType} onChange={e => setCurrentSurvey({...currentSurvey, targetType: e.target.value as any})}>
+                                          <select 
+                                              className="w-full px-4 py-2.5 border rounded-xl bg-white font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500" 
+                                              value={currentSurvey.targetType} 
+                                              onChange={e => setCurrentSurvey({
+                                                  ...currentSurvey, 
+                                                  targetType: e.target.value as any,
+                                                  targetProductType: '',
+                                                  targetProductName: ''
+                                              })}
+                                          >
                                               <option value="all">Qualquer Aluno</option>
-                                              <option value="product_type">Por Categoria</option>
-                                              <option value="specific_product">Produto Específico</option>
+                                              <option value="product_type">Por Categoria (Tipo de Produto)</option>
+                                              <option value="specific_product">Produto Específico (Curso)</option>
                                           </select>
                                       </div>
-                                      <label className="flex items-center gap-3 p-4 bg-white rounded-xl border border-indigo-100 cursor-pointer">
-                                          <input type="checkbox" className="w-6 h-6 rounded text-indigo-600" checked={currentSurvey.onlyIfFinished} onChange={e => setCurrentSurvey({...currentSurvey, onlyIfFinished: e.target.checked})} />
-                                          <span className="font-bold text-indigo-900">Exibir apenas após encerrar o curso?</span>
+
+                                      {currentSurvey.targetType === 'product_type' && (
+                                          <div className="animate-in fade-in slide-in-from-top-1">
+                                              <label className="block text-xs font-black text-indigo-700 uppercase mb-2">Escolha a Categoria</label>
+                                              <select 
+                                                  className="w-full px-4 py-2.5 border rounded-xl bg-white font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                                                  value={currentSurvey.targetProductType || ''}
+                                                  onChange={e => setCurrentSurvey({...currentSurvey, targetProductType: e.target.value})}
+                                              >
+                                                  <option value="">Selecione o Tipo...</option>
+                                                  <option value="Digital">Digital</option>
+                                                  <option value="Presencial">Presencial</option>
+                                                  <option value="Evento">Evento</option>
+                                              </select>
+                                          </div>
+                                      )}
+
+                                      {currentSurvey.targetType === 'specific_product' && (
+                                          <div className="animate-in fade-in slide-in-from-top-1">
+                                              <label className="block text-xs font-black text-indigo-700 uppercase mb-2">Escolha o Produto / Curso</label>
+                                              <select 
+                                                  className="w-full px-4 py-2.5 border rounded-xl bg-white font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                                                  value={currentSurvey.targetProductName || ''}
+                                                  onChange={e => setCurrentSurvey({...currentSurvey, targetProductName: e.target.value})}
+                                              >
+                                                  <option value="">Selecione o Produto...</option>
+                                                  {products.map(p => (
+                                                      <option key={p.id} value={p.name}>{p.name}</option>
+                                                  ))}
+                                              </select>
+                                          </div>
+                                      )}
+
+                                      <label className="flex items-center gap-3 p-4 bg-white rounded-xl border border-indigo-100 cursor-pointer hover:bg-slate-50 transition-colors">
+                                          <input type="checkbox" className="w-6 h-6 rounded text-indigo-600 focus:ring-indigo-500" checked={currentSurvey.onlyIfFinished} onChange={e => setCurrentSurvey({...currentSurvey, onlyIfFinished: e.target.checked})} />
+                                          <div className="flex-1">
+                                              <span className="font-bold text-indigo-900 block">Exibir apenas após encerrar o curso?</span>
+                                              <p className="text-[10px] text-slate-400 mt-0.5 uppercase font-bold">Verifica Mod 2 (Presencial) ou Conclusão (Digital)</p>
+                                          </div>
                                       </label>
                                   </div>
                               </div>

@@ -1,6 +1,5 @@
-
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, TwilioConfig } from '../types';
+import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -94,14 +93,6 @@ export const appBackend = {
       }
       return supabase.auth.onAuthStateChange((_event, session) => callback(session));
     }
-  },
-
-  // --- TWILIO CONFIG ---
-  getTwilioConfig: async (): Promise<TwilioConfig | null> => {
-    return await appBackend.getAppSetting('twilio_config');
-  },
-  saveTwilioConfig: async (config: TwilioConfig): Promise<void> => {
-    await appBackend.saveAppSetting('twilio_config', config);
   },
 
   // --- ACTIVITY LOGS ---
@@ -441,7 +432,7 @@ export const appBackend = {
       hasLadderBarrel: d.has_ladder_barrel, 
       qty_ladder_barrel: d.qty_ladder_barrel, 
       hasChair: d.has_chair, 
-      qty_chair: d.qty_chair, 
+      qtyChair: d.qty_chair, 
       hasCadillac: d.has_cadillac, 
       qtyCadillac: d.qty_cadillac, 
       hasChairsForCourse: d.has_chairs_for_course, 
@@ -470,7 +461,6 @@ export const appBackend = {
       city: studio.city, 
       state: studio.state, 
       country: studio.country, 
-      // Fixed: Property 'size_m2' does not exist on type 'PartnerStudio'. Did you mean 'sizeM2'?
       size_m2: studio.sizeM2, 
       student_capacity: studio.studentCapacity, 
       rent_value: studio.rentValue, 

@@ -1,93 +1,91 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-// Added EventRegistration to the import list below to fix the error on line 632
-import { TwilioConfig, Role, Banner, InstructorLevel, ActivityLog, FormModel, SurveyModel, Contract, ContractFolder, PartnerStudio, CertificateModel, EventModel, Workshop, EventBlock, InventoryRecord, EventRegistration } from '../types';
+import { 
+  TwilioConfig, Role, Banner, InstructorLevel, ActivityLog, 
+  FormModel, SurveyModel, Contract, ContractFolder, PartnerStudio, 
+  CertificateModel, EventModel, Workshop, EventBlock, InventoryRecord, 
+  EventRegistration 
+} from '../types';
 
-// Helper to safely get environment variables without crashing
-const getEnvVar = (key: string): string => {
+// Função auxiliar para obter variáveis de ambiente de qualquer fonte comum (Vite, Webpack, Node)
+const getSafeEnv = (key: string): string => {
   try {
-    // Check import.meta.env (Vite standard)
+    // 1. Tenta Vite (import.meta.env)
     if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
       return (import.meta as any).env[key] || '';
     }
-    // Check process.env (Node/Webpack standard)
+    // 2. Tenta Node/Webpack (process.env)
     if (typeof process !== 'undefined' && process.env) {
       return process.env[key] || '';
     }
   } catch (e) {
-    console.warn(`Error accessing environment variable ${key}:`, e);
+    // Silencia erros de acesso a objetos de ambiente
   }
   return '';
 };
 
-const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
-const supabaseKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+const supabaseUrl = getSafeEnv('VITE_SUPABASE_URL');
+const supabaseKey = getSafeEnv('VITE_SUPABASE_ANON_KEY');
 
-// Initialize client only if URL is valid to prevent crash on boot
+// Inicializa o cliente apenas se os dados forem válidos.
+// Caso contrário, cria um objeto "mock" para evitar erros de "undefined" no render do React.
 const createSafeClient = (): SupabaseClient => {
-  if (!supabaseUrl || !supabaseUrl.startsWith('http')) {
-    console.warn("Supabase VITE_SUPABASE_URL is not configured. Internal backend features will be disabled.");
-    // Return a dummy client proxy to prevent 'undefined' errors during render
-    // It will throw an error only when an actual database call is made
-    return new Proxy({} as any, {
-      get: (target, prop) => {
-        if (prop === 'auth') return { 
-          onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-          getSession: async () => ({ data: { session: null }, error: null }),
-          signInWithPassword: async () => ({ data: null, error: new Error("Supabase não configurado.") }),
-          signOut: async () => {}
-        };
-        return () => ({
-          select: () => ({ order: () => ({ limit: () => ({ data: [], error: null }) }), eq: () => ({ single: () => ({ data: null, error: null }), maybeSingle: () => ({ data: null, error: null }) }) }),
-          from: () => ({ select: () => ({ order: () => ({ limit: () => ({ data: [], error: null }) }), eq: () => ({ single: () => ({ data: null, error: null }), maybeSingle: () => ({ data: null, error: null }) }) }) }),
-          insert: () => ({ select: () => ({ single: () => ({ data: null, error: null }) }) }),
-          update: () => ({ eq: () => ({ data: null, error: null }) }),
-          delete: () => ({ eq: () => ({ data: null, error: null }) }),
-          upsert: () => ({ select: () => ({ single: () => ({ data: null, error: null }) }) })
-        });
-      }
-    });
+  const isValid = supabaseUrl && supabaseUrl.startsWith('http') && supabaseKey;
+  
+  if (!isValid) {
+    console.warn("SUPABASE: Chaves não configuradas. O backend interno está desativado.");
+    
+    // Retorna um objeto que imita a estrutura do Supabase para não quebrar os componentes
+    return {
+      auth: {
+        getSession: async () => ({ data: { session: null }, error: null }),
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+        signInWithPassword: async () => ({ data: { user: null }, error: new Error("Supabase não configurado") }),
+        signOut: async () => ({ error: null })
+      },
+      from: () => ({
+        select: () => ({
+          order: () => ({ limit: () => ({ data: [], error: null }), data: [], error: null }),
+          eq: () => ({ single: () => ({ data: null, error: null }), maybeSingle: () => ({ data: null, error: null }), data: [], error: null }),
+          data: [], error: null
+        }),
+        insert: () => ({ select: () => ({ single: () => ({ data: null, error: null }) }) }),
+        upsert: () => ({ select: () => ({ single: () => ({ data: null, error: null }) }) }),
+        update: () => ({ eq: () => ({ data: null, error: null }) }),
+        delete: () => ({ eq: () => ({ data: null, error: null }) })
+      })
+    } as unknown as SupabaseClient;
   }
+
   return createClient(supabaseUrl, supabaseKey);
 };
 
 export const supabase = createSafeClient();
 
-export interface PipelineStage {
-    id: string;
-    title: string;
-    color: string;
-}
-
-export interface Pipeline {
-    id: string;
-    name: string;
-    stages: PipelineStage[];
-}
-
-export interface CompanySetting {
-    id: string;
-    legalName: string;
-    cnpj: string;
-    productTypes: string[];
-}
+// Interfaces auxiliares
+export interface PipelineStage { id: string; title: string; color: string; }
+export interface Pipeline { id: string; name: string; stages: PipelineStage[]; }
+export interface CompanySetting { id: string; legalName: string; cnpj: string; productTypes: string[]; }
 
 export const appBackend = {
   client: supabase,
 
   auth: {
     signIn: async (email: string, pass: string) => {
-        const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
-        if (error) throw error;
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (error) throw error;
+      return data;
     },
     signOut: async () => {
-        await supabase.auth.signOut();
+      await supabase.auth.signOut();
     }
   },
 
   getAppSetting: async (key: string) => {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
-    return data?.value || null;
+    try {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
+      return data?.value || null;
+    } catch (e) { return null; }
   },
 
   saveAppSetting: async (key: string, value: any) => {
@@ -179,7 +177,7 @@ export const appBackend = {
 
   logActivity: async (log: Partial<ActivityLog>) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getSession().then(res => ({ data: { user: res.data.session?.user } }));
       await supabase.from('activity_logs').insert([{
           action: log.action,
           module: log.module,
@@ -188,9 +186,7 @@ export const appBackend = {
           user_name: user?.email || 'System',
           record_id: log.recordId
       }]);
-    } catch (e) {
-      console.warn("Failed to log activity", e);
-    }
+    } catch (e) {}
   },
 
   getForms: async (): Promise<FormModel[]> => {
@@ -353,6 +349,7 @@ export const appBackend = {
         qty_cadillac: studio.qtyCadillac,
         has_chairs_for_course: studio.hasChairsForCourse,
         has_tv: studio.hasTv,
+        // Fix: Use maxKitsCapacity from PartnerStudio interface instead of non-existent max_kits_capacity
         max_kits_capacity: studio.maxKitsCapacity,
         attachments: studio.attachments
     };
@@ -644,6 +641,7 @@ export const appBackend = {
   },
 
   getPipelines: async (): Promise<Pipeline[]> => {
+    try {
       const { data } = await supabase.from('app_settings').select('value').eq('key', 'crm_pipelines').maybeSingle();
       return data?.value || [
           { id: '1', name: 'Padrão', stages: [
@@ -654,6 +652,7 @@ export const appBackend = {
               { id: 'closed', title: 'Fechado', color: 'border-green-500' }
           ]}
       ];
+    } catch (e) { return []; }
   },
 
   savePipeline: async (pipeline: Pipeline) => {

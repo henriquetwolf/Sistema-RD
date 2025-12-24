@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
     LayoutDashboard, Database, Upload, FileText, Settings as SettingsIcon, 
     LogOut, BarChart3, Users, GraduationCap, School, FileSignature, 
     ShoppingBag, Store, Award, Calendar, MessageCircle, Building2, Package, MessageSquare, Briefcase, Table as TableIcon,
-    PieChart
+    PieChart, XCircle
 } from 'lucide-react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -65,32 +66,44 @@ function App() {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [appLogo, setAppLogo] = useState<string | null>(null);
+  const [appError, setAppError] = useState<string | null>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const certHash = params.get('certificateHash');
-    if (certHash) setViewingCertificateHash(certHash);
+    const initializeApp = async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const certHash = params.get('certificateHash');
+        if (certHash) setViewingCertificateHash(certHash);
 
-    const contractId = params.get('contractId');
-    if (contractId) {
-        appBackend.getContracts().then(list => {
-            const found = list.find(c => c.id === contractId);
-            if (found) setSigningContract(found);
-        });
-    }
+        const contractId = params.get('contractId');
+        if (contractId) {
+            appBackend.getContracts().then(list => {
+                const found = list.find(c => c.id === contractId);
+                if (found) setSigningContract(found);
+            }).catch(() => {});
+        }
 
-    appBackend.client.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) loadUserRole(session.user.id);
-    });
+        // Tenta buscar sessão inicial de forma segura
+        if (appBackend.client && appBackend.client.auth) {
+          const { data: { session } } = await appBackend.client.auth.getSession();
+          setSession(session);
+          if (session) loadUserRole(session.user.id);
 
-    appBackend.client.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) loadUserRole(session.user.id);
-      else setUserRole(null);
-    });
+          appBackend.client.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+            if (session) loadUserRole(session.user.id);
+            else setUserRole(null);
+          });
+        }
 
-    appBackend.getAppLogo().then(setAppLogo);
+        appBackend.getAppLogo().then(setAppLogo).catch(() => {});
+      } catch (err: any) {
+        console.error("Erro na inicialização do App:", err);
+        setAppError(err.message);
+      }
+    };
+
+    initializeApp();
   }, []);
 
   const loadUserRole = async (userId: string) => {
@@ -134,8 +147,12 @@ function App() {
   };
 
   const handleClearTable = async () => {
-      const client = createSupabaseClient(config.url, config.key);
-      await clearTableData(client, config.tableName, config.primaryKey);
+      try {
+        const client = createSupabaseClient(config.url, config.key);
+        await clearTableData(client, config.tableName, config.primaryKey);
+      } catch (e: any) {
+        alert(e.message);
+      }
   };
 
   const canAccess = (tab: DashboardTab) => {
@@ -144,18 +161,42 @@ function App() {
       return !!userRole.permissions[tab];
   };
 
+  const logout = async () => {
+    try {
+      await appBackend.auth.signOut();
+    } catch (e) {}
+    setSession(null);
+    setStudentSession(null);
+    setInstructorSession(null);
+    setStudioSession(null);
+    setUserRole(null);
+    setStep(AppStep.UPLOAD);
+  };
+
+  if (appError) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-8 text-center">
+      <div className="bg-white p-12 rounded-3xl shadow-xl max-w-md border border-red-100">
+        {/* Fix: use XCircle correctly after importing it */}
+        <XCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+        <h2 className="text-2xl font-black text-slate-800 mb-2">Erro Crítico</h2>
+        <p className="text-slate-500 mb-6">{appError}</p>
+        <button onClick={() => window.location.reload()} className="bg-teal-600 text-white px-8 py-3 rounded-xl font-bold">Recarregar App</button>
+      </div>
+    </div>
+  );
+
   if (viewingCertificateHash) return <CertificateViewer hash={viewingCertificateHash} />;
   if (signingContract) return <ContractSigning contract={signingContract} />;
-  if (studentSession) return <StudentArea student={studentSession} onLogout={() => setStudentSession(null)} />;
-  if (instructorSession) return <InstructorArea instructor={instructorSession} onLogout={() => setInstructorSession(null)} />;
-  if (studioSession) return <PartnerStudioArea studio={studioSession} onLogout={() => setStudioSession(null)} />;
+  if (studentSession) return <StudentArea student={studentSession} onLogout={logout} />;
+  if (instructorSession) return <InstructorArea instructor={instructorSession} onLogout={logout} />;
+  if (studioSession) return <PartnerStudioArea studio={studioSession} onLogout={logout} />;
   
   if (!session) return (
       <LoginPanel 
         onStudentLogin={setStudentSession} 
         onInstructorLogin={setInstructorSession} 
         onStudioLogin={setStudioSession}
-        onCollaboratorLogin={(c) => { setSession({ user: { email: c.email } }); setUserRole(c.role); }}
+        onCollaboratorLogin={(c) => { setSession({ user: { id: c.id, email: c.email } }); setUserRole(c.role); }}
       />
   );
 
@@ -215,7 +256,7 @@ function App() {
         </nav>
 
         <div className="p-4 border-t border-slate-800">
-          <button onClick={() => appBackend.auth.signOut()} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all">
+          <button onClick={logout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all">
             <LogOut size={18} /> Sair do Sistema
           </button>
         </div>

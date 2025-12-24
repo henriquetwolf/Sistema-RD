@@ -4,7 +4,7 @@ import {
     LayoutDashboard, Database, Upload, FileText, Settings as SettingsIcon, 
     LogOut, BarChart3, Users, GraduationCap, School, FileSignature, 
     ShoppingBag, Store, Award, Calendar, MessageCircle, Building2, Package, MessageSquare, Briefcase, Table as TableIcon,
-    PieChart, XCircle
+    PieChart, XCircle, AlertTriangle
 } from 'lucide-react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -41,7 +41,7 @@ import {
     StudentSession, CollaboratorSession, PartnerStudioSession, 
     Contract, Role
 } from './types';
-import { appBackend } from './services/appBackend';
+import { appBackend, isSupabaseConfigured } from './services/appBackend';
 import { clearTableData, batchUploadData, createSupabaseClient } from './services/supabaseService';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -57,6 +57,7 @@ function App() {
   const [studioSession, setStudioSession] = useState<PartnerStudioSession | null>(null);
   const [viewingCertificateHash, setViewingCertificateHash] = useState<string | null>(null);
   const [signingContract, setSigningContract] = useState<Contract | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
 
   const [step, setStep] = useState<AppStep>(AppStep.UPLOAD);
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
@@ -85,13 +86,18 @@ function App() {
 
         // Tenta buscar sessão inicial de forma segura
         if (appBackend.client && appBackend.client.auth) {
-          const { data: { session } } = await appBackend.client.auth.getSession();
-          setSession(session);
-          if (session) loadUserRole(session.user.id);
+          const { data: { session: currentSession } } = await appBackend.client.auth.getSession();
+          if (currentSession) {
+              setSession(currentSession);
+              loadUserRole(currentSession.user.id);
+          }
 
           appBackend.client.auth.onAuthStateChange((_event, session) => {
             setSession(session);
-            if (session) loadUserRole(session.user.id);
+            if (session) {
+              loadUserRole(session.user.id);
+              setIsGuest(false);
+            }
             else setUserRole(null);
           });
         }
@@ -156,6 +162,8 @@ function App() {
   };
 
   const canAccess = (tab: DashboardTab) => {
+      if (isGuest && tab === 'overview') return true;
+      if (isGuest) return false;
       if (!session) return false;
       if (!userRole) return true; // Default to allow if no role defined but authenticated
       return !!userRole.permissions[tab];
@@ -170,13 +178,13 @@ function App() {
     setInstructorSession(null);
     setStudioSession(null);
     setUserRole(null);
+    setIsGuest(false);
     setStep(AppStep.UPLOAD);
   };
 
   if (appError) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-8 text-center">
       <div className="bg-white p-12 rounded-3xl shadow-xl max-w-md border border-red-100">
-        {/* Fix: use XCircle correctly after importing it */}
         <XCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
         <h2 className="text-2xl font-black text-slate-800 mb-2">Erro Crítico</h2>
         <p className="text-slate-500 mb-6">{appError}</p>
@@ -191,12 +199,13 @@ function App() {
   if (instructorSession) return <InstructorArea instructor={instructorSession} onLogout={logout} />;
   if (studioSession) return <PartnerStudioArea studio={studioSession} onLogout={logout} />;
   
-  if (!session) return (
+  if (!session && !isGuest) return (
       <LoginPanel 
         onStudentLogin={setStudentSession} 
         onInstructorLogin={setInstructorSession} 
         onStudioLogin={setStudioSession}
         onCollaboratorLogin={(c) => { setSession({ user: { id: c.id, email: c.email } }); setUserRole(c.role); }}
+        onGuestAccess={() => setIsGuest(true)}
       />
   );
 
@@ -213,57 +222,71 @@ function App() {
           <button onClick={() => setDashboardTab('overview')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'overview' ? "bg-teal-600 text-white shadow-lg" : "hover:bg-slate-800")}>
             <LayoutDashboard size={18} /> Dashboard
           </button>
-          {canAccess('crm') && (
-            <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'crm' ? "bg-indigo-600 text-white shadow-lg" : "hover:bg-slate-800")}>
-              <Briefcase size={18} /> CRM Comercial
-            </button>
-          )}
-          {canAccess('classes') && (
-            <button onClick={() => setDashboardTab('classes')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'classes' ? "bg-purple-600 text-white shadow-lg" : "hover:bg-slate-800")}>
-              <GraduationCap size={18} /> Turmas
-            </button>
-          )}
-          {canAccess('teachers') && (
-            <button onClick={() => setDashboardTab('teachers')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'teachers' ? "bg-orange-600 text-white shadow-lg" : "hover:bg-slate-800")}>
-              <School size={18} /> Professores
-            </button>
-          )}
-          {canAccess('inventory') && (
-            <button onClick={() => setDashboardTab('inventory')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'inventory' ? "bg-emerald-600 text-white shadow-lg" : "hover:bg-slate-800")}>
-              <Package size={18} /> Estoque
-            </button>
-          )}
-          {canAccess('analysis') && (
-            <button onClick={() => setDashboardTab('analysis')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'analysis' ? "bg-teal-600 text-white shadow-lg" : "hover:bg-slate-800")}>
-              <BarChart3 size={18} /> Análise de Vendas
-            </button>
-          )}
-          {canAccess('whatsapp') && (
-            <button onClick={() => setDashboardTab('whatsapp')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'whatsapp' ? "bg-teal-500 text-white shadow-lg" : "hover:bg-slate-800")}>
-              <MessageCircle size={18} /> WhatsApp
-            </button>
-          )}
-          {canAccess('twilio') && (
-            <button onClick={() => setDashboardTab('twilio')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'twilio' ? "bg-red-600 text-white shadow-lg" : "hover:bg-slate-800")}>
-              <MessageSquare size={18} /> Twilio
-            </button>
-          )}
-          {canAccess('global_settings') && (
-            <button onClick={() => setDashboardTab('global_settings')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'global_settings' ? "bg-slate-700 text-white shadow-lg" : "hover:bg-slate-800")}>
-              <SettingsIcon size={18} /> Configurações
-            </button>
+          {!isGuest && (
+            <>
+              {canAccess('crm') && (
+                <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'crm' ? "bg-indigo-600 text-white shadow-lg" : "hover:bg-slate-800")}>
+                  <Briefcase size={18} /> CRM Comercial
+                </button>
+              )}
+              {canAccess('classes') && (
+                <button onClick={() => setDashboardTab('classes')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'classes' ? "bg-purple-600 text-white shadow-lg" : "hover:bg-slate-800")}>
+                  <GraduationCap size={18} /> Turmas
+                </button>
+              )}
+              {canAccess('teachers') && (
+                <button onClick={() => setDashboardTab('teachers')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'teachers' ? "bg-orange-600 text-white shadow-lg" : "hover:bg-slate-800")}>
+                  <School size={18} /> Professores
+                </button>
+              )}
+              {canAccess('inventory') && (
+                <button onClick={() => setDashboardTab('inventory')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'inventory' ? "bg-emerald-600 text-white shadow-lg" : "hover:bg-slate-800")}>
+                  <Package size={18} /> Estoque
+                </button>
+              )}
+              {canAccess('analysis') && (
+                <button onClick={() => setDashboardTab('analysis')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'analysis' ? "bg-teal-600 text-white shadow-lg" : "hover:bg-slate-800")}>
+                  <BarChart3 size={18} /> Análise de Vendas
+                </button>
+              )}
+              {canAccess('whatsapp') && (
+                <button onClick={() => setDashboardTab('whatsapp')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'whatsapp' ? "bg-teal-500 text-white shadow-lg" : "hover:bg-slate-800")}>
+                  <MessageCircle size={18} /> WhatsApp
+                </button>
+              )}
+              {canAccess('twilio') && (
+                <button onClick={() => setDashboardTab('twilio')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'twilio' ? "bg-red-600 text-white shadow-lg" : "hover:bg-slate-800")}>
+                  <MessageSquare size={18} /> Twilio
+                </button>
+              )}
+              {canAccess('global_settings') && (
+                <button onClick={() => setDashboardTab('global_settings')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all", dashboardTab === 'global_settings' ? "bg-slate-700 text-white shadow-lg" : "hover:bg-slate-800")}>
+                  <SettingsIcon size={18} /> Configurações
+                </button>
+              )}
+            </>
           )}
         </nav>
 
         <div className="p-4 border-t border-slate-800">
           <button onClick={logout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all">
-            <LogOut size={18} /> Sair do Sistema
+            <LogOut size={18} /> {isGuest ? 'Sair do modo Convidado' : 'Sair do Sistema'}
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto bg-slate-50 p-8 custom-scrollbar">
+        {!isSupabaseConfigured && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-8 flex gap-3 text-amber-800">
+                <AlertTriangle className="shrink-0" />
+                <div className="text-sm">
+                    <p className="font-bold">Atenção: Banco de Dados CRM não configurado.</p>
+                    <p>Você pode usar o Sincronizador de CSV informando as chaves manualmente, mas as funcionalidades de CRM, Estoque e Relatórios Globais estão desativadas.</p>
+                </div>
+            </div>
+        )}
+
         {dashboardTab === 'overview' && (
             <div className="max-w-6xl mx-auto space-y-8">
                 <header>

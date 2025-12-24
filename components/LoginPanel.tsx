@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Loader2, AlertCircle, School, ShieldCheck, GraduationCap, Briefcase, Building2 } from 'lucide-react';
+import { Loader2, AlertCircle, School, ShieldCheck, GraduationCap, Briefcase, Building2, UserCircle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { Teacher } from './TeachersManager';
 import { StudentSession, CollaboratorSession, PartnerStudioSession } from '../types';
@@ -11,13 +11,15 @@ interface LoginPanelProps {
     onStudentLogin?: (student: StudentSession) => void;
     onCollaboratorLogin?: (collab: CollaboratorSession) => void;
     onStudioLogin?: (studio: PartnerStudioSession) => void;
+    onGuestAccess: () => void;
 }
 
 export const LoginPanel: React.FC<LoginPanelProps> = ({ 
     onInstructorLogin, 
     onStudentLogin, 
     onCollaboratorLogin,
-    onStudioLogin
+    onStudioLogin,
+    onGuestAccess
 }) => {
   const [activeTab, setActiveTab] = useState<'admin' | 'collaborator' | 'instructor' | 'student' | 'studio'>('admin');
   
@@ -152,9 +154,17 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
         <div className="p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
-                <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                <span>{error}</span>
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex flex-col gap-2">
+                <div className="flex items-start gap-2">
+                    <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                    <span>{error}</span>
+                </div>
+                {error.includes("não configurado") && (
+                    <div className="pt-2 border-t border-red-100">
+                        <p className="text-[10px] uppercase font-bold text-red-400">Sugestão:</p>
+                        <p className="text-xs text-slate-600">Se você quer apenas usar o <b>Importador de CSV</b> para sincronizar dados, clique no botão "Acessar como Convidado" abaixo.</p>
+                    </div>
+                )}
               </div>
             )}
             
@@ -174,7 +184,17 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
               {isLoading ? <><Loader2 size={20} className="animate-spin" /> Verificando...</> : 'Entrar'}
             </button>
           </form>
-          <div className="mt-8 text-center pt-6 border-t border-slate-100"><p className="text-xs text-slate-400">VOLL Pilates Group &copy; {new Date().getFullYear()}</p></div>
+          
+          <div className="mt-6 pt-6 border-t border-slate-100">
+              <button 
+                onClick={onGuestAccess}
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all uppercase tracking-wider"
+              >
+                  <UserCircle size={16} /> Acessar como Convidado (Modo CSV)
+              </button>
+          </div>
+
+          <div className="mt-8 text-center"><p className="text-xs text-slate-400">VOLL Pilates Group &copy; {new Date().getFullYear()}</p></div>
         </div>
       </div>
     </div>

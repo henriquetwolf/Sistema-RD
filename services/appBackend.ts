@@ -4,46 +4,52 @@ import {
   TwilioConfig, Role, Banner, InstructorLevel, ActivityLog, 
   FormModel, SurveyModel, Contract, ContractFolder, PartnerStudio, 
   CertificateModel, EventModel, Workshop, EventBlock, InventoryRecord, 
-  EventRegistration 
+  EventRegistration,
+  // Fix missing imports from types.ts
+  Pipeline, PipelineStage, CompanySetting 
 } from '../types';
 
-// Função auxiliar para obter variáveis de ambiente de qualquer fonte comum (Vite, Webpack, Node)
+// Re-export types so components can import them from this service
+export type { Pipeline, PipelineStage, CompanySetting };
+
+// Busca extensiva de variáveis de ambiente
 const getSafeEnv = (key: string): string => {
   try {
-    // 1. Tenta Vite (import.meta.env)
-    if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-      return (import.meta as any).env[key] || '';
+    // Tenta as chaves com e sem o prefixo VITE_
+    const keysToTry = [key, `VITE_${key}`, `REACT_APP_${key}`];
+    
+    for (const k of keysToTry) {
+      // 1. Vite / ESM
+      if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[k]) {
+        return (import.meta as any).env[k];
+      }
+      // 2. Node / Webpack / Process
+      if (typeof process !== 'undefined' && process.env && process.env[k]) {
+        return process.env[k];
+      }
     }
-    // 2. Tenta Node/Webpack (process.env)
-    if (typeof process !== 'undefined' && process.env) {
-      return process.env[key] || '';
-    }
-  } catch (e) {
-    // Silencia erros de acesso a objetos de ambiente
-  }
+  } catch (e) {}
   return '';
 };
 
-const supabaseUrl = getSafeEnv('VITE_SUPABASE_URL');
-const supabaseKey = getSafeEnv('VITE_SUPABASE_ANON_KEY');
+const supabaseUrl = getSafeEnv('SUPABASE_URL');
+const supabaseKey = getSafeEnv('SUPABASE_ANON_KEY');
 
-// Inicializa o cliente apenas se os dados forem válidos.
-// Caso contrário, cria um objeto "mock" para evitar erros de "undefined" no render do React.
+// Verifica se a configuração global está presente
+export const isSupabaseConfigured = !!(supabaseUrl && supabaseUrl.startsWith('http') && supabaseKey);
+
 const createSafeClient = (): SupabaseClient => {
-  const isValid = supabaseUrl && supabaseUrl.startsWith('http') && supabaseKey;
-  
-  if (!isValid) {
-    console.warn("SUPABASE: Chaves não configuradas. O backend interno está desativado.");
+  if (!isSupabaseConfigured) {
+    console.warn("CRM BACKEND: Chaves de ambiente não detectadas. Funcionalidades de CRM desabilitadas.");
     
-    // Retorna um objeto que imita a estrutura do Supabase para não quebrar os componentes
     return {
       auth: {
         getSession: async () => ({ data: { session: null }, error: null }),
         onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-        signInWithPassword: async () => ({ data: { user: null }, error: new Error("Supabase não configurado") }),
+        signInWithPassword: async () => ({ data: { user: null }, error: new Error("Supabase não configurado nas variáveis de ambiente (SUPABASE_URL / SUPABASE_ANON_KEY).") }),
         signOut: async () => ({ error: null })
       },
-      from: () => ({
+      from: (table: string) => ({
         select: () => ({
           order: () => ({ limit: () => ({ data: [], error: null }), data: [], error: null }),
           eq: () => ({ single: () => ({ data: null, error: null }), maybeSingle: () => ({ data: null, error: null }), data: [], error: null }),
@@ -62,13 +68,9 @@ const createSafeClient = (): SupabaseClient => {
 
 export const supabase = createSafeClient();
 
-// Interfaces auxiliares
-export interface PipelineStage { id: string; title: string; color: string; }
-export interface Pipeline { id: string; name: string; stages: PipelineStage[]; }
-export interface CompanySetting { id: string; legalName: string; cnpj: string; productTypes: string[]; }
-
 export const appBackend = {
   client: supabase,
+  isConfigured: isSupabaseConfigured,
 
   auth: {
     signIn: async (email: string, pass: string) => {
@@ -93,8 +95,10 @@ export const appBackend = {
   },
 
   getPresets: async () => {
-    const { data } = await supabase.from('app_presets').select('*').order('created_at', { ascending: false });
-    return data || [];
+    try {
+        const { data } = await supabase.from('app_presets').select('*').order('created_at', { ascending: false });
+        return data || [];
+    } catch(e) { return []; }
   },
 
   savePreset: async (preset: any) => {
@@ -328,7 +332,7 @@ export const appBackend = {
         city: studio.city,
         state: studio.state,
         country: studio.country,
-        size_m2: studio.sizeM2,
+        size_m2: studio.size_m2,
         student_capacity: studio.studentCapacity,
         rent_value: studio.rentValue,
         methodology: studio.methodology,
@@ -349,7 +353,6 @@ export const appBackend = {
         qty_cadillac: studio.qtyCadillac,
         has_chairs_for_course: studio.hasChairsForCourse,
         has_tv: studio.hasTv,
-        // Fix: Use maxKitsCapacity from PartnerStudio interface instead of non-existent max_kits_capacity
         max_kits_capacity: studio.maxKitsCapacity,
         attachments: studio.attachments
     };
@@ -381,11 +384,11 @@ export const appBackend = {
   saveCertificate: async (cert: CertificateModel) => {
     const payload = {
         title: cert.title,
-        background_data: cert.backgroundData,
-        back_background_data: cert.backBackgroundData,
-        linked_product_id: cert.linkedProductId,
-        body_text: cert.bodyText,
-        layout_config: cert.layoutConfig,
+        background_data: cert.background_data,
+        back_background_data: cert.back_background_data,
+        linked_product_id: cert.linked_product_id,
+        body_text: cert.body_text,
+        layout_config: cert.layout_config,
         created_at: cert.createdAt
     };
     if (cert.id) {
@@ -601,7 +604,7 @@ export const appBackend = {
         eventId: d.event_id,
         date: d.date,
         title: d.title,
-        maxSelections: d.max_selections
+        max_selections: d.max_selections
     }));
   },
 

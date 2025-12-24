@@ -1,3 +1,4 @@
+
 export type AppStep = number;
 export const AppStep = {
     UPLOAD: 0,
@@ -377,4 +378,24 @@ export interface TwilioMessageLog {
   status: string;
   sid: string;
   createdAt: string;
+}
+
+// Add missing Pipeline and CompanySetting interfaces
+export interface PipelineStage {
+    id: string;
+    title: string;
+    color?: string;
+}
+
+export interface Pipeline {
+    id: string;
+    name: string;
+    stages: PipelineStage[];
+}
+
+export interface CompanySetting {
+    id: string;
+    legalName: string;
+    cnpj: string;
+    productTypes?: string[];
 }

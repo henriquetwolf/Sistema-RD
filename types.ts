@@ -1,4 +1,16 @@
 
+export interface BillingRecord {
+  id: number;
+  "Identificador do cliente": string;
+  "Nome do cliente": string;
+  "Código referência": string;
+  "Data de competência": string;
+  "Valor"?: number;
+  "Status"?: string;
+  "Vencimento"?: string;
+  [key: string]: any;
+}
+
 export interface Franchise {
   id: string;
   saleNumber: string;
@@ -18,7 +30,7 @@ export interface Franchise {
   commercialNeighborhood: string;
   latitude: string;
   longitude: string;
-  exclusivityRadiusKm?: string; // NOVO: Raio de exclusividade territorial
+  exclusivityRadiusKm?: string; 
   kmStreetPoint: string;
   kmCommercialBuilding: string;
   studioStatus: string;
@@ -40,14 +52,14 @@ export interface SupabaseConfig {
   url: string;
   key: string;
   tableName: string;
-  primaryKey?: string; // Optional: Used for Upsert logic
-  intervalMinutes?: number; // New: Selected sync interval
+  primaryKey?: string; 
+  intervalMinutes?: number; 
 }
 
 export interface SavedPreset extends SupabaseConfig {
   id: string;
-  name: string; // The display name for the saved config
-  createdByName?: string; // Nome de quem salvou o preset
+  name: string; 
+  createdByName?: string; 
 }
 
 export interface CsvRow {
@@ -62,7 +74,7 @@ export interface FileData {
 }
 
 export enum AppStep {
-  DASHBOARD = -1, // New Step
+  DASHBOARD = -1, 
   UPLOAD = 0,
   CONFIG = 1,
   PREVIEW = 2,
@@ -89,12 +101,11 @@ export interface SyncJob {
   status: 'idle' | 'syncing' | 'success' | 'error';
   lastMessage: string | null;
   active: boolean;
-  intervalMinutes: number; // Required for the job logic
-  createdBy?: string; // Nome ou email do usuário que criou a conexão
-  createdAt: string | Date;    // Data e hora da criação da conexão
+  intervalMinutes: number; 
+  createdBy?: string; 
+  createdAt: string | Date;    
 }
 
-// --- ACTIVITY LOGS ---
 export interface ActivityLog {
   id: string;
   userName: string;
@@ -105,12 +116,10 @@ export interface ActivityLog {
   createdAt: string;
 }
 
-// --- ACCESS CONTROL ---
-
 export interface Role {
   id: string;
   name: string;
-  permissions: Record<string, boolean>; // e.g., { 'crm': true, 'financial': false }
+  permissions: Record<string, boolean>; 
   created_at?: string;
 }
 
@@ -122,8 +131,6 @@ export interface CollaboratorSession {
   photoUrl?: string;
 }
 
-// --- BANNERS ---
-
 export interface Banner {
   id: string;
   title: string;
@@ -134,8 +141,6 @@ export interface Banner {
   createdAt?: string;
 }
 
-// --- FORMS & LEADS ---
-
 export type QuestionType = 'text' | 'paragraph' | 'email' | 'phone' | 'number' | 'date' | 'select' | 'checkbox';
 
 export interface FormQuestion {
@@ -144,9 +149,9 @@ export interface FormQuestion {
   type: QuestionType;
   required: boolean;
   placeholder?: string;
-  options?: string[]; // Para tipos select/checkbox
+  options?: string[]; 
   crmMapping?: string; 
-  systemMapping?: string; // NOVO: Mapeamento para auto-preenchimento (student_name, course, etc)
+  systemMapping?: string; 
 }
 
 export interface FormStyle {
@@ -155,7 +160,6 @@ export interface FormStyle {
   backgroundImage?: string;
   backgroundTexture?: string;
   cardTransparent?: boolean;
-  // Personalização Avançada
   primaryColor?: string;
   textColor?: string;
   fontFamily?: 'sans' | 'serif' | 'modern';
@@ -164,7 +168,6 @@ export interface FormStyle {
   buttonText?: string;
   logoUrl?: string;
   shadowIntensity?: 'none' | 'soft' | 'strong';
-  // Tela de Sucesso
   successTitle?: string;
   successMessage?: string;
   successButtonText?: string;
@@ -179,15 +182,14 @@ export interface FormModel {
   teamId?: string;
   distributionMode?: 'fixed' | 'round-robin';
   fixedOwnerId?: string;
-  targetPipeline?: string; // NOVO: Nome do funil de destino
-  targetStage?: string;    // NOVO: ID da etapa de destino
+  targetPipeline?: string; 
+  targetStage?: string;    
   questions: FormQuestion[];
   style?: FormStyle; 
   createdAt: string;
   submissionsCount: number;
 }
 
-// --- SURVEYS (PESQUISAS) ---
 export interface SurveyModel extends FormModel {
     targetType: 'all' | 'product_type' | 'specific_product';
     targetProductType?: string;
@@ -201,8 +203,6 @@ export interface FormAnswer {
   questionTitle: string;
   value: string;
 }
-
-// --- CONTRACTS ---
 
 export interface ContractSigner {
   id: string;
@@ -231,8 +231,6 @@ export interface ContractFolder {
   createdAt: string;
 }
 
-// --- SESSIONS ---
-
 export interface StudentSession {
   id?: string;
   email: string;
@@ -248,8 +246,6 @@ export interface PartnerStudioSession {
   email: string;
   cnpj: string;
 }
-
-// --- CERTIFICATES ---
 
 export interface TextStyle {
   x: number;
@@ -271,8 +267,8 @@ export interface CertificateLayout {
 export interface CertificateModel {
   id: string;
   title: string;
-  backgroundData: string; // Base64
-  backBackgroundData?: string; // Base64
+  backgroundData: string; 
+  backBackgroundData?: string; 
   linkedProductId?: string;
   bodyText: string;
   layoutConfig: CertificateLayout;
@@ -286,8 +282,6 @@ export interface StudentCertificate {
   hash: string;
   issuedAt: string;
 }
-
-// --- EVENTS ---
 
 export interface EventModel {
   id: string;
@@ -328,8 +322,6 @@ export interface EventRegistration {
   studentEmail: string;
   registeredAt: string;
 }
-
-// --- PARTNER STUDIOS ---
 
 export interface PartnerStudio {
   id: string;
@@ -374,8 +366,6 @@ export interface PartnerStudio {
   attachments?: string;
 }
 
-// --- INSTRUCTOR LEVELS ---
-
 export interface InstructorLevel {
   id: string;
   name: string;
@@ -383,8 +373,6 @@ export interface InstructorLevel {
   observations?: string;
   createdAt?: string;
 }
-
-// --- INVENTORY ---
 
 export interface InventoryRecord {
   id: string;
@@ -402,8 +390,6 @@ export interface InventoryRecord {
   createdAt?: string;
 }
 
-// --- PRODUCTS ---
-
 export interface Product {
   id: string;
   name: string;
@@ -415,43 +401,4 @@ export interface Product {
   description: string;
   certificateTemplateId?: string;
   createdAt: string;
-}
-
-// --- FRANCHISES ---
-
-export interface Franchise {
-  id: string;
-  saleNumber: string;
-  contractStartDate: string;
-  inaugurationDate: string;
-  salesConsultant: string;
-  franchiseeName: string;
-  cpf: string;
-  companyName: string;
-  cnpj: string;
-  phone: string;
-  email: string;
-  residentialAddress: string;
-  commercialState: string;
-  commercialCity: string;
-  commercialAddress: string;
-  commercialNeighborhood: string;
-  latitude: string;
-  longitude: string;
-  exclusivityRadiusKm?: string;
-  kmStreetPoint: string;
-  kmCommercialBuilding: string;
-  studioStatus: string;
-  studioSizeM2: string;
-  equipmentList: string;
-  royaltiesValue: string;
-  bankAccountInfo: string;
-  hasSignedContract: boolean;
-  contractEndDate: string;
-  isRepresentative: boolean;
-  partner1Name: string;
-  partner2Name: string;
-  franchiseeFolderLink: string;
-  pathInfo: string;
-  observations: string;
 }

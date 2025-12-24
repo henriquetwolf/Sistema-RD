@@ -5,12 +5,12 @@ import {
   ArrowLeft, Save, X, Edit2, Trash2, Loader2, Calendar, FileText, 
   DollarSign, User, Building, Map as MapIcon, List,
   Navigation, AlertTriangle, CheckCircle, Briefcase, Globe, Info, Ruler, Dumbbell,
-  AlertCircle
+  AlertCircle, ShieldCheck
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import { Franchise } from '../types';
 
 interface FranchisesManagerProps {
@@ -36,6 +36,7 @@ const INITIAL_FORM_STATE: Franchise = {
     commercialNeighborhood: '',
     latitude: '',
     longitude: '',
+    exclusivityRadiusKm: '',
     kmStreetPoint: '',
     kmCommercialBuilding: '',
     studioStatus: 'Em implantação',
@@ -123,6 +124,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
               commercialNeighborhood: d.commercial_neighborhood || '',
               latitude: d.latitude?.toString() || '',
               longitude: d.longitude?.toString() || '',
+              exclusivityRadiusKm: d.exclusivity_radius_km?.toString() || '',
               kmStreetPoint: d.km_street_point?.toString() || '',
               kmCommercialBuilding: d.km_commercial_building?.toString() || '',
               studioStatus: d.studio_status || 'Em implantação',
@@ -175,6 +177,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
           commercial_neighborhood: formData.commercialNeighborhood,
           latitude: formData.latitude ? parseFloat(formData.latitude) : null,
           longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+          exclusivity_radius_km: formData.exclusivityRadiusKm ? parseFloat(formData.exclusivityRadiusKm) : null,
           km_street_point: formData.kmStreetPoint ? parseFloat(formData.kmStreetPoint) : null,
           km_commercial_building: formData.kmCommercialBuilding ? parseFloat(formData.kmCommercialBuilding) : null,
           studio_status: formData.studioStatus,
@@ -312,7 +315,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                 </div>
                                 <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
                                     <span>Venda: {item.saleNumber || '--'}</span>
-                                    <span>{item.studioSizeM2 ? `${item.studioSizeM2}m²` : '--'}</span>
+                                    <span className="flex items-center gap-1"><ShieldCheck size={10} className="text-teal-600"/> {item.exclusivityRadiusKm ? `${item.exclusivityRadiusKm}km` : 'S/ Exclusividade'}</span>
                                 </div>
                             </div>
                         ))
@@ -323,20 +326,42 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-[600px] relative z-0">
                 <MapContainer center={[-15.7801, -47.9292]} zoom={4} style={{ height: '100%', width: '100%' }}>
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' />
-                    {franchises.filter(f => f.latitude && f.longitude).map(f => (
-                        <Marker key={f.id} position={[parseFloat(f.latitude), parseFloat(f.longitude)]}>
-                            <Popup>
-                                <div className="p-1">
-                                    <h4 className="font-bold text-slate-800">{f.franchiseeName}</h4>
-                                    <p className="text-xs text-slate-500">{f.commercialCity}/{f.commercialState}</p>
-                                    <span className="text-[10px] font-bold text-teal-600 uppercase">{f.studioStatus}</span>
-                                </div>
-                            </Popup>
-                        </Marker>
-                    ))}
+                    {franchises.filter(f => f.latitude && f.longitude).map(f => {
+                        const lat = parseFloat(f.latitude);
+                        const lng = parseFloat(f.longitude);
+                        const radiusKm = parseFloat(f.exclusivityRadiusKm || '0');
+                        
+                        return (
+                            <React.Fragment key={f.id}>
+                                <Marker position={[lat, lng]}>
+                                    <Popup>
+                                        <div className="p-1">
+                                            <h4 className="font-bold text-slate-800">{f.franchiseeName}</h4>
+                                            <p className="text-xs text-slate-500">{f.commercialCity}/{f.commercialState}</p>
+                                            <p className="text-[10px] font-bold text-teal-600 uppercase mt-1">{f.studioStatus}</p>
+                                            {radiusKm > 0 && <p className="text-[9px] text-indigo-500 font-black mt-0.5">ZONA DE EXCLUSIVIDADE: {radiusKm}KM</p>}
+                                        </div>
+                                    </Popup>
+                                </Marker>
+                                {radiusKm > 0 && (
+                                    <Circle 
+                                        center={[lat, lng]} 
+                                        radius={radiusKm * 1000} 
+                                        pathOptions={{ 
+                                            fillColor: '#0d9488', 
+                                            fillOpacity: 0.15, 
+                                            color: '#0d9488', 
+                                            weight: 1.5,
+                                            dashArray: '5, 10'
+                                        }} 
+                                    />
+                                )}
+                            </React.Fragment>
+                        );
+                    })}
                 </MapContainer>
                 <div className="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur-sm p-3 rounded-lg border border-slate-200 shadow-lg max-w-xs">
-                    <p className="text-xs text-slate-600 font-medium">Exibindo {franchises.filter(f => f.latitude && f.longitude).length} franquias com coordenadas cadastradas.</p>
+                    <p className="text-xs text-slate-600 font-medium">Exibindo {franchises.filter(f => f.latitude && f.longitude).length} unidades. Círculos tracejados indicam a <strong>Zona de Exclusividade Territorial</strong>.</p>
                 </div>
             </div>
         )}
@@ -344,7 +369,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
         {/* MODAL FORM */}
         {showModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-                <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
                     <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl shrink-0">
                         <div>
                             <h3 className="text-xl font-bold text-slate-800">{formData.id ? 'Ficha da Unidade' : 'Cadastro de Nova Unidade'}</h3>
@@ -442,20 +467,40 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Endereço do Studio</label>
                                         <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={formData.commercialAddress} onChange={e => handleInputChange('commercialAddress', e.target.value)} />
                                     </div>
-                                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="p-6 bg-amber-50 rounded-2xl border border-amber-100 md:col-span-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                         <div className="space-y-4">
-                                            <h4 className="text-xs font-black text-amber-700 uppercase flex items-center gap-2"><Navigation size={14}/> Coordenadas Geográficas</h4>
+                                            <h4 className="text-xs font-black text-amber-700 uppercase flex items-center gap-2 mb-2"><Navigation size={14}/> Coordenadas Geográficas</h4>
                                             <div className="grid grid-cols-2 gap-4">
-                                                <div><label className="block text-[10px] font-bold text-amber-600 mb-1">Latitude</label><input type="text" placeholder="-23.5505" className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm" value={formData.latitude} onChange={e => handleInputChange('latitude', e.target.value)} /></div>
-                                                <div><label className="block text-[10px] font-bold text-amber-600 mb-1">Longitude</label><input type="text" placeholder="-46.6333" className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm" value={formData.longitude} onChange={e => handleInputChange('longitude', e.target.value)} /></div>
+                                                <div><label className="block text-[10px] font-bold text-amber-600 mb-1">Latitude</label><input type="text" placeholder="-23.5505" className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white" value={formData.latitude} onChange={e => handleInputChange('latitude', e.target.value)} /></div>
+                                                <div><label className="block text-[10px] font-bold text-amber-600 mb-1">Longitude</label><input type="text" placeholder="-46.6333" className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white" value={formData.longitude} onChange={e => handleInputChange('longitude', e.target.value)} /></div>
                                             </div>
-                                            <p className="text-[10px] text-amber-600 leading-relaxed"><Info size={10} className="inline mr-1"/> Use as coordenadas decimais do Google Maps para exibir esta unidade no mapeamento nacional de franquias.</p>
+                                            <p className="text-[10px] text-amber-600 leading-relaxed"><Info size={10} className="inline mr-1"/> Use coordenadas decimais para exibir a unidade no mapa.</p>
                                         </div>
+                                        
+                                        <div className="space-y-4 bg-white/50 p-4 rounded-xl border border-amber-200">
+                                            <h4 className="text-xs font-black text-indigo-700 uppercase flex items-center gap-2 mb-2"><ShieldCheck size={16}/> Regras de Zoneamento</h4>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-indigo-600 mb-1">Raio de Exclusividade Territorial (Km)</label>
+                                                <div className="flex items-center gap-2">
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.1" 
+                                                        placeholder="Ex: 5" 
+                                                        className="flex-1 px-3 py-2 border border-indigo-200 rounded-lg text-sm bg-white font-bold text-indigo-900" 
+                                                        value={formData.exclusivityRadiusKm} 
+                                                        onChange={e => handleInputChange('exclusivityRadiusKm', e.target.value)} 
+                                                    />
+                                                    <span className="text-xs font-bold text-indigo-400">KM</span>
+                                                </div>
+                                            </div>
+                                            <p className="text-[10px] text-indigo-500 leading-relaxed italic">Este valor será plotado no mapa para análise visual de sobreposição entre franqueados.</p>
+                                        </div>
+
                                         <div className="space-y-4">
-                                            <h4 className="text-xs font-black text-amber-700 uppercase flex items-center gap-2"><Ruler size={14}/> Distâncias Estratégicas</h4>
+                                            <h4 className="text-xs font-black text-amber-700 uppercase flex items-center gap-2 mb-2"><Ruler size={14}/> Distâncias Estratégicas</h4>
                                             <div className="grid grid-cols-2 gap-4">
-                                                <div><label className="block text-[10px] font-bold text-amber-600 mb-1">KM Ponto de Rua</label><input type="text" className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm" value={formData.kmStreetPoint} onChange={e => handleInputChange('kmStreetPoint', e.target.value)} /></div>
-                                                <div><label className="block text-[10px] font-bold text-amber-600 mb-1">KM Prédio Comercial</label><input type="text" className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm" value={formData.kmCommercialBuilding} onChange={e => handleInputChange('kmCommercialBuilding', e.target.value)} /></div>
+                                                <div><label className="block text-[10px] font-bold text-amber-600 mb-1">KM Ponto de Rua</label><input type="text" className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white" value={formData.kmStreetPoint} onChange={e => handleInputChange('kmStreetPoint', e.target.value)} /></div>
+                                                <div><label className="block text-[10px] font-bold text-amber-600 mb-1">KM Prédio Comercial</label><input type="text" className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white" value={formData.kmCommercialBuilding} onChange={e => handleInputChange('kmCommercialBuilding', e.target.value)} /></div>
                                             </div>
                                         </div>
                                     </div>
@@ -504,9 +549,8 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
 
                     <div className="px-8 py-5 bg-slate-50 flex justify-between items-center gap-3 shrink-0 border-t">
                         <div className="flex items-center gap-2 text-xs text-slate-400 italic">
-                            {/* Added missing AlertCircle import from lucide-react */}
                             <AlertCircle size={14}/>
-                            <span>Preencha as coordenadas para habilitar a unidade no mapa.</span>
+                            <span>Preencha as coordenadas e o raio de exclusividade para mapeamento técnico.</span>
                         </div>
                         <div className="flex gap-3">
                             <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm transition-colors">Cancelar</button>

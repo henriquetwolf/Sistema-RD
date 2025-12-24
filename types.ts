@@ -3,6 +3,7 @@ export interface TwilioConfig {
   accountSid: string;
   authToken: string;
   fromNumber: string;
+  proxyUrl?: string; // NOVO: URL de proxy para evitar erro de CORS
 }
 
 export interface Franchise {

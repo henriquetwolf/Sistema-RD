@@ -4,7 +4,7 @@ import {
     MessageSquare, Send, Settings, Save, Smartphone, 
     ShieldCheck, Loader2, Search, User, Info, AlertTriangle, 
     Database, CheckCircle, Smartphone as PhoneIcon, FileText,
-    Plus, Trash2, Code
+    Plus, Trash2, Code, ShieldAlert, Globe, Link2
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { twilioService } from '../services/twilioService';
@@ -18,12 +18,14 @@ export const TwilioInbox: React.FC = () => {
   const [config, setConfig] = useState<TwilioConfig>({
       accountSid: '',
       authToken: '',
-      fromNumber: 'whatsapp:+14155238886'
+      fromNumber: 'whatsapp:+14155238886',
+      proxyUrl: ''
   });
   
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
   
   // Dados de Envio
   const [toPhone, setToPhone] = useState('');
@@ -45,7 +47,7 @@ export const TwilioInbox: React.FC = () => {
               appBackend.getTwilioConfig(),
               appBackend.client.from('crm_deals').select('contact_name, company_name, phone').limit(50)
           ]);
-          if (savedConfig) setConfig(savedConfig);
+          if (savedConfig) setConfig({ ...config, ...savedConfig });
           if (crmData.data) setContacts(crmData.data);
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
@@ -54,7 +56,7 @@ export const TwilioInbox: React.FC = () => {
       setIsSaving(true);
       try {
           await appBackend.saveTwilioConfig(config);
-          alert("Configurações salvas!");
+          alert("Configurações salvas com sucesso!");
           setActiveTab('send');
       } catch (e: any) {
           alert(`Erro: ${e.message}`);
@@ -74,6 +76,7 @@ export const TwilioInbox: React.FC = () => {
       if (!toPhone) return;
       
       setIsSending(true);
+      setLastError(null);
       try {
           let contentVariables = '';
           if (sendMode === 'template') {
@@ -89,10 +92,10 @@ export const TwilioInbox: React.FC = () => {
               contentVariables: sendMode === 'template' ? contentVariables : undefined
           });
 
-          alert("Mensagem enviada!");
+          alert("Mensagem entregue com sucesso à fila do Twilio!");
           if (sendMode === 'text') setMessageText('');
       } catch (e: any) {
-          alert(`Erro ao enviar: ${e.message}`);
+          setLastError(e.message);
       } finally { setIsSending(false); }
   };
 
@@ -111,41 +114,52 @@ export const TwilioInbox: React.FC = () => {
                 </div>
                 <div>
                     <h2 className="text-lg font-bold text-slate-800">Twilio WhatsApp</h2>
-                    <p className="text-xs text-slate-500">Gestão de envios via Twilio Cloud API.</p>
+                    <p className="text-xs text-slate-500">Integração oficial via API Cloud.</p>
                 </div>
             </div>
             <div className="flex bg-slate-200 p-1 rounded-lg">
-                <button onClick={() => setActiveTab('send')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", activeTab === 'send' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>Enviar</button>
-                <button onClick={() => setActiveTab('config')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", activeTab === 'config' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>Configuração</button>
+                <button onClick={() => { setActiveTab('send'); setLastError(null); }} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", activeTab === 'send' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>Enviar</button>
+                <button onClick={() => { setActiveTab('config'); setLastError(null); }} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", activeTab === 'config' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>Configuração</button>
             </div>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
             {activeTab === 'config' ? (
-                <div className="max-w-2xl mx-auto p-10 space-y-8">
-                    <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 flex gap-4">
-                        <Info className="text-blue-600 shrink-0" size={24} />
-                        <div className="text-sm text-blue-800 leading-relaxed">
-                            <p className="font-bold mb-1">Configuração de Credenciais:</p>
-                            <p>Insira os dados do seu console Twilio para habilitar os envios.</p>
+                <div className="max-w-3xl mx-auto p-10 space-y-8">
+                    <div className="bg-amber-50 p-6 rounded-2xl border border-amber-100 flex gap-4">
+                        <ShieldAlert className="text-amber-600 shrink-0" size={24} />
+                        <div className="text-sm text-amber-800 leading-relaxed">
+                            <p className="font-bold mb-1">Atenção sobre o erro de envio:</p>
+                            <p>O navegador bloqueia requisições diretas para o Twilio (Erro de CORS). Para que o envio funcione aqui pelo app, você <b>deve</b> usar um URL de Proxy ou criar uma Edge Function no Supabase.</p>
+                            <p className="mt-2">Sugestão p/ testes: <code className="bg-white px-1">https://cors-anywhere.herokuapp.com/</code></p>
                         </div>
                     </div>
 
                     <div className="space-y-6">
-                        <div>
-                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Account SID</label>
-                            <input type="text" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-mono" value={config.accountSid} onChange={e => setConfig({...config, accountSid: e.target.value})} />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                    <Globe size={14} className="text-blue-500"/> CORS Proxy URL (Opcional, mas recomendado)
+                                </label>
+                                <input type="text" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-mono" value={config.proxyUrl} onChange={e => setConfig({...config, proxyUrl: e.target.value})} placeholder="https://seu-proxy.com/" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Account SID</label>
+                                <input type="text" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-mono" value={config.accountSid} onChange={e => setConfig({...config, accountSid: e.target.value})} placeholder="AC..." />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Auth Token</label>
+                                <input type="password" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-mono" value={config.authToken} onChange={e => setConfig({...config, authToken: e.target.value})} placeholder="••••••••" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                    <Smartphone size={14} /> Número Remetente (De)
+                                </label>
+                                <input type="text" className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm font-mono bg-slate-50" value={config.fromNumber} onChange={e => setConfig({...config, fromNumber: e.target.value})} placeholder="whatsapp:+14155238886" />
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Auth Token</label>
-                            <input type="password" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-mono" value={config.authToken} onChange={e => setConfig({...config, authToken: e.target.value})} />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Número Remetente (whatsapp:+...)</label>
-                            <input type="text" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-mono" value={config.fromNumber} onChange={e => setConfig({...config, fromNumber: e.target.value})} />
-                        </div>
-                        <button onClick={handleSaveConfig} disabled={isSaving} className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all">
-                            {isSaving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />} Salvar
+                        <button onClick={handleSaveConfig} disabled={isSaving} className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95">
+                            {isSaving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />} Salvar Credenciais
                         </button>
                     </div>
                 </div>
@@ -172,6 +186,17 @@ export const TwilioInbox: React.FC = () => {
                     {/* Envio */}
                     <main className="flex-1 bg-slate-50 flex flex-col items-center p-10 overflow-y-auto custom-scrollbar">
                         <div className="max-w-xl w-full bg-white rounded-2xl shadow-xl border border-slate-200 p-8 space-y-8">
+                            
+                            {lastError && (
+                                <div className="bg-red-50 border-2 border-red-100 p-4 rounded-xl flex items-start gap-3 text-red-700 animate-in shake">
+                                    <AlertTriangle className="shrink-0 mt-0.5" size={18} />
+                                    <div className="text-[11px] font-medium leading-relaxed">
+                                        <p className="font-black uppercase mb-1">Erro no Envio</p>
+                                        <p>{lastError}</p>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex items-center justify-between">
                                 <h3 className="text-xl font-bold text-slate-800">Nova Mensagem</h3>
                                 <div className="flex bg-slate-100 p-1 rounded-lg">
@@ -212,10 +237,6 @@ export const TwilioInbox: React.FC = () => {
                                                     </div>
                                                 ))}
                                             </div>
-                                            <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3">
-                                                <AlertTriangle className="text-amber-500 shrink-0" size={18} />
-                                                <p className="text-[10px] text-amber-700 leading-relaxed">Certifique-se que o número de variáveis corresponde exatamente ao que está configurado no seu template do Twilio.</p>
-                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -231,7 +252,7 @@ export const TwilioInbox: React.FC = () => {
         </div>
         
         <div className="px-6 py-3 bg-slate-800 text-white flex items-center justify-between text-[10px] font-bold uppercase tracking-widest shrink-0">
-            <span className="flex items-center gap-2"><ShieldCheck size={14} className="text-teal-400" /> Twilio Content API v1.0</span>
+            <span className="flex items-center gap-2"><ShieldCheck size={14} className="text-teal-400" /> Twilio Content API v1.1</span>
             <span className="opacity-50">VOLL PILATES GROUP</span>
         </div>
     </div>

@@ -1,243 +1,672 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { 
-  SupabaseConfig, SavedPreset, Role, Banner, CompanySetting, 
-  InstructorLevel, ActivityLog, FormModel, FormAnswer, 
-  SurveyModel, InventoryRecord, Contract, ContractFolder,
-  Product, CertificateModel, EventModel, Workshop, EventBlock,
-  EventRegistration, TwilioConfig, PartnerStudio
-} from '../types';
+// Added EventRegistration to the import list below to fix the error on line 632
+import { TwilioConfig, Role, Banner, InstructorLevel, ActivityLog, FormModel, SurveyModel, Contract, ContractFolder, PartnerStudio, CertificateModel, EventModel, Workshop, EventBlock, InventoryRecord, EventRegistration } from '../types';
 
-// Use environment variables or empty strings as fallback
-const supabaseUrl = (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) || '';
-const supabaseAnonKey = (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) || '';
-
-// Create client only if URL is valid to prevent crash on boot
-const createSafeClient = () => {
-  if (!supabaseUrl || !supabaseUrl.startsWith('http')) {
-    console.warn("Supabase VITE_SUPABASE_URL not configured. Backend features will be disabled.");
-    // Return a dummy client proxy to prevent 'undefined' errors, but it will fail on actual calls
-    return new Proxy({} as any, {
-      get: () => () => { throw new Error("Supabase não configurado. Adicione VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY às variáveis de ambiente."); }
-    });
+// Helper to safely get environment variables without crashing
+const getEnvVar = (key: string): string => {
+  try {
+    // Check import.meta.env (Vite standard)
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+      return (import.meta as any).env[key] || '';
+    }
+    // Check process.env (Node/Webpack standard)
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env[key] || '';
+    }
+  } catch (e) {
+    console.warn(`Error accessing environment variable ${key}:`, e);
   }
-  return createClient(supabaseUrl, supabaseAnonKey);
+  return '';
 };
 
-export const client = createSafeClient();
+const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
+const supabaseKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+
+// Initialize client only if URL is valid to prevent crash on boot
+const createSafeClient = (): SupabaseClient => {
+  if (!supabaseUrl || !supabaseUrl.startsWith('http')) {
+    console.warn("Supabase VITE_SUPABASE_URL is not configured. Internal backend features will be disabled.");
+    // Return a dummy client proxy to prevent 'undefined' errors during render
+    // It will throw an error only when an actual database call is made
+    return new Proxy({} as any, {
+      get: (target, prop) => {
+        if (prop === 'auth') return { 
+          onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+          getSession: async () => ({ data: { session: null }, error: null }),
+          signInWithPassword: async () => ({ data: null, error: new Error("Supabase não configurado.") }),
+          signOut: async () => {}
+        };
+        return () => ({
+          select: () => ({ order: () => ({ limit: () => ({ data: [], error: null }) }), eq: () => ({ single: () => ({ data: null, error: null }), maybeSingle: () => ({ data: null, error: null }) }) }),
+          from: () => ({ select: () => ({ order: () => ({ limit: () => ({ data: [], error: null }) }), eq: () => ({ single: () => ({ data: null, error: null }), maybeSingle: () => ({ data: null, error: null }) }) }) }),
+          insert: () => ({ select: () => ({ single: () => ({ data: null, error: null }) }) }),
+          update: () => ({ eq: () => ({ data: null, error: null }) }),
+          delete: () => ({ eq: () => ({ data: null, error: null }) }),
+          upsert: () => ({ select: () => ({ single: () => ({ data: null, error: null }) }) })
+        });
+      }
+    });
+  }
+  return createClient(supabaseUrl, supabaseKey);
+};
+
+export const supabase = createSafeClient();
+
+export interface PipelineStage {
+    id: string;
+    title: string;
+    color: string;
+}
+
+export interface Pipeline {
+    id: string;
+    name: string;
+    stages: PipelineStage[];
+}
+
+export interface CompanySetting {
+    id: string;
+    legalName: string;
+    cnpj: string;
+    productTypes: string[];
+}
 
 export const appBackend = {
-  client,
-  
+  client: supabase,
+
   auth: {
     signIn: async (email: string, pass: string) => {
-      const { data, error } = await client.auth.signInWithPassword({ email, password: pass });
-      if (error) throw error;
-      return data;
+        const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+        if (error) throw error;
     },
     signOut: async () => {
-      await client.auth.signOut();
+        await supabase.auth.signOut();
     }
   },
 
-  // Settings
   getAppSetting: async (key: string) => {
-    const { data } = await client.from('app_settings').select('value').eq('key', key).single();
+    const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
     return data?.value || null;
   },
+
   saveAppSetting: async (key: string, value: any) => {
-    await client.from('app_settings').upsert({ key, value });
+    await supabase.from('app_settings').upsert({ key, value });
   },
 
-  saveAppLogo: async (logo: string) => appBackend.saveAppSetting('app_logo', logo),
-  getAppLogo: async () => appBackend.getAppSetting('app_logo'),
-
-  saveInventorySecurityMargin: async (margin: number) => appBackend.saveAppSetting('inventory_margin', margin),
-  getInventorySecurityMargin: async () => (await appBackend.getAppSetting('inventory_margin')) || 5,
-
-  // Presets & Sync
-  getPresets: async (): Promise<SavedPreset[]> => {
-    const { data } = await client.from('crm_sync_presets').select('*');
+  getPresets: async () => {
+    const { data } = await supabase.from('app_presets').select('*').order('created_at', { ascending: false });
     return data || [];
   },
-  savePreset: async (preset: Partial<SavedPreset>) => {
-    const { data, error } = await client.from('crm_sync_presets').upsert(preset).select().single();
+
+  savePreset: async (preset: any) => {
+    const { data, error } = await supabase.from('app_presets').upsert(preset).select().single();
     if (error) throw error;
     return data;
   },
+
   deletePreset: async (id: string) => {
-    await client.from('crm_sync_presets').delete().eq('id', id);
+    await supabase.from('app_presets').delete().eq('id', id);
   },
 
-  // CRM & Pipelines
-  getPipelines: async (): Promise<any[]> => {
-    const { data } = await client.from('crm_pipelines').select('*');
-    return data || [];
-  },
-  savePipeline: async (p: any) => client.from('crm_pipelines').upsert(p),
-  deletePipeline: async (id: string) => client.from('crm_pipelines').delete().eq('id', id),
-
-  // Roles
   getRoles: async (): Promise<Role[]> => {
-    const { data } = await client.from('crm_roles').select('*');
+    const { data } = await supabase.from('crm_roles').select('*');
     return data || [];
   },
-  saveRole: async (role: Role) => client.from('crm_roles').upsert(role),
-  deleteRole: async (id: string) => client.from('crm_roles').delete().eq('id', id),
+  
+  saveRole: async (role: Role) => {
+    await supabase.from('crm_roles').upsert(role);
+  },
 
-  // Banners
+  deleteRole: async (id: string) => {
+    await supabase.from('crm_roles').delete().eq('id', id);
+  },
+
   getBanners: async (audience?: string): Promise<Banner[]> => {
-    let query = client.from('crm_banners').select('*');
+    let query = supabase.from('crm_banners').select('*');
     if (audience) query = query.eq('target_audience', audience);
     const { data } = await query;
     return data || [];
   },
-  saveBanner: async (b: Banner) => client.from('crm_banners').upsert(b),
-  deleteBanner: async (id: string) => client.from('crm_banners').delete().eq('id', id),
 
-  // Companies
-  getCompanies: async (): Promise<CompanySetting[]> => {
-    const { data } = await client.from('crm_companies').select('*');
+  saveBanner: async (banner: Banner) => {
+    await supabase.from('crm_banners').upsert(banner);
+  },
+
+  deleteBanner: async (id: string) => {
+    await supabase.from('crm_banners').delete().eq('id', id);
+  },
+
+  getCompanies: async () => {
+    const { data } = await supabase.from('app_companies').select('*');
     return data || [];
   },
-  saveCompany: async (c: CompanySetting) => client.from('crm_companies').upsert(c),
-  deleteCompany: async (id: string) => client.from('crm_companies').delete().eq('id', id),
 
-  // Instructor Levels
+  saveCompany: async (company: any) => {
+    await supabase.from('app_companies').upsert(company);
+  },
+
+  deleteCompany: async (id: string) => {
+    await supabase.from('app_companies').delete().eq('id', id);
+  },
+
   getInstructorLevels: async (): Promise<InstructorLevel[]> => {
-    const { data } = await client.from('crm_instructor_levels').select('*');
+    const { data } = await supabase.from('crm_instructor_levels').select('*');
     return data || [];
   },
-  saveInstructorLevel: async (l: InstructorLevel) => client.from('crm_instructor_levels').upsert(l),
-  deleteInstructorLevel: async (id: string) => client.from('crm_instructor_levels').delete().eq('id', id),
 
-  // Logs
+  saveInstructorLevel: async (level: InstructorLevel) => {
+    await supabase.from('crm_instructor_levels').upsert(level);
+  },
+
+  deleteInstructorLevel: async (id: string) => {
+    await supabase.from('crm_instructor_levels').delete().eq('id', id);
+  },
+
+  getActivityLogs: async (limit = 100): Promise<ActivityLog[]> => {
+    const { data } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(limit);
+    return (data || []).map(d => ({
+        id: d.id,
+        action: d.action,
+        module: d.module,
+        details: d.details,
+        userName: d.user_name,
+        userId: d.user_id,
+        recordId: d.record_id,
+        createdAt: d.created_at
+    }));
+  },
+
   logActivity: async (log: Partial<ActivityLog>) => {
     try {
-      const { data: userRes } = await client.auth.getUser();
-      await client.from('crm_activity_logs').insert({
-        ...log,
-        user_name: userRes?.user?.email || 'System',
-        created_at: new Date().toISOString()
-      });
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('activity_logs').insert([{
+          action: log.action,
+          module: log.module,
+          details: log.details,
+          user_id: user?.id,
+          user_name: user?.email || 'System',
+          record_id: log.recordId
+      }]);
     } catch (e) {
-      console.error("Log error", e);
+      console.warn("Failed to log activity", e);
     }
   },
-  getActivityLogs: async (): Promise<ActivityLog[]> => {
-    const { data } = await client.from('crm_activity_logs').select('*').order('created_at', { ascending: false });
-    return data || [];
-  },
 
-  // Forms
   getForms: async (): Promise<FormModel[]> => {
-    const { data } = await client.from('crm_forms').select('*');
+    const { data } = await supabase.from('crm_forms').select('*');
     return data || [];
   },
-  saveForm: async (f: FormModel) => client.from('crm_forms').upsert(f),
-  deleteForm: async (id: string) => client.from('crm_forms').delete().eq('id', id),
+
+  saveForm: async (form: FormModel) => {
+    await supabase.from('crm_forms').upsert(form);
+  },
+
+  deleteForm: async (id: string) => {
+    await supabase.from('crm_forms').delete().eq('id', id);
+  },
+
+  submitForm: async (formId: string, answers: any[], isLeadCapture?: boolean, studentId?: string) => {
+      await supabase.from('crm_form_submissions').insert([{
+          form_id: formId,
+          answers,
+          student_id: studentId
+      }]);
+  },
+
   getFormSubmissions: async (formId: string) => {
-    const { data } = await client.from('crm_form_submissions').select('*').eq('form_id', formId).order('created_at', { ascending: false });
-    return data || [];
-  },
-  submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string) => {
-    await client.from('crm_form_submissions').insert({ form_id: formId, answers, student_id: studentId });
+      const { data } = await supabase.from('crm_form_submissions').select('*').eq('form_id', formId).order('created_at', { ascending: false });
+      return data || [];
   },
 
-  // Surveys
   getSurveys: async (): Promise<SurveyModel[]> => {
-    const { data } = await client.from('crm_surveys').select('*');
-    return data || [];
-  },
-  saveSurvey: async (s: SurveyModel) => client.from('crm_surveys').upsert(s),
-  getEligibleSurveysForStudent: async (studentId: string) => {
-    const { data } = await client.from('crm_surveys').select('*').eq('is_active', true);
+    const { data } = await supabase.from('crm_surveys').select('*');
     return data || [];
   },
 
-  // Inventory
-  getInventory: async (): Promise<InventoryRecord[]> => {
-    const { data } = await client.from('crm_inventory').select('*');
-    return data || [];
+  saveSurvey: async (survey: SurveyModel) => {
+    await supabase.from('crm_surveys').upsert(survey);
   },
-  saveInventoryRecord: async (r: InventoryRecord) => client.from('crm_inventory').upsert(r),
-  deleteInventoryRecord: async (id: string) => client.from('crm_inventory').delete().eq('id', id),
 
-  // Contracts
+  getEligibleSurveysForStudent: async (studentId: string): Promise<SurveyModel[]> => {
+      const { data } = await supabase.from('crm_surveys').select('*').eq('is_active', true);
+      return data || [];
+  },
+
   getContracts: async (): Promise<Contract[]> => {
-    const { data } = await client.from('crm_contracts').select('*');
+    const { data } = await supabase.from('crm_contracts').select('*');
     return data || [];
   },
-  saveContract: async (c: Contract) => client.from('crm_contracts').upsert(c),
-  deleteContract: async (id: string) => client.from('crm_contracts').delete().eq('id', id),
+
+  saveContract: async (contract: Contract) => {
+    await supabase.from('crm_contracts').upsert(contract);
+  },
+
+  deleteContract: async (id: string) => {
+    await supabase.from('crm_contracts').delete().eq('id', id);
+  },
+
+  signContract: async (contractId: string, signerId: string, signatureData: string) => {
+      const { data: contract } = await supabase.from('crm_contracts').select('*').eq('id', contractId).single();
+      if (!contract) return;
+      const signers = contract.signers.map((s: any) => 
+          s.id === signerId ? { ...s, status: 'signed', signatureData, signedAt: new Date().toISOString() } : s
+      );
+      const allSigned = signers.every((s: any) => s.status === 'signed');
+      await supabase.from('crm_contracts').update({ signers, status: allSigned ? 'signed' : 'sent' }).eq('id', contractId);
+  },
+
   getFolders: async (): Promise<ContractFolder[]> => {
-    const { data } = await client.from('crm_contract_folders').select('*');
+    const { data } = await supabase.from('crm_contract_folders').select('*');
     return data || [];
   },
-  saveFolder: async (f: ContractFolder) => client.from('crm_contract_folders').upsert(f),
-  deleteFolder: async (id: string) => client.from('crm_contract_folders').delete().eq('id', id),
-  signContract: async (contractId: string, signerId: string, sig: string) => {
-     // Implementation would update specific signer status
+
+  saveFolder: async (folder: ContractFolder) => {
+    await supabase.from('crm_contract_folders').upsert(folder);
   },
 
-  // Certificates
+  deleteFolder: async (id: string) => {
+    await supabase.from('crm_contract_folders').delete().eq('id', id);
+  },
+
+  getPartnerStudios: async (): Promise<PartnerStudio[]> => {
+    const { data } = await supabase.from('crm_partner_studios').select('*');
+    return (data || []).map(d => ({
+        id: d.id,
+        status: d.status,
+        responsibleName: d.responsible_name,
+        cpf: d.cpf,
+        phone: d.phone,
+        email: d.email,
+        secondContactName: d.second_contact_name,
+        secondContactPhone: d.second_contact_phone,
+        fantasyName: d.fantasy_name,
+        legalName: d.legal_name,
+        cnpj: d.cnpj,
+        studioPhone: d.studio_phone,
+        address: d.address,
+        city: d.city,
+        state: d.state,
+        country: d.country,
+        sizeM2: d.size_m2,
+        studentCapacity: d.student_capacity,
+        rentValue: d.rent_value,
+        methodology: d.methodology,
+        studioType: d.studio_type,
+        nameOnSite: d.name_on_site,
+        bank: d.bank,
+        agency: d.agency,
+        account: d.account,
+        beneficiary: d.beneficiary,
+        pixKey: d.pix_key,
+        hasReformer: d.has_reformer,
+        qtyReformer: d.qty_reformer,
+        hasLadderBarrel: d.has_ladder_barrel,
+        qtyLadderBarrel: d.qty_ladder_barrel,
+        hasChair: d.has_chair,
+        qtyChair: d.qty_chair,
+        hasCadillac: d.has_cadillac,
+        qtyCadillac: d.qty_cadillac,
+        hasChairsForCourse: d.has_chairs_for_course,
+        hasTv: d.has_tv,
+        maxKitsCapacity: d.max_kits_capacity,
+        attachments: d.attachments
+    }));
+  },
+
+  savePartnerStudio: async (studio: PartnerStudio) => {
+    const payload = {
+        status: studio.status,
+        responsible_name: studio.responsibleName,
+        cpf: studio.cpf,
+        phone: studio.phone,
+        email: studio.email,
+        password: studio.password,
+        second_contact_name: studio.secondContactName,
+        second_contact_phone: studio.secondContactPhone,
+        fantasy_name: studio.fantasyName,
+        legal_name: studio.legalName,
+        cnpj: studio.cnpj,
+        studio_phone: studio.studioPhone,
+        address: studio.address,
+        city: studio.city,
+        state: studio.state,
+        country: studio.country,
+        size_m2: studio.sizeM2,
+        student_capacity: studio.studentCapacity,
+        rent_value: studio.rentValue,
+        methodology: studio.methodology,
+        studio_type: studio.studioType,
+        name_on_site: studio.nameOnSite,
+        bank: studio.bank,
+        agency: studio.agency,
+        account: studio.account,
+        beneficiary: studio.beneficiary,
+        pix_key: studio.pixKey,
+        has_reformer: studio.hasReformer,
+        qty_reformer: studio.qtyReformer,
+        has_ladder_barrel: studio.hasLadderBarrel,
+        qty_ladder_barrel: studio.qtyLadderBarrel,
+        has_chair: studio.hasChair,
+        qty_chair: studio.qtyChair,
+        has_cadillac: studio.hasCadillac,
+        qty_cadillac: studio.qtyCadillac,
+        has_chairs_for_course: studio.hasChairsForCourse,
+        has_tv: studio.hasTv,
+        max_kits_capacity: studio.maxKitsCapacity,
+        attachments: studio.attachments
+    };
+    if (studio.id) {
+        await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
+    } else {
+        await supabase.from('crm_partner_studios').insert([payload]);
+    }
+  },
+
+  deletePartnerStudio: async (id: string) => {
+    await supabase.from('crm_partner_studios').delete().eq('id', id);
+  },
+
   getCertificates: async (): Promise<CertificateModel[]> => {
-    const { data } = await client.from('crm_certificates').select('*');
-    return data || [];
+    const { data } = await supabase.from('crm_certificates').select('*');
+    return (data || []).map(d => ({
+        id: d.id,
+        title: d.title,
+        backgroundData: d.background_data,
+        backBackgroundData: d.back_background_data,
+        linkedProductId: d.linked_product_id,
+        bodyText: d.body_text,
+        layoutConfig: d.layout_config,
+        createdAt: d.created_at
+    }));
   },
-  saveCertificate: async (c: CertificateModel) => client.from('crm_certificates').upsert(c),
-  deleteCertificate: async (id: string) => client.from('crm_certificates').delete().eq('id', id),
-  issueCertificate: async (dealId: string, templateId: string) => {
-    const hash = Math.random().toString(36).substring(2, 15);
-    await client.from('crm_student_certificates').insert({ student_deal_id: dealId, certificate_template_id: templateId, hash });
-    return hash;
+
+  saveCertificate: async (cert: CertificateModel) => {
+    const payload = {
+        title: cert.title,
+        background_data: cert.backgroundData,
+        back_background_data: cert.backBackgroundData,
+        linked_product_id: cert.linkedProductId,
+        body_text: cert.bodyText,
+        layout_config: cert.layoutConfig,
+        created_at: cert.createdAt
+    };
+    if (cert.id) {
+        await supabase.from('crm_certificates').update(payload).eq('id', cert.id);
+    } else {
+        await supabase.from('crm_certificates').insert([payload]);
+    }
   },
+
+  deleteCertificate: async (id: string) => {
+    await supabase.from('crm_certificates').delete().eq('id', id);
+  },
+
+  issueCertificate: async (studentDealId: string, templateId: string) => {
+      const hash = Math.random().toString(36).substring(2, 15);
+      await supabase.from('crm_student_certificates').insert([{
+          student_deal_id: studentDealId,
+          certificate_template_id: templateId,
+          hash,
+          issued_at: new Date().toISOString()
+      }]);
+      return hash;
+  },
+
   getStudentCertificate: async (hash: string) => {
-    const { data } = await client.from('crm_student_certificates').select('*, template:crm_certificates(*)').eq('hash', hash).single();
-    return data;
-  },
-  deleteStudentCertificate: async (id: string) => client.from('crm_student_certificates').delete().eq('id', id),
-
-  // Events
-  getEvents: async (): Promise<EventModel[]> => {
-    const { data } = await client.from('crm_events').select('*');
-    return data || [];
-  },
-  saveEvent: async (e: EventModel) => client.from('crm_events').upsert(e),
-  deleteEvent: async (id: string) => client.from('crm_events').delete().eq('id', id),
-  getWorkshops: async (eventId: string): Promise<Workshop[]> => {
-    const { data } = await client.from('crm_workshops').select('*').eq('event_id', eventId);
-    return data || [];
-  },
-  saveWorkshop: async (w: Workshop) => client.from('crm_workshops').upsert(w),
-  deleteWorkshop: async (id: string) => client.from('crm_workshops').delete().eq('id', id),
-  getBlocks: async (eventId: string): Promise<EventBlock[]> => {
-    const { data } = await client.from('crm_event_blocks').select('*').eq('event_id', eventId);
-    return data || [];
-  },
-  saveBlock: async (b: EventBlock) => client.from('crm_event_blocks').upsert(b),
-  deleteBlock: async (id: string) => client.from('crm_event_blocks').delete().eq('id', id),
-  getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
-    const { data } = await client.from('crm_event_registrations').select('*').eq('event_id', eventId);
-    return data || [];
+      const { data: cert } = await supabase.from('crm_student_certificates').select('*, crm_deals(*)').eq('hash', hash).single();
+      if (!cert) return null;
+      const { data: template } = await supabase.from('crm_certificates').select('*').eq('id', cert.certificate_template_id).single();
+      return {
+          studentName: cert.crm_deals.company_name || cert.crm_deals.contact_name,
+          studentCity: cert.crm_deals.course_city || 'S/ Cidade',
+          template: {
+              id: template.id,
+              title: template.title,
+              backgroundData: template.background_data,
+              backBackgroundData: template.back_background_data,
+              bodyText: template.body_text,
+              layoutConfig: template.layout_config,
+              createdAt: template.created_at
+          },
+          issuedAt: cert.issued_at
+      };
   },
 
-  // WhatsApp & Twilio
-  getWhatsAppConfig: async () => appBackend.getAppSetting('whatsapp_config'),
-  saveWhatsAppConfig: async (c: any) => appBackend.saveAppSetting('whatsapp_config', c),
-  
+  deleteStudentCertificate: async (id: string) => {
+      await supabase.from('crm_student_certificates').delete().eq('id', id);
+  },
+
+  getInventory: async (): Promise<InventoryRecord[]> => {
+    const { data } = await supabase.from('crm_inventory').select('*');
+    return (data || []).map(d => ({
+        id: d.id,
+        type: d.type,
+        itemApostilaNova: d.item_apostila_nova,
+        itemApostilaClassico: d.item_apostila_classico,
+        itemSacochila: d.item_sacochila,
+        itemLapis: d.item_lapis,
+        registrationDate: d.registration_date,
+        studioId: d.studio_id,
+        trackingCode: d.tracking_code,
+        observations: d.observations,
+        conferenceDate: d.conference_date,
+        attachments: d.attachments
+    }));
+  },
+
+  saveInventoryRecord: async (record: InventoryRecord) => {
+    const payload = {
+        type: record.type,
+        item_apostila_nova: record.itemApostilaNova,
+        item_apostila_classico: record.itemApostilaClassico,
+        item_sacochila: record.itemSacochila,
+        item_lapis: record.itemLapis,
+        registration_date: record.registrationDate,
+        studio_id: record.studioId,
+        tracking_code: record.trackingCode,
+        observations: record.observations,
+        conference_date: record.conferenceDate,
+        attachments: record.attachments
+    };
+    if (record.id) {
+        await supabase.from('crm_inventory').update(payload).eq('id', record.id);
+    } else {
+        await supabase.from('crm_inventory').insert([payload]);
+    }
+  },
+
+  deleteInventoryRecord: async (id: string) => {
+    await supabase.from('crm_inventory').delete().eq('id', id);
+  },
+
+  getInventorySecurityMargin: async () => {
+    const margin = await appBackend.getAppSetting('inventory_security_margin');
+    return margin || 5;
+  },
+
+  saveInventorySecurityMargin: async (margin: number) => {
+    await appBackend.saveAppSetting('inventory_security_margin', margin);
+  },
+
+  getAppLogo: async () => {
+    return await appBackend.getAppSetting('app_logo');
+  },
+
+  saveAppLogo: async (logo: string) => {
+    await appBackend.saveAppSetting('app_logo', logo);
+  },
+
+  getWhatsAppConfig: async () => {
+    return await appBackend.getAppSetting('whatsapp_config');
+  },
+
+  saveWhatsAppConfig: async (config: any) => {
+    await appBackend.saveAppSetting('whatsapp_config', config);
+  },
+
   getTwilioConfig: async (): Promise<TwilioConfig | null> => {
     return await appBackend.getAppSetting('twilio_config');
   },
+
   saveTwilioConfig: async (config: TwilioConfig): Promise<void> => {
     await appBackend.saveAppSetting('twilio_config', config);
   },
 
-  // Partner Studios
-  getPartnerStudios: async (): Promise<PartnerStudio[]> => {
-    const { data } = await client.from('crm_partner_studios').select('*');
-    return data || [];
+  getEvents: async (): Promise<EventModel[]> => {
+    const { data } = await supabase.from('crm_events').select('*');
+    return (data || []).map(d => ({
+        id: d.id,
+        name: d.name,
+        description: d.description,
+        location: d.location,
+        dates: d.dates,
+        createdAt: d.created_at,
+        registrationOpen: d.registration_open
+    }));
   },
-  savePartnerStudio: async (s: PartnerStudio) => client.from('crm_partner_studios').upsert(s),
-  deletePartnerStudio: async (id: string) => client.from('crm_partner_studios').delete().eq('id', id)
+
+  saveEvent: async (evt: EventModel) => {
+      const payload = {
+          name: evt.name,
+          description: evt.description,
+          location: evt.location,
+          dates: evt.dates,
+          created_at: evt.createdAt,
+          registration_open: evt.registrationOpen
+      };
+      const { data, error } = await supabase.from('crm_events').upsert(payload).select().single();
+      if (error) throw error;
+      return {
+          id: data.id,
+          name: data.name,
+          description: data.description,
+          location: data.location,
+          dates: data.dates,
+          createdAt: data.created_at,
+          registrationOpen: data.registration_open
+      };
+  },
+
+  deleteEvent: async (id: string) => {
+    await supabase.from('crm_events').delete().eq('id', id);
+  },
+
+  getWorkshops: async (eventId: string): Promise<Workshop[]> => {
+    const { data } = await supabase.from('crm_event_workshops').select('*').eq('event_id', eventId);
+    return (data || []).map(d => ({
+        id: d.id,
+        eventId: d.event_id,
+        blockId: d.block_id,
+        title: d.title,
+        description: d.description,
+        speaker: d.speaker,
+        date: d.date,
+        time: d.time,
+        spots: d.spots
+    }));
+  },
+
+  saveWorkshop: async (w: Workshop) => {
+      const payload = {
+          event_id: w.eventId,
+          block_id: w.blockId,
+          title: w.title,
+          description: w.description,
+          speaker: w.speaker,
+          date: w.date,
+          time: w.time,
+          spots: w.spots
+      };
+      const { data, error } = await supabase.from('crm_event_workshops').upsert(payload).select().single();
+      if (error) throw error;
+      return {
+          id: data.id,
+          eventId: data.event_id,
+          blockId: data.block_id,
+          title: data.title,
+          description: data.description,
+          speaker: data.speaker,
+          date: data.date,
+          time: data.time,
+          spots: data.spots
+      };
+  },
+
+  deleteWorkshop: async (id: string) => {
+    await supabase.from('crm_event_workshops').delete().eq('id', id);
+  },
+
+  getBlocks: async (eventId: string): Promise<EventBlock[]> => {
+    const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId);
+    return (data || []).map(d => ({
+        id: d.id,
+        eventId: d.event_id,
+        date: d.date,
+        title: d.title,
+        maxSelections: d.max_selections
+    }));
+  },
+
+  saveBlock: async (b: EventBlock) => {
+      const payload = {
+          event_id: b.eventId,
+          date: b.date,
+          title: b.title,
+          max_selections: b.maxSelections
+      };
+      const { data, error } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
+      if (error) throw error;
+      return {
+          id: data.id,
+          eventId: data.event_id,
+          date: data.date,
+          title: data.title,
+          maxSelections: data.max_selections
+      };
+  },
+
+  deleteBlock: async (id: string) => {
+    await supabase.from('crm_event_blocks').delete().eq('id', id);
+  },
+
+  getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
+      const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId);
+      return (data || []).map(d => ({
+          id: d.id,
+          eventId: d.event_id,
+          workshopId: d.workshop_id,
+          studentId: d.student_id,
+          studentName: d.student_name,
+          studentEmail: d.student_email,
+          registeredAt: d.created_at
+      }));
+  },
+
+  getPipelines: async (): Promise<Pipeline[]> => {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', 'crm_pipelines').maybeSingle();
+      return data?.value || [
+          { id: '1', name: 'Padrão', stages: [
+              { id: 'new', title: 'Sem Contato', color: 'border-slate-300' },
+              { id: 'contacted', title: 'Contatado', color: 'border-blue-400' },
+              { id: 'proposal', title: 'Proposta', color: 'border-yellow-400' },
+              { id: 'negotiation', title: 'Negociação', color: 'border-orange-500' },
+              { id: 'closed', title: 'Fechado', color: 'border-green-500' }
+          ]}
+      ];
+  },
+
+  savePipeline: async (pipeline: Pipeline) => {
+      const current = await appBackend.getPipelines();
+      const updated = current.some(p => p.id === pipeline.id) 
+          ? current.map(p => p.id === pipeline.id ? pipeline : p)
+          : [...current, pipeline];
+      await supabase.from('app_settings').upsert({ key: 'crm_pipelines', value: updated });
+  },
+
+  deletePipeline: async (id: string) => {
+      const current = await appBackend.getPipelines();
+      const updated = current.filter(p => p.id !== id);
+      await supabase.from('app_settings').upsert({ key: 'crm_pipelines', value: updated });
+  }
 };

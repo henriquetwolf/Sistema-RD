@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { twilioService } from '../services/twilioService';
-import { TwilioConfig } from '../types';
+import { TwilioConfig, ActivityLog } from '../types';
 import clsx from 'clsx';
 
 interface TwilioManagerProps {
@@ -29,7 +29,7 @@ export const TwilioManager: React.FC<TwilioManagerProps> = ({ onBack }) => {
   // Message State
   const [toPhone, setToPhone] = useState('');
   const [messageBody, setMessageBody] = useState('');
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
 
   useEffect(() => {
     loadData();
@@ -41,14 +41,8 @@ export const TwilioManager: React.FC<TwilioManagerProps> = ({ onBack }) => {
       const savedConfig = await appBackend.getTwilioConfig();
       if (savedConfig) setConfig(savedConfig);
       
-      // Carregar logs do banco se você optar por salvá-los, aqui simularemos ou buscaremos de uma tabela dedicada
-      const { data } = await appBackend.client
-        .from('crm_activity_logs')
-        .select('*')
-        .eq('module', 'twilio')
-        .order('created_at', { ascending: false })
-        .limit(10);
-      setLogs(data || []);
+      const activityLogs = await appBackend.getActivityLogs(50);
+      setLogs(activityLogs.filter(l => l.module === 'twilio'));
     } catch (e) {
       console.error(e);
     } finally {
@@ -80,14 +74,14 @@ export const TwilioManager: React.FC<TwilioManagerProps> = ({ onBack }) => {
       await appBackend.logActivity({
         action: 'create',
         module: 'twilio',
-        details: `WhatsApp enviado para ${toPhone}: ${messageBody.substring(0, 30)}...`,
+        details: `WhatsApp enviado p/ ${toPhone}: ${messageBody.substring(0, 40)}...`,
         recordId: result.sid
       });
 
       alert("Mensagem enviada com sucesso!");
       setMessageBody('');
       setToPhone('');
-      loadData(); // Refresh logs
+      loadData();
     } catch (e: any) {
       alert(`Erro no Twilio: ${e.message}`);
     } finally {
@@ -106,7 +100,7 @@ export const TwilioManager: React.FC<TwilioManagerProps> = ({ onBack }) => {
             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
               <MessageSquare className="text-red-500" /> WhatsApp Twilio
             </h2>
-            <p className="text-slate-500 text-sm">Integração para envios automáticos e manuais.</p>
+            <p className="text-slate-500 text-sm">Envio de notificações e mensagens via API Twilio.</p>
           </div>
         </div>
       </div>
@@ -114,21 +108,21 @@ export const TwilioManager: React.FC<TwilioManagerProps> = ({ onBack }) => {
       <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm w-fit">
         <button 
           onClick={() => setActiveTab('send')}
-          className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", activeTab === 'send' ? "bg-red-50 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}
+          className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", activeTab === 'send' ? "bg-red-500 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}
         >
           <Send size={18}/> Enviar Mensagem
         </button>
         <button 
           onClick={() => setActiveTab('history')}
-          className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", activeTab === 'history' ? "bg-red-50 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}
+          className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", activeTab === 'history' ? "bg-red-500 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}
         >
           <History size={18}/> Histórico
         </button>
         <button 
           onClick={() => setActiveTab('config')}
-          className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", activeTab === 'config' ? "bg-red-50 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}
+          className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", activeTab === 'config' ? "bg-red-500 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}
         >
-          <Settings size={18}/> Configurações API
+          <Settings size={18}/> Configuração API
         </button>
       </div>
 
@@ -138,7 +132,7 @@ export const TwilioManager: React.FC<TwilioManagerProps> = ({ onBack }) => {
             <div className="p-8 space-y-6">
               <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 text-xs text-blue-800">
                 <Info size={18} className="shrink-0 text-blue-600" />
-                <p>Certifique-se de que o número do destinatário inclua o DDI (ex: 55 para Brasil). Exemplo: <strong>5511999999999</strong></p>
+                <p>O número deve conter DDI e DDD (ex: 5511999999999). Se usar o Sandbox do Twilio, o destinatário deve ter enviado a mensagem de adesão primeiro.</p>
               </div>
 
               <form onSubmit={handleSend} className="space-y-5">
@@ -173,7 +167,7 @@ export const TwilioManager: React.FC<TwilioManagerProps> = ({ onBack }) => {
                     className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-red-500/20 flex items-center gap-2 transition-all active:scale-95"
                   >
                     {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
-                    Enviar Agora
+                    Enviar WhatsApp
                   </button>
                 </div>
               </form>
@@ -186,7 +180,7 @@ export const TwilioManager: React.FC<TwilioManagerProps> = ({ onBack }) => {
             <div className="p-8 space-y-6">
               <div className="flex items-center gap-3 mb-2">
                 <div className="bg-red-100 p-2 rounded-lg text-red-600"><ShieldCheck size={24}/></div>
-                <h3 className="text-lg font-bold text-slate-800">Credenciais Twilio REST API</h3>
+                <h3 className="text-lg font-bold text-slate-800">Credenciais Twilio</h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -250,7 +244,7 @@ export const TwilioManager: React.FC<TwilioManagerProps> = ({ onBack }) => {
                             <div key={log.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-center">
                                 <div>
                                     <p className="text-sm font-bold text-slate-800">{log.details}</p>
-                                    <p className="text-[10px] text-slate-400 font-medium uppercase">{new Date(log.created_at).toLocaleString('pt-BR')}</p>
+                                    <p className="text-[10px] text-slate-400 font-medium uppercase">{new Date(log.createdAt).toLocaleString('pt-BR')}</p>
                                 </div>
                                 <div className="text-right">
                                     <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">ENVIADO</span>

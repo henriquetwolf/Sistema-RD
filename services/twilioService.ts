@@ -4,16 +4,19 @@ import { TwilioConfig } from '../types';
 
 export const twilioService = {
   sendMessage: async (to: string, body: string) => {
-    const config: TwilioConfig | null = await appBackend.getTwilioConfig();
+    const config = await appBackend.getTwilioConfig();
     
     if (!config || !config.accountSid || !config.authToken || !config.fromNumber) {
-      throw new Error("Configurações do Twilio incompletas. Verifique a aba de configurações.");
+      throw new Error("Configurações do Twilio incompletas. Vá na aba Twilio > Configurações.");
     }
 
     const { accountSid, authToken, fromNumber } = config;
     
-    // Formata o número de destino se não tiver o prefixo whatsapp:
-    const formattedTo = to.startsWith('whatsapp:') ? to : `whatsapp:${to.replace(/\s+/g, '')}`;
+    // Formata o número de destino para o padrão Twilio whatsapp:+55...
+    const cleanTo = to.replace(/\D/g, '');
+    const formattedTo = `whatsapp:+${cleanTo}`;
+    
+    // Formata o número de origem
     const formattedFrom = fromNumber.startsWith('whatsapp:') ? fromNumber : `whatsapp:${fromNumber}`;
 
     const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;

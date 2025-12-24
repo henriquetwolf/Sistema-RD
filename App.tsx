@@ -39,7 +39,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info
+  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -511,10 +511,23 @@ function App() {
                     <div className="flex-1 min-w-0">
                         {dashboardTab === 'overview' && (
                             <div className="space-y-8 animate-in fade-in duration-500">
-                                <div>
-                                    <h2 className="text-3xl font-extrabold text-teal-600 tracking-tight">Sistema VOLL Pilates Group</h2>
-                                    <p className="text-slate-500 text-sm mt-1">Bem-vindo ao sistema VOLL. Aqui está o resumo das suas operações.</p>
-                                </div>
+                                <section className="bg-gradient-to-r from-teal-600 to-indigo-700 rounded-3xl p-8 text-white shadow-xl shadow-teal-900/20 relative overflow-hidden group">
+                                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
+                                    <div className="relative z-10">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md border border-white/30">
+                                                <Sparkles size={24} className="text-teal-100" />
+                                            </div>
+                                            <span className="text-teal-100 text-xs font-black uppercase tracking-[0.2em]">Painel de Controle</span>
+                                        </div>
+                                        <h2 className="text-4xl font-black tracking-tight mb-2">
+                                            Bem-vindo, <span className="text-teal-200">{currentUserName.split(' ')[0]}</span>!
+                                        </h2>
+                                        <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed">
+                                            Seu centro de comando está pronto. Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.
+                                        </p>
+                                    </div>
+                                </section>
 
                                 {isOverviewLoading ? (
                                     <div className="flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={32} /></div>

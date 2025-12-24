@@ -1,4 +1,10 @@
 
+export interface TwilioConfig {
+  accountSid: string;
+  authToken: string;
+  fromNumber: string;
+}
+
 export interface Franchise {
   id: string;
   saleNumber: string;

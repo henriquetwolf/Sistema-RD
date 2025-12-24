@@ -4,9 +4,10 @@ import {
   Users, UserCheck, UserMinus, Clock, ShieldCheck, FileWarning, 
   Heart, Baby, BarChart3, PieChart, LayoutDashboard, ClipboardList,
   AlertCircle, Calendar, Briefcase, DollarSign, MapPin, Building,
-  ArrowRight, CheckCircle2, XCircle, ChevronRight, TrendingUp, Info
+  ArrowRight, CheckCircle2, XCircle, ChevronRight, TrendingUp, Info,
+  Users2
 } from 'lucide-react';
-import { Collaborator } from './CollaboratorsManager';
+import { Collaborator, CollaboratorsManager } from './CollaboratorsManager';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   Cell, PieChart as RePie, Pie, Legend, LineChart, Line
@@ -19,8 +20,9 @@ interface HrDashboardProps {
 }
 
 export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditCollaborator }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'executivo' | 'operacional'>('executivo');
+  const [activeSubTab, setActiveSubTab] = useState<'executivo' | 'operacional' | 'equipe'>('executivo');
   const [opSection, setOpSection] = useState<'contratos' | 'ferias' | 'beneficios' | 'compliance'>('contratos');
+  const [targetCollaborator, setTargetCollaborator] = useState<Collaborator | null>(null);
 
   // --- CÁLCULOS DOS KPIS ---
   const stats = useMemo(() => {
@@ -28,7 +30,6 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
     const active = collaborators.filter(c => c.status === 'active');
     const inactive = collaborators.filter(c => c.status === 'inactive');
     
-    // Admissões Mês Atual
     const now = new Date();
     const thisMonth = now.getMonth();
     const thisYear = now.getFullYear();
@@ -38,7 +39,6 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
         return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
     }).length;
 
-    // Tempo de Casa Médio (Meses)
     let totalMonths = 0;
     active.forEach(c => {
         if (c.admissionDate) {
@@ -49,12 +49,10 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
     });
     const avgTenure = active.length > 0 ? (totalMonths / active.length).toFixed(1) : "0";
 
-    // % Cadastros Completos (Campos Essenciais: Nome, Email, CPF, RG, Admissão, Cargo, Depto)
     const essentialFields: (keyof Collaborator)[] = ['fullName', 'email', 'cpf', 'rg', 'admissionDate', 'role', 'department'];
     const completeCount = collaborators.filter(c => essentialFields.every(f => !!c[f])).length;
     const completionRate = total > 0 ? Math.round((completeCount / total) * 100) : 0;
 
-    // Benefícios
     const healthRate = total > 0 ? Math.round((collaborators.filter(c => c.hasHealthPlan === 'Sim').length / total) * 100) : 0;
     const dependentRate = total > 0 ? Math.round((collaborators.filter(c => c.hasDependents === 'Sim').length / total) * 100) : 0;
 
@@ -97,7 +95,6 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
       return Object.entries(dist).map(([name, value]) => ({ name, value }));
   }, [collaborators]);
 
-  // --- OPERACIONAL: VENCIMENTO DE EXPERIÊNCIA ---
   const probationAlerts = useMemo(() => {
       const now = new Date();
       return collaborators
@@ -118,6 +115,15 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
       return isNaN(num) ? 'R$ 0,00' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
   };
 
+  const goToCollaborator = (c: Collaborator) => {
+      setTargetCollaborator(c);
+      setActiveSubTab('equipe');
+  };
+
+  if (activeSubTab === 'equipe') {
+      return <CollaboratorsManager onBack={() => setActiveSubTab('executivo')} initialEditCollaborator={targetCollaborator} />;
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
@@ -128,6 +134,9 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
           </button>
           <button onClick={() => setActiveSubTab('operacional')} className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", activeSubTab === 'operacional' ? "bg-slate-800 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}>
               <ClipboardList size={18}/> Painel Operacional
+          </button>
+          <button onClick={() => { setTargetCollaborator(null); setActiveSubTab('equipe'); }} className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", activeSubTab === 'equipe' ? "bg-slate-800 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}>
+              <Users2 size={18}/> Gestão de Equipe
           </button>
       </div>
 
@@ -215,7 +224,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
                           <div className="space-y-3">
                               {alerts.missingDocs.length > 0 ? (
                                   alerts.missingDocs.slice(0, 3).map(c => (
-                                      <div key={c.id} className="flex items-center justify-between group cursor-pointer" onClick={() => onEditCollaborator(c)}>
+                                      <div key={c.id} className="flex items-center justify-between group cursor-pointer" onClick={() => goToCollaborator(c)}>
                                           <div className="flex items-center gap-2">
                                               <div className="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center font-bold text-xs">{c.fullName.charAt(0)}</div>
                                               <span className="text-xs font-bold text-slate-700 group-hover:text-red-600 transition-colors truncate max-w-[120px]">{c.fullName}</span>
@@ -312,7 +321,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
                                                   <span className={clsx("text-xs font-black px-3 py-1 rounded-full uppercase", c.daysSince >= 85 || (c.daysSince >= 40 && c.daysSince <= 45) ? "bg-red-600 text-white" : "bg-amber-500 text-white")}>
                                                       {c.daysSince} dias de casa
                                                   </span>
-                                                  <button onClick={() => onEditCollaborator(c)} className="block mt-1 text-[10px] font-black text-indigo-600 hover:underline uppercase">Ver Ficha</button>
+                                                  <button onClick={() => goToCollaborator(c)} className="block mt-1 text-[10px] font-black text-indigo-600 hover:underline uppercase">Ver Ficha</button>
                                               </div>
                                           </div>
                                       ))}
@@ -449,7 +458,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
                                                       <td className="p-4">{check(c.ctpsNumber)}</td>
                                                       <td className="p-4">{check(c.bankAccountInfo)}</td>
                                                       <td className="p-4 text-right">
-                                                          <button onClick={() => onEditCollaborator(c)} className="p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200"><ArrowRight size={14}/></button>
+                                                          <button onClick={() => goToCollaborator(c)} className="p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200"><ArrowRight size={14}/></button>
                                                       </td>
                                                   </tr>
                                               );

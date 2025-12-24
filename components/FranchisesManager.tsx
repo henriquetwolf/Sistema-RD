@@ -5,7 +5,7 @@ import {
   ArrowLeft, Save, X, Edit2, Trash2, Loader2, Calendar, FileText, 
   DollarSign, User, Building, Map as MapIcon, List,
   Navigation, AlertTriangle, CheckCircle, Briefcase, Globe, Info, Ruler, Dumbbell,
-  AlertCircle, ShieldCheck
+  AlertCircle, ShieldCheck, Crosshair, HelpCircle, MapPinned
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -54,10 +54,29 @@ const INITIAL_FORM_STATE: Franchise = {
     observations: ''
 };
 
-// Componente auxiliar para centralizar o mapa quando uma franquia for selecionada
-const ChangeView = ({ center }: { center: [number, number] }) => {
+// --- Helpers de Geolocalização ---
+
+const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+};
+
+// Componente para controle do Mapa
+const MapController = ({ center }: { center?: [number, number] }) => {
   const map = useMap();
-  map.setView(center, 15);
+  useEffect(() => {
+    if (center) map.setView(center, 14);
+  }, [center, map]);
   return null;
 };
 
@@ -72,6 +91,15 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
   
   const [formData, setFormData] = useState<Franchise>(INITIAL_FORM_STATE);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+  // Estados de Simulação no Mapa
+  const [simAddress, setSimAddress] = useState('');
+  const [simRadius, setSimRadius] = useState('5');
+  const [simLocation, setSimLocation] = useState<[number, number] | null>(null);
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  // Geocoding loading
+  const [isGeocoding, setIsGeocoding] = useState(false);
 
   // IBGE State
   const [states, setStates] = useState<IBGEUF[]>([]);
@@ -138,7 +166,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
               partner1Name: d.partner_1_name || '',
               partner2Name: d.partner_2_name || '',
               franchiseeFolderLink: d.franchisee_folder_link || '',
-              pathInfo: d.path_info || '',
+              path_info: d.path_info || '',
               observations: d.observations || ''
           })));
       } catch (e: any) {
@@ -147,6 +175,100 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
           setIsLoading(false);
       }
   };
+
+  // --- Lógica de Geocoding (Nominatim OpenStreetMap) ---
+  const handleAutoGeocode = async () => {
+    if (!formData.commercialAddress || !formData.commercialCity || !formData.commercialState) {
+        alert("Preencha endereço, cidade e estado para buscar as coordenadas.");
+        return;
+    }
+    setIsGeocoding(true);
+    try {
+        const query = encodeURIComponent(`${formData.commercialAddress}, ${formData.commercialCity}, ${formData.commercialState}, Brasil`);
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`);
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+            setFormData(prev => ({
+                ...prev,
+                latitude: data[0].lat,
+                longitude: data[0].lon
+            }));
+        } else {
+            alert("Endereço não localizado no mapeamento automático. Verifique os dados ou insira manualmente.");
+        }
+    } catch (e) {
+        alert("Erro ao conectar com serviço de mapas.");
+    } finally {
+        setIsGeocoding(false);
+    }
+  };
+
+  const handleSimulateGeocode = async () => {
+    if (!simAddress) return;
+    setIsSimulating(true);
+    try {
+        const query = encodeURIComponent(`${simAddress}, Brasil`);
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`);
+        const data = await response.json();
+        if (data && data.length > 0) {
+            setSimLocation([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+        } else {
+            alert("Endereço não localizado.");
+        }
+    } catch (e) {
+        alert("Erro de conexão.");
+    } finally {
+        setIsSimulating(false);
+    }
+  };
+
+  // --- Análise de Colisões ---
+  const collisions = useMemo(() => {
+    const list: { f1: Franchise, f2: Franchise }[] = [];
+    const geocoded = franchises.filter(f => f.latitude && f.longitude && f.exclusivityRadiusKm);
+
+    for (let i = 0; i < geocoded.length; i++) {
+        for (let j = i + 1; j < geocoded.length; j++) {
+            const f1 = geocoded[i];
+            const f2 = geocoded[j];
+            const dist = getDistanceInMeters(
+                parseFloat(f1.latitude), parseFloat(f1.longitude),
+                parseFloat(f2.latitude), parseFloat(f2.longitude)
+            );
+            const r1 = parseFloat(f1.exclusivityRadiusKm!) * 1000;
+            const r2 = parseFloat(f2.exclusivityRadiusKm!) * 1000;
+
+            if (dist < (r1 + r2)) {
+                list.push({ f1, f2 });
+            }
+        }
+    }
+    return list;
+  }, [franchises]);
+
+  const conflictingIds = useMemo(() => {
+      const ids = new Set<string>();
+      collisions.forEach(c => {
+          ids.add(c.f1.id);
+          ids.add(c.f2.id);
+      });
+      return ids;
+  }, [collisions]);
+
+  const simulationConflicts = useMemo(() => {
+      if (!simLocation || !simRadius) return [];
+      const simR = parseFloat(simRadius) * 1000;
+      return franchises.filter(f => {
+          if (!f.latitude || !f.longitude || !f.exclusivityRadiusKm) return false;
+          const dist = getDistanceInMeters(
+              simLocation[0], simLocation[1],
+              parseFloat(f.latitude), parseFloat(f.longitude)
+          );
+          const fR = parseFloat(f.exclusivityRadiusKm) * 1000;
+          return dist < (simR + fR);
+      });
+  }, [simLocation, simRadius, franchises]);
 
   const handleInputChange = (field: keyof Franchise, value: any) => {
       setFormData(prev => ({ ...prev, [field]: value }));
@@ -253,10 +375,10 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
             </div>
             <div className="flex gap-2">
                 <div className="bg-slate-100 p-1 rounded-lg flex">
-                    <button onClick={() => setViewMode('list')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2", viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>
+                    <button onClick={() => setViewMode('list')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>
                         <List size={16} /> Lista
                     </button>
-                    <button onClick={() => setViewMode('map')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2", viewMode === 'map' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>
+                    <button onClick={() => setViewMode('map')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'map' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>
                         <MapIcon size={16} /> Mapa
                     </button>
                 </div>
@@ -315,7 +437,9 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                 </div>
                                 <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
                                     <span>Venda: {item.saleNumber || '--'}</span>
-                                    <span className="flex items-center gap-1"><ShieldCheck size={10} className="text-teal-600"/> {item.exclusivityRadiusKm ? `${item.exclusivityRadiusKm}km` : 'S/ Exclusividade'}</span>
+                                    <span className={clsx("flex items-center gap-1 font-black", conflictingIds.has(item.id) ? "text-red-600" : "text-teal-600")}>
+                                        <ShieldCheck size={10}/> {item.exclusivityRadiusKm ? `${item.exclusivityRadiusKm}km` : 'S/ Exclusividade'}
+                                    </span>
                                 </div>
                             </div>
                         ))
@@ -323,46 +447,158 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                 </div>
             </>
         ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-[600px] relative z-0">
-                <MapContainer center={[-15.7801, -47.9292]} zoom={4} style={{ height: '100%', width: '100%' }}>
-                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' />
-                    {franchises.filter(f => f.latitude && f.longitude).map(f => {
-                        const lat = parseFloat(f.latitude);
-                        const lng = parseFloat(f.longitude);
-                        const radiusKm = parseFloat(f.exclusivityRadiusKm || '0');
+            <div className="flex flex-col lg:flex-row gap-6 h-[700px]">
+                {/* Lado Esquerdo: Mapa */}
+                <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative z-0">
+                    <MapContainer center={[-15.7801, -47.9292]} zoom={4} style={{ height: '100%', width: '100%' }}>
+                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' />
+                        <MapController center={simLocation || undefined} />
                         
-                        return (
-                            <React.Fragment key={f.id}>
-                                <Marker position={[lat, lng]}>
-                                    <Popup>
-                                        <div className="p-1">
-                                            <h4 className="font-bold text-slate-800">{f.franchiseeName}</h4>
-                                            <p className="text-xs text-slate-500">{f.commercialCity}/{f.commercialState}</p>
-                                            <p className="text-[10px] font-bold text-teal-600 uppercase mt-1">{f.studioStatus}</p>
-                                            {radiusKm > 0 && <p className="text-[9px] text-indigo-500 font-black mt-0.5">ZONA DE EXCLUSIVIDADE: {radiusKm}KM</p>}
-                                        </div>
-                                    </Popup>
-                                </Marker>
-                                {radiusKm > 0 && (
-                                    <Circle 
-                                        center={[lat, lng]} 
-                                        radius={radiusKm * 1000} 
-                                        pathOptions={{ 
-                                            fillColor: '#0d9488', 
-                                            fillOpacity: 0.15, 
-                                            color: '#0d9488', 
-                                            weight: 1.5,
-                                            dashArray: '5, 10'
-                                        }} 
-                                    />
-                                )}
-                            </React.Fragment>
-                        );
-                    })}
-                </MapContainer>
-                <div className="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur-sm p-3 rounded-lg border border-slate-200 shadow-lg max-w-xs">
-                    <p className="text-xs text-slate-600 font-medium">Exibindo {franchises.filter(f => f.latitude && f.longitude).length} unidades. Círculos tracejados indicam a <strong>Zona de Exclusividade Territorial</strong>.</p>
+                        {franchises.filter(f => f.latitude && f.longitude).map(f => {
+                            const lat = parseFloat(f.latitude);
+                            const lng = parseFloat(f.longitude);
+                            const radiusKm = parseFloat(f.exclusivityRadiusKm || '0');
+                            const hasConflict = conflictingIds.has(f.id);
+                            
+                            return (
+                                <React.Fragment key={f.id}>
+                                    <Marker position={[lat, lng]}>
+                                        <Popup>
+                                            <div className="p-1">
+                                                <h4 className="font-bold text-slate-800">{f.franchiseeName}</h4>
+                                                <p className="text-xs text-slate-500">{f.commercialCity}/{f.commercialState}</p>
+                                                {hasConflict && <p className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded mt-1 font-bold">⚠️ CONFLITO DE RAIO</p>}
+                                            </div>
+                                        </Popup>
+                                    </Marker>
+                                    {radiusKm > 0 && (
+                                        <Circle 
+                                            center={[lat, lng]} 
+                                            radius={radiusKm * 1000} 
+                                            pathOptions={{ 
+                                                fillColor: hasConflict ? '#ef4444' : '#0d9488', 
+                                                fillOpacity: 0.15, 
+                                                color: hasConflict ? '#ef4444' : '#0d9488', 
+                                                weight: 2,
+                                                dashArray: hasConflict ? undefined : '5, 10'
+                                            }} 
+                                        />
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
+
+                        {/* Círculo de Simulação */}
+                        {simLocation && (
+                            <Circle 
+                                center={simLocation} 
+                                radius={parseFloat(simRadius) * 1000} 
+                                pathOptions={{ 
+                                    fillColor: simulationConflicts.length > 0 ? '#ef4444' : '#6366f1', 
+                                    fillOpacity: 0.3, 
+                                    color: simulationConflicts.length > 0 ? '#ef4444' : '#6366f1', 
+                                    weight: 3
+                                }} 
+                            />
+                        )}
+                    </MapContainer>
+                    
+                    {/* Barra de Simulação Flutuante */}
+                    <div className="absolute top-4 right-4 z-[1000] w-72 space-y-2">
+                        <div className="bg-white/95 backdrop-blur-md p-4 rounded-xl shadow-xl border border-slate-200">
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><MapPinned size={14}/> Testar Viabilidade</h4>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase">Endereço do Local</label>
+                                    <div className="flex gap-1">
+                                        <input type="text" className="w-full text-xs px-2 py-1.5 border rounded-lg" placeholder="Rua, Cidade, UF" value={simAddress} onChange={e => setSimAddress(e.target.value)} />
+                                        <button onClick={handleSimulateGeocode} disabled={isSimulating} className="bg-indigo-600 text-white p-1.5 rounded-lg hover:bg-indigo-700 transition-colors">
+                                            {isSimulating ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase">Raio de Exclusividade (Km)</label>
+                                    <input type="number" className="w-full text-xs px-2 py-1.5 border rounded-lg" value={simRadius} onChange={e => setSimRadius(e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                {/* Lado Direito: Alertas e Conflitos */}
+                <aside className="w-full lg:w-80 space-y-6 overflow-y-auto custom-scrollbar">
+                    {/* Lista de Conflitos Existentes */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-[300px]">
+                        <div className="bg-red-50 px-4 py-3 border-b border-red-100 flex items-center justify-between">
+                            <h3 className="text-red-700 font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
+                                <AlertTriangle size={14}/> Colisões de Território ({collisions.length})
+                            </h3>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {collisions.length === 0 ? (
+                                <p className="text-xs text-slate-400 text-center py-4 italic">Nenhuma colisão detectada entre as unidades atuais.</p>
+                            ) : collisions.map((c, idx) => (
+                                <div key={idx} className="p-3 bg-red-50/50 rounded-xl border border-red-100 animate-in slide-in-from-right-2">
+                                    <p className="text-xs font-bold text-slate-800">{c.f1.franchiseeName}</p>
+                                    <p className="text-[9px] text-slate-400 italic font-medium">conflita com</p>
+                                    <p className="text-xs font-bold text-slate-800">{c.f2.franchiseeName}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Resultado da Simulação */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                        <div className="bg-indigo-50 px-4 py-3 border-b border-indigo-100">
+                            <h3 className="text-indigo-700 font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
+                                <Crosshair size={14}/> Resultado da Simulação
+                            </h3>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            {!simLocation ? (
+                                <div className="text-center py-8">
+                                    <MapPin size={24} className="mx-auto text-slate-200 mb-2" />
+                                    <p className="text-xs text-slate-400">Pesquise um endereço acima para ver a viabilidade do território.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className={clsx(
+                                        "p-4 rounded-xl border-2 flex flex-col items-center gap-2 text-center",
+                                        simulationConflicts.length > 0 ? "bg-red-50 border-red-500" : "bg-green-50 border-green-500"
+                                    )}>
+                                        {simulationConflicts.length > 0 ? (
+                                            <>
+                                                <XCircleIcon />
+                                                <p className="text-xs font-black text-red-700 uppercase">Território Indisponível</p>
+                                                <p className="text-[10px] text-red-600 font-medium">Este raio sobrepõe {simulationConflicts.length} {simulationConflicts.length === 1 ? 'franqueado' : 'franqueados'}.</p>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircleIcon />
+                                                <p className="text-xs font-black text-green-700 uppercase">Território Livre</p>
+                                                <p className="text-[10px] text-green-600 font-medium">Não há sobreposição com franqueados existentes neste raio.</p>
+                                            </>
+                                        )}
+                                    </div>
+                                    
+                                    {simulationConflicts.length > 0 && (
+                                        <div className="space-y-2">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase">Sobreposições com:</p>
+                                            <div className="space-y-1">
+                                                {simulationConflicts.map(f => (
+                                                    <div key={f.id} className="text-xs font-bold text-slate-700 border-l-2 border-red-400 pl-2 py-1 bg-slate-50">{f.franchiseeName}</div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    <button onClick={() => setSimLocation(null)} className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all">Limpar Simulação</button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </aside>
             </div>
         )}
 
@@ -463,10 +699,21 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Bairro</label>
                                         <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={formData.commercialNeighborhood} onChange={e => handleInputChange('commercialNeighborhood', e.target.value)} />
                                     </div>
-                                    <div className="md:col-span-4">
+                                    <div className="md:col-span-3">
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Endereço do Studio</label>
                                         <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={formData.commercialAddress} onChange={e => handleInputChange('commercialAddress', e.target.value)} />
                                     </div>
+                                    <div className="md:col-span-1 flex items-end">
+                                        <button 
+                                            onClick={handleAutoGeocode}
+                                            disabled={isGeocoding}
+                                            className="w-full py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-2 hover:bg-indigo-100 transition-all"
+                                        >
+                                            {isGeocoding ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>}
+                                            Buscar Coordenadas (Auto)
+                                        </button>
+                                    </div>
+                                    
                                     <div className="p-6 bg-amber-50 rounded-2xl border border-amber-100 md:col-span-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                         <div className="space-y-4">
                                             <h4 className="text-xs font-black text-amber-700 uppercase flex items-center gap-2 mb-2"><Navigation size={14}/> Coordenadas Geográficas</h4>
@@ -474,7 +721,7 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
                                                 <div><label className="block text-[10px] font-bold text-amber-600 mb-1">Latitude</label><input type="text" placeholder="-23.5505" className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white" value={formData.latitude} onChange={e => handleInputChange('latitude', e.target.value)} /></div>
                                                 <div><label className="block text-[10px] font-bold text-amber-600 mb-1">Longitude</label><input type="text" placeholder="-46.6333" className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white" value={formData.longitude} onChange={e => handleInputChange('longitude', e.target.value)} /></div>
                                             </div>
-                                            <p className="text-[10px] text-amber-600 leading-relaxed"><Info size={10} className="inline mr-1"/> Use coordenadas decimais para exibir a unidade no mapa.</p>
+                                            <p className="text-[10px] text-amber-600 leading-relaxed"><Info size={10} className="inline mr-1"/> Use o botão acima para preenchimento automático ou coordenadas manuais.</p>
                                         </div>
                                         
                                         <div className="space-y-4 bg-white/50 p-4 rounded-xl border border-amber-200">
@@ -566,3 +813,15 @@ export const FranchisesManager: React.FC<FranchisesManagerProps> = ({ onBack }) 
     </div>
   );
 };
+
+const XCircleIcon = () => (
+    <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+        <X size={24} />
+    </div>
+);
+
+const CheckCircleIcon = () => (
+    <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+        <CheckCircle size={24} />
+    </div>
+);

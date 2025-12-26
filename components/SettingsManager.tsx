@@ -191,11 +191,12 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V17.1)
--- ATUALIZAÇÃO DE TABELA DE EMPRESAS PARA PRODUTOS ESPECÍFICOS
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V17.2)
+-- ATUALIZAÇÃO DE TABELA DE EMPRESAS PARA PRODUTOS ESPECÍFICOS E WEBHOOK
 
 ALTER TABLE IF EXISTS public.crm_companies 
-ADD COLUMN IF NOT EXISTS product_ids text[] DEFAULT '{}';
+ADD COLUMN IF NOT EXISTS product_ids text[] DEFAULT '{}',
+ADD COLUMN IF NOT EXISTS webhook_url text;
 
 -- 1. CRIAR TABELA DE NEGOCIAÇÕES DE COBRANÇA
 CREATE TABLE IF NOT EXISTS public.crm_billing_negotiations (
@@ -488,12 +489,17 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'company' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-bold text-slate-800">Empresas do Grupo</h3><button onClick={() => setEditingCompany({ legalName: '', cnpj: '', productTypes: [], productIds: [] })} className="bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ Nova Empresa</button></div>
+                <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-bold text-slate-800">Empresas do Grupo</h3><button onClick={() => setEditingCompany({ legalName: '', cnpj: '', webhookUrl: '', productTypes: [], productIds: [] })} className="bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ Nova Empresa</button></div>
                 {editingCompany && (
                     <form onSubmit={handleSaveCompany} className="bg-slate-50 p-6 rounded-xl border mb-6 space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div><label className="block text-xs font-bold mb-1">Razão Social</label><input type="text" className="w-full p-2 border rounded text-sm font-bold" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} required /></div>
                             <div><label className="block text-xs font-bold mb-1">CNPJ</label><input type="text" className="w-full p-2 border rounded text-sm font-mono" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} required /></div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-bold mb-1 flex items-center gap-1">Webhook URL <LinkIcon size={12} className="text-teal-600"/></label>
+                                <input type="text" className="w-full p-2 border rounded text-sm font-mono text-blue-600" value={editingCompany.webhookUrl || ''} onChange={e => setEditingCompany({...editingCompany, webhookUrl: e.target.value})} placeholder="https://endpoint-da-automacao.com/webhook" />
+                                <p className="text-[10px] text-slate-400 mt-1">URL para onde o sistema enviará eventos de faturamento/venda desta empresa.</p>
+                            </div>
                         </div>
                         
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -584,6 +590,7 @@ NOTIFY pgrst, 'reload config';
                                                 <ShoppingBag size={8}/> {(c.productIds || []).length} Vinculados
                                             </span>
                                         )}
+                                        {c.webhookUrl && <span className="text-[8px] font-black uppercase bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">Webhook Ativo</span>}
                                     </div>
                                 </div>
                             </div>

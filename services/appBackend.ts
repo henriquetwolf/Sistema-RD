@@ -34,8 +34,9 @@ export interface CompanySetting {
     id: string;
     legalName: string;
     cnpj: string;
+    webhookUrl?: string; // Novo campo para automações externas
     productTypes: string[]; 
-    productIds: string[]; // Novo: Associação de produtos específicos
+    productIds: string[]; // Associação de produtos específicos
 }
 
 // Pipelines management types
@@ -396,6 +397,7 @@ export const appBackend = {
           id: c.id, 
           legalName: c.legal_name, 
           cnpj: c.cnpj, 
+          webhookUrl: c.webhook_url,
           productTypes: c.product_types || [],
           productIds: c.product_ids || [] 
       }));
@@ -407,6 +409,7 @@ export const appBackend = {
           id: company.id || undefined, 
           legal_name: company.legalName, 
           cnpj: company.cnpj, 
+          webhook_url: company.webhookUrl,
           product_types: company.productTypes,
           product_ids: company.productIds 
       };

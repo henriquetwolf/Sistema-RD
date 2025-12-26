@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   CreditCard, Search, Filter, Download, Loader2, RefreshCw, 
@@ -5,7 +6,6 @@ import {
   CheckCircle2, XCircle, MoreHorizontal, Mail, Phone, Clock, Info,
   Copy, ExternalLink, FileText, X, Hash, Tag, ArrowUpRight, ArrowDownRight, Eraser,
   ChevronLeft, ChevronRight, Users, Plus, Save, Link as LinkIcon, List, LayoutGrid, FileSpreadsheet,
-  /* Added Edit2 and Trash2 imports to fix "Cannot find name" errors on lines 427 and 428 */
   Edit2, Trash2
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
@@ -16,6 +16,7 @@ export const BillingManager: React.FC = () => {
   const [activeMainTab, setActiveMainTab] = useState<'conciliacao' | 'consultoria'>('conciliacao');
   const [records, setRecords] = useState<any[]>([]);
   const [negotiations, setNegotiations] = useState<BillingNegotiation[]>([]);
+  const [billingTeam, setBillingTeam] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -45,6 +46,7 @@ export const BillingManager: React.FC = () => {
   useEffect(() => {
     fetchData();
     fetchNegotiations();
+    fetchBillingTeam();
     
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -61,6 +63,22 @@ export const BillingManager: React.FC = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, startDate, endDate, activeMainTab]);
+
+  const fetchBillingTeam = async () => {
+      try {
+          const { data, error } = await appBackend.client
+              .from('crm_collaborators')
+              .select('id, full_name')
+              .eq('department', 'Cobrança')
+              .eq('status', 'active')
+              .order('full_name', { ascending: true });
+          
+          if (error) throw error;
+          setBillingTeam(data || []);
+      } catch (e) {
+          console.error("Erro ao carregar equipe de cobrança:", e);
+      }
+  };
 
   const fetchData = async () => {
     if (isLoading) return;
@@ -507,7 +525,16 @@ export const BillingManager: React.FC = () => {
                           </div>
                           <div>
                               <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Responsável Atendimento</label>
-                              <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={negotiationFormData.responsibleAgent} onChange={e => setNegotiationFormData({...negotiationFormData, responsibleAgent: e.target.value})} placeholder="—" />
+                              <select 
+                                  className="w-full px-3 py-2 border rounded-lg text-sm bg-white" 
+                                  value={negotiationFormData.responsibleAgent || ''} 
+                                  onChange={e => setNegotiationFormData({...negotiationFormData, responsibleAgent: e.target.value})}
+                              >
+                                  <option value="">Selecione...</option>
+                                  {billingTeam.map(member => (
+                                      <option key={member.id} value={member.full_name}>{member.full_name}</option>
+                                  ))}
+                              </select>
                           </div>
                           <div className="md:col-span-1">
                               <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Forma de Pagamento</label>

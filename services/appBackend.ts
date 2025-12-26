@@ -1,5 +1,6 @@
+
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession } from '../types';
+import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -137,6 +138,79 @@ export const appBackend = {
           recordId: d.record_id,
           createdAt: d.created_at
       }));
+  },
+
+  // --- BILLING NEGOTIATIONS ---
+  getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      openInstallments: row.open_installments,
+      totalNegotiatedValue: row.total_negotiated_value,
+      totalInstallments: row.total_installments,
+      dueDate: row.due_date,
+      responsibleAgent: row.responsible_agent,
+      identifierCode: row.identifier_code,
+      fullName: row.full_name,
+      productName: row.product_name,
+      originalValue: row.original_value,
+      paymentMethod: row.payment_method,
+      observations: row.observations,
+      status: row.status,
+      team: row.team,
+      voucherLink1: row.voucher_link_1,
+      testDate: row.test_date,
+      voucherLink2: row.voucher_link_2,
+      voucherLink3: row.voucher_link_3,
+      boletosLink: row.boletos_link,
+      negotiationReference: row.negotiation_reference,
+      attachments: row.attachments,
+      createdAt: row.created_at
+    }));
+  },
+
+  saveBillingNegotiation: async (negotiation: Partial<BillingNegotiation>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      open_installments: negotiation.openInstallments,
+      total_negotiated_value: negotiation.totalNegotiatedValue,
+      total_installments: negotiation.totalInstallments,
+      due_date: negotiation.dueDate,
+      responsible_agent: negotiation.responsibleAgent,
+      identifier_code: negotiation.identifierCode,
+      full_name: negotiation.fullName,
+      product_name: negotiation.productName,
+      original_value: negotiation.originalValue,
+      payment_method: negotiation.paymentMethod,
+      observations: negotiation.observations,
+      status: negotiation.status,
+      team: negotiation.team,
+      voucher_link_1: negotiation.voucherLink1,
+      test_date: negotiation.testDate,
+      voucher_link_2: negotiation.voucherLink2,
+      voucher_link_3: negotiation.voucherLink3,
+      boletos_link: negotiation.boletosLink,
+      negotiation_reference: negotiation.negotiationReference,
+      attachments: negotiation.attachments
+    };
+    
+    let error;
+    if (negotiation.id) {
+        const result = await supabase.from('crm_billing_negotiations').update(payload).eq('id', negotiation.id);
+        error = result.error;
+    } else {
+        const result = await supabase.from('crm_billing_negotiations').insert([{ ...payload, id: crypto.randomUUID() }]);
+        error = result.error;
+    }
+    if (error) throw error;
+  },
+
+  deleteBillingNegotiation: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_billing_negotiations').delete().eq('id', id);
+      if (error) throw error;
   },
 
   // --- PIPELINES MANAGEMENT ---
@@ -1011,7 +1085,7 @@ export const appBackend = {
 
   deleteWorkshop: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_workshops').delete().eq('id', id);
+    const { error = null } = await supabase.from('crm_workshops').delete().eq('id', id);
     if (error) throw error;
   },
 

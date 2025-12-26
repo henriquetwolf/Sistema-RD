@@ -11,6 +11,31 @@ export interface BillingRecord {
   [key: string]: any;
 }
 
+export interface BillingNegotiation {
+  id: string;
+  openInstallments: number;
+  totalNegotiatedValue: number;
+  totalInstallments: number;
+  dueDate: string;
+  responsibleAgent: string;
+  identifierCode: string;
+  fullName: string;
+  productName: string;
+  originalValue: number;
+  paymentMethod: string;
+  observations: string;
+  status: string;
+  team: string;
+  voucherLink1: string;
+  testDate: string;
+  voucherLink2: string;
+  voucherLink3: string;
+  boletosLink: string;
+  negotiationReference: string;
+  attachments: string;
+  createdAt: string;
+}
+
 export interface Franchise {
   id: string;
   saleNumber: string;

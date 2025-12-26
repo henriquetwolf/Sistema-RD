@@ -122,48 +122,44 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V16)
--- ADIÇÃO DE CLÁUSULA DE EXCLUSIVIDADE E CORREÇÕES
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V17)
+-- ADIÇÃO DE TABELA DE NEGOCIAÇÕES DE COBRANÇA
 
--- 1. ADICIONAR CAMPO DE EXCLUSIVIDADE NA TABELA DE FRANQUIAS
+-- 1. CRIAR TABELA DE NEGOCIAÇÕES DE COBRANÇA
+CREATE TABLE IF NOT EXISTS public.crm_billing_negotiations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    open_installments integer DEFAULT 0,
+    total_negotiated_value numeric DEFAULT 0,
+    total_installments integer DEFAULT 0,
+    due_date date,
+    responsible_agent text,
+    identifier_code text,
+    full_name text,
+    product_name text,
+    original_value numeric DEFAULT 0,
+    payment_method text,
+    observations text,
+    status text DEFAULT 'EDIÇÃO PENDENTE',
+    team text,
+    voucher_link_1 text,
+    test_date date,
+    voucher_link_2 text,
+    voucher_link_3 text,
+    boletos_link text,
+    negotiation_reference text,
+    attachments text,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- 2. ADICIONAR CAMPO DE EXCLUSIVIDADE NA TABELA DE FRANQUIAS
 ALTER TABLE IF EXISTS public.crm_franchises 
 ADD COLUMN IF NOT EXISTS exclusivity_radius_km numeric DEFAULT 0;
 
--- 2. REMOVER CONSTRAINTS CONFLITANTES DE SUBMISSÕES
-ALTER TABLE IF EXISTS public.crm_form_submissions 
-DROP CONSTRAINT IF EXISTS crm_form_submissions_form_id_fkey;
+-- 3. PERMISSÕES
+GRANT ALL ON public.crm_billing_negotiations TO anon, authenticated, service_role;
 
--- 3. REPARAR/CRIAR TABELA DE SUBMISSÕES
-CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    form_id uuid NOT NULL,
-    student_id uuid,
-    answers jsonb DEFAULT '[]'::jsonb,
-    created_at timestamptz DEFAULT now()
-);
-
--- Garantir tipos de dados corretos
-ALTER TABLE public.crm_form_submissions ALTER COLUMN student_id TYPE uuid USING student_id::uuid;
-ALTER TABLE public.crm_form_submissions ALTER COLUMN answers TYPE jsonb USING answers::jsonb;
-
--- 4. PERMISSÕES DE ACESSO (GRANT)
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT ALL ON public.crm_form_submissions TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_surveys TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_forms TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_franchises TO anon, authenticated, service_role;
-
--- 5. REFAZER POLÍTICAS DE SEGURANÇA (RLS)
-ALTER TABLE public.crm_form_submissions DISABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permitir inserção de respostas" ON public.crm_form_submissions;
-DROP POLICY IF EXISTS "Permitir leitura de respostas" ON public.crm_form_submissions;
-
-CREATE POLICY "Permitir inserção de respostas" ON public.crm_form_submissions FOR INSERT WITH CHECK (true);
-CREATE POLICY "Permitir leitura de respostas" ON public.crm_form_submissions FOR SELECT USING (true);
-
-ALTER TABLE public.crm_form_submissions ENABLE ROW LEVEL SECURITY;
-
--- 6. RELOAD
+-- 4. RELOAD
 NOTIFY pgrst, 'reload config';
   `.trim();
 
@@ -372,9 +368,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V16)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Exclusividade de Franquias).</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V16</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V17)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Consultoria de Cobrança).</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V17</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

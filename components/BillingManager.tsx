@@ -118,17 +118,53 @@ export const BillingManager: React.FC = () => {
   };
 
   const processedRecords = useMemo(() => {
-    return records.map(r => ({
-      ...r,
-      _display_name: getFlexibleField(r, ['Nome do cliente', 'Cliente', 'Nome']),
-      _display_id_cliente: getFlexibleField(r, ['Identificador do cliente', 'Identificador', 'ID Cliente']),
-      _display_ref: getFlexibleField(r, ['Código referência', 'Referência', 'Ref']),
-      _display_comp: getFlexibleField(r, ['Data de competência', 'Competência']),
-      _display_venc: getFlexibleField(r, ['Vencimento', 'Data de vencimento', 'Vencimento original']),
-      _display_valor_original: parseToNumber(getFlexibleField(r, ['Valor original da parcela', 'Valor original', 'Valor nominal'])),
-      _display_valor_recebido: parseToNumber(getFlexibleField(r, ['Valor recebido da parcela', 'Valor recebido', 'Valor pago'])),
-      _display_status: getFlexibleField(r, ['Status', 'Situação']) || 'Pendente'
-    }));
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    return records.map(r => {
+      const valOrig = parseToNumber(getFlexibleField(r, ['Valor original da parcela', 'Valor original', 'Valor nominal']));
+      const valRec = parseToNumber(getFlexibleField(r, ['Valor recebido da parcela', 'Valor recebido', 'Valor pago']));
+      const rawStatus = getFlexibleField(r, ['Status', 'Situação']) || 'Pendente';
+      const vencStr = getFlexibleField(r, ['Vencimento', 'Data de vencimento', 'Vencimento original']);
+      
+      let finalStatus = rawStatus;
+      const isPaidRaw = rawStatus === 'Pago' || rawStatus === 'Liquidado' || rawStatus === 'Liquidado antecipadamente';
+
+      // Lógica inteligente de status:
+      // 1. Se já está pago no banco, mantém.
+      // 2. Se o valor recebido atingiu o original, força 'Pago'.
+      // 3. Se houver pagamento parcial, marca como 'Pago' (ou poderia ser Parcial, mas para simplificar o filtro do usuário vamos de Pago).
+      // 4. Se não há pagamento e a data passou, marca como 'Atrasado'.
+      if (!isPaidRaw && valOrig > 0) {
+        if (valRec >= valOrig) {
+          finalStatus = 'Pago';
+        } else if (valRec > 0) {
+          finalStatus = 'Pago'; // Consideramos pago para os KPIs se houve conciliação
+        } else if (vencStr) {
+          const parts = vencStr.split('/');
+          if (parts.length === 3) {
+            const vencDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+            if (vencDate < now) {
+              finalStatus = 'Atrasado';
+            } else {
+              finalStatus = 'Pendente';
+            }
+          }
+        }
+      }
+
+      return {
+        ...r,
+        _display_name: getFlexibleField(r, ['Nome do cliente', 'Cliente', 'Nome']),
+        _display_id_cliente: getFlexibleField(r, ['Identificador do cliente', 'Identificador', 'ID Cliente']),
+        _display_ref: getFlexibleField(r, ['Código referência', 'Referência', 'Ref']),
+        _display_comp: getFlexibleField(r, ['Data de competência', 'Competência']),
+        _display_venc: vencStr,
+        _display_valor_original: valOrig,
+        _display_valor_recebido: valRec,
+        _display_status: finalStatus
+      };
+    });
   }, [records]);
 
   const filteredRecords = useMemo(() => {

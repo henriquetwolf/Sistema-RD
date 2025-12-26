@@ -235,7 +235,7 @@ export const CrmBoard: React.FC = () => {
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
                   email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receipt_link: d.receipt_link,
                   transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
-                  registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
+                  registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, course_city: d.course_city,
                   classMod1: d.class_mod_1, class_mod_2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
               })));
@@ -308,7 +308,7 @@ export const CrmBoard: React.FC = () => {
         const updates: any = { stage: newStage };
         if (newStage === 'closed') updates.closed_at = now.toISOString();
         if (currentStage === 'closed' && newStage !== 'closed') updates.closed_at = null;
-        const { data, error } = await appBackend.client.from('crm_deals').update(updates).eq('id', dealId).select().single();
+        const { data, error = null } = await appBackend.client.from('crm_deals').update(updates).eq('id', dealId).select().single();
         if (error) throw error;
 
         // Disparo condicional de Webhook baseado no estágio destino
@@ -339,7 +339,7 @@ export const CrmBoard: React.FC = () => {
         const updates: any = { pipeline: pipelineName, stage: targetStage };
         if (targetStage === 'closed') updates.closed_at = now.toISOString();
         else if (currentDeal.stage === 'closed') updates.closed_at = null;
-        const { data, error } = await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId).select().single();
+        const { data, error = null } = await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId).select().single();
         if (error) throw error;
 
         // Disparo condicional de Webhook baseado no estágio destino
@@ -445,10 +445,10 @@ export const CrmBoard: React.FC = () => {
       if (!deal.billing_cnpj) return;
       
       // Verificação de Gatilho (Connection Plug)
-      const hasTrigger = webhookTriggers.some(t => t.pipelineName === deal.pipeline && t.stage_id === deal.stage);
+      const trigger = webhookTriggers.find(t => t.pipelineName === deal.pipeline && t.stageId === deal.stage);
       
       // Se não houver trigger configurado para este estágio+funil, interrompe
-      if (!hasTrigger) return;
+      if (!trigger) return;
 
       const company = companies.find(c => c.cnpj === deal.billing_cnpj);
       if (!company || !company.webhookUrl) return;
@@ -458,34 +458,81 @@ export const CrmBoard: React.FC = () => {
       const stageObj = pipelineObj?.stages?.find(s => s.id === deal.stage);
       const stageLabel = stageObj?.title || deal.stage || "Novo Lead";
 
-      const webhookPayload = {
-          "data_venda": new Date().toISOString().split('T')[0],  
-          "situacao_venda": "Aprovada",                        
-          "numero_venda": String(deal.deal_number || ""),                              
-          "numero_negociacao": String(deal.deal_number || ""),                        
-          "nome_cliente": deal.company_name || deal.contact_name || "",
-          "email_cliente": deal.email || "",                             
-          "telefone_cliente": deal.phone || "",                            
-          "cpf_cnpj_cliente": deal.cpf || "",              
-          "nome_vendedor": sellerName,  
-          "tipo_produto": deal.product_type || "", 
-          "curso_produto": deal.product_name || "", 
-          "fonte_negociacao": deal.source || "", 
-          "campanha": deal.campaign || "",
-          "funil_vendas": deal.pipeline || "", 
-          "etapa_funil": stageLabel,
-          "cidade_cliente": deal.course_city || "", 
-          "turma_modulo": deal.class_mod_1 || deal.class_mod_2 || "", 
-          "valor_total": String(Number(deal.value || 0).toFixed(2)), 
-          "itens_venda": "1", 
-          "forma_pagamento": deal.payment_method || "", 
-          "valor_entrada": String(Number(deal.entry_value || 0).toFixed(2)),  
-          "numero_parcelas": String(deal.installments || "1"),
-          "valor_parcelas": String(Number(deal.installment_value || 0).toFixed(2)), 
-          "dia_primeiro_vencimento": deal.first_due_date || "",
-          "link_comprovante": deal.receipt_link || "", 
-          "codigo_transacao": deal.transaction_code || ""
-      };
+      let webhookPayload: any;
+
+      // Se houver um JSON customizado no gatilho, processa os placeholders
+      if (trigger.payloadJson) {
+          try {
+              let template = trigger.payloadJson;
+              
+              // Mapeamento de placeholders dinâmicos
+              const replacements: Record<string, string> = {
+                  "{{data_venda}}": new Date().toISOString().split('T')[0],
+                  "{{deal_number}}": String(deal.deal_number || ""),
+                  "{{nome_cliente}}": deal.company_name || deal.contact_name || "",
+                  "{{email_cliente}}": deal.email || "",
+                  "{{telefone_cliente}}": deal.phone || "",
+                  "{{cpf_cnpj_cliente}}": deal.cpf || "",
+                  "{{nome_vendedor}}": sellerName,
+                  "{{tipo_produto}}": deal.product_type || "",
+                  "{{curso_produto}}": deal.product_name || "",
+                  "{{fonte_negociacao}}": deal.source || "",
+                  "{{campanha}}": deal.campaign || "",
+                  "{{funil_vendas}}": deal.pipeline || "",
+                  "{{etapa_funil}}": stageLabel,
+                  "{{cidade_cliente}}": deal.course_city || "",
+                  "{{turma_modulo}}": deal.class_mod_1 || deal.class_mod_2 || "",
+                  "{{valor_total}}": String(Number(deal.value || 0).toFixed(2)),
+                  "{{forma_pagamento}}": deal.payment_method || "",
+                  "{{valor_entrada}}": String(Number(deal.entry_value || 0).toFixed(2)),
+                  "{{numero_parcelas}}": String(deal.installments || "1"),
+                  "{{valor_parcelas}}": String(Number(deal.installment_value || 0).toFixed(2)),
+                  "{{dia_primeiro_vencimento}}": deal.first_due_date || "",
+                  "{{link_comprovante}}": deal.receipt_link || "",
+                  "{{codigo_transacao}}": deal.transaction_code || ""
+              };
+
+              // Substituição em massa
+              Object.keys(replacements).forEach(placeholder => {
+                  template = template.split(placeholder).join(replacements[placeholder]);
+              });
+
+              webhookPayload = JSON.parse(template);
+          } catch(e) {
+              console.error("Erro ao processar JSON customizado do Webhook:", e);
+              return;
+          }
+      } else {
+          // Fallback para o formato padrão caso não haja template
+          webhookPayload = {
+              "data_venda": new Date().toISOString().split('T')[0],  
+              "situacao_venda": "Aprovada",                        
+              "numero_venda": String(deal.deal_number || ""),                              
+              "numero_negociacao": String(deal.deal_number || ""),                        
+              "nome_cliente": deal.company_name || deal.contact_name || "",
+              "email_cliente": deal.email || "",                             
+              "telefone_cliente": deal.phone || "",                            
+              "cpf_cnpj_cliente": deal.cpf || "",              
+              "nome_vendedor": sellerName,  
+              "tipo_produto": deal.product_type || "", 
+              "curso_produto": deal.product_name || "", 
+              "fonte_negociacao": deal.source || "", 
+              "campanha": deal.campaign || "",
+              "funil_vendas": deal.pipeline || "", 
+              "etapa_funil": stageLabel,
+              "cidade_cliente": deal.course_city || "", 
+              "turma_modulo": deal.class_mod_1 || deal.class_mod_2 || "", 
+              "valor_total": String(Number(deal.value || 0).toFixed(2)), 
+              "itens_venda": "1", 
+              "forma_pagamento": deal.payment_method || "", 
+              "valor_entrada": String(Number(deal.entry_value || 0).toFixed(2)),  
+              "numero_parcelas": String(deal.installments || "1"),
+              "valor_parcelas": String(Number(deal.installment_value || 0).toFixed(2)), 
+              "dia_primeiro_vencimento": deal.first_due_date || "",
+              "link_comprovante": deal.receipt_link || "", 
+              "codigo_transacao": deal.transaction_code || ""
+          };
+      }
 
       try {
           await fetch(company.webhookUrl, {
@@ -515,7 +562,7 @@ export const CrmBoard: React.FC = () => {
       };
       try {
           if (editingDealId) {
-              const { data, error } = await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId).select().single();
+              const { data, error = null } = await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId).select().single();
               if (error) throw error;
               
               // Verifica gatilho ao atualizar por formulário
@@ -524,7 +571,7 @@ export const CrmBoard: React.FC = () => {
               }
           } else {
               const dealNumber = generateDealNumber();
-              const { data, error } = await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]).select().single();
+              const { data, error = null } = await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]).select().single();
               if (error) throw error;
               
               // Verifica gatilho na criação
@@ -679,7 +726,6 @@ export const CrmBoard: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {(pipelines || []).map(p => (
                             <div key={p.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow flex flex-col group">
-                                {/* Fixed "Cannot find name 'id'" error by changing it to "p.id" */}
                                 <div className="flex justify-between items-start mb-4"><div className="bg-teal-100 text-teal-700 p-2 rounded-lg"><Filter size={24} /></div><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => openEditPipelineModal(p)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"><Edit2 size={16} /></button><button onClick={() => handleDeletePipeline(p.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button></div></div>
                                 <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{p.name || 'Sem nome'}</h3><p className="text-xs text-slate-400 mb-4">{(p.stages || []).length} etapas</p>
                                 <div className="flex flex-wrap gap-1 mb-4">{(p.stages || []).map(s => <span key={s.id} className={clsx("px-2 py-0.5 rounded text-[9px] font-bold border", s.color)}>{s.title}</span>)}</div>
@@ -769,7 +815,7 @@ export const CrmBoard: React.FC = () => {
                   </div>
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                       <button onClick={() => setShowTeamModal(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
-                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-lg font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all">
+                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all">
                           {isSavingTeam ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                           Salvar Equipe
                       </button>

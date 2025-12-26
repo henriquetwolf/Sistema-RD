@@ -7,7 +7,7 @@ import {
     Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
     Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search,
     Play, Pause, Calendar, Smartphone, Link as LinkIcon, ChevronDown, Award, ShoppingBag, Zap, Filter,
-    List, ArrowRight
+    List, ArrowRight, Braces, Sparkles
 } from 'lucide-react';
 import { appBackend, CompanySetting, WebhookTrigger, Pipeline } from '../services/appBackend';
 import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, Product } from '../types';
@@ -70,6 +70,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [webhookTriggers, setWebhookTriggers] = useState<WebhookTrigger[]>([]);
   const [selectedFunnel, setSelectedFunnel] = useState('');
   const [selectedStage, setSelectedStage] = useState('');
+  const [customJson, setCustomJson] = useState('');
   const [isSavingTrigger, setIsSavingTrigger] = useState(false);
   const [isLoadingTriggers, setIsLoadingTriggers] = useState(false);
 
@@ -216,20 +217,25 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V18)
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V18.1)
 -- ATUALIZAÇÃO DE TABELA DE EMPRESAS E TRIGGER DE WEBHOOKS
 
 ALTER TABLE IF EXISTS public.crm_companies 
 ADD COLUMN IF NOT EXISTS product_ids text[] DEFAULT '{}',
 ADD COLUMN IF NOT EXISTS webhook_url text;
 
--- CRIAR TABELA DE GATILHOS DE WEBHOOK (CONNECTION PLUG)
+-- ATUALIZAR TABELA DE GATILHOS DE WEBHOOK (CONNECTION PLUG)
 CREATE TABLE IF NOT EXISTS public.crm_webhook_triggers (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     pipeline_name text NOT NULL,
     stage_id text NOT NULL,
+    payload_json text, -- NOVO CAMPO PARA JSON CUSTOMIZADO
     created_at timestamptz DEFAULT now()
 );
+
+-- ADICIONAR COLUNA CASO JÁ EXISTA A TABELA
+ALTER TABLE IF EXISTS public.crm_webhook_triggers 
+ADD COLUMN IF NOT EXISTS payload_json text;
 
 -- 1. CRIAR TABELA DE NEGOCIAÇÕES DE COBRANÇA
 CREATE TABLE IF NOT EXISTS public.crm_billing_negotiations (
@@ -267,6 +273,38 @@ NOTIFY pgrst, 'reload config';
   `.trim();
 
   const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
+
+  const handleLoadDefaultJson = () => {
+      const defaultFormat = {
+          "data_venda": "{{data_venda}}",  
+          "situacao_venda": "Aprovada",                        
+          "numero_venda": "{{deal_number}}",                              
+          "numero_negociacao": "{{deal_number}}",                        
+          "nome_cliente": "{{nome_cliente}}",
+          "email_cliente": "{{email_cliente}}",                             
+          "telefone_cliente": "{{telefone_cliente}}",                            
+          "cpf_cnpj_cliente": "{{cpf_cnpj_cliente}}",              
+          "nome_vendedor": "{{nome_vendedor}}",  
+          "tipo_produto": "{{tipo_produto}}", 
+          "curso_produto": "{{curso_produto}}", 
+          "fonte_negociacao": "{{fonte_negociacao}}", 
+          "campanha": "{{campanha}}",
+          "funil_vendas": "{{funil_vendas}}", 
+          "etapa_funil": "{{etapa_funil}}",
+          "cidade_cliente": "{{cidade_cliente}}", 
+          "turma_modulo": "{{turma_modulo}}", 
+          "valor_total": "{{valor_total}}", 
+          "itens_venda": "1", 
+          "forma_pagamento": "{{forma_pagamento}}", 
+          "valor_entrada": "{{valor_entrada}}",  
+          "numero_parcelas": "{{numero_parcelas}}",
+          "valor_parcelas": "{{valor_parcelas}}", 
+          "dia_primeiro_vencimento": "{{dia_primeiro_vencimento}}",
+          "link_comprovante": "{{link_comprovante}}", 
+          "codigo_transacao": "{{codigo_transacao}}"
+      };
+      setCustomJson(JSON.stringify(defaultFormat, null, 2));
+  };
 
   // Handlers para CRUDs
   const handleSaveRole = async (e: React.FormEvent) => {
@@ -313,13 +351,26 @@ NOTIFY pgrst, 'reload config';
 
   const handleSaveWebhookTrigger = async () => {
       if (!selectedFunnel || !selectedStage) return;
+      
+      // Validação básica do JSON se preenchido
+      if (customJson.trim()) {
+          try {
+              JSON.parse(customJson);
+          } catch(e) {
+              alert("O formato do JSON é inválido. Verifique vírgulas e aspas.");
+              return;
+          }
+      }
+
       setIsSavingTrigger(true);
       try {
           await appBackend.saveWebhookTrigger({
               pipelineName: selectedFunnel,
-              stageId: selectedStage
+              stageId: selectedStage,
+              payloadJson: customJson.trim() || undefined
           });
           setSelectedStage('');
+          setCustomJson('');
           await fetchWebhookTriggers();
       } catch (e: any) { alert(e.message); } finally { setIsSavingTrigger(false); }
   };
@@ -431,51 +482,77 @@ NOTIFY pgrst, 'reload config';
                     </div>
                 </div>
 
-                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row items-end gap-4">
-                    <div className="flex-1 w-full">
-                        <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">1. Selecione o Funil</label>
-                        <div className="relative">
-                            <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <select 
-                                className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-white text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                                value={selectedFunnel}
-                                onChange={e => { setSelectedFunnel(e.target.value); setSelectedStage(''); }}
-                            >
-                                <option value="">Escolha o Funil...</option>
-                                {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                            </select>
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="w-full">
+                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">1. Selecione o Funil</label>
+                            <div className="relative">
+                                <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <select 
+                                    className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-white text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                                    value={selectedFunnel}
+                                    onChange={e => { setSelectedFunnel(e.target.value); setSelectedStage(''); }}
+                                >
+                                    <option value="">Escolha o Funil...</option>
+                                    {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="w-full">
+                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">2. Selecione a Etapa (Gatilho)</label>
+                            <div className="relative">
+                                <Zap size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <select 
+                                    className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-white text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:bg-slate-100"
+                                    value={selectedStage}
+                                    onChange={e => setSelectedStage(e.target.value)}
+                                    disabled={!selectedFunnel}
+                                >
+                                    <option value="">Escolha a Etapa...</option>
+                                    {funnelStages.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                                </select>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex-1 w-full">
-                        <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">2. Selecione a Etapa (Gatilho)</label>
-                        <div className="relative">
-                            <Zap size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <select 
-                                className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-white text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:bg-slate-100"
-                                value={selectedStage}
-                                onChange={e => setSelectedStage(e.target.value)}
-                                disabled={!selectedFunnel}
+                    <div className="w-full">
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                <Braces size={14} className="text-indigo-600" /> 3. JSON de Disparo (Payload)
+                            </label>
+                            <button 
+                                onClick={handleLoadDefaultJson}
+                                className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 flex items-center gap-1 uppercase transition-all"
                             >
-                                <option value="">Escolha a Etapa...</option>
-                                {funnelStages.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
-                            </select>
+                                <Sparkles size={10}/> Carregar Padrão
+                            </button>
                         </div>
+                        <textarea 
+                            className="w-full h-48 p-4 border rounded-xl bg-slate-900 text-teal-400 font-mono text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder='{"nome": "{{nome_cliente}}", "valor": "{{valor_total}}"}'
+                            value={customJson}
+                            onChange={e => setCustomJson(e.target.value)}
+                        />
+                        <p className="text-[10px] text-slate-400 mt-2 italic">
+                            Dica: Use <strong>{"{{nome_cliente}}"}</strong>, <strong>{"{{valor_total}}"}</strong>, <strong>{"{{deal_number}}"}</strong> etc, para preenchimento dinâmico.
+                        </p>
                     </div>
 
-                    <button 
-                        onClick={handleSaveWebhookTrigger}
-                        disabled={!selectedStage || isSavingTrigger}
-                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all active:scale-95"
-                    >
-                        {isSavingTrigger ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-                        Adicionar Gatilho
-                    </button>
+                    <div className="flex justify-end">
+                        <button 
+                            onClick={handleSaveWebhookTrigger}
+                            disabled={!selectedStage || isSavingTrigger}
+                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all active:scale-95"
+                        >
+                            {isSavingTrigger ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                            Adicionar Gatilho Customizado
+                        </button>
+                    </div>
                 </div>
 
                 <div className="space-y-4">
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        {/* Fix: List was not imported */}
                         <List size={14}/> Gatilhos de Disparo Ativos
                     </h4>
                     
@@ -500,10 +577,12 @@ NOTIFY pgrst, 'reload config';
                                             <div>
                                                 <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">Ao chegar em:</p>
                                                 <h4 className="font-bold text-slate-800 text-sm">
-                                                    {/* Fix: ArrowRight was not imported */}
                                                     {trigger.pipelineName} <ArrowRight size={10} className="inline mx-1 text-slate-300" /> 
                                                     <span className="text-indigo-600">{stage?.title || trigger.stageId}</span>
                                                 </h4>
+                                                {trigger.payloadJson && (
+                                                    <span className="text-[9px] font-bold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 mt-1 inline-block uppercase">JSON Customizado</span>
+                                                )}
                                             </div>
                                         </div>
                                         <button 
@@ -521,7 +600,7 @@ NOTIFY pgrst, 'reload config';
 
                 <div className="bg-indigo-50 p-4 rounded-xl flex gap-3 text-xs text-indigo-800 border border-indigo-100">
                     <Info size={18} className="shrink-0 text-indigo-600" />
-                    <p><strong>Atenção:</strong> Sempre que um negócio for movido ou criado em um dos estágios acima, o Webhook da empresa associada será disparado com o JSON de faturamento.</p>
+                    <p><strong>Automação Inteligente:</strong> Ao configurar o JSON acima, o sistema substituirá os tokens entre chaves pelos dados reais da negociação antes de enviar para o Webhook da empresa.</p>
                 </div>
             </div>
         )}
@@ -640,9 +719,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V18)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Consultoria de Cobrança e Gatilhos de Webhook).</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V18</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V18.1)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (JSON Customizado no Connection Plug).</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V18.1</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

@@ -57,6 +57,7 @@ export interface WebhookTrigger {
     id: string;
     pipelineName: string;
     stageId: string;
+    payloadJson?: string; // Modelo JSON customizado para este gatilho
     createdAt?: string;
 }
 
@@ -225,7 +226,7 @@ export const appBackend = {
   // --- PIPELINES MANAGEMENT ---
   getPipelines: async (): Promise<Pipeline[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_pipelines').select('*').order('created_at', { ascending: true });
+    const { data, error = null } = await supabase.from('crm_pipelines').select('*').order('created_at', { ascending: true });
     if (error) throw error;
     return data || [];
   },
@@ -249,12 +250,13 @@ export const appBackend = {
   // --- WEBHOOK TRIGGERS (CONNECTION PLUG) ---
   getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_webhook_triggers').select('*').order('created_at', { ascending: false });
+      const { data, error = null } = await supabase.from('crm_webhook_triggers').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((t: any) => ({
           id: t.id,
           pipelineName: t.pipeline_name,
           stageId: t.stage_id,
+          payloadJson: t.payload_json,
           createdAt: t.created_at
       }));
   },
@@ -263,7 +265,8 @@ export const appBackend = {
       if (!isConfigured) return;
       const { error } = await supabase.from('crm_webhook_triggers').insert([{
           pipeline_name: trigger.pipelineName,
-          stage_id: trigger.stageId
+          stage_id: trigger.stageId,
+          payload_json: trigger.payloadJson
       }]);
       if (error) throw error;
   },
@@ -277,7 +280,7 @@ export const appBackend = {
   // --- SYNC JOBS (CONNECTIONS) ---
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
+    const { data, error = null } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((row: any) => ({
       id: row.id,
@@ -338,7 +341,7 @@ export const appBackend = {
 
   getPresets: async (): Promise<SavedPreset[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from(TABLE_NAME).select('*').order('created_at', { ascending: false });
+    const { data, error = null } = await supabase.from(TABLE_NAME).select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((row: any) => ({
       id: row.id, 
@@ -367,7 +370,7 @@ export const appBackend = {
       interval_minutes: preset.intervalMinutes || 5, 
       created_by_name: preset.createdByName || null
     };
-    const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
+    const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
     if (error) throw error;
     return {
       id: data.id, 
@@ -629,7 +632,7 @@ export const appBackend = {
 
   getInstructorLevels: async (): Promise<InstructorLevel[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_instructor_levels').select('*').order('name', { ascending: true });
+    const { data, error = null } = await supabase.from('crm_instructor_levels').select('*').order('name', { ascending: true });
     if (error) throw error;
     return (data || []).map((d: any) => ({ id: d.id, name: d.name, honorarium: Number(d.honorarium || 0), observations: d.observations || '', createdAt: d.created_at }));
   },
@@ -678,7 +681,7 @@ export const appBackend = {
 
   getForms: async (): Promise<FormModel[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
+      const { data, error = null } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((d: any) => ({ 
           id: d.id, 
@@ -722,7 +725,7 @@ export const appBackend = {
 
   getSurveys: async (): Promise<SurveyModel[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_surveys').select('*').order('created_at', { ascending: false });
+      const { data, error = null } = await supabase.from('crm_surveys').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((d: any) => ({ 
           id: d.id, 
@@ -795,7 +798,7 @@ export const appBackend = {
   getFormById: async (id: string): Promise<FormModel | null> => {
       if (!isConfigured) return null;
       // Also try surveys table if not in forms
-      const { data: form, error: formErr } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
+      const { data: form, error: formErr = null } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
       if (form) {
           return { 
               id: form.id, title: form.title, description: form.description, 
@@ -808,7 +811,7 @@ export const appBackend = {
           };
       }
       
-      const { data: survey, error: surveyErr } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
+      const { data: survey, error: surveyErr = null } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
       if (survey) {
           return { 
               id: survey.id, title: survey.title, description: survey.description, 
@@ -934,14 +937,14 @@ export const appBackend = {
 
   getFormSubmissions: async (formId: string): Promise<any[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_form_submissions').select('*').eq('form_id', formId).order('created_at', { ascending: false });
+      const { data, error = null } = await supabase.from('crm_form_submissions').select('*').eq('form_id', formId).order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
   },
 
   getFolders: async (): Promise<ContractFolder[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('app_contract_folders').select('*').order('created_at', { ascending: false });
+      const { data, error = null } = await supabase.from('app_contract_folders').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
   },
@@ -960,14 +963,14 @@ export const appBackend = {
 
   getContracts: async (): Promise<Contract[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
+      const { data, error = null } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folder_id: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
       if (!isConfigured) return null;
-      const { data, error } = await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle();
+      const { data, error = null } = await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle();
       if (error || !data) return null;
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
@@ -999,7 +1002,7 @@ export const appBackend = {
 
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
+    const { data, error = null } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((d: any) => ({ 
         id: d.id, 
@@ -1051,7 +1054,7 @@ export const appBackend = {
 
   getStudentCertificate: async (hash: string): Promise<any> => {
     if (!isConfigured) return null;
-    const { data: certData, error: certError } = await supabase.from('crm_student_certificates').select('*').eq('hash', hash).maybeSingle();
+    const { data: certData, error: certError = null } = await supabase.from('crm_student_certificates').select('*').eq('hash', hash).maybeSingle();
     if (certError || !certData) return null;
     const { data: dealData } = await supabase.from('crm_deals').select('contact_name, company_name, course_city').eq('id', (certData as any).student_deal_id).single();
     const { data: templateData } = await supabase.from('crm_certificates').select('*').eq('id', (certData as any).certificate_template_id).single();
@@ -1079,7 +1082,7 @@ export const appBackend = {
 
   getEvents: async (): Promise<EventModel[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
+    const { data, error = null } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((d: any) => ({ id: d.id, name: d.name, description: d.description, location: d.location, dates: d.dates || [], createdAt: d.created_at, registrationOpen: d.registration_open || false }));
   },
@@ -1087,7 +1090,7 @@ export const appBackend = {
   saveEvent: async (event: EventModel): Promise<EventModel> => {
     if (!isConfigured) throw new Error("Backend not configured");
     const payload = { id: event.id, name: event.name, description: event.description, location: event.location, dates: event.dates, registration_open: event.registrationOpen };
-    const { data, error } = await supabase.from('crm_events').upsert(payload).select().single();
+    const { data, error = null } = await supabase.from('crm_events').upsert(payload).select().single();
     if (error) throw error;
     return { id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates || [], createdAt: data.created_at, registrationOpen: data.registration_open || false };
   },
@@ -1100,7 +1103,7 @@ export const appBackend = {
 
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('title', { ascending: true });
+    const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('title', { ascending: true });
     if (error) throw error;
     return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, max_selections: d.max_selections }));
   },
@@ -1108,7 +1111,7 @@ export const appBackend = {
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
       if (!isConfigured) throw new Error("Backend not configured");
       const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
-      const { data, error } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
+      const { data, error = null } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, date: data.date, title: block.title, maxSelections: data.max_selections };
   },
@@ -1121,7 +1124,7 @@ export const appBackend = {
 
   getWorkshops: async (eventId: string): Promise<Workshop[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_workshops').select('*').eq('event_id', eventId).order('date', { ascending: true }).order('time', { ascending: true });
+    const { data, error = null } = await supabase.from('crm_workshops').select('*').eq('event_id', eventId).order('date', { ascending: true }).order('time', { ascending: true });
     if (error) throw error;
     return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, blockId: d.block_id, title: d.title, description: d.description, speaker: d.speaker, date: d.date, time: d.time, spots: d.spots }));
   },
@@ -1129,7 +1132,7 @@ export const appBackend = {
   saveWorkshop: async (workshop: Workshop): Promise<Workshop> => {
     if (!isConfigured) throw new Error("Backend not configured");
     const payload = { id: workshop.id, event_id: workshop.eventId, block_id: workshop.blockId || null, title: workshop.title, description: workshop.description, speaker: workshop.speaker, date: workshop.date, time: workshop.time, spots: workshop.spots };
-    const { data, error } = await supabase.from('crm_workshops').upsert(payload).select().single();
+    const { data, error = null } = await supabase.from('crm_workshops').upsert(payload).select().single();
     if (error) throw error;
     return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: workshop.title, description: workshop.description, speaker: workshop.speaker, date: workshop.date, time: workshop.time, spots: workshop.spots };
   },
@@ -1142,7 +1145,7 @@ export const appBackend = {
 
   getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId);
+    const { data, error = null } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId);
     if (error) throw error;
     return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, workshopId: d.workshop_id, studentId: d.student_id, studentName: d.student_name, studentEmail: d.student_email, registeredAt: d.created_at }));
   },
@@ -1160,7 +1163,7 @@ export const appBackend = {
 
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
+    const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     if (error) throw error;
     return (data || []).map((d: any) => ({
       id: d.id, 

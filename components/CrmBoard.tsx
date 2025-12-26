@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
@@ -178,16 +177,29 @@ export const CrmBoard: React.FC = () => {
     fetchData();
   }, []);
 
+  // Lógica de preenchimento automático de CNPJ e Empresa
   useEffect(() => {
-      if (dealFormData.productType && companies.length > 0) {
-          const matched = companies.find(c => (c.productTypes || []).includes(dealFormData.productType!));
+      if (companies.length > 0) {
+          let matched: CompanySetting | undefined;
+
+          // 1. Prioridade Máxima: Tenta encontrar por PRODUTO ESPECÍFICO
+          if (dealFormData.productName) {
+              matched = companies.find(c => (c.productIds || []).includes(dealFormData.productName!));
+          }
+
+          // 2. Fallback: Se não encontrou por produto, tenta por TIPO DE PRODUTO
+          if (!matched && dealFormData.productType) {
+              matched = companies.find(c => (c.productTypes || []).includes(dealFormData.productType!));
+          }
+
           if (matched) {
               setDealFormData(prev => ({
                   ...prev,
-                  billingCnpj: matched.cnpj,
-                  billingCompanyName: matched.legalName
+                  billingCnpj: matched!.cnpj,
+                  billingCompanyName: matched!.legalName
               }));
           } else {
+              // Se não houver match algum, limpa os campos automáticos
               setDealFormData(prev => ({
                   ...prev,
                   billingCnpj: '',
@@ -195,7 +207,7 @@ export const CrmBoard: React.FC = () => {
               }));
           }
       }
-  }, [dealFormData.productType, companies]);
+  }, [dealFormData.productName, dealFormData.productType, companies]);
 
   const fetchData = async () => {
       setIsLoading(true);
@@ -221,7 +233,7 @@ export const CrmBoard: React.FC = () => {
                   email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
                   transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
-                  classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
+                  classMod1: d.class_mod_1, class_mod_2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
               })));
           } else {
@@ -579,6 +591,7 @@ export const CrmBoard: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {(pipelines || []).map(p => (
                             <div key={p.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow flex flex-col group">
+                                {/* Fixed "Cannot find name 'id'" error by changing it to "p.id" */}
                                 <div className="flex justify-between items-start mb-4"><div className="bg-teal-100 text-teal-700 p-2 rounded-lg"><Filter size={24} /></div><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => openEditPipelineModal(p)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"><Edit2 size={16} /></button><button onClick={() => handleDeletePipeline(p.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button></div></div>
                                 <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{p.name || 'Sem nome'}</h3><p className="text-xs text-slate-400 mb-4">{(p.stages || []).length} etapas</p>
                                 <div className="flex flex-wrap gap-1 mb-4">{(p.stages || []).map(s => <span key={s.id} className={clsx("px-2 py-0.5 rounded text-[9px] font-bold border", s.color)}>{s.title}</span>)}</div>

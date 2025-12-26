@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
@@ -230,7 +231,7 @@ export const CrmBoard: React.FC = () => {
                   nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
-                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
+                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receipt_link: d.receipt_link,
                   transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
                   classMod1: d.class_mod_1, class_mod_2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
@@ -423,6 +424,58 @@ export const CrmBoard: React.FC = () => {
       } catch (e: any) { alert(`Erro ao excluir equipe: ${e.message}`); }
   };
 
+  const dispatchNegotiationWebhook = async (deal: any) => {
+      if (!deal.billing_cnpj) return;
+      
+      const company = companies.find(c => c.cnpj === deal.billing_cnpj);
+      if (!company || !company.webhookUrl) return;
+
+      const sellerName = collaborators.find(c => c.id === deal.owner_id)?.fullName || "Vendedor Não Localizado";
+      const pipelineObj = pipelines.find(p => p.name === deal.pipeline);
+      const stageObj = pipelineObj?.stages?.find(s => s.id === deal.stage);
+      const stageLabel = stageObj?.title || deal.stage || "Novo Lead";
+
+      const webhookPayload = {
+          "data_venda": new Date().toISOString().split('T')[0],  
+          "situacao_venda": "Aprovada",                        
+          "numero_venda": String(deal.deal_number || ""),                              
+          "numero_negociacao": String(deal.deal_number || ""),                        
+          "nome_cliente": deal.company_name || deal.contact_name || "",
+          "email_cliente": deal.email || "",                             
+          "telefone_cliente": deal.phone || "",                            
+          "cpf_cnpj_cliente": deal.cpf || "",              
+          "nome_vendedor": sellerName,  
+          "tipo_produto": deal.product_type || "", 
+          "curso_produto": deal.product_name || "", 
+          "fonte_negociacao": deal.source || "", 
+          "campanha": deal.campaign || "",
+          "funil_vendas": deal.pipeline || "", 
+          "etapa_funil": stageLabel,
+          "cidade_cliente": deal.course_city || "", 
+          "turma_modulo": deal.class_mod_1 || deal.class_mod_2 || "", 
+          "valor_total": String(Number(deal.value || 0).toFixed(2)), 
+          "itens_venda": "1", 
+          "forma_pagamento": deal.payment_method || "", 
+          "valor_entrada": String(Number(deal.entry_value || 0).toFixed(2)),  
+          "numero_parcelas": String(deal.installments || "1"),
+          "valor_parcelas": String(Number(deal.installment_value || 0).toFixed(2)), 
+          "dia_primeiro_vencimento": deal.first_due_date || "",
+          "link_comprovante": deal.receipt_link || "", 
+          "codigo_transacao": deal.transaction_code || ""
+      };
+
+      try {
+          await fetch(company.webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(webhookPayload)
+          });
+          console.log(`Webhook disparado com sucesso para a empresa: ${company.legalName}`);
+      } catch (err) {
+          console.error("Falha ao disparar Webhook de negociação:", err);
+      }
+  };
+
   const handleSaveDeal = async () => {
       if (!dealFormData.companyName) { alert("Preencha o Nome Completo do Cliente."); return; }
       const payload = {
@@ -442,7 +495,13 @@ export const CrmBoard: React.FC = () => {
               await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId);
           } else {
               const dealNumber = generateDealNumber();
-              await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]);
+              const { data, error } = await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]).select().single();
+              if (error) throw error;
+              
+              // Dispara o Webhook após o salvamento bem-sucedido de uma nova negociação
+              if (data) {
+                  dispatchNegotiationWebhook(data);
+              }
           }
           await fetchData(); setShowDealModal(false);
       } catch (e: any) { handleDbError(e); }

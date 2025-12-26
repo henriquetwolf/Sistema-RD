@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, 
     Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, 
@@ -18,6 +17,12 @@ interface SettingsManagerProps {
   jobs: SyncJob[];
   onStartWizard: () => void;
   onDeleteJob: (id: string) => void;
+}
+
+interface UnifiedProduct {
+    id: string;
+    name: string;
+    type: 'Digital' | 'Presencial' | 'Evento';
 }
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ 
@@ -44,7 +49,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [isLoadingBanners, setIsLoadingBanners] = useState(false);
 
   const [companies, setCompanies] = useState<CompanySetting[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<UnifiedProduct[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Partial<CompanySetting> | null>(null);
   const [productSearch, setProductSearch] = useState('');
@@ -84,7 +89,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       fetchGlobalSettings();
       if (activeTab === 'roles') fetchRoles();
       else if (activeTab === 'banners') fetchBanners();
-      else if (activeTab === 'company') { fetchCompanies(); fetchProducts(); }
+      else if (activeTab === 'company') { fetchCompanies(); fetchUnifiedProducts(); }
       else if (activeTab === 'instructor_levels') fetchInstructorLevels();
       else if (activeTab === 'logs') fetchLogs();
   }, [activeTab]);
@@ -111,12 +116,47 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       try { const data = await appBackend.getCompanies(); setCompanies(data); } catch(e) { console.error(e); } finally { setIsLoadingCompanies(false); }
   };
 
-  const fetchProducts = async () => {
+  const fetchUnifiedProducts = async () => {
       try {
-          const { data } = await appBackend.client.from('crm_products').select('*').order('name');
-          if (data) setProducts(data);
+          // Added explicit type cast to any[] for results to avoid unknown inference issues with Supabase responses in Promise.all
+          const [digitalRes, eventsRes, classesRes] = (await Promise.all([
+              appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
+              appBackend.client.from('crm_events').select('id, name'),
+              appBackend.client.from('crm_classes').select('course')
+          ])) as any[];
+
+          const unified: UnifiedProduct[] = [];
+
+          // Use String() conversion to ensure unknown values are assigned as strings
+          if (digitalRes.data) {
+              (digitalRes.data as any[]).forEach(p => unified.push({ id: String(p.id), name: String(p.name), type: 'Digital' }));
+          }
+          if (eventsRes.data) {
+              (eventsRes.data as any[]).forEach(e => unified.push({ id: String(e.id), name: String(e.name), type: 'Evento' }));
+          }
+          if (classesRes.data) {
+              const uniqueCourses = Array.from(new Set((classesRes.data as any[]).map(c => c.course as string).filter(Boolean)));
+              // Explicitly cast c to string to satisfy type constraints
+              uniqueCourses.forEach((c: string) => unified.push({ id: `course-${c}`, name: c, type: 'Presencial' }));
+          }
+
+          setAllProducts(unified.sort((a, b) => a.name.localeCompare(b.name)));
       } catch (e) {}
   };
+
+  // Filtragem dos produtos específicos baseada nos tipos selecionados para a empresa
+  const filteredProductsBySelectedTypes = useMemo(() => {
+      if (!editingCompany) return [];
+      const selectedTypes = editingCompany.productTypes || [];
+      
+      // Se nenhum tipo estiver selecionado, não mostra produtos para evitar confusão
+      if (selectedTypes.length === 0) return [];
+
+      return allProducts.filter(p => 
+          selectedTypes.includes(p.type) && 
+          p.name.toLowerCase().includes(productSearch.toLowerCase())
+      );
+  }, [allProducts, editingCompany, productSearch]);
 
   const fetchInstructorLevels = async () => {
     setIsLoadingLevels(true);
@@ -239,7 +279,15 @@ NOTIFY pgrst, 'reload config';
       const newTypes = currentTypes.includes(type) 
         ? currentTypes.filter(t => t !== type)
         : [...currentTypes, type];
-      setEditingCompany({ ...editingCompany, productTypes: newTypes });
+      
+      // Quando desmarca um tipo, removemos os produtos daquele tipo que estavam selecionados
+      let newProductIds = editingCompany.productIds || [];
+      if (!newTypes.includes(type)) {
+          const productsToRemove = allProducts.filter(p => p.type === type).map(p => p.name);
+          newProductIds = newProductIds.filter(id => !productsToRemove.includes(id));
+      }
+
+      setEditingCompany({ ...editingCompany, productTypes: newTypes, productIds: newProductIds });
   };
 
   const toggleCompanyProductId = (id: string) => {
@@ -252,7 +300,7 @@ NOTIFY pgrst, 'reload config';
   };
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-8 pb-20">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h2 className="text-2xl font-bold text-slate-800">Configurações do Sistema</h2>
@@ -459,34 +507,47 @@ NOTIFY pgrst, 'reload config';
                                         </label>
                                     ))}
                                 </div>
-                                <p className="text-[10px] text-slate-400 mt-2 italic leading-tight">O CRM utilizará esta regra padrão para definir o CNPJ no faturamento do negócio.</p>
+                                <p className="text-[10px] text-slate-400 mt-2 italic leading-tight">Selecione os tipos para habilitar a lista de produtos específicos à direita.</p>
                             </div>
 
-                            {/* PRODUTOS ESPECÍFICOS */}
+                            {/* PRODUTOS ESPECÍFICOS (FILTRADOS) */}
                             <div className="bg-white p-4 rounded-lg border border-slate-200 flex flex-col max-h-[300px]">
                                 <div className="flex items-center justify-between mb-3 shrink-0">
                                     <label className="block text-xs font-black text-indigo-700 uppercase tracking-widest">Produtos Específicos</label>
-                                    <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{(editingCompany.productIds || []).length} selecionados</span>
+                                    <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{filteredProductsBySelectedTypes.length} disponíveis</span>
                                 </div>
-                                <div className="relative mb-3 shrink-0">
-                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
-                                    <input type="text" placeholder="Filtrar produtos..." className="w-full pl-7 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs" value={productSearch} onChange={e => setProductSearch(e.target.value)} />
-                                </div>
-                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1 p-1">
-                                    {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).map(p => (
-                                        <label key={p.id} className={clsx("flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors group", (editingCompany.productIds || []).includes(p.name) ? "bg-indigo-50" : "hover:bg-slate-50")}>
-                                            <input 
-                                                type="checkbox" 
-                                                className="w-3.5 h-3.5 rounded text-indigo-600" 
-                                                checked={(editingCompany.productIds || []).includes(p.name)} 
-                                                onChange={() => toggleCompanyProductId(p.name)} 
-                                            />
-                                            <span className="text-[11px] font-medium text-slate-700 group-hover:text-indigo-600">{p.name}</span>
-                                        </label>
-                                    ))}
-                                    {products.length === 0 && <p className="text-[10px] text-slate-400 italic py-4 text-center">Nenhum produto cadastrado.</p>}
-                                </div>
-                                <p className="text-[10px] text-slate-400 mt-2 italic leading-tight">Associações por produto específico têm precedência sobre o tipo de produto.</p>
+                                
+                                { (editingCompany.productTypes || []).length === 0 ? (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                                        <ShoppingBag className="text-slate-200 mb-2" size={32}/>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Marque ao menos um tipo à esquerda</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="relative mb-3 shrink-0">
+                                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
+                                            <input type="text" placeholder="Filtrar por nome..." className="w-full pl-7 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs" value={productSearch} onChange={e => setProductSearch(e.target.value)} />
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1 p-1">
+                                            {filteredProductsBySelectedTypes.map(p => (
+                                                <label key={p.id} className={clsx("flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors group", (editingCompany.productIds || []).includes(p.name) ? "bg-indigo-50" : "hover:bg-slate-50")}>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="w-3.5 h-3.5 rounded text-indigo-600" 
+                                                        checked={(editingCompany.productIds || []).includes(p.name)} 
+                                                        onChange={() => toggleCompanyProductId(p.name)} 
+                                                    />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[11px] font-medium text-slate-700 group-hover:text-indigo-600">{p.name}</span>
+                                                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{p.type}</span>
+                                                    </div>
+                                                </label>
+                                            ))}
+                                            {filteredProductsBySelectedTypes.length === 0 && <p className="text-[10px] text-slate-400 italic py-4 text-center">Nenhum produto localizado para os tipos selecionados.</p>}
+                                        </div>
+                                    </>
+                                )}
+                                <p className="text-[10px] text-slate-400 mt-2 italic leading-tight">O sistema priorizará o CNPJ associado ao produto específico no faturamento.</p>
                             </div>
                         </div>
 
@@ -501,10 +562,10 @@ NOTIFY pgrst, 'reload config';
                                 <div className="flex flex-wrap items-center gap-3 mt-1">
                                     <span className="text-xs text-slate-400 font-mono">{c.cnpj}</span>
                                     <div className="flex flex-wrap gap-1">
-                                        {(c.productTypes || []).map(t => <span key={t} className="text-[8px] font-black uppercase bg-teal-50 text-teal-600 px-1.5 py-0.5 rounded border border-teal-100">{t}</span>)}
+                                        {(c.productTypes || []).map(t => <span key={t} className={clsx("text-[8px] font-black uppercase px-1.5 py-0.5 rounded border", t === 'Digital' ? "bg-blue-50 text-blue-600 border-blue-100" : t === 'Presencial' ? "bg-teal-50 text-teal-600 border-teal-100" : "bg-orange-50 text-orange-600 border-orange-100")}>{t}</span>)}
                                         {(c.productIds || []).length > 0 && (
                                             <span className="text-[8px] font-black uppercase bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1">
-                                                <ShoppingBag size={8}/> {(c.productIds || []).length} Produtos
+                                                <ShoppingBag size={8}/> {(c.productIds || []).length} Vinculados
                                             </span>
                                         )}
                                     </div>
@@ -555,3 +616,31 @@ NOTIFY pgrst, 'reload config';
     </div>
   );
 };
+
+  const fetchUnifiedProducts = async () => {
+      try {
+          // Explicitly cast the Promise.all result to any[] to avoid 'unknown' type errors during destructuring
+          const [digitalRes, eventsRes, classesRes] = (await Promise.all([
+              appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
+              appBackend.client.from('crm_events').select('id, name'),
+              appBackend.client.from('crm_classes').select('course')
+          ])) as any[];
+
+          const unified: UnifiedProduct[] = [];
+
+          // Use explicit casting and String() to ensure unknown properties from Supabase results are compatible with string
+          if (digitalRes.data) {
+              (digitalRes.data as any[]).forEach(p => unified.push({ id: String(p.id), name: String(p.name), type: 'Digital' }));
+          }
+          if (eventsRes.data) {
+              (eventsRes.data as any[]).forEach(e => unified.push({ id: String(e.id), name: String(e.name), type: 'Evento' }));
+          }
+          if (classesRes.data) {
+              const uniqueCourses = Array.from(new Set((classesRes.data as any[]).map(c => c.course as string).filter(Boolean)));
+              // Cast uniqueCourses element to string to satisfy UnifiedProduct name type
+              uniqueCourses.forEach((c: string) => unified.push({ id: `course-${c}`, name: c, type: 'Presencial' }));
+          }
+
+          setAllProducts(unified.sort((a, b) => a.name.localeCompare(b.name)));
+      } catch (e) {}
+  };

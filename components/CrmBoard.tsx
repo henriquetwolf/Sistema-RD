@@ -8,7 +8,7 @@ import {
   MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2, Palette, Settings as SettingsIcon, ChevronDown
 } from 'lucide-react';
 import clsx from 'clsx';
-import { appBackend, CompanySetting, Pipeline, PipelineStage } from '../services/appBackend';
+import { appBackend, CompanySetting, Pipeline, PipelineStage, WebhookTrigger } from '../services/appBackend';
 
 // --- Types ---
 type DealStage = string; 
@@ -150,6 +150,7 @@ export const CrmBoard: React.FC = () => {
   const [registeredClasses, setRegisteredClasses] = useState<RegisteredClass[]>([]);
   const [digitalProducts, setDigitalProducts] = useState<DigitalProduct[]>([]);
   const [eventsList, setEventsList] = useState<{id: string, name: string}[]>([]);
+  const [webhookTriggers, setWebhookTriggers] = useState<WebhookTrigger[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
@@ -213,7 +214,7 @@ export const CrmBoard: React.FC = () => {
   const fetchData = async () => {
       setIsLoading(true);
       try {
-          const [dealsResult, teamsResult, pipelinesResult, classesResult, productsResult, eventsResult, collabResult, companiesResult] = await Promise.all([
+          const [dealsResult, teamsResult, pipelinesResult, classesResult, productsResult, eventsResult, collabResult, companiesResult, triggersResult] = await Promise.all([
               appBackend.client.from('crm_deals').select('*').order('created_at', { ascending: false }),
               appBackend.client.from('crm_teams').select('*').order('name', { ascending: true }),
               appBackend.getPipelines(),
@@ -221,7 +222,8 @@ export const CrmBoard: React.FC = () => {
               appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
               appBackend.client.from('crm_events').select('id, name').order('created_at', { ascending: false }),
               appBackend.client.from('crm_collaborators').select('id, full_name, department').order('full_name', { ascending: true }),
-              appBackend.getCompanies()
+              appBackend.getCompanies(),
+              appBackend.getWebhookTriggers()
           ]);
 
           if (dealsResult.data) {
@@ -267,6 +269,7 @@ export const CrmBoard: React.FC = () => {
           }
 
           setCompanies(companiesResult || []);
+          setWebhookTriggers(triggersResult || []);
 
       } catch (e: any) {
           console.error("Erro ao carregar dados do CRM:", e);
@@ -305,7 +308,14 @@ export const CrmBoard: React.FC = () => {
         const updates: any = { stage: newStage };
         if (newStage === 'closed') updates.closed_at = now.toISOString();
         if (currentStage === 'closed' && newStage !== 'closed') updates.closed_at = null;
-        await appBackend.client.from('crm_deals').update(updates).eq('id', dealId);
+        const { data, error } = await appBackend.client.from('crm_deals').update(updates).eq('id', dealId).select().single();
+        if (error) throw error;
+
+        // Disparo condicional de Webhook baseado no estágio destino
+        if (data) {
+            dispatchNegotiationWebhook(data);
+        }
+
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal.title}" para a etapa: ${newStage}`, recordId: dealId });
     } catch (e: any) { handleDbError(e); fetchData(); }
   };
@@ -329,7 +339,14 @@ export const CrmBoard: React.FC = () => {
         const updates: any = { pipeline: pipelineName, stage: targetStage };
         if (targetStage === 'closed') updates.closed_at = now.toISOString();
         else if (currentDeal.stage === 'closed') updates.closed_at = null;
-        await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId);
+        const { data, error } = await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId).select().single();
+        if (error) throw error;
+
+        // Disparo condicional de Webhook baseado no estágio destino
+        if (data) {
+            dispatchNegotiationWebhook(data);
+        }
+
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para Funil: ${pipelineName}, Etapa: ${targetStage}`, recordId: draggedDealId });
     } catch (e) { handleDbError(e); fetchData(); }
     setDraggedDealId(null);
@@ -427,6 +444,12 @@ export const CrmBoard: React.FC = () => {
   const dispatchNegotiationWebhook = async (deal: any) => {
       if (!deal.billing_cnpj) return;
       
+      // Verificação de Gatilho (Connection Plug)
+      const hasTrigger = webhookTriggers.some(t => t.pipelineName === deal.pipeline && t.stage_id === deal.stage);
+      
+      // Se não houver trigger configurado para este estágio+funil, interrompe
+      if (!hasTrigger) return;
+
       const company = companies.find(c => c.cnpj === deal.billing_cnpj);
       if (!company || !company.webhookUrl) return;
 
@@ -492,13 +515,19 @@ export const CrmBoard: React.FC = () => {
       };
       try {
           if (editingDealId) {
-              await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId);
+              const { data, error } = await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId).select().single();
+              if (error) throw error;
+              
+              // Verifica gatilho ao atualizar por formulário
+              if (data) {
+                  dispatchNegotiationWebhook(data);
+              }
           } else {
               const dealNumber = generateDealNumber();
               const { data, error } = await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]).select().single();
               if (error) throw error;
               
-              // Dispara o Webhook após o salvamento bem-sucedido de uma nova negociação
+              // Verifica gatilho na criação
               if (data) {
                   dispatchNegotiationWebhook(data);
               }
@@ -740,7 +769,7 @@ export const CrmBoard: React.FC = () => {
                   </div>
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                       <button onClick={() => setShowTeamModal(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
-                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all">
+                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-lg font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all">
                           {isSavingTeam ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                           Salvar Equipe
                       </button>

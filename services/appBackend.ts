@@ -53,6 +53,13 @@ export interface Pipeline {
     created_at?: string;
 }
 
+export interface WebhookTrigger {
+    id: string;
+    pipelineName: string;
+    stageId: string;
+    createdAt?: string;
+}
+
 const generateDealNumber = () => {
     const now = new Date();
     const yyyy = now.getFullYear();
@@ -237,6 +244,34 @@ export const appBackend = {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_pipelines').delete().eq('id', id);
     if (error) throw error;
+  },
+
+  // --- WEBHOOK TRIGGERS (CONNECTION PLUG) ---
+  getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_webhook_triggers').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((t: any) => ({
+          id: t.id,
+          pipelineName: t.pipeline_name,
+          stageId: t.stage_id,
+          createdAt: t.created_at
+      }));
+  },
+
+  saveWebhookTrigger: async (trigger: Omit<WebhookTrigger, 'id'>): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_webhook_triggers').insert([{
+          pipeline_name: trigger.pipelineName,
+          stage_id: trigger.stageId
+      }]);
+      if (error) throw error;
+  },
+
+  deleteWebhookTrigger: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_webhook_triggers').delete().eq('id', id);
+      if (error) throw error;
   },
 
   // --- SYNC JOBS (CONNECTIONS) ---
@@ -1059,7 +1094,7 @@ export const appBackend = {
 
   deleteEvent: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_events').delete().eq('id', id);
+    const { error = null } = await supabase.from('crm_events').delete().eq('id', id);
     if (error) throw error;
   },
 
@@ -1080,7 +1115,7 @@ export const appBackend = {
 
   deleteBlock: async (id: string): Promise<void> => {
       if (!isConfigured) return;
-      const { error } = await supabase.from('crm_event_blocks').delete().eq('id', id);
+      const { error = null } = await supabase.from('crm_event_blocks').delete().eq('id', id);
       if (error) throw error;
   },
 

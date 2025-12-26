@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   CreditCard, Search, Filter, Download, Loader2, RefreshCw, 
   TrendingUp, AlertCircle, Calendar, DollarSign, User, ArrowRight,
-  CheckCircle2, XCircle, MoreHorizontal, Mail, Phone, Clock, Info
+  CheckCircle2, XCircle, MoreHorizontal, Mail, Phone, Clock, Info,
+  Copy, ExternalLink, FileText, X
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { BillingRecord } from '../types';
@@ -14,9 +15,21 @@ export const BillingManager: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
+  
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchData();
+    
+    // Fechar menu ao clicar fora
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const fetchData = async () => {
@@ -63,11 +76,12 @@ export const BillingManager: React.FC = () => {
     return records.map(r => ({
       ...r,
       _display_name: getFlexibleField(r, ['Nome do cliente', 'Cliente', 'Nome']),
-      _display_id: getFlexibleField(r, ['Identificador do cliente', 'Identificador', 'ID Cliente']),
+      _display_id_cliente: getFlexibleField(r, ['Identificador do cliente', 'Identificador', 'ID Cliente']),
       _display_ref: getFlexibleField(r, ['Código referência', 'Referência', 'Ref']),
       _display_comp: getFlexibleField(r, ['Data de competência', 'Competência']),
       _display_venc: getFlexibleField(r, ['Vencimento', 'Data de vencimento', 'Vencimento original']),
-      _display_valor: parseToNumber(getFlexibleField(r, ['Valor', 'Valor total', 'Valor da parcela'])),
+      _display_valor_original: parseToNumber(getFlexibleField(r, ['Valor original da parcela', 'Valor original', 'Valor nominal'])),
+      _display_valor_recebido: parseToNumber(getFlexibleField(r, ['Valor recebido da parcela', 'Valor recebido', 'Valor pago'])),
       _display_status: getFlexibleField(r, ['Status', 'Situação']) || 'Pendente'
     }));
   }, [records]);
@@ -75,7 +89,7 @@ export const BillingManager: React.FC = () => {
   const filteredRecords = useMemo(() => {
     return processedRecords.filter(r => {
       const name = String(r._display_name || '').toLowerCase();
-      const id = String(r._display_id || '').toLowerCase();
+      const id = String(r._display_id_cliente || '').toLowerCase();
       const ref = String(r._display_ref || '').toLowerCase();
       const search = searchTerm.toLowerCase();
 
@@ -88,15 +102,22 @@ export const BillingManager: React.FC = () => {
 
   const stats = useMemo(() => {
     const total = filteredRecords.length;
-    const totalValue = filteredRecords.reduce((acc, curr) => acc + curr._display_valor, 0);
+    const totalOriginal = filteredRecords.reduce((acc, curr) => acc + curr._display_valor_original, 0);
+    const totalRecebido = filteredRecords.reduce((acc, curr) => acc + curr._display_valor_recebido, 0);
     const paid = filteredRecords.filter(r => r._display_status === 'Pago' || r._display_status === 'Liquidado').length;
     const overdue = filteredRecords.filter(r => r._display_status === 'Atrasado' || r._display_status === 'Vencido').length;
     const pending = total - paid - overdue;
 
-    return { total, totalValue, pending, paid, overdue };
+    return { total, totalOriginal, totalRecebido, pending, paid, overdue };
   }, [filteredRecords]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    alert("ID do cliente copiado!");
+    setActiveMenuId(null);
+  };
 
   return (
     <div className="animate-in fade-in duration-500 space-y-6">
@@ -105,7 +126,7 @@ export const BillingManager: React.FC = () => {
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <CreditCard className="text-teal-600" /> Gestão de Cobrança
           </h2>
-          <p className="text-slate-500 text-sm">Controle de faturamento e contas a receber (Conta Azul).</p>
+          <p className="text-slate-500 text-sm">Controle de faturamento e recebimentos conciliados.</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={fetchData} className="p-2 text-slate-500 hover:text-teal-600 bg-white border border-slate-200 rounded-lg shadow-sm transition-colors">
@@ -118,9 +139,9 @@ export const BillingManager: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
           <div className="absolute right-0 top-0 p-4 opacity-5"><DollarSign size={64} className="text-teal-600" /></div>
-          <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total a Receber</p>
-          <h3 className="text-2xl font-black text-slate-800">{formatCurrency(stats.totalValue)}</h3>
-          <p className="text-[10px] text-slate-500 mt-2">{stats.total} lançamentos filtrados</p>
+          <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Recebido</p>
+          <h3 className="text-2xl font-black text-emerald-600">{formatCurrency(stats.totalRecebido)}</h3>
+          <p className="text-[10px] text-slate-500 mt-2">De um total original de {formatCurrency(stats.totalOriginal)}</p>
         </div>
         
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
@@ -134,7 +155,7 @@ export const BillingManager: React.FC = () => {
           <div className="absolute right-0 top-0 p-4 opacity-5"><Clock size={64} className="text-amber-600" /></div>
           <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Pendentes</p>
           <h3 className="text-2xl font-black text-amber-600">{stats.pending}</h3>
-          <p className="text-[10px] text-amber-500 mt-2">Aguardando vencimento</p>
+          <p className="text-[10px] text-green-500 mt-2">Aguardando vencimento</p>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
@@ -185,10 +206,9 @@ export const BillingManager: React.FC = () => {
                 <tr>
                   <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">ID</th>
                   <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Cliente</th>
-                  <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Referência</th>
-                  <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Competência</th>
                   <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Vencimento</th>
-                  <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Valor</th>
+                  <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Valor Original</th>
+                  <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Valor Recebido</th>
                   <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest text-center">Status</th>
                   <th className="px-6 py-4"></th>
                 </tr>
@@ -200,17 +220,12 @@ export const BillingManager: React.FC = () => {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-800">{record._display_name}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">ID: {record._display_id}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Ref: {record._display_ref || '--'}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                        {record._display_ref || '--'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-slate-500 text-xs">{record._display_comp || '--'}</td>
                     <td className="px-6 py-4 font-bold text-slate-700 text-xs">{record._display_venc || '--/--/----'}</td>
-                    <td className="px-6 py-4 font-black text-slate-900">{formatCurrency(record._display_valor)}</td>
+                    <td className="px-6 py-4 font-medium text-slate-600">{formatCurrency(record._display_valor_original)}</td>
+                    <td className="px-6 py-4 font-black text-emerald-600">{formatCurrency(record._display_valor_recebido)}</td>
                     <td className="px-6 py-4 text-center">
                       <span className={clsx(
                         "text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-tighter border",
@@ -221,10 +236,41 @@ export const BillingManager: React.FC = () => {
                         {record._display_status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="p-2 text-slate-400 hover:text-teal-600 rounded-lg transition-colors">
+                    <td className="px-6 py-4 text-right relative">
+                      <button 
+                        onClick={() => setActiveMenuId(activeMenuId === record.id ? null : record.id)}
+                        className="p-2 text-slate-400 hover:text-teal-600 rounded-lg transition-colors"
+                      >
                         <MoreHorizontal size={18} />
                       </button>
+                      
+                      {activeMenuId === record.id && (
+                        <div 
+                          ref={menuRef}
+                          className="absolute right-10 top-8 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 animate-in fade-in zoom-in-95 duration-100"
+                        >
+                          <button 
+                            onClick={() => handleCopyId(record._display_id_cliente || '')}
+                            className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                          >
+                            <Copy size={14} /> Copiar ID Cliente
+                          </button>
+                          <button 
+                            onClick={() => { alert("Recurso de detalhes em desenvolvimento."); setActiveMenuId(null); }}
+                            className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                          >
+                            <FileText size={14} /> Ver Detalhes
+                          </button>
+                          <div className="h-px bg-slate-100 my-1"></div>
+                          <button 
+                            onClick={() => setActiveMenuId(null)}
+                            className="w-full text-left px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2"
+                          >
+                            {/* Import X from lucide-react to fix the 'Cannot find name X' error */}
+                            <X size={14} /> Fechar Menu
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -237,8 +283,8 @@ export const BillingManager: React.FC = () => {
       <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 text-xs text-blue-800 shadow-sm">
         <Info className="text-blue-600 shrink-0" size={18} />
         <div>
-          <strong>Sincronização Automática:</strong> Os dados desta aba são alimentados via integração com o ERP Conta Azul. 
-          <br/>Se as informações não aparecerem corretamente, verifique se os cabeçalhos do arquivo original foram mantidos na importação.
+          <strong>Gestão Financeira:</strong> O <strong>Valor Original</strong> representa o que foi faturado, enquanto o <strong>Valor Recebido</strong> mostra o que foi efetivamente conciliado no banco via Conta Azul.
+          <br/>Use o botão de menu ao lado de cada linha para acessar ações rápidas sobre o cliente.
         </div>
       </div>
     </div>

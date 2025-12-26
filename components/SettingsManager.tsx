@@ -55,6 +55,29 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [logSearch, setLogSearch] = useState('');
 
+  // Lista exata de módulos do menu lateral para permissões
+  const PERMISSION_MODULES = [
+      { id: 'overview', label: 'Visão Geral' },
+      { id: 'hr', label: 'Recursos Humanos' },
+      { id: 'crm', label: 'CRM Comercial' },
+      { id: 'billing', label: 'Cobrança' },
+      { id: 'inventory', label: 'Controle de Estoque' },
+      { id: 'whatsapp', label: 'Atendimento' },
+      { id: 'analysis', label: 'Análise de Vendas' },
+      { id: 'forms', label: 'Formulários' },
+      { id: 'surveys', label: 'Pesquisas' },
+      { id: 'contracts', label: 'Contratos' },
+      { id: 'events', label: 'Eventos' },
+      { id: 'students', label: 'Alunos' },
+      { id: 'certificates', label: 'Certificados' },
+      { id: 'products', label: 'Produtos Digitais' },
+      { id: 'franchises', label: 'Franquias' },
+      { id: 'partner_studios', label: 'Studios Parceiros' },
+      { id: 'classes', label: 'Turmas' },
+      { id: 'teachers', label: 'Professores' },
+      { id: 'global_settings', label: 'Configurações' }
+  ];
+
   useEffect(() => {
       fetchGlobalSettings();
       if (activeTab === 'roles') fetchRoles();
@@ -402,8 +425,15 @@ NOTIFY pgrst, 'reload config';
                     <form onSubmit={handleSaveRole} className="bg-slate-50 p-6 rounded-xl border mb-6 space-y-4">
                         <label className="block text-xs font-bold">Nome do Perfil</label><input type="text" className="w-full p-2 border rounded text-sm mb-4" value={editingRole.name} onChange={e => setEditingRole({...editingRole, name: e.target.value})} required />
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {['overview', 'crm', 'inventory', 'analysis', 'classes', 'teachers', 'forms', 'surveys', 'contracts', 'products', 'students', 'certificates', 'events', 'partner_studios', 'collaborators', 'whatsapp', 'franchises', 'global_settings'].map(mod => (
-                                <label key={mod} className="flex items-center gap-2 p-2 bg-white border rounded cursor-pointer hover:bg-indigo-50"><input type="checkbox" checked={!!editingRole.permissions[mod]} onChange={e => setEditingRole({...editingRole, permissions: {...editingRole.permissions, [mod]: e.target.checked}})} /><span className="text-xs capitalize">{mod.replace('_', ' ')}</span></label>
+                            {PERMISSION_MODULES.map(mod => (
+                                <label key={mod.id} className="flex items-center gap-2 p-2 bg-white border rounded cursor-pointer hover:bg-indigo-50">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={!!editingRole.permissions[mod.id]} 
+                                        onChange={e => setEditingRole({...editingRole, permissions: {...editingRole.permissions, [mod.id]: e.target.checked}})} 
+                                    />
+                                    <span className="text-xs font-medium">{mod.label}</span>
+                                </label>
                             ))}
                         </div>
                         <div className="flex justify-end gap-2 pt-4"><button type="button" onClick={() => setEditingRole(null)} className="px-3 py-1 text-sm">Cancelar</button><button type="submit" className="bg-indigo-600 text-white px-4 py-1.5 rounded font-bold text-sm">Salvar Perfil</button></div>

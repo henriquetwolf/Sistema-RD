@@ -45,15 +45,34 @@ export const BillingManager: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Usando select('*') sem limites explícitos para carregar o volume completo para filtragem local
-      // O Supabase tem um limite padrão de 1000, para volumes maiores usaríamos paginação via servidor
-      const { data, error } = await appBackend.client
-        .from('Conta_Azul_Receber')
-        .select('*')
-        .order('id', { ascending: false });
+      let allData: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
 
-      if (error) throw error;
-      setRecords(data || []);
+      // Loop para buscar todos os registros, contornando o limite de 1000 do Supabase
+      while (hasMore) {
+        const { data, error } = await appBackend.client
+          .from('Conta_Azul_Receber')
+          .select('*')
+          .order('id', { ascending: false })
+          .range(from, from + step - 1);
+
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          if (data.length < step) {
+            hasMore = false;
+          } else {
+            from += step;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      setRecords(allData);
     } catch (e) {
       console.error("Erro ao buscar dados de cobrança:", e);
     } finally {
@@ -349,7 +368,6 @@ export const BillingManager: React.FC = () => {
               </button>
               <div className="flex items-center gap-1">
                 {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
-                    // Lógica simples para mostrar páginas próximas à atual
                     let pageNum = currentPage <= 3 ? i + 1 : (currentPage >= totalPages - 2 ? totalPages - 4 + i : currentPage - 2 + i);
                     if (pageNum <= 0) pageNum = i + 1;
                     if (pageNum > totalPages) return null;

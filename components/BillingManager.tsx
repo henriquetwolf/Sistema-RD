@@ -4,7 +4,7 @@ import {
   CreditCard, Search, Filter, Download, Loader2, RefreshCw, 
   TrendingUp, AlertCircle, Calendar, DollarSign, User, ArrowRight,
   CheckCircle2, XCircle, MoreHorizontal, Mail, Phone, Clock, Info,
-  Copy, ExternalLink, FileText, X, Hash, Tag, ArrowUpRight, ArrowDownRight
+  Copy, ExternalLink, FileText, X, Hash, Tag, ArrowUpRight, ArrowDownRight, Eraser
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { BillingRecord } from '../types';
@@ -15,6 +15,8 @@ export const BillingManager: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
   const [selectedDetailRecord, setSelectedDetailRecord] = useState<any | null>(null);
   
@@ -119,9 +121,27 @@ export const BillingManager: React.FC = () => {
       const matchesSearch = name.includes(search) || id.includes(search) || ref.includes(search);
       const matchesStatus = statusFilter === 'all' || r._display_status === statusFilter;
 
-      return matchesSearch && matchesStatus;
+      // Date Filtering Logic
+      let matchesDate = true;
+      if (startDate || endDate) {
+        const dateStr = r._display_venc;
+        if (dateStr) {
+          const parts = dateStr.split('/');
+          if (parts.length === 3) {
+            const recordDate = `${parts[2]}-${parts[1]}-${parts[0]}`; // YYYY-MM-DD
+            if (startDate && recordDate < startDate) matchesDate = false;
+            if (endDate && recordDate > endDate) matchesDate = false;
+          } else {
+            matchesDate = false;
+          }
+        } else {
+          matchesDate = false;
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [processedRecords, searchTerm, statusFilter]);
+  }, [processedRecords, searchTerm, statusFilter, startDate, endDate]);
 
   const stats = useMemo(() => {
     const totalValueOriginal = filteredRecords.reduce((acc, curr) => acc + curr._display_valor_original, 0);
@@ -150,6 +170,13 @@ export const BillingManager: React.FC = () => {
   const openDetails = (record: any) => {
     setSelectedDetailRecord(record);
     setActiveMenuId(null);
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setStartDate('');
+    setEndDate('');
   };
 
   return (
@@ -200,27 +227,65 @@ export const BillingManager: React.FC = () => {
       </div>
 
       {/* Toolbar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Buscar por cliente, identificador ou referência..." 
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
-          />
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Buscar por cliente, identificador ou referência..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+            />
+          </div>
+          <select 
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="bg-white border border-slate-200 text-slate-600 text-sm rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            <option value="all">Todos os Status</option>
+            <option value="Pago">Pago</option>
+            <option value="Pendente">Pendente</option>
+            <option value="Atrasado">Atrasado</option>
+          </select>
         </div>
-        <select 
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="bg-white border border-slate-200 text-slate-600 text-sm rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-teal-500"
-        >
-          <option value="all">Todos os Status</option>
-          <option value="Pago">Pago</option>
-          <option value="Pendente">Pendente</option>
-          <option value="Atrasado">Atrasado</option>
-        </select>
+
+        <div className="flex flex-col md:flex-row items-end md:items-center gap-4 pt-3 border-t border-slate-100">
+          <div className="flex items-center gap-2 text-slate-400 mr-2">
+            <Filter size={16} />
+            <span className="text-xs font-bold uppercase ml-1">Filtro de Vencimento:</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase">De:</label>
+            <input 
+              type="date" 
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className="bg-slate-50 border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase">Até:</label>
+            <input 
+              type="date" 
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              className="bg-slate-50 border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+
+          {(searchTerm || statusFilter !== 'all' || startDate || endDate) && (
+            <button 
+              onClick={clearFilters}
+              className="flex items-center gap-1.5 text-xs font-bold text-red-500 hover:text-red-700 transition-colors ml-auto px-3 py-1.5 hover:bg-red-50 rounded-lg"
+            >
+              <Eraser size={14} /> Limpar Filtros
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table */}

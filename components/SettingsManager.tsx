@@ -6,10 +6,10 @@ import {
     Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2,
     Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
     Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search,
-    Play, Pause, Calendar, Smartphone, Link as LinkIcon, ChevronDown, Award
+    Play, Pause, Calendar, Smartphone, Link as LinkIcon, ChevronDown, Award, ShoppingBag
 } from 'lucide-react';
 import { appBackend, CompanySetting } from '../services/appBackend';
-import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob } from '../types';
+import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, Product } from '../types';
 import clsx from 'clsx';
 
 interface SettingsManagerProps {
@@ -44,8 +44,10 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [isLoadingBanners, setIsLoadingBanners] = useState(false);
 
   const [companies, setCompanies] = useState<CompanySetting[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Partial<CompanySetting> | null>(null);
+  const [productSearch, setProductSearch] = useState('');
 
   const [instructorLevels, setInstructorLevels] = useState<InstructorLevel[]>([]);
   const [isLoadingLevels, setIsLoadingLevels] = useState(false);
@@ -82,7 +84,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       fetchGlobalSettings();
       if (activeTab === 'roles') fetchRoles();
       else if (activeTab === 'banners') fetchBanners();
-      else if (activeTab === 'company') fetchCompanies();
+      else if (activeTab === 'company') { fetchCompanies(); fetchProducts(); }
       else if (activeTab === 'instructor_levels') fetchInstructorLevels();
       else if (activeTab === 'logs') fetchLogs();
   }, [activeTab]);
@@ -107,6 +109,13 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const fetchCompanies = async () => {
       setIsLoadingCompanies(true);
       try { const data = await appBackend.getCompanies(); setCompanies(data); } catch(e) { console.error(e); } finally { setIsLoadingCompanies(false); }
+  };
+
+  const fetchProducts = async () => {
+      try {
+          const { data } = await appBackend.client.from('crm_products').select('*').order('name');
+          if (data) setProducts(data);
+      } catch (e) {}
   };
 
   const fetchInstructorLevels = async () => {
@@ -145,8 +154,11 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V17)
--- ADIÇÃO DE TABELA DE NEGOCIAÇÕES DE COBRANÇA
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V17.1)
+-- ATUALIZAÇÃO DE TABELA DE EMPRESAS PARA PRODUTOS ESPECÍFICOS
+
+ALTER TABLE IF EXISTS public.crm_companies 
+ADD COLUMN IF NOT EXISTS product_ids text[] DEFAULT '{}';
 
 -- 1. CRIAR TABELA DE NEGOCIAÇÕES DE COBRANÇA
 CREATE TABLE IF NOT EXISTS public.crm_billing_negotiations (
@@ -219,6 +231,24 @@ NOTIFY pgrst, 'reload config';
     await appBackend.saveInstructorLevel(editingLevel as InstructorLevel);
     fetchInstructorLevels();
     setEditingLevel(null);
+  };
+
+  const toggleCompanyProductType = (type: string) => {
+      if (!editingCompany) return;
+      const currentTypes = editingCompany.productTypes || [];
+      const newTypes = currentTypes.includes(type) 
+        ? currentTypes.filter(t => t !== type)
+        : [...currentTypes, type];
+      setEditingCompany({ ...editingCompany, productTypes: newTypes });
+  };
+
+  const toggleCompanyProductId = (id: string) => {
+      if (!editingCompany) return;
+      const currentIds = editingCompany.productIds || [];
+      const newIds = currentIds.includes(id) 
+        ? currentIds.filter(i => i !== id)
+        : [...currentIds, id];
+      setEditingCompany({ ...editingCompany, productIds: newIds });
   };
 
   return (
@@ -404,17 +434,89 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'company' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-bold text-slate-800">Empresas do Grupo</h3><button onClick={() => setEditingCompany({ legalName: '', cnpj: '', productTypes: [] })} className="bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ Nova Empresa</button></div>
+                <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-bold text-slate-800">Empresas do Grupo</h3><button onClick={() => setEditingCompany({ legalName: '', cnpj: '', productTypes: [], productIds: [] })} className="bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ Nova Empresa</button></div>
                 {editingCompany && (
-                    <form onSubmit={handleSaveCompany} className="bg-slate-50 p-6 rounded-xl border mb-6 space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div><label className="block text-xs font-bold mb-1">Razão Social</label><input type="text" className="w-full p-2 border rounded text-sm" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} required /></div>
-                            <div><label className="block text-xs font-bold mb-1">CNPJ</label><input type="text" className="w-full p-2 border rounded text-sm" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} required /></div>
+                    <form onSubmit={handleSaveCompany} className="bg-slate-50 p-6 rounded-xl border mb-6 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label className="block text-xs font-bold mb-1">Razão Social</label><input type="text" className="w-full p-2 border rounded text-sm font-bold" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} required /></div>
+                            <div><label className="block text-xs font-bold mb-1">CNPJ</label><input type="text" className="w-full p-2 border rounded text-sm font-mono" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} required /></div>
                         </div>
-                        <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingCompany(null)} className="px-3 py-1 text-sm">Cancelar</button><button type="submit" className="bg-teal-600 text-white px-4 py-1.5 rounded font-bold text-sm">Salvar</button></div>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* TIPOS DE PRODUTOS */}
+                            <div className="bg-white p-4 rounded-lg border border-slate-200">
+                                <label className="block text-xs font-black text-teal-700 uppercase tracking-widest mb-3">Associar Tipos de Produtos</label>
+                                <div className="flex flex-wrap gap-4">
+                                    {['Digital', 'Presencial', 'Evento'].map(type => (
+                                        <label key={type} className="flex items-center gap-2 cursor-pointer group">
+                                            <input 
+                                                type="checkbox" 
+                                                className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500" 
+                                                checked={(editingCompany.productTypes || []).includes(type)} 
+                                                onChange={() => toggleCompanyProductType(type)}
+                                            />
+                                            <span className="text-sm font-medium text-slate-700 group-hover:text-teal-600 transition-colors">{type}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-2 italic leading-tight">O CRM utilizará esta regra padrão para definir o CNPJ no faturamento do negócio.</p>
+                            </div>
+
+                            {/* PRODUTOS ESPECÍFICOS */}
+                            <div className="bg-white p-4 rounded-lg border border-slate-200 flex flex-col max-h-[300px]">
+                                <div className="flex items-center justify-between mb-3 shrink-0">
+                                    <label className="block text-xs font-black text-indigo-700 uppercase tracking-widest">Produtos Específicos</label>
+                                    <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{(editingCompany.productIds || []).length} selecionados</span>
+                                </div>
+                                <div className="relative mb-3 shrink-0">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
+                                    <input type="text" placeholder="Filtrar produtos..." className="w-full pl-7 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs" value={productSearch} onChange={e => setProductSearch(e.target.value)} />
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1 p-1">
+                                    {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).map(p => (
+                                        <label key={p.id} className={clsx("flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors group", (editingCompany.productIds || []).includes(p.name) ? "bg-indigo-50" : "hover:bg-slate-50")}>
+                                            <input 
+                                                type="checkbox" 
+                                                className="w-3.5 h-3.5 rounded text-indigo-600" 
+                                                checked={(editingCompany.productIds || []).includes(p.name)} 
+                                                onChange={() => toggleCompanyProductId(p.name)} 
+                                            />
+                                            <span className="text-[11px] font-medium text-slate-700 group-hover:text-indigo-600">{p.name}</span>
+                                        </label>
+                                    ))}
+                                    {products.length === 0 && <p className="text-[10px] text-slate-400 italic py-4 text-center">Nenhum produto cadastrado.</p>}
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-2 italic leading-tight">Associações por produto específico têm precedência sobre o tipo de produto.</p>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-4 border-t"><button type="button" onClick={() => setEditingCompany(null)} className="px-3 py-1 text-sm">Cancelar</button><button type="submit" className="bg-teal-600 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-md">Salvar Empresa</button></div>
                     </form>
                 )}
-                <div className="space-y-2">{companies.map(c => <div key={c.id} className="p-3 border rounded-lg flex justify-between items-center"><div className="font-bold text-sm">{c.legalName} <span className="text-xs text-slate-400 ml-2">{c.cnpj}</span></div><button onClick={() => appBackend.deleteCompany(c.id).then(fetchCompanies)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></div>)}</div>
+                <div className="space-y-2">
+                    {companies.map(c => (
+                        <div key={c.id} className="p-4 border rounded-xl flex justify-between items-center bg-white hover:border-teal-100 transition-all">
+                            <div>
+                                <div className="font-bold text-sm text-slate-800">{c.legalName}</div>
+                                <div className="flex flex-wrap items-center gap-3 mt-1">
+                                    <span className="text-xs text-slate-400 font-mono">{c.cnpj}</span>
+                                    <div className="flex flex-wrap gap-1">
+                                        {(c.productTypes || []).map(t => <span key={t} className="text-[8px] font-black uppercase bg-teal-50 text-teal-600 px-1.5 py-0.5 rounded border border-teal-100">{t}</span>)}
+                                        {(c.productIds || []).length > 0 && (
+                                            <span className="text-[8px] font-black uppercase bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1">
+                                                <ShoppingBag size={8}/> {(c.productIds || []).length} Produtos
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex gap-1">
+                                <button onClick={() => setEditingCompany(c)} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit2 size={16}/></button>
+                                <button onClick={() => appBackend.deleteCompany(c.id).then(fetchCompanies)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         )}
 

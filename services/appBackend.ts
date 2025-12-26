@@ -35,6 +35,7 @@ export interface CompanySetting {
     legalName: string;
     cnpj: string;
     productTypes: string[]; 
+    productIds: string[]; // Novo: Associação de produtos específicos
 }
 
 // Pipelines management types
@@ -160,10 +161,10 @@ export const appBackend = {
       observations: row.observations,
       status: row.status,
       team: row.team,
-      voucherLink1: row.voucher_link_1,
+      voucher_link_1: row.voucher_link_1,
       testDate: row.test_date,
-      voucherLink2: row.voucher_link_2,
-      voucherLink3: row.voucher_link_3,
+      voucher_link_2: row.voucher_link_2,
+      voucher_link_3: row.voucher_link_3,
       boletosLink: row.boletos_link,
       negotiationReference: row.negotiation_reference,
       attachments: row.attachments,
@@ -391,12 +392,24 @@ export const appBackend = {
   getCompanies: async (): Promise<CompanySetting[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_companies').select('*').order('created_at', { ascending: true });
-      return (data || []).map((c: any) => ({ id: c.id, legalName: c.legal_name, cnpj: c.cnpj, productTypes: c.product_types || [] }));
+      return (data || []).map((c: any) => ({ 
+          id: c.id, 
+          legalName: c.legal_name, 
+          cnpj: c.cnpj, 
+          productTypes: c.product_types || [],
+          productIds: c.product_ids || [] 
+      }));
   },
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: company.id || undefined, legal_name: company.legalName, cnpj: company.cnpj, product_types: company.productTypes };
+      const payload = { 
+          id: company.id || undefined, 
+          legal_name: company.legalName, 
+          cnpj: company.cnpj, 
+          product_types: company.productTypes,
+          product_ids: company.productIds 
+      };
       const { error } = await supabase.from('crm_companies').upsert(payload);
       if (error) throw error;
   },

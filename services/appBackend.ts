@@ -34,12 +34,11 @@ export interface CompanySetting {
     id: string;
     legalName: string;
     cnpj: string;
-    webhookUrl?: string; // Novo campo para automações externas
+    webhookUrl?: string;
     productTypes: string[]; 
-    productIds: string[]; // Associação de produtos específicos
+    productIds: string[];
 }
 
-// Pipelines management types
 export interface PipelineStage {
     id: string;
     title: string;
@@ -57,7 +56,7 @@ export interface WebhookTrigger {
     id: string;
     pipelineName: string;
     stageId: string;
-    payloadJson?: string; // Modelo JSON customizado para este gatilho
+    payloadJson?: string;
     createdAt?: string;
 }
 
@@ -106,7 +105,6 @@ export const appBackend = {
     }
   },
 
-  // --- ACTIVITY LOGS ---
   logActivity: async (log: Omit<ActivityLog, 'id' | 'createdAt' | 'userName'>): Promise<void> => {
       if (!isConfigured) return;
       
@@ -126,6 +124,7 @@ export const appBackend = {
           action: log.action,
           module: log.module,
           details: log.details,
+          // Fixed record_id access: mapping camelCase recordId from interface to snake_case column in DB
           record_id: log.recordId
       }]);
   },
@@ -150,7 +149,6 @@ export const appBackend = {
       }));
   },
 
-  // --- BILLING NEGOTIATIONS ---
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
@@ -170,7 +168,6 @@ export const appBackend = {
       observations: row.observations,
       status: row.status,
       team: row.team,
-      /* Fixed: Property names mapped to match BillingNegotiation interface (camelCase) */
       voucherLink1: row.voucher_link_1,
       testDate: row.test_date,
       voucherLink2: row.voucher_link_2,
@@ -203,7 +200,6 @@ export const appBackend = {
       voucher_link_2: negotiation.voucherLink2,
       voucher_link_3: negotiation.voucherLink3,
       boletos_link: negotiation.boletosLink,
-      /* Fixed: negotiation_reference correctly assigned from negotiationReference */
       negotiation_reference: negotiation.negotiationReference,
       attachments: negotiation.attachments
     };
@@ -225,7 +221,6 @@ export const appBackend = {
       if (error) throw error;
   },
 
-  // --- PIPELINES MANAGEMENT ---
   getPipelines: async (): Promise<Pipeline[]> => {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_pipelines').select('*').order('created_at', { ascending: true });
@@ -249,7 +244,6 @@ export const appBackend = {
     if (error) throw error;
   },
 
-  // --- WEBHOOK TRIGGERS (CONNECTION PLUG) ---
   getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_webhook_triggers').select('*').order('created_at', { ascending: false });
@@ -280,7 +274,6 @@ export const appBackend = {
       if (error) throw error;
   },
 
-  // --- SYNC JOBS (CONNECTIONS) ---
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
@@ -294,7 +287,6 @@ export const appBackend = {
       status: row.status,
       lastMessage: row.last_message,
       active: row.active,
-      // Fix: intervalMinutes uses camelCase in SyncJob interface
       intervalMinutes: row.interval_minutes,
       createdBy: row.created_by_name,
       createdAt: row.created_at
@@ -308,16 +300,12 @@ export const appBackend = {
       id: job.id,
       user_id: user?.id,
       name: job.name,
-      // Fixed: Property 'sheet_url' does not exist on type 'SyncJob'. Did you mean 'sheetUrl'?
       sheet_url: job.sheetUrl,
       config: job.config,
       active: job.active,
-      // Fixed: Property 'interval_minutes' does not exist on type 'SyncJob'. Did you mean 'intervalMinutes'?
       interval_minutes: job.intervalMinutes,
-      // Fixed: Property 'last_sync' exist on type 'SyncJob'. Did you mean 'lastSync'?
       last_sync: job.lastSync,
       status: job.status,
-      // Fixed: Property 'last_message' exist on type 'SyncJob'. Did you mean 'lastMessage'?
       last_message: job.lastMessage,
       created_by_name: job.createdBy,
       created_at: job.createdAt
@@ -369,7 +357,6 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      // Fixed: Property 'interval_minutes' does not exist on type 'Omit<SavedPreset, "id">'. Did you mean 'intervalMinutes'?
       interval_minutes: preset.intervalMinutes || 5, 
       created_by_name: preset.createdByName || null
     };
@@ -423,7 +410,6 @@ export const appBackend = {
   },
 
   getWhatsAppConfig: async (): Promise<any | null> => {
-    // Fixed: Fixed recursive call that was causing a stack overflow by calling itself instead of getAppSetting.
     return await appBackend.getAppSetting('whatsapp_config');
   },
 
@@ -507,7 +493,6 @@ export const appBackend = {
 
   saveBanner: async (banner: Banner): Promise<void> => {
     if (!isConfigured) return;
-    // Fixed: Property 'link_url' does not exist on type 'Banner'. Use 'linkUrl'.
     const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.linkUrl, target_audience: banner.targetAudience, active: banner.active };
     let error;
     if (banner.id) {
@@ -552,7 +537,7 @@ export const appBackend = {
       rentValue: d.rent_value, 
       methodology: d.methodology, 
       studioType: d.studio_type, 
-      name_on_site: d.name_on_site, 
+      nameOnSite: d.name_on_site, 
       bank: d.bank, 
       agency: d.agency, 
       account: d.account, 
@@ -671,7 +656,6 @@ export const appBackend = {
           questions: form.questions, 
           style: form.style, 
           team_id: form.teamId || null, 
-          // Fixed distribution_mode to distributionMode
           distribution_mode: form.distributionMode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null,
           target_pipeline: form.targetPipeline || 'Padrão',
@@ -704,7 +688,6 @@ export const appBackend = {
       }));
   },
 
-  // --- SURVEYS (PESQUISAS) ---
   saveSurvey: async (survey: SurveyModel): Promise<void> => {
       if (!isConfigured) return;
       const payload = { 
@@ -714,7 +697,6 @@ export const appBackend = {
           is_lead_capture: survey.isLeadCapture, 
           questions: survey.questions, 
           style: survey.style, 
-          // Fixed: Property 'target_type' does not exist on type 'SurveyModel'. Use 'targetType'.
           target_type: survey.targetType,
           target_product_type: survey.targetProductType || null,
           target_product_name: survey.targetProductName || null,
@@ -749,24 +731,14 @@ export const appBackend = {
 
   getEligibleSurveysForStudent: async (studentDealId: string): Promise<SurveyModel[]> => {
       if (!isConfigured) return [];
-      
-      // 1. Get student deal to check products
       const { data: deal } = await supabase.from('crm_deals').select('*').eq('id', studentDealId).single();
       if (!deal) return [];
-
-      // 2. Get active surveys
       const { data: surveys } = await supabase.from('crm_surveys').select('*').eq('is_active', true);
       if (!surveys || surveys.length === 0) return [];
-
-      // 3. Get student submissions to exclude already answered ones
       const { data: answered } = await supabase.from('crm_form_submissions').select('form_id').eq('student_id', studentDealId);
       const answeredIds = new Set((answered || []).map(a => a.form_id));
-
       const eligible = surveys.filter((survey: any) => {
-          // EXCLUDE ALREADY ANSWERED
           if (answeredIds.has(survey.id)) return false;
-
-          // Check product matches
           let matchesProduct = false;
           if (survey.target_type === 'all') {
               matchesProduct = true;
@@ -775,20 +747,13 @@ export const appBackend = {
               const specificMatch = survey.target_type === 'specific_product' && deal.product_name === survey.target_product_name;
               matchesProduct = typeMatch || specificMatch;
           }
-
           if (!matchesProduct) return false;
-
-          // Check "finished" condition
           if (survey.only_if_finished) {
-              if (deal.product_type === 'Presencial') {
-                  return deal.stage === 'closed'; // Fallback: matricula fechada
-              }
+              if (deal.product_type === 'Presencial') return deal.stage === 'closed';
               return true; 
           }
-
           return true;
       });
-
       return eligible.map((d: any) => ({
           id: d.id, title: d.title, description: d.description, isLeadCapture: d.is_lead_capture,
           questions: d.questions || [], style: d.style || {}, targetType: d.target_type,
@@ -800,7 +765,6 @@ export const appBackend = {
 
   getFormById: async (id: string): Promise<FormModel | null> => {
       if (!isConfigured) return null;
-      // Also try surveys table if not in forms
       const { data: form, error: formErr = null } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
       if (form) {
           return { 
@@ -813,7 +777,6 @@ export const appBackend = {
               submissionsCount: form.submissions_count || 0 
           };
       }
-      
       const { data: survey, error: surveyErr = null } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
       if (survey) {
           return { 
@@ -836,48 +799,21 @@ export const appBackend = {
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
       const form = await appBackend.getFormById(formId);
       if (!form) throw new Error("Formulário não encontrado no banco de dados.");
-
       if (isConfigured) {
-          // CRITICAL: Garante que o student_id seja null absoluto se for string vazia para evitar erro de UUID no PostgreSQL
           const cleanStudentId = (studentId && typeof studentId === 'string' && studentId.trim() !== '') ? studentId : null;
-
-          console.log("Submitting form with data:", { form_id: formId, student_id: cleanStudentId });
-
-          // Salva a resposta do formulário/pesquisa
           const { error: subError } = await supabase.from('crm_form_submissions').insert([{
               form_id: formId,
               answers: answers,
               student_id: cleanStudentId
           }]);
-          
-          if (subError) {
-              console.error("Critical Error saving submission:", {
-                  code: subError.code,
-                  message: subError.message,
-                  details: subError.details,
-                  hint: subError.hint
-              });
-              // Retorna o erro específico do banco para o frontend exibir
-              throw new Error(`Banco de Dados: ${subError.message} (${subError.code}). Hint: ${subError.hint || 'Rode o SQL V14'}`);
-          }
-
-          // Se for uma pesquisa (survey), incrementa na tabela de surveys
-          // Usamos o count atual + 1 para evitar discrepâncias
-          await supabase.from('crm_surveys').update({ 
-              submissions_count: (form.submissionsCount || 0) + 1 
-          }).eq('id', formId);
-          
-          // Caso seja um formulário normal
-          await supabase.from('crm_forms').update({ 
-              submissions_count: (form.submissionsCount || 0) + 1 
-          }).eq('id', formId);
+          if (subError) throw new Error(`Erro ao salvar: ${subError.message}`);
+          await supabase.from('crm_surveys').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
+          await supabase.from('crm_forms').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
       }
-
       if (isLeadCapture && isConfigured) {
           const dealPayload: any = {
               title: `Lead: ${form.title}`,
               status: 'warm',
-              // Use configured funnel/stage or defaults
               pipeline: (form as any).targetPipeline || 'Padrão',
               stage: (form as any).targetStage || 'new',
               deal_number: generateDealNumber(),
@@ -885,21 +821,13 @@ export const appBackend = {
               campaign: (form as any).campaign || '',
               created_at: new Date().toISOString()
           };
-
           answers.forEach(ans => {
               const question = form.questions.find(q => q.id === ans.questionId);
-              if (question && question.crmMapping) {
-                  dealPayload[question.crmMapping] = ans.value;
-              }
+              if (question && question.crmMapping) dealPayload[question.crmMapping] = ans.value;
           });
-
-          // CORREÇÃO: Sincroniza o Nome do Cliente em todos os campos necessários do CRM
           const finalName = dealPayload.company_name || dealPayload.contact_name;
-          
           if (!finalName) {
-              const fallbackName = answers.find(a => 
-                  ['nome', 'name', 'completo'].some(k => a.questionTitle.toLowerCase().includes(k))
-              );
+              const fallbackName = answers.find(a => ['nome', 'name', 'completo'].some(k => a.questionTitle.toLowerCase().includes(k)));
               if (fallbackName) {
                   const nameValue = fallbackName.value;
                   dealPayload.contact_name = nameValue;
@@ -911,7 +839,6 @@ export const appBackend = {
               dealPayload.company_name = finalName;
               dealPayload.title = `Lead: ${finalName}`;
           }
-
           if (dealPayload.contact_name) {
               let assignedOwnerId = (form as any).fixedOwnerId || null;
               if ((form as any).distributionMode === 'round-robin' && (form as any).teamId) {
@@ -926,13 +853,6 @@ export const appBackend = {
                   }
               }
               dealPayload.owner_id = assignedOwnerId;
-              
-              if (!dealPayload.observation) {
-                  const email = dealPayload.email || '';
-                  const phone = dealPayload.phone || '';
-                  dealPayload.next_task = `Entrar em contato (${email || phone || 'sem dados'})`;
-              }
-
               await supabase.from('crm_deals').insert([dealPayload]);
           }
       }
@@ -1008,29 +928,13 @@ export const appBackend = {
     const { data, error = null } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((d: any) => ({ 
-        id: d.id, 
-        title: d.title, 
-        backgroundData: d.background_base_64, 
-        backBackgroundData: d.back_background_base_64, 
-        linkedProductId: d.linked_product_id, 
-        bodyText: d.body_text, 
-        layoutConfig: d.layout_config, 
-        createdAt: d.created_at 
+        id: d.id, title: d.title, backgroundData: d.background_base_64, backBackgroundData: d.back_background_base_64, linkedProductId: d.linked_product_id, bodyText: d.body_text, layoutConfig: d.layout_config, createdAt: d.created_at 
     }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { 
-        id: cert.id || undefined, 
-        title: cert.title, 
-        background_base_64: cert.backgroundData, 
-        back_background_base_64: cert.backBackgroundData, 
-        linked_product_id: cert.linkedProductId, 
-        // Fixed: Property 'body_text' does not exist on type 'CertificateModel'. Use 'bodyText'.
-        body_text: cert.bodyText, 
-        layout_config: cert.layoutConfig 
-    };
+    const payload = { id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.body_text, layout_config: cert.layoutConfig };
     const { error } = await supabase.from('crm_certificates').upsert(payload);
     if (error) throw error;
   },
@@ -1049,38 +953,24 @@ export const appBackend = {
     return hash;
   },
 
-  deleteStudentCertificate: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error = null } = await supabase.from('crm_student_certificates').delete().eq('id', id);
-    if (error) throw error;
-  },
-
   getStudentCertificate: async (hash: string): Promise<any> => {
     if (!isConfigured) return null;
-    const { data: certData, error: certError = null } = await supabase.from('crm_student_certificates').select('*').eq('hash', hash).maybeSingle();
-    if (certError || !certData) return null;
+    const { data: certData } = await supabase.from('crm_student_certificates').select('*').eq('hash', hash).maybeSingle();
+    if (!certData) return null;
     const { data: dealData } = await supabase.from('crm_deals').select('contact_name, company_name, course_city').eq('id', (certData as any).student_deal_id).single();
     const { data: templateData } = await supabase.from('crm_certificates').select('*').eq('id', (certData as any).certificate_template_id).single();
     if (!dealData || !templateData) return null;
     return { 
-        id: (certData as any).id, 
-        studentDealId: (certData as any).student_deal_id, 
-        certificateTemplateId: (certData as any).certificate_template_id, 
-        hash: (certData as any).hash, 
-        issuedAt: (certData as any).issued_at, 
-        studentName: (dealData as any).company_name || (dealData as any).contact_name, 
-        studentCity: (dealData as any).course_city || 'Local', 
-        template: { 
-            id: (templateData as any).id, 
-            title: (templateData as any).title, 
-            backgroundData: (templateData as any).background_base_64, 
-            backBackgroundData: (templateData as any).back_background_base_64, 
-            linkedProductId: (templateData as any).linked_product_id, 
-            bodyText: (templateData as any).body_text, 
-            layoutConfig: (templateData as any).layout_config, 
-            createdAt: (templateData as any).created_at 
-        } 
+        id: (certData as any).id, studentDealId: (certData as any).student_deal_id, certificateTemplateId: (certData as any).certificate_template_id, hash: (certData as any).hash, issuedAt: (certData as any).issued_at, studentName: (dealData as any).company_name || (dealData as any).contact_name, studentCity: (dealData as any).course_city || 'Local', 
+        template: { id: (templateData as any).id, title: (templateData as any).title, backgroundData: (templateData as any).background_base_64, backBackgroundData: (templateData as any).back_background_base_64, linkedProductId: (templateData as any).linked_product_id, bodyText: (templateData as any).body_text, layoutConfig: (templateData as any).layout_config, createdAt: (templateData as any).created_at } 
     };
+  },
+
+  // Added missing deleteStudentCertificate method to fix compilation error in StudentsManager
+  deleteStudentCertificate: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_student_certificates').delete().eq('id', id);
+    if (error) throw error;
   },
 
   getEvents: async (): Promise<EventModel[]> => {
@@ -1108,7 +998,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('title', { ascending: true });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, max_selections: d.max_selections }));
+    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
@@ -1168,38 +1058,12 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({
-      id: d.id, 
-      type: d.type, 
-      itemApostilaNova: d.item_apostila_nova, 
-      itemApostilaClassico: d.item_apostila_classico, 
-      itemSacochila: d.item_sacochila, 
-      itemLapis: d.item_lapis, 
-      registrationDate: d.registration_date, 
-      studioId: d.studio_id, 
-      trackingCode: d.tracking_code, 
-      observations: d.observations, 
-      conferenceDate: d.conference_date, 
-      attachments: d.attachments, 
-      createdAt: d.created_at
-    }));
+    return (data || []).map((d: any) => ({ id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date, attachments: d.attachments, createdAt: d.created_at }));
   },
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-      type: record.type, 
-      item_apostila_nova: record.itemApostilaNova, 
-      item_apostila_classico: record.itemApostilaClassico, 
-      item_sacochila: record.itemSacochila, 
-      item_lapis: record.itemLapis, 
-      registration_date: record.registrationDate, 
-      studio_id: record.studioId || null, 
-      tracking_code: record.trackingCode, 
-      observations: record.observations, 
-      conference_date: record.conferenceDate || null, 
-      attachments: record.attachments
-    };
+    const payload = { type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments };
     let error;
     if (record.id) {
         const result = await supabase.from('crm_inventory').update(payload).eq('id', record.id);

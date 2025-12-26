@@ -75,7 +75,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [isSavingTrigger, setIsSavingTrigger] = useState(false);
   const [isLoadingTriggers, setIsLoadingTriggers] = useState(false);
 
-  // Lista exata de módulos do menu lateral para permissões
   const PERMISSION_MODULES = [
       { id: 'overview', label: 'Visão Geral' },
       { id: 'hr', label: 'Recursos Humanos' },
@@ -170,7 +169,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       } catch (e) {}
   };
 
-  // Filtragem dos produtos específicos baseada nos tipos selecionados para a empresa
   const filteredProductsBySelectedTypes = useMemo(() => {
       if (!editingCompany) return [];
       const selectedTypes = editingCompany.productTypes || [];
@@ -219,26 +217,21 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const generateRepairSQL = () => `
 -- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V18.1)
--- ATUALIZAÇÃO DE TABELA DE EMPRESAS E TRIGGER DE WEBHOOKS
-
 ALTER TABLE IF EXISTS public.crm_companies 
 ADD COLUMN IF NOT EXISTS product_ids text[] DEFAULT '{}',
 ADD COLUMN IF NOT EXISTS webhook_url text;
 
--- ATUALIZAR TABELA DE GATILHOS DE WEBHOOK (CONNECTION PLUG)
 CREATE TABLE IF NOT EXISTS public.crm_webhook_triggers (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     pipeline_name text NOT NULL,
     stage_id text NOT NULL,
-    payload_json text, -- NOVO CAMPO PARA JSON CUSTOMIZADO
+    payload_json text, 
     created_at timestamptz DEFAULT now()
 );
 
--- ADICIONAR COLUNA CASO JÁ EXISTA A TABELA
 ALTER TABLE IF EXISTS public.crm_webhook_triggers 
 ADD COLUMN IF NOT EXISTS payload_json text;
 
--- 1. CRIAR TABELA DE NEGOCIAÇÕES DE COBRANÇA
 CREATE TABLE IF NOT EXISTS public.crm_billing_negotiations (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     open_installments integer DEFAULT 0,
@@ -265,11 +258,8 @@ CREATE TABLE IF NOT EXISTS public.crm_billing_negotiations (
     updated_at timestamptz DEFAULT now()
 );
 
--- PERMISSÕES
 GRANT ALL ON public.crm_webhook_triggers TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_billing_negotiations TO anon, authenticated, service_role;
-
--- RELOAD
 NOTIFY pgrst, 'reload config';
   `.trim();
 
@@ -307,7 +297,6 @@ NOTIFY pgrst, 'reload config';
       setCustomJson(JSON.stringify(defaultFormat, null, 2));
   };
 
-  // Handlers para CRUDs
   const handleSaveRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRole) return;
@@ -352,8 +341,6 @@ NOTIFY pgrst, 'reload config';
 
   const handleSaveWebhookTrigger = async () => {
       if (!selectedFunnel || !selectedStage) return;
-      
-      // Validação básica do JSON se preenchido
       if (customJson.trim()) {
           try {
               JSON.parse(customJson);
@@ -414,7 +401,6 @@ NOTIFY pgrst, 'reload config';
           const productsToRemove = allProducts.filter(p => p.type === type).map(p => p.name);
           newProductIds = newProductIds.filter(id => !productsToRemove.includes(id));
       }
-
       setEditingCompany({ ...editingCompany, productTypes: newTypes, productIds: newProductIds });
   };
 
@@ -489,7 +475,6 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
-        {/* CONNECTION PLUG (WEBHOOK TRIGGERS) */}
         {activeTab === 'connection_plug' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 space-y-8 animate-in fade-in zoom-in-95">
                 <div className="flex items-center justify-between border-b pb-4">
@@ -553,86 +538,46 @@ NOTIFY pgrst, 'reload config';
                             value={customJson}
                             onChange={e => setCustomJson(e.target.value)}
                         />
-                        <p className="text-[10px] text-slate-400 mt-2 italic">
-                            Dica: Use <strong>{"{{nome_cliente}}"}</strong>, <strong>{"{{valor_total}}"}</strong>, <strong>{"{{deal_number}}"}</strong> etc, para preenchimento dinâmico.
-                        </p>
                     </div>
 
                     <div className="flex justify-end gap-3">
                         {editingTriggerId && (
-                            <button 
-                                onClick={cancelEditTrigger}
-                                className="px-6 py-2.5 text-slate-600 font-bold text-sm"
-                            >
-                                Cancelar Edição
-                            </button>
+                            <button onClick={cancelEditTrigger} className="px-6 py-2.5 text-slate-600 font-bold text-sm">Cancelar</button>
                         )}
                         <button 
                             onClick={handleSaveWebhookTrigger}
                             disabled={!selectedStage || isSavingTrigger}
-                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all active:scale-95"
+                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 transition-all active:scale-95"
                         >
                             {isSavingTrigger ? <Loader2 size={18} className="animate-spin" /> : (editingTriggerId ? <RefreshCw size={18} /> : <Plus size={18} />)}
-                            {editingTriggerId ? 'Atualizar Gatilho' : 'Adicionar Gatilho Customizado'}
+                            {editingTriggerId ? 'Atualizar Gatilho' : 'Adicionar Gatilho'}
                         </button>
                     </div>
                 </div>
 
                 <div className="space-y-4">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <List size={14}/> Gatilhos de Disparo Ativos
-                    </h4>
-                    
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><List size={14}/> Gatilhos Ativos</h4>
                     {isLoadingTriggers ? (
                         <div className="flex justify-center py-10"><Loader2 className="animate-spin text-indigo-600" /></div>
                     ) : webhookTriggers.length === 0 ? (
-                        <div className="text-center py-12 border-2 border-dashed rounded-2xl text-slate-300">
-                            Nenhum gatilho configurado. Adicione o primeiro acima.
-                        </div>
+                        <div className="text-center py-12 border-2 border-dashed rounded-2xl text-slate-300">Nenhum gatilho configurado.</div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {webhookTriggers.map(trigger => {
                                 const funnel = pipelines.find(p => p.name === trigger.pipelineName);
                                 const stage = funnel?.stages.find(s => s.id === trigger.stageId);
-                                
                                 return (
-                                    <div key={trigger.id} className={clsx(
-                                        "bg-white border p-4 rounded-xl shadow-sm flex items-center justify-between group transition-all",
-                                        editingTriggerId === trigger.id ? "border-indigo-500 ring-1 ring-indigo-500" : "border-slate-200 hover:border-indigo-300"
-                                    )}>
+                                    <div key={trigger.id} className={clsx("bg-white border p-4 rounded-xl shadow-sm flex items-center justify-between group transition-all", editingTriggerId === trigger.id ? "border-indigo-500 ring-1 ring-indigo-500" : "border-slate-200 hover:border-indigo-300")}>
                                         <div className="flex items-center gap-4">
-                                            <div className={clsx(
-                                                "p-2 rounded-lg transition-colors",
-                                                editingTriggerId === trigger.id ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white"
-                                            )}>
-                                                <Zap size={20} />
-                                            </div>
+                                            <div className={clsx("p-2 rounded-lg", editingTriggerId === trigger.id ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600")}><Zap size={20} /></div>
                                             <div>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">Ao chegar em:</p>
-                                                <h4 className="font-bold text-slate-800 text-sm">
-                                                    {trigger.pipelineName} <ArrowRight size={10} className="inline mx-1 text-slate-300" /> 
-                                                    <span className="text-indigo-600">{stage?.title || trigger.stageId}</span>
-                                                </h4>
-                                                {trigger.payloadJson && (
-                                                    <span className="text-[9px] font-bold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 mt-1 inline-block uppercase">JSON Customizado</span>
-                                                )}
+                                                <h4 className="font-bold text-slate-800 text-sm">{trigger.pipelineName} <ArrowRight size={10} className="inline mx-1" /> <span className="text-indigo-600">{stage?.title || trigger.stageId}</span></h4>
+                                                {trigger.payloadJson && <span className="text-[9px] font-bold text-teal-600 uppercase">JSON Customizado</span>}
                                             </div>
                                         </div>
-                                        <div className="flex gap-1">
-                                            <button 
-                                                onClick={() => handleEditTrigger(trigger)}
-                                                className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                                                title="Editar Gatilho"
-                                            >
-                                                <Edit2 size={18} />
-                                            </button>
-                                            <button 
-                                                onClick={() => handleDeleteTrigger(trigger.id)}
-                                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                                                title="Excluir Gatilho"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                                            <button onClick={() => handleEditTrigger(trigger)} className="p-2 text-slate-300 hover:text-indigo-600"><Edit2 size={18} /></button>
+                                            <button onClick={() => handleDeleteTrigger(trigger.id)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={18} /></button>
                                         </div>
                                     </div>
                                 );
@@ -640,136 +585,6 @@ NOTIFY pgrst, 'reload config';
                         </div>
                     )}
                 </div>
-
-                <div className="bg-indigo-50 p-4 rounded-xl flex gap-3 text-xs text-indigo-800 border border-indigo-100">
-                    <Info size={18} className="shrink-0 text-indigo-600" />
-                    <p><strong>Automação Inteligente:</strong> Ao configurar o JSON acima, o sistema substituirá os tokens entre chaves pelos dados reais da negociação antes de enviar para o Webhook da empresa.</p>
-                </div>
-            </div>
-        )}
-
-        {/* CRUD BANNERS */}
-        {activeTab === 'banners' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold text-slate-800">Banners de Promoção</h3>
-                    <button onClick={() => setEditingBanner({ title: '', imageUrl: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Banner</button>
-                </div>
-                {editingBanner && (
-                    <form onSubmit={handleSaveBanner} className="bg-slate-50 p-6 rounded-xl border mb-8 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="md:col-span-2">
-                                <label className="block text-xs font-bold mb-1">Título Interno</label>
-                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} required />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold mb-1">URL da Imagem</label>
-                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.imageUrl} onChange={e => setEditingBanner({...editingBanner, imageUrl: e.target.value})} required />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold mb-1">Link de Destino</label>
-                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold mb-1">Público</label>
-                                <select className="w-full p-2 border rounded text-sm" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
-                                    <option value="student">Área do Aluno</option>
-                                    <option value="instructor">Área do Instrutor</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingBanner(null)} className="px-4 py-2 text-sm">Cancelar</button><button type="submit" className="bg-orange-600 text-white px-6 py-2 rounded-lg font-bold text-sm">Salvar Banner</button></div>
-                    </form>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {banners.map(b => (
-                        <div key={b.id} className="p-3 border rounded-xl flex items-center gap-4 bg-white group">
-                            <div className="w-20 h-12 bg-slate-100 rounded overflow-hidden flex-shrink-0"><img src={b.imageUrl} className="w-full h-full object-cover" /></div>
-                            <div className="flex-1 truncate"><h4 className="font-bold text-sm text-slate-800">{b.title}</h4><p className="text-[10px] text-slate-400 uppercase">{b.targetAudience}</p></div>
-                            <div className="flex gap-1"><button onClick={() => setEditingBanner(b)} className="p-1.5 text-slate-400 hover:text-orange-600"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteBanner(b.id).then(fetchBanners)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button></div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {/* CRUD NÍVEIS DE INSTRUTORES */}
-        {activeTab === 'instructor_levels' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold text-slate-800">Níveis e Honorários Docentes</h3>
-                    <button onClick={() => setEditingLevel({ name: '', honorarium: 0, observations: '' })} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Nível</button>
-                </div>
-                {editingLevel && (
-                    <form onSubmit={handleSaveLevel} className="bg-slate-50 p-6 rounded-xl border mb-8 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-bold mb-1">Nome do Nível</label>
-                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} placeholder="Ex: Master II" required />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold mb-1">Honorário Padrão (R$)</label>
-                                <input type="number" className="w-full p-2 border rounded text-sm" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value)})} required />
-                            </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-xs font-bold mb-1">Observações / Regras</label>
-                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingLevel.observations} onChange={e => setEditingLevel({...editingLevel, observations: e.target.value})} />
-                            </div>
-                        </div>
-                        <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingLevel(null)} className="px-4 py-2 text-sm">Cancelar</button><button type="submit" className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold text-sm">Salvar Nível</button></div>
-                    </form>
-                )}
-                <div className="space-y-2">
-                    {instructorLevels.map(lvl => (
-                        <div key={lvl.id} className="p-4 border rounded-xl flex justify-between items-center bg-white hover:border-purple-200 transition-all">
-                            <div className="flex items-center gap-4">
-                                <div className="bg-purple-50 p-2 rounded-lg text-purple-600"><Award size={20}/></div>
-                                <div><h4 className="font-bold text-slate-800">{lvl.name}</h4><p className="text-xs text-slate-500">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lvl.honorarium)}</p></div>
-                            </div>
-                            <div className="flex gap-2"><button onClick={() => setEditingLevel(lvl)} className="p-2 text-slate-400 hover:text-purple-600"><Edit2 size={18}/></button><button onClick={() => appBackend.deleteInstructorLevel(lvl.id).then(fetchInstructorLevels)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={18}/></button></div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'connections' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Globe className="text-teal-600" size={20}/> Conexões Externas (Sync)</h3>
-                    <button onClick={onStartWizard} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 shadow-sm"><Plus size={16}/> Nova Conexão</button>
-                </div>
-                <div className="space-y-4">
-                    {jobs.length === 0 ? <p className="text-center py-10 text-slate-400 italic">Nenhuma conexão configurada.</p> : jobs.map(job => (
-                        <div key={job.id} className="p-4 border rounded-xl hover:bg-slate-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div>
-                                <h4 className="font-bold text-slate-800">{job.name}</h4>
-                                <p className="text-xs text-slate-400 truncate max-w-md">{job.sheetUrl}</p>
-                                <div className="mt-2 flex items-center gap-4">
-                                    <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase", job.active ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-400")}>{job.active ? 'Sincronizando' : 'Pausado'}</span>
-                                    <span className="text-[10px] text-slate-400">Freq: {job.intervalMinutes} min</span>
-                                    <span className="text-[10px] text-slate-400">Tabela: {job.config.tableName}</span>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                                <button onClick={() => onDeleteJob(job.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'database' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V18.1)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (JSON Customizado no Connection Plug).</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V18.1</button> : (
-                    <div className="relative animate-in slide-in-from-top-4">
-                        <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
-                        <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>
-                    </div>
-                )}
             </div>
         )}
 
@@ -782,63 +597,59 @@ NOTIFY pgrst, 'reload config';
                             <div><label className="block text-xs font-bold mb-1">Razão Social</label><input type="text" className="w-full p-2 border rounded text-sm font-bold" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} required /></div>
                             <div><label className="block text-xs font-bold mb-1">CNPJ</label><input type="text" className="w-full p-2 border rounded text-sm font-mono" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} required /></div>
                             <div className="md:col-span-2">
-                                <label className="block text-xs font-bold mb-1 flex items-center gap-1">Webhook URL <LinkIcon size={12} className="text-teal-600"/></label>
-                                <input type="text" className="w-full p-2 border rounded text-sm font-mono text-blue-600" value={editingCompany.webhookUrl || ''} onChange={e => setEditingCompany({...editingCompany, webhookUrl: e.target.value})} placeholder="https://endpoint-da-automacao.com/webhook" />
-                                <p className="text-[10px] text-slate-400 mt-1">URL para onde o sistema enviará eventos de faturamento/venda desta empresa.</p>
+                                <label className="block text-xs font-bold mb-1 flex items-center gap-1">Webhook URL <LinkIcon size={12}/></label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingCompany.webhookUrl || ''} onChange={e => setEditingCompany({...editingCompany, webhookUrl: e.target.value})} />
                             </div>
                         </div>
-                        
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* TIPOS DE PRODUTOS */}
                             <div className="bg-white p-4 rounded-lg border border-slate-200">
-                                <label className="block text-xs font-black text-teal-700 uppercase tracking-widest mb-3">Associar Tipos de Produtos</label>
+                                <label className="block text-xs font-black text-teal-700 uppercase mb-3">Tipos de Produtos</label>
                                 <div className="flex flex-wrap gap-4">
                                     {['Digital', 'Presencial', 'Evento'].map(type => (
-                                        <label key={type} className="flex items-center gap-2 cursor-pointer group">
-                                            <input 
-                                                type="checkbox" 
-                                                className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500" 
-                                                checked={(editingCompany.productTypes || []).includes(type)} 
-                                                onChange={() => toggleCompanyProductType(type)}
-                                            />
-                                            <span className="text-sm font-medium text-slate-700 group-hover:text-teal-600 transition-colors">{type}</span>
+                                        <label key={type} className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" className="w-4 h-4 rounded text-teal-600" checked={(editingCompany.productTypes || []).includes(type)} onChange={() => toggleCompanyProductType(type)} />
+                                            <span className="text-sm font-medium">{type}</span>
                                         </label>
                                     ))}
                                 </div>
-                                <p className="text-[10px] text-slate-400 mt-2 italic leading-tight">Selecione os tipos para habilitar a lista de produtos específicos à direita.</p>
                             </div>
-
-                            {/* PRODUTOS ESPECÍFICOS (FILTRADOS) */}
                             <div className="bg-white p-4 rounded-lg border border-slate-200 flex flex-col max-h-[300px]">
-                                <div className="flex items-center justify-between mb-3 shrink-0">
-                                    <label className="block text-xs font-black text-indigo-700 uppercase tracking-widest">Produtos Específicos</label>
-                                    <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{filteredProductsBySelectedTypes.length} disponíveis</span>
+                                <label className="block text-xs font-black text-indigo-700 uppercase mb-3">Produtos Específicos</label>
+                                <input type="text" placeholder="Filtrar..." className="w-full mb-3 p-1.5 border rounded text-xs" value={productSearch} onChange={e => setProductSearch(e.target.value)} />
+                                <div className="flex-1 overflow-y-auto space-y-1">
+                                    {filteredProductsBySelectedTypes.map(p => (
+                                        <label key={p.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-slate-50 cursor-pointer">
+                                            <input type="checkbox" className="w-3.5 h-3.5 rounded" checked={(editingCompany.productIds || []).includes(p.name)} onChange={() => toggleCompanyProductId(p.name)} />
+                                            <span className="text-[11px] font-medium">{p.name}</span>
+                                        </label>
+                                    ))}
+                                    {filteredProductsBySelectedTypes.length === 0 && <p className="text-[10px] text-slate-400 italic py-4 text-center">Nenhum produto localizado.</p>}
                                 </div>
-                                
-                                { (editingCompany.productTypes || []).length === 0 ? (
-                                    <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
-                                        <ShoppingBag className="text-slate-200 mb-2" size={32}/>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Marque ao menos um tipo à esquerda</p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <div className="relative mb-3 shrink-0">
-                                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
-                                            <input type="text" placeholder="Filtrar por nome..." className="w-full pl-7 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs" value={productSearch} onChange={e => setProductSearch(e.target.value)} />
-                                        </div>
-                                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1 p-1">
-                                            {filteredProductsBySelectedTypes.map(p => (
-                                                <label key={p.id} className={clsx("flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors group", (editingCompany.productIds || []).includes(p.name) ? "bg-indigo-50" : "hover:bg-slate-50")}>
-                                                    <input 
-                                                        type="checkbox" 
-                                                        className="w-3.5 h-3.5 rounded text-indigo-600" 
-                                                        checked={(editingCompany.productIds || []).includes(p.name)} 
-                                                        onChange={() => toggleCompanyProductId(p.name)} 
-                                                    />
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[11px] font-medium text-slate-700 group-hover:text-indigo-600">{p.name}</span>
-                                                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{p.type}</span>
-                                                    </div>
-                                                </label>
-                                            ))}
-                                            {filteredProductsBySelectedTypes.length === 0 && <p className="text-[10px] text-slate-400 italic py-4 text-center">
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-4 border-t">
+                            <button type="button" onClick={() => setEditingCompany(null)} className="px-3 py-1 text-sm">Cancelar</button>
+                            <button type="submit" disabled={isSavingCompany} className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-lg font-bold text-sm">{isSavingCompany ? <Loader2 size={16} className="animate-spin" /> : 'Salvar Empresa'}</button>
+                        </div>
+                    </form>
+                )}
+                <div className="space-y-2">
+                    {companies.map(c => (
+                        <div key={c.id} className="p-4 border rounded-xl flex justify-between items-center bg-white hover:border-teal-100 transition-all">
+                            <div>
+                                <div className="font-bold text-sm text-slate-800">{c.legalName}</div>
+                                <div className="text-xs text-slate-400 font-mono">{c.cnpj}</div>
+                            </div>
+                            <div className="flex gap-1">
+                                <button onClick={() => setEditingCompany(c)} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit2 size={16}/></button>
+                                <button onClick={() => appBackend.deleteCompany(c.id).then(fetchCompanies)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+      </div>
+    </div>
+  );
+};

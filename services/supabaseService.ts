@@ -52,7 +52,6 @@ export const batchUploadData = async (
                 
                 if (trimmed.toLowerCase() === 'true') val = true;
                 else if (trimmed.toLowerCase() === 'false') val = false;
-                // Adicionado suporte a termos em português para limpeza de valores monetários
                 else if (
                   lowerKey.includes('value') || 
                   lowerKey.includes('valor') || 
@@ -62,12 +61,17 @@ export const batchUploadData = async (
                   lowerKey.includes('preco') ||
                   lowerKey.includes('preço')
                 ) {
-                    const cleanNum = trimmed
+                    let cleanStr = trimmed
                       .replace('R$', '')
-                      .replace(/\s/g, '')
-                      .replace(/\./g, '')
-                      .replace(',', '.');
-                    const num = parseFloat(cleanNum);
+                      .replace(/\s/g, '');
+                    
+                    // Se contém vírgula, assume formato brasileiro (ponto=milhar, vírgula=decimal)
+                    if (cleanStr.includes(',')) {
+                        cleanStr = cleanStr.replace(/\./g, '').replace(',', '.');
+                    }
+                    // Senão, o parseFloat lida com o ponto decimal naturalmente
+                    
+                    const num = parseFloat(cleanStr);
                     if (!isNaN(num)) val = num;
                 }
             }

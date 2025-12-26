@@ -79,11 +79,18 @@ export const BillingManager: React.FC = () => {
   const parseToNumber = (val: any): number => {
     if (typeof val === 'number') return val;
     if (!val) return 0;
-    const clean = String(val)
+    
+    let clean = String(val)
       .replace('R$', '')
-      .replace(/\s/g, '')
-      .replace(/\./g, '')
-      .replace(',', '.');
+      .replace(/\s/g, '');
+
+    // Se contém vírgula, tratamos como formato brasileiro (ponto é milhar, vírgula é decimal)
+    if (clean.includes(',')) {
+      clean = clean.replace(/\./g, '').replace(',', '.');
+    }
+    // Caso contrário (apenas pontos ou números puros), o parseFloat já lidará corretamente
+    // mantendo o ponto como separador decimal.
+    
     const num = parseFloat(clean);
     return isNaN(num) ? 0 : num;
   };
@@ -431,7 +438,7 @@ export const BillingManager: React.FC = () => {
         <Info className="text-blue-600 shrink-0" size={18} />
         <div>
           <strong>Gestão Financeira:</strong> O <strong>Valor Original</strong> representa o que foi faturado, enquanto o <strong>Valor Recebido</strong> mostra o que foi efetivamente conciliado no banco via Conta Azul.
-          <br/>Use o botão de menu ao lado de cada linha para acessar ações rápidas sobre o cliente.
+          <br/>Use o botão de menu al lado de cada linha para acessar ações rápidas sobre o cliente.
         </div>
       </div>
     </div>

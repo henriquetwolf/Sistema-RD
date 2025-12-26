@@ -7,7 +7,7 @@ import {
     Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
     Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search,
     Play, Pause, Calendar, Smartphone, Link as LinkIcon, ChevronDown, Award, ShoppingBag, Zap, Filter,
-    List, ArrowRight, Braces, Sparkles
+    List, ArrowRight, Braces, Sparkles, RefreshCw
 } from 'lucide-react';
 import { appBackend, CompanySetting, WebhookTrigger, Pipeline } from '../services/appBackend';
 import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, Product } from '../types';
@@ -71,6 +71,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [selectedFunnel, setSelectedFunnel] = useState('');
   const [selectedStage, setSelectedStage] = useState('');
   const [customJson, setCustomJson] = useState('');
+  const [editingTriggerId, setEditingTriggerId] = useState<string | null>(null);
   const [isSavingTrigger, setIsSavingTrigger] = useState(false);
   const [isLoadingTriggers, setIsLoadingTriggers] = useState(false);
 
@@ -365,14 +366,32 @@ NOTIFY pgrst, 'reload config';
       setIsSavingTrigger(true);
       try {
           await appBackend.saveWebhookTrigger({
+              id: editingTriggerId || undefined,
               pipelineName: selectedFunnel,
               stageId: selectedStage,
               payloadJson: customJson.trim() || undefined
           });
+          setSelectedFunnel('');
           setSelectedStage('');
           setCustomJson('');
+          setEditingTriggerId(null);
           await fetchWebhookTriggers();
       } catch (e: any) { alert(e.message); } finally { setIsSavingTrigger(false); }
+  };
+
+  const handleEditTrigger = (trigger: WebhookTrigger) => {
+      setEditingTriggerId(trigger.id);
+      setSelectedFunnel(trigger.pipelineName);
+      setSelectedStage(trigger.stageId);
+      setCustomJson(trigger.payloadJson || '');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEditTrigger = () => {
+      setEditingTriggerId(null);
+      setSelectedFunnel('');
+      setSelectedStage('');
+      setCustomJson('');
   };
 
   const handleDeleteTrigger = async (id: string) => {
@@ -539,14 +558,22 @@ NOTIFY pgrst, 'reload config';
                         </p>
                     </div>
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-3">
+                        {editingTriggerId && (
+                            <button 
+                                onClick={cancelEditTrigger}
+                                className="px-6 py-2.5 text-slate-600 font-bold text-sm"
+                            >
+                                Cancelar Edição
+                            </button>
+                        )}
                         <button 
                             onClick={handleSaveWebhookTrigger}
                             disabled={!selectedStage || isSavingTrigger}
                             className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all active:scale-95"
                         >
-                            {isSavingTrigger ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-                            Adicionar Gatilho Customizado
+                            {isSavingTrigger ? <Loader2 size={18} className="animate-spin" /> : (editingTriggerId ? <RefreshCw size={18} /> : <Plus size={18} />)}
+                            {editingTriggerId ? 'Atualizar Gatilho' : 'Adicionar Gatilho Customizado'}
                         </button>
                     </div>
                 </div>
@@ -569,9 +596,15 @@ NOTIFY pgrst, 'reload config';
                                 const stage = funnel?.stages.find(s => s.id === trigger.stageId);
                                 
                                 return (
-                                    <div key={trigger.id} className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex items-center justify-between group hover:border-indigo-300 transition-all">
+                                    <div key={trigger.id} className={clsx(
+                                        "bg-white border p-4 rounded-xl shadow-sm flex items-center justify-between group transition-all",
+                                        editingTriggerId === trigger.id ? "border-indigo-500 ring-1 ring-indigo-500" : "border-slate-200 hover:border-indigo-300"
+                                    )}>
                                         <div className="flex items-center gap-4">
-                                            <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                            <div className={clsx(
+                                                "p-2 rounded-lg transition-colors",
+                                                editingTriggerId === trigger.id ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white"
+                                            )}>
                                                 <Zap size={20} />
                                             </div>
                                             <div>
@@ -585,12 +618,22 @@ NOTIFY pgrst, 'reload config';
                                                 )}
                                             </div>
                                         </div>
-                                        <button 
-                                            onClick={() => handleDeleteTrigger(trigger.id)}
-                                            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
+                                        <div className="flex gap-1">
+                                            <button 
+                                                onClick={() => handleEditTrigger(trigger)}
+                                                className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                title="Editar Gatilho"
+                                            >
+                                                <Edit2 size={18} />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteTrigger(trigger.id)}
+                                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                title="Excluir Gatilho"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -798,87 +841,4 @@ NOTIFY pgrst, 'reload config';
                                                     </div>
                                                 </label>
                                             ))}
-                                            {filteredProductsBySelectedTypes.length === 0 && <p className="text-[10px] text-slate-400 italic py-4 text-center">Nenhum produto localizado para os tipos selecionados.</p>}
-                                        </div>
-                                    </>
-                                )}
-                                <p className="text-[10px] text-slate-400 mt-2 italic leading-tight">O sistema priorizará o CNPJ associado ao produto específico no faturamento.</p>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-end gap-2 pt-4 border-t">
-                            <button type="button" onClick={() => setEditingCompany(null)} className="px-3 py-1 text-sm">Cancelar</button>
-                            <button 
-                                type="submit" 
-                                disabled={isSavingCompany}
-                                className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-md flex items-center gap-2"
-                            >
-                                {isSavingCompany ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                                {isSavingCompany ? 'Salvando...' : 'Salvar Empresa'}
-                            </button>
-                        </div>
-                    </form>
-                )}
-                <div className="space-y-2">
-                    {companies.map(c => (
-                        <div key={c.id} className="p-4 border rounded-xl flex justify-between items-center bg-white hover:border-teal-100 transition-all">
-                            <div>
-                                <div className="font-bold text-sm text-slate-800">{c.legalName}</div>
-                                <div className="flex flex-wrap items-center gap-3 mt-1">
-                                    <span className="text-xs text-slate-400 font-mono">{c.cnpj}</span>
-                                    <div className="flex flex-wrap gap-1">
-                                        {(c.productTypes || []).map(t => <span key={t} className={clsx("text-[8px] font-black uppercase px-1.5 py-0.5 rounded border", t === 'Digital' ? "bg-blue-50 text-blue-600 border-blue-100" : t === 'Presencial' ? "bg-teal-50 text-teal-600 border-teal-100" : "bg-orange-50 text-orange-600 border-orange-100")}>{t}</span>)}
-                                        {(c.productIds || []).length > 0 && (
-                                            <span className="text-[8px] font-black uppercase bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1">
-                                                <ShoppingBag size={8}/> {(c.productIds || []).length} Vinculados
-                                            </span>
-                                        )}
-                                        {c.webhookUrl && <span className="text-[8px] font-black uppercase bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">Webhook Ativo</span>}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex gap-1">
-                                <button onClick={() => setEditingCompany(c)} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit2 size={16}/></button>
-                                <button onClick={() => appBackend.deleteCompany(c.id).then(fetchCompanies)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'roles' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-bold text-slate-800">Perfis de Acesso</h3><button onClick={() => setEditingRole({ id: '', name: '', permissions: {} })} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ Novo Perfil</button></div>
-                {editingRole && (
-                    <form onSubmit={handleSaveRole} className="bg-slate-50 p-6 rounded-xl border mb-6 space-y-4">
-                        <label className="block text-xs font-bold">Nome do Perfil</label><input type="text" className="w-full p-2 border rounded text-sm mb-4" value={editingRole.name} onChange={e => setEditingRole({...editingRole, name: e.target.value})} required />
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {PERMISSION_MODULES.map(mod => (
-                                <label key={mod.id} className="flex items-center gap-2 p-2 bg-white border rounded cursor-pointer hover:bg-indigo-50">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={!!editingRole.permissions[mod.id]} 
-                                        onChange={e => setEditingRole({...editingRole, permissions: {...editingRole.permissions, [mod.id]: e.target.checked}})} 
-                                    />
-                                    <span className="text-xs font-medium">{mod.label}</span>
-                                </label>
-                            ))}
-                        </div>
-                        <div className="flex justify-end gap-2 pt-4"><button type="button" onClick={() => setEditingRole(null)} className="px-3 py-1 text-sm">Cancelar</button><button type="submit" className="bg-indigo-600 text-white px-4 py-1.5 rounded font-bold text-sm">Salvar Perfil</button></div>
-                    </form>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{roles.map(r => <div key={r.id} className="p-3 border rounded-xl flex justify-between items-center bg-white hover:border-indigo-200 transition-all"><span className="font-bold text-sm text-slate-700">{r.name}</span><div className="flex gap-2"><button onClick={() => setEditingRole(r)} className="text-slate-400 hover:text-indigo-600"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteRole(r.id).then(fetchRoles)} className="text-slate-400 hover:text-red-500"><Trash2 size={16}/></button></div></div>)}</div>
-            </div>
-        )}
-
-        {activeTab === 'logs' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col h-[600px]">
-                <div className="flex items-center justify-between mb-4 shrink-0"><h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><History className="text-blue-600" size={20}/> Registro de Auditoria</h3><div className="relative w-64"><Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="text" className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs" placeholder="Buscar no histórico..." value={logSearch} onChange={e => setLogSearch(e.target.value)} /></div></div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar border rounded-lg"><table className="w-full text-left text-xs border-collapse"><thead className="bg-slate-50 sticky top-0 font-bold text-slate-500 uppercase tracking-wider"><tr><th className="p-3 border-b">Data/Hora</th><th className="p-3 border-b">Usuário</th><th className="p-3 border-b">Ação</th><th className="p-3 border-b">Módulo</th><th className="p-3 border-b">Detalhes</th></tr></thead><tbody className="divide-y divide-slate-100">{logs.filter(l => l.userName.toLowerCase().includes(logSearch.toLowerCase()) || l.details.toLowerCase().includes(logSearch.toLowerCase())).map(log => (<tr key={log.id} className="hover:bg-slate-50 transition-colors"><td className="p-3 text-slate-400 whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</td><td className="p-3 font-bold text-slate-700">{log.userName}</td><td className="p-3"><span className={clsx("px-2 py-0.5 rounded font-black uppercase text-[9px]", log.action === 'delete' ? "bg-red-100 text-red-700" : log.action === 'create' ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700")}>{log.action}</span></td><td className="p-3 font-medium text-slate-500">{log.module}</td><td className="p-3 text-slate-600">{log.details}</td></tr>))}</tbody></table></div>
-            </div>
-        )}
-      </div>
-    </div>
-  );
-};
+                                            {filteredProductsBySelectedTypes.length === 0 && <p className="text-[10px] text-slate-400 italic py-4 text-center">

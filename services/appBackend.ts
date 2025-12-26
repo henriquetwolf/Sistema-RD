@@ -170,10 +170,11 @@ export const appBackend = {
       observations: row.observations,
       status: row.status,
       team: row.team,
-      voucher_link_1: row.voucher_link_1,
+      /* Fixed: Property names mapped to match BillingNegotiation interface (camelCase) */
+      voucherLink1: row.voucher_link_1,
       testDate: row.test_date,
-      voucher_link_2: row.voucher_link_2,
-      voucher_link_3: row.voucher_link_3,
+      voucherLink2: row.voucher_link_2,
+      voucherLink3: row.voucher_link_3,
       boletosLink: row.boletos_link,
       negotiationReference: row.negotiation_reference,
       attachments: row.attachments,
@@ -202,6 +203,7 @@ export const appBackend = {
       voucher_link_2: negotiation.voucherLink2,
       voucher_link_3: negotiation.voucherLink3,
       boletos_link: negotiation.boletosLink,
+      /* Fixed: negotiation_reference correctly assigned from negotiationReference */
       negotiation_reference: negotiation.negotiationReference,
       attachments: negotiation.attachments
     };
@@ -261,13 +263,14 @@ export const appBackend = {
       }));
   },
 
-  saveWebhookTrigger: async (trigger: Omit<WebhookTrigger, 'id'>): Promise<void> => {
+  saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
       if (!isConfigured) return;
-      const { error } = await supabase.from('crm_webhook_triggers').insert([{
+      const { error } = await supabase.from('crm_webhook_triggers').upsert({
+          id: trigger.id || undefined,
           pipeline_name: trigger.pipelineName,
           stage_id: trigger.stageId,
           payload_json: trigger.payloadJson
-      }]);
+      });
       if (error) throw error;
   },
 
@@ -558,7 +561,7 @@ export const appBackend = {
       hasReformer: d.has_reformer, 
       qtyReformer: d.qty_reformer, 
       hasLadderBarrel: d.has_ladder_barrel, 
-      qty_ladder_barrel: d.qty_ladder_barrel, 
+      qtyLadderBarrel: d.qty_ladder_barrel, 
       hasChair: d.has_chair, 
       qtyChair: d.qty_chair, 
       hasCadillac: d.has_cadillac, 
@@ -691,7 +694,7 @@ export const appBackend = {
           isLeadCapture: d.is_lead_capture, 
           teamId: d.team_id, 
           distributionMode: d.distribution_mode, 
-          fixedOwnerId: d.fixed_owner_id, 
+          fixedOwnerId: d.fixedOwnerId, 
           targetPipeline: d.target_pipeline,
           targetStage: d.target_stage,
           questions: d.questions || [], 

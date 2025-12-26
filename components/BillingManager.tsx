@@ -27,6 +27,7 @@ export const BillingManager: React.FC = () => {
   
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // Carrega os dados apenas uma vez ao montar o componente
   useEffect(() => {
     fetchData();
     
@@ -42,16 +43,23 @@ export const BillingManager: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Reseta a página para 1 sempre que um filtro mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, startDate, endDate]);
+
   const fetchData = async () => {
+    if (isLoading) return;
     setIsLoading(true);
     try {
       let allData: any[] = [];
       let from = 0;
       const step = 1000;
       let hasMore = true;
+      let safetyCounter = 0;
 
-      // Loop para buscar todos os registros, contornando o limite de 1000 do Supabase
-      while (hasMore) {
+      // Loop para buscar todos os registros (Suporta > 1000)
+      while (hasMore && safetyCounter < 20) { // Limite de 20k registros por segurança
         const { data, error } = await appBackend.client
           .from('Conta_Azul_Receber')
           .select('*')
@@ -70,6 +78,7 @@ export const BillingManager: React.FC = () => {
         } else {
           hasMore = false;
         }
+        safetyCounter++;
       }
       
       setRecords(allData);
@@ -123,7 +132,7 @@ export const BillingManager: React.FC = () => {
   }, [records]);
 
   const filteredRecords = useMemo(() => {
-    const results = processedRecords.filter(r => {
+    return processedRecords.filter(r => {
       const name = String(r._display_name || '').toLowerCase();
       const id = String(r._display_id_cliente || '').toLowerCase();
       const ref = String(r._display_ref || '').toLowerCase();
@@ -151,10 +160,6 @@ export const BillingManager: React.FC = () => {
 
       return matchesSearch && matchesStatus && matchesDate;
     });
-    
-    // Reset page when filters change
-    setCurrentPage(1);
-    return results;
   }, [processedRecords, searchTerm, statusFilter, startDate, endDate]);
 
   const stats = useMemo(() => {
@@ -356,7 +361,7 @@ export const BillingManager: React.FC = () => {
         {totalPages > 1 && (
           <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
             <p className="text-xs text-slate-500">
-              Mostrando {Math.min(filteredRecords.length, itemsPerPage)} de {filteredRecords.length} registros
+              Mostrando {Math.min(filteredRecords.length, (currentPage * itemsPerPage))} de {filteredRecords.length} registros
             </p>
             <div className="flex items-center gap-2">
               <button 
@@ -398,7 +403,7 @@ export const BillingManager: React.FC = () => {
         )}
       </div>
 
-      {/* Modal de Detalhes Funcional */}
+      {/* Modal de Detalhes */}
       {selectedDetailRecord && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">

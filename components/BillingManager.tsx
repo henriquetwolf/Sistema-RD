@@ -4,7 +4,7 @@ import {
   CreditCard, Search, Filter, Download, Loader2, RefreshCw, 
   TrendingUp, AlertCircle, Calendar, DollarSign, User, ArrowRight,
   CheckCircle2, XCircle, MoreHorizontal, Mail, Phone, Clock, Info,
-  Copy, ExternalLink, FileText, X
+  Copy, ExternalLink, FileText, X, Hash, Tag, ArrowUpRight, ArrowDownRight
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { BillingRecord } from '../types';
@@ -16,13 +16,13 @@ export const BillingManager: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
+  const [selectedDetailRecord, setSelectedDetailRecord] = useState<any | null>(null);
   
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchData();
     
-    // Fechar menu ao clicar fora
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setActiveMenuId(null);
@@ -49,7 +49,6 @@ export const BillingManager: React.FC = () => {
     }
   };
 
-  // Helper para buscar campo de forma flexível (ignora case e espaços extras)
   const getFlexibleField = (obj: any, variations: string[]) => {
     const keys = Object.keys(obj);
     for (const variation of variations) {
@@ -59,7 +58,6 @@ export const BillingManager: React.FC = () => {
     return null;
   };
 
-  // Helper para converter qualquer valor para número
   const parseToNumber = (val: any): number => {
     if (typeof val === 'number') return val;
     if (!val) return 0;
@@ -119,6 +117,11 @@ export const BillingManager: React.FC = () => {
     setActiveMenuId(null);
   };
 
+  const openDetails = (record: any) => {
+    setSelectedDetailRecord(record);
+    setActiveMenuId(null);
+  };
+
   return (
     <div className="animate-in fade-in duration-500 space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -155,7 +158,7 @@ export const BillingManager: React.FC = () => {
           <div className="absolute right-0 top-0 p-4 opacity-5"><Clock size={64} className="text-amber-600" /></div>
           <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Pendentes</p>
           <h3 className="text-2xl font-black text-amber-600">{stats.pending}</h3>
-          <p className="text-[10px] text-green-500 mt-2">Aguardando vencimento</p>
+          <p className="text-[10px] text-slate-500 mt-2">Aguardando vencimento</p>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
@@ -256,7 +259,7 @@ export const BillingManager: React.FC = () => {
                             <Copy size={14} /> Copiar ID Cliente
                           </button>
                           <button 
-                            onClick={() => { alert("Recurso de detalhes em desenvolvimento."); setActiveMenuId(null); }}
+                            onClick={() => openDetails(record)}
                             className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
                           >
                             <FileText size={14} /> Ver Detalhes
@@ -266,7 +269,6 @@ export const BillingManager: React.FC = () => {
                             onClick={() => setActiveMenuId(null)}
                             className="w-full text-left px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2"
                           >
-                            {/* Import X from lucide-react to fix the 'Cannot find name X' error */}
                             <X size={14} /> Fechar Menu
                           </button>
                         </div>
@@ -279,6 +281,128 @@ export const BillingManager: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal de Detalhes Funcional */}
+      {selectedDetailRecord && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="bg-teal-100 p-2 rounded-lg text-teal-600">
+                  <CreditCard size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800">Detalhes do Recebimento</h3>
+                  <p className="text-xs text-slate-500">ID Lançamento: #{selectedDetailRecord.id}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedDetailRecord(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded-lg transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-8">
+              {/* Cabeçalho do Cliente */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white rounded-full border border-slate-200 flex items-center justify-center text-teal-600 shadow-sm">
+                    <User size={24} />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-800 text-lg leading-tight">{selectedDetailRecord._display_name}</h4>
+                    <p className="text-xs text-slate-500 font-mono">ID Cliente: {selectedDetailRecord._display_id_cliente || '--'}</p>
+                  </div>
+                </div>
+                <div className={clsx(
+                  "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border w-fit",
+                  (selectedDetailRecord._display_status === 'Pago' || selectedDetailRecord._display_status === 'Liquidado') ? "bg-green-50 text-green-700 border-green-200" :
+                  (selectedDetailRecord._display_status === 'Atrasado' || selectedDetailRecord._display_status === 'Vencido') ? "bg-red-50 text-red-700 border-red-200" :
+                  "bg-amber-50 text-amber-700 border-amber-200"
+                )}>
+                  {selectedDetailRecord._display_status}
+                </div>
+              </div>
+
+              {/* Informações da Parcela */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b pb-2">
+                    <Tag size={12} /> Dados do Título
+                  </h5>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500 font-bold uppercase">Referência</span>
+                      <span className="text-sm font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">{selectedDetailRecord._display_ref || '--'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500 font-bold uppercase">Competência</span>
+                      <span className="text-sm font-bold text-slate-800">{selectedDetailRecord._display_comp || '--'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500 font-bold uppercase">Data Vencimento</span>
+                      <span className="text-sm font-bold text-red-600">{selectedDetailRecord._display_venc || '--'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b pb-2">
+                    <DollarSign size={12} /> Comparativo de Valores
+                  </h5>
+                  <div className="space-y-4">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] text-slate-400 font-black uppercase">Valor Faturado</span>
+                        <ArrowUpRight size={14} className="text-slate-300" />
+                      </div>
+                      <p className="text-xl font-black text-slate-700">{formatCurrency(selectedDetailRecord._display_valor_original)}</p>
+                    </div>
+                    <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] text-emerald-600 font-black uppercase">Valor Recebido (Líquido)</span>
+                        <ArrowDownRight size={14} className="text-emerald-500" />
+                      </div>
+                      <p className="text-xl font-black text-emerald-700">{formatCurrency(selectedDetailRecord._display_valor_recebido)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Todos os campos (Visualizador Bruto) */}
+              <div className="space-y-4">
+                <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b pb-2">
+                  <Hash size={12} /> Metadados Completos
+                </h5>
+                <div className="bg-slate-900 rounded-xl p-4 overflow-x-auto">
+                  <pre className="text-[10px] text-teal-400 font-mono leading-relaxed whitespace-pre-wrap">
+                    {JSON.stringify(
+                      Object.fromEntries(
+                        Object.entries(selectedDetailRecord).filter(([k]) => !k.startsWith('_'))
+                      ), 
+                      null, 2
+                    )}
+                  </pre>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button 
+                onClick={() => handleCopyId(selectedDetailRecord._display_id_cliente || '')}
+                className="px-4 py-2 text-teal-600 hover:bg-teal-50 rounded-lg font-bold text-sm transition-colors flex items-center gap-2"
+              >
+                <Copy size={16} /> Copiar ID
+              </button>
+              <button 
+                onClick={() => setSelectedDetailRecord(null)}
+                className="px-6 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-bold text-sm shadow-lg transition-all active:scale-95"
+              >
+                Fechar Detalhes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 text-xs text-blue-800 shadow-sm">
         <Info className="text-blue-600 shrink-0" size={18} />

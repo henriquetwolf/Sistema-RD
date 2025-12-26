@@ -23,7 +23,7 @@ interface CollaboratorsManagerProps {
     initialEditCollaborator?: Collaborator | null;
 }
 
-const DEPARTMENTS = ['Comercial', 'Marketing', 'Financeiro', 'Web / TI', 'Suporte', 'Logística', 'RH', 'Diretoria'];
+const DEPARTMENTS = ['Comercial', 'Marketing', 'Financeiro', 'Cobrança', 'Web / TI', 'Suporte', 'Logística', 'RH', 'Diretoria'];
 const HEADQUARTERS = ['Matriz - SP', 'Filial - RS', 'Filial - MG', 'Home Office Total'];
 const EDUCATION_LEVELS = ['Médio', 'Superior Incompleto', 'Superior Completo', 'Pós-Graduação', 'Mestrado/Doutorado'];
 
@@ -405,7 +405,7 @@ export const CollaboratorsManager: React.FC<CollaboratorsManagerProps> = ({ onBa
                                     <h4 className="text-xs font-black text-green-600 uppercase tracking-widest mb-2 flex items-center gap-2"><Activity size={14}/> Saúde e Alimentação</h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         <label className="flex items-center justify-between p-2 border rounded hover:bg-slate-50 cursor-pointer"><span className="text-xs font-bold">Plano Saúde</span><input type="checkbox" checked={formData.hasHealthPlan === 'Sim'} onChange={e => setFormData({...formData, hasHealthPlan: e.target.checked ? 'Sim' : 'Não'})}/></label>
-                                        <label className="flex items-center justify-between p-2 border rounded hover:bg-slate-50 cursor-pointer"><span className="text-xs font-bold">Plano Dental</span><input type="checkbox" checked={formData.hasDentalPlan === 'Sim'} onChange={e => setFormData({...formData, hasDentalPlan: e.target.checked ? 'Sim' : 'Não'})}/></label>
+                                        <label className="flex items-center justify-between p-2 border rounded hover:bg-slate-50 cursor-pointer"><span className="text-xs font-bold">Plano Dental</span><input type="checkbox" checked={formData.hasDentalPlan === 'Sim'} onChange={e => setFormData({...formData, hasHealthPlan: e.target.checked ? 'Sim' : 'Não'})}/></label>
                                         <label className="flex items-center justify-between p-2 border rounded hover:bg-slate-50 cursor-pointer"><span className="text-xs font-bold">Vale Refeição</span><input type="checkbox" checked={formData.hasMealVoucher === 'Sim'} onChange={e => setFormData({...formData, hasMealVoucher: e.target.checked ? 'Sim' : 'Não'})}/></label>
                                         <label className="flex items-center justify-between p-2 border rounded hover:bg-slate-50 cursor-pointer"><span className="text-xs font-bold">Vale Aliment.</span><input type="checkbox" checked={formData.hasFoodVoucher === 'Sim'} onChange={e => setFormData({...formData, hasFoodVoucher: e.target.checked ? 'Sim' : 'Não'})}/></label>
                                     </div>

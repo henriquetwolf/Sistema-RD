@@ -10,7 +10,7 @@ import { BillingRecord } from '../types';
 import clsx from 'clsx';
 
 export const BillingManager: React.FC = () => {
-  const [records, setRecords] = useState<BillingRecord[]>([]);
+  const [records, setRecords] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -36,25 +36,62 @@ export const BillingManager: React.FC = () => {
     }
   };
 
-  const filteredRecords = useMemo(() => {
-    return records.filter(r => {
-      const matchesSearch = 
-        (r["Nome do cliente"] || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (r["Identificador do cliente"] || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (r["Código referência"] || '').toLowerCase().includes(searchTerm.toLowerCase());
+  // Helper para buscar campo de forma flexível (ignora case e espaços extras)
+  const getFlexibleField = (obj: any, variations: string[]) => {
+    const keys = Object.keys(obj);
+    for (const variation of variations) {
+      const found = keys.find(k => k.toLowerCase().trim() === variation.toLowerCase().trim());
+      if (found) return obj[found];
+    }
+    return null;
+  };
 
-      const matchesStatus = statusFilter === 'all' || r.Status === statusFilter;
+  // Helper para converter qualquer valor para número
+  const parseToNumber = (val: any): number => {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    const clean = String(val)
+      .replace('R$', '')
+      .replace(/\s/g, '')
+      .replace(/\./g, '')
+      .replace(',', '.');
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const processedRecords = useMemo(() => {
+    return records.map(r => ({
+      ...r,
+      _display_name: getFlexibleField(r, ['Nome do cliente', 'Cliente', 'Nome']),
+      _display_id: getFlexibleField(r, ['Identificador do cliente', 'Identificador', 'ID Cliente']),
+      _display_ref: getFlexibleField(r, ['Código referência', 'Referência', 'Ref']),
+      _display_comp: getFlexibleField(r, ['Data de competência', 'Competência']),
+      _display_venc: getFlexibleField(r, ['Vencimento', 'Data de vencimento', 'Vencimento original']),
+      _display_valor: parseToNumber(getFlexibleField(r, ['Valor', 'Valor total', 'Valor da parcela'])),
+      _display_status: getFlexibleField(r, ['Status', 'Situação']) || 'Pendente'
+    }));
+  }, [records]);
+
+  const filteredRecords = useMemo(() => {
+    return processedRecords.filter(r => {
+      const name = String(r._display_name || '').toLowerCase();
+      const id = String(r._display_id || '').toLowerCase();
+      const ref = String(r._display_ref || '').toLowerCase();
+      const search = searchTerm.toLowerCase();
+
+      const matchesSearch = name.includes(search) || id.includes(search) || ref.includes(search);
+      const matchesStatus = statusFilter === 'all' || r._display_status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
-  }, [records, searchTerm, statusFilter]);
+  }, [processedRecords, searchTerm, statusFilter]);
 
   const stats = useMemo(() => {
     const total = filteredRecords.length;
-    const totalValue = filteredRecords.reduce((acc, curr) => acc + (Number(curr.Valor) || 0), 0);
-    const pending = filteredRecords.filter(r => r.Status === 'Pendente').length;
-    const paid = filteredRecords.filter(r => r.Status === 'Pago').length;
-    const overdue = filteredRecords.filter(r => r.Status === 'Atrasado').length;
+    const totalValue = filteredRecords.reduce((acc, curr) => acc + curr._display_valor, 0);
+    const paid = filteredRecords.filter(r => r._display_status === 'Pago' || r._display_status === 'Liquidado').length;
+    const overdue = filteredRecords.filter(r => r._display_status === 'Atrasado' || r._display_status === 'Vencido').length;
+    const pending = total - paid - overdue;
 
     return { total, totalValue, pending, paid, overdue };
   }, [filteredRecords]);
@@ -162,26 +199,26 @@ export const BillingManager: React.FC = () => {
                     <td className="px-6 py-4 font-mono text-[11px] text-slate-400">#{record.id}</td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-800">{record["Nome do cliente"]}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">ID: {record["Identificador do cliente"]}</span>
+                        <span className="font-bold text-slate-800">{record._display_name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">ID: {record._display_id}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                        {record["Código referência"]}
+                        {record._display_ref || '--'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-500 text-xs">{record["Data de competência"]}</td>
-                    <td className="px-6 py-4 font-bold text-slate-700 text-xs">{record.Vencimento || '--/--/----'}</td>
-                    <td className="px-6 py-4 font-black text-slate-900">{formatCurrency(Number(record.Valor) || 0)}</td>
+                    <td className="px-6 py-4 text-slate-500 text-xs">{record._display_comp || '--'}</td>
+                    <td className="px-6 py-4 font-bold text-slate-700 text-xs">{record._display_venc || '--/--/----'}</td>
+                    <td className="px-6 py-4 font-black text-slate-900">{formatCurrency(record._display_valor)}</td>
                     <td className="px-6 py-4 text-center">
                       <span className={clsx(
                         "text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-tighter border",
-                        record.Status === 'Pago' ? "bg-green-50 text-green-700 border-green-200" :
-                        record.Status === 'Atrasado' ? "bg-red-50 text-red-700 border-red-200" :
+                        (record._display_status === 'Pago' || record._display_status === 'Liquidado') ? "bg-green-50 text-green-700 border-green-200" :
+                        (record._display_status === 'Atrasado' || record._display_status === 'Vencido') ? "bg-red-50 text-red-700 border-red-200" :
                         "bg-amber-50 text-amber-700 border-amber-200"
                       )}>
-                        {record.Status || 'Pendente'}
+                        {record._display_status}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
@@ -198,10 +235,10 @@ export const BillingManager: React.FC = () => {
       </div>
 
       <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 text-xs text-blue-800 shadow-sm">
-        {/* Fixed: Added Info to imports from lucide-react to resolve "Cannot find name 'Info'" */}
         <Info className="text-blue-600 shrink-0" size={18} />
         <div>
-          <strong>Sincronização Automática:</strong> Os dados desta aba são alimentados via integração com o ERP Conta Azul através do seu fluxo de arquivos configurado nas conexões globais. Certifique-se de que a tabela <code>Conta_Azul_Receber</code> está sendo atualizada regularmente.
+          <strong>Sincronização Automática:</strong> Os dados desta aba são alimentados via integração com o ERP Conta Azul. 
+          <br/>Se as informações não aparecerem corretamente, verifique se os cabeçalhos do arquivo original foram mantidos na importação.
         </div>
       </div>
     </div>

@@ -35,27 +35,38 @@ export const batchUploadData = async (
   data: CsvRow[],
   onProgress: (progress: number) => void
 ) => {
-  const BATCH_SIZE = 500; // Reduzido para maior estabilidade
+  const BATCH_SIZE = 500; 
   const totalRows = data.length;
   let processedRows = 0;
 
   for (let i = 0; i < totalRows; i += BATCH_SIZE) {
     const rawBatch = data.slice(i, i + BATCH_SIZE);
     
-    // Limpeza leve de dados para evitar erros comuns de tipo
     const batch = rawBatch.map(row => {
         const cleaned: any = {};
         Object.keys(row).forEach(key => {
             let val = row[key];
-            // Se for uma string que parece ser moeda ou número formatado, limpa
             if (typeof val === 'string') {
                 const trimmed = val.trim();
-                // Verifica se parece um booleano string
+                const lowerKey = key.toLowerCase();
+                
                 if (trimmed.toLowerCase() === 'true') val = true;
                 else if (trimmed.toLowerCase() === 'false') val = false;
-                // Se for campo de valor (ex: level_honorarium), tenta limpar
-                else if (key.includes('value') || key.includes('honorarium') || key.includes('salary')) {
-                    const cleanNum = trimmed.replace('R$', '').replace(/\s/g, '').replace('.', '').replace(',', '.');
+                // Adicionado suporte a termos em português para limpeza de valores monetários
+                else if (
+                  lowerKey.includes('value') || 
+                  lowerKey.includes('valor') || 
+                  lowerKey.includes('honorarium') || 
+                  lowerKey.includes('salary') ||
+                  lowerKey.includes('salario') ||
+                  lowerKey.includes('preco') ||
+                  lowerKey.includes('preço')
+                ) {
+                    const cleanNum = trimmed
+                      .replace('R$', '')
+                      .replace(/\s/g, '')
+                      .replace(/\./g, '')
+                      .replace(',', '.');
                     const num = parseFloat(cleanNum);
                     if (!isNaN(num)) val = num;
                 }

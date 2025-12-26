@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, 
@@ -51,6 +52,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [companies, setCompanies] = useState<CompanySetting[]>([]);
   const [allProducts, setAllProducts] = useState<UnifiedProduct[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
+  const [isSavingCompany, setIsSavingCompany] = useState(false); // Novo estado de salvamento
   const [editingCompany, setEditingCompany] = useState<Partial<CompanySetting> | null>(null);
   const [productSearch, setProductSearch] = useState('');
 
@@ -118,7 +120,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const fetchUnifiedProducts = async () => {
       try {
-          // Added explicit type cast to any[] for results to avoid unknown inference issues with Supabase responses in Promise.all
           const [digitalRes, eventsRes, classesRes] = (await Promise.all([
               appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
               appBackend.client.from('crm_events').select('id, name'),
@@ -127,7 +128,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
           const unified: UnifiedProduct[] = [];
 
-          // Use String() conversion to ensure unknown values are assigned as strings
           if (digitalRes.data) {
               (digitalRes.data as any[]).forEach(p => unified.push({ id: String(p.id), name: String(p.name), type: 'Digital' }));
           }
@@ -136,7 +136,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
           }
           if (classesRes.data) {
               const uniqueCourses = Array.from(new Set((classesRes.data as any[]).map(c => c.course as string).filter(Boolean)));
-              // Explicitly cast c to string to satisfy type constraints
               uniqueCourses.forEach((c: string) => unified.push({ id: `course-${c}`, name: c, type: 'Presencial' }));
           }
 
@@ -148,8 +147,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const filteredProductsBySelectedTypes = useMemo(() => {
       if (!editingCompany) return [];
       const selectedTypes = editingCompany.productTypes || [];
-      
-      // Se nenhum tipo estiver selecionado, não mostra produtos para evitar confusão
       if (selectedTypes.length === 0) return [];
 
       return allProducts.filter(p => 
@@ -260,9 +257,19 @@ NOTIFY pgrst, 'reload config';
   const handleSaveCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCompany) return;
-    await appBackend.saveCompany(editingCompany as CompanySetting);
-    fetchCompanies();
-    setEditingCompany(null);
+    
+    setIsSavingCompany(true);
+    try {
+        await appBackend.saveCompany(editingCompany as CompanySetting);
+        await fetchCompanies();
+        setEditingCompany(null);
+        alert("Empresa salva com sucesso!");
+    } catch (err: any) {
+        console.error(err);
+        alert(`Erro ao salvar empresa: ${err.message}`);
+    } finally {
+        setIsSavingCompany(false);
+    }
   };
 
   const handleSaveLevel = async (e: React.FormEvent) => {
@@ -280,7 +287,6 @@ NOTIFY pgrst, 'reload config';
         ? currentTypes.filter(t => t !== type)
         : [...currentTypes, type];
       
-      // Quando desmarca um tipo, removemos os produtos daquele tipo que estavam selecionados
       let newProductIds = editingCompany.productIds || [];
       if (!newTypes.includes(type)) {
           const productsToRemove = allProducts.filter(p => p.type === type).map(p => p.name);
@@ -551,7 +557,17 @@ NOTIFY pgrst, 'reload config';
                             </div>
                         </div>
 
-                        <div className="flex justify-end gap-2 pt-4 border-t"><button type="button" onClick={() => setEditingCompany(null)} className="px-3 py-1 text-sm">Cancelar</button><button type="submit" className="bg-teal-600 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-md">Salvar Empresa</button></div>
+                        <div className="flex justify-end gap-2 pt-4 border-t">
+                            <button type="button" onClick={() => setEditingCompany(null)} className="px-3 py-1 text-sm">Cancelar</button>
+                            <button 
+                                type="submit" 
+                                disabled={isSavingCompany}
+                                className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-md flex items-center gap-2"
+                            >
+                                {isSavingCompany ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                {isSavingCompany ? 'Salvando...' : 'Salvar Empresa'}
+                            </button>
+                        </div>
                     </form>
                 )}
                 <div className="space-y-2">
@@ -616,31 +632,3 @@ NOTIFY pgrst, 'reload config';
     </div>
   );
 };
-
-  const fetchUnifiedProducts = async () => {
-      try {
-          // Explicitly cast the Promise.all result to any[] to avoid 'unknown' type errors during destructuring
-          const [digitalRes, eventsRes, classesRes] = (await Promise.all([
-              appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
-              appBackend.client.from('crm_events').select('id, name'),
-              appBackend.client.from('crm_classes').select('course')
-          ])) as any[];
-
-          const unified: UnifiedProduct[] = [];
-
-          // Use explicit casting and String() to ensure unknown properties from Supabase results are compatible with string
-          if (digitalRes.data) {
-              (digitalRes.data as any[]).forEach(p => unified.push({ id: String(p.id), name: String(p.name), type: 'Digital' }));
-          }
-          if (eventsRes.data) {
-              (eventsRes.data as any[]).forEach(e => unified.push({ id: String(e.id), name: String(e.name), type: 'Evento' }));
-          }
-          if (classesRes.data) {
-              const uniqueCourses = Array.from(new Set((classesRes.data as any[]).map(c => c.course as string).filter(Boolean)));
-              // Cast uniqueCourses element to string to satisfy UnifiedProduct name type
-              uniqueCourses.forEach((c: string) => unified.push({ id: `course-${c}`, name: c, type: 'Presencial' }));
-          }
-
-          setAllProducts(unified.sort((a, b) => a.name.localeCompare(b.name)));
-      } catch (e) {}
-  };

@@ -24,8 +24,12 @@ export const BillingManager: React.FC = () => {
     fetchData();
     
     const handleClickOutside = (event: MouseEvent) => {
+      // Se o clique for fora do menu E fora de um botão de gatilho de menu
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setActiveMenuId(null);
+        const isMenuButton = (event.target as HTMLElement).closest('.menu-trigger');
+        if (!isMenuButton) {
+          setActiveMenuId(null);
+        }
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -49,12 +53,26 @@ export const BillingManager: React.FC = () => {
     }
   };
 
+  // Helper para buscar campo de forma flexível (suporta variação com (R$) e espaços)
   const getFlexibleField = (obj: any, variations: string[]) => {
     const keys = Object.keys(obj);
+    
+    // 1. Tenta correspondência exata ou normalizada
     for (const variation of variations) {
-      const found = keys.find(k => k.toLowerCase().trim() === variation.toLowerCase().trim());
+      const found = keys.find(k => {
+        const normalizedKey = k.toLowerCase().trim();
+        const normalizedVar = variation.toLowerCase().trim();
+        return normalizedKey === normalizedVar || normalizedKey === `${normalizedVar} (r$)`;
+      });
       if (found) return obj[found];
     }
+
+    // 2. Tenta busca parcial se a exata falhar
+    for (const variation of variations) {
+      const found = keys.find(k => k.toLowerCase().includes(variation.toLowerCase().trim()));
+      if (found) return obj[found];
+    }
+    
     return null;
   };
 
@@ -99,14 +117,19 @@ export const BillingManager: React.FC = () => {
   }, [processedRecords, searchTerm, statusFilter]);
 
   const stats = useMemo(() => {
-    const total = filteredRecords.length;
-    const totalOriginal = filteredRecords.reduce((acc, curr) => acc + curr._display_valor_original, 0);
+    const totalValueOriginal = filteredRecords.reduce((acc, curr) => acc + curr._display_valor_original, 0);
     const totalRecebido = filteredRecords.reduce((acc, curr) => acc + curr._display_valor_recebido, 0);
-    const paid = filteredRecords.filter(r => r._display_status === 'Pago' || r._display_status === 'Liquidado').length;
-    const overdue = filteredRecords.filter(r => r._display_status === 'Atrasado' || r._display_status === 'Vencido').length;
-    const pending = total - paid - overdue;
+    const paidCount = filteredRecords.filter(r => r._display_status === 'Pago' || r._display_status === 'Liquidado').length;
+    const overdueCount = filteredRecords.filter(r => r._display_status === 'Atrasado' || r._display_status === 'Vencido').length;
 
-    return { total, totalOriginal, totalRecebido, pending, paid, overdue };
+    return { 
+      total: filteredRecords.length, 
+      totalOriginal: totalValueOriginal, 
+      totalRecebido: totalRecebido, 
+      paid: paidCount, 
+      overdue: overdueCount,
+      pending: filteredRecords.length - paidCount - overdueCount
+    };
   }, [filteredRecords]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -158,7 +181,7 @@ export const BillingManager: React.FC = () => {
           <div className="absolute right-0 top-0 p-4 opacity-5"><Clock size={64} className="text-amber-600" /></div>
           <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Pendentes</p>
           <h3 className="text-2xl font-black text-amber-600">{stats.pending}</h3>
-          <p className="text-[10px] text-slate-500 mt-2">Aguardando vencimento</p>
+          <p className="text-[10px] text-green-500 mt-2">Aguardando vencimento</p>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
@@ -203,15 +226,15 @@ export const BillingManager: React.FC = () => {
             <p>Nenhum registro encontrado para os filtros atuais.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-visible">
             <table className="w-full text-left text-sm border-collapse">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">ID</th>
                   <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Cliente</th>
                   <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Vencimento</th>
-                  <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Valor Original</th>
-                  <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest">Valor Recebido</th>
+                  <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest text-right">Valor Original</th>
+                  <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest text-right">Valor Recebido</th>
                   <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-widest text-center">Status</th>
                   <th className="px-6 py-4"></th>
                 </tr>
@@ -227,8 +250,8 @@ export const BillingManager: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 font-bold text-slate-700 text-xs">{record._display_venc || '--/--/----'}</td>
-                    <td className="px-6 py-4 font-medium text-slate-600">{formatCurrency(record._display_valor_original)}</td>
-                    <td className="px-6 py-4 font-black text-emerald-600">{formatCurrency(record._display_valor_recebido)}</td>
+                    <td className="px-6 py-4 font-medium text-slate-600 text-right">{formatCurrency(record._display_valor_original)}</td>
+                    <td className="px-6 py-4 font-black text-emerald-600 text-right">{formatCurrency(record._display_valor_recebido)}</td>
                     <td className="px-6 py-4 text-center">
                       <span className={clsx(
                         "text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-tighter border",
@@ -241,8 +264,11 @@ export const BillingManager: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-right relative">
                       <button 
-                        onClick={() => setActiveMenuId(activeMenuId === record.id ? null : record.id)}
-                        className="p-2 text-slate-400 hover:text-teal-600 rounded-lg transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuId(activeMenuId === record.id ? null : record.id);
+                        }}
+                        className="menu-trigger p-2 text-slate-400 hover:text-teal-600 rounded-lg transition-colors"
                       >
                         <MoreHorizontal size={18} />
                       </button>
@@ -250,7 +276,7 @@ export const BillingManager: React.FC = () => {
                       {activeMenuId === record.id && (
                         <div 
                           ref={menuRef}
-                          className="absolute right-10 top-8 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 animate-in fade-in zoom-in-95 duration-100"
+                          className="absolute right-10 top-0 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[100] py-1 animate-in fade-in zoom-in-95 duration-100"
                         >
                           <button 
                             onClick={() => handleCopyId(record._display_id_cliente || '')}
@@ -284,7 +310,7 @@ export const BillingManager: React.FC = () => {
 
       {/* Modal de Detalhes Funcional */}
       {selectedDetailRecord && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <div className="flex items-center gap-3">
@@ -302,7 +328,6 @@ export const BillingManager: React.FC = () => {
             </div>
 
             <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-8">
-              {/* Cabeçalho do Cliente */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-white rounded-full border border-slate-200 flex items-center justify-center text-teal-600 shadow-sm">
@@ -323,7 +348,6 @@ export const BillingManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Informações da Parcela */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-6">
                   <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b pb-2">
@@ -368,7 +392,6 @@ export const BillingManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Todos os campos (Visualizador Bruto) */}
               <div className="space-y-4">
                 <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b pb-2">
                   <Hash size={12} /> Metadados Completos

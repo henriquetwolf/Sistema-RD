@@ -649,6 +649,162 @@ NOTIFY pgrst, 'reload config';
                 </div>
             </div>
         )}
+
+        {activeTab === 'connections' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Globe className="text-teal-600" size={20}/> Conexões Externas (Sync)</h3>
+                    <button onClick={onStartWizard} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 shadow-sm"><Plus size={16}/> Nova Conexão</button>
+                </div>
+                <div className="space-y-4">
+                    {jobs.length === 0 ? <p className="text-center py-10 text-slate-400 italic">Nenhuma conexão configurada.</p> : jobs.map(job => (
+                        <div key={job.id} className="p-4 border rounded-xl hover:bg-slate-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h4 className="font-bold text-slate-800">{job.name}</h4>
+                                <p className="text-xs text-slate-400 truncate max-w-md">{job.sheetUrl}</p>
+                                <div className="mt-2 flex items-center gap-4">
+                                    <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase", job.active ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-400")}>{job.active ? 'Sincronizando' : 'Pausado'}</span>
+                                    <span className="text-[10px] text-slate-400">Freq: {job.intervalMinutes} min</span>
+                                    <span className="text-[10px] text-slate-400">Tabela: {job.config.tableName}</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <button onClick={() => onDeleteJob(job.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'roles' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-bold text-slate-800">Perfis de Acesso</h3><button onClick={() => setEditingRole({ id: '', name: '', permissions: {} })} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ Novo Perfil</button></div>
+                {editingRole && (
+                    <form onSubmit={handleSaveRole} className="bg-slate-50 p-6 rounded-xl border mb-6 space-y-4">
+                        <label className="block text-xs font-bold">Nome do Perfil</label><input type="text" className="w-full p-2 border rounded text-sm mb-4" value={editingRole.name} onChange={e => setEditingRole({...editingRole, name: e.target.value})} required />
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {PERMISSION_MODULES.map(mod => (
+                                <label key={mod.id} className="flex items-center gap-2 p-2 bg-white border rounded cursor-pointer hover:bg-indigo-50">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={!!editingRole.permissions[mod.id]} 
+                                        onChange={e => setEditingRole({...editingRole, permissions: {...editingRole.permissions, [mod.id]: e.target.checked}})} 
+                                    />
+                                    <span className="text-xs font-medium">{mod.label}</span>
+                                </label>
+                            ))}
+                        </div>
+                        <div className="flex justify-end gap-2 pt-4"><button type="button" onClick={() => setEditingRole(null)} className="px-3 py-1 text-sm">Cancelar</button><button type="submit" className="bg-indigo-600 text-white px-4 py-1.5 rounded font-bold text-sm">Salvar Perfil</button></div>
+                    </form>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{roles.map(r => <div key={r.id} className="p-3 border rounded-xl flex justify-between items-center bg-white hover:border-indigo-200 transition-all"><span className="font-bold text-sm text-slate-700">{r.name}</span><div className="flex gap-2"><button onClick={() => setEditingRole(r)} className="text-slate-400 hover:text-indigo-600"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteRole(r.id).then(fetchRoles)} className="text-slate-400 hover:text-red-500"><Trash2 size={16}/></button></div></div>)}</div>
+            </div>
+        )}
+
+        {activeTab === 'logs' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col h-[600px]">
+                <div className="flex items-center justify-between mb-4 shrink-0"><h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><History className="text-blue-600" size={20}/> Registro de Auditoria</h3><div className="relative w-64"><Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="text" className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs" placeholder="Buscar no histórico..." value={logSearch} onChange={e => setLogSearch(e.target.value)} /></div></div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar border rounded-lg"><table className="w-full text-left text-xs border-collapse"><thead className="bg-slate-50 sticky top-0 font-bold text-slate-500 uppercase tracking-wider"><tr><th className="p-3 border-b">Data/Hora</th><th className="p-3 border-b">Usuário</th><th className="p-3 border-b">Ação</th><th className="p-3 border-b">Módulo</th><th className="p-3 border-b">Detalhes</th></tr></thead><tbody className="divide-y divide-slate-100">{logs.filter(l => l.userName.toLowerCase().includes(logSearch.toLowerCase()) || l.details.toLowerCase().includes(logSearch.toLowerCase())).map(log => (<tr key={log.id} className="hover:bg-slate-50 transition-colors"><td className="p-3 text-slate-400 whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</td><td className="p-3 font-bold text-slate-700">{log.userName}</td><td className="p-3"><span className={clsx("px-2 py-0.5 rounded font-black uppercase text-[9px]", log.action === 'delete' ? "bg-red-100 text-red-700" : log.action === 'create' ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700")}>{log.action}</span></td><td className="p-3 font-medium text-slate-500">{log.module}</td><td className="p-3 text-slate-600">{log.details}</td></tr>))}</tbody></table></div>
+            </div>
+        )}
+
+        {activeTab === 'banners' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-800">Banners de Promoção</h3>
+                    <button onClick={() => setEditingBanner({ title: '', imageUrl: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Banner</button>
+                </div>
+                {editingBanner && (
+                    <form onSubmit={handleSaveBanner} className="bg-slate-50 p-6 rounded-xl border mb-8 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-bold mb-1">Título Interno</label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} required />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1">URL da Imagem</label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.imageUrl} onChange={e => setEditingBanner({...editingBanner, imageUrl: e.target.value})} required />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1">Link de Destino</label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1">Público</label>
+                                <select className="w-full p-2 border rounded text-sm" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
+                                    <option value="student">Área do Aluno</option>
+                                    <option value="instructor">Área do Instrutor</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingBanner(null)} className="px-4 py-2 text-sm">Cancelar</button><button type="submit" className="bg-orange-600 text-white px-6 py-2 rounded-lg font-bold text-sm">Salvar Banner</button></div>
+                    </form>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {banners.map(b => (
+                        <div key={b.id} className="p-3 border rounded-xl flex items-center gap-4 bg-white group">
+                            <div className="w-20 h-12 bg-slate-100 rounded overflow-hidden flex-shrink-0"><img src={b.imageUrl} className="w-full h-full object-cover" /></div>
+                            <div className="flex-1 truncate"><h4 className="font-bold text-sm text-slate-800">{b.title}</h4><p className="text-[10px] text-slate-400 uppercase">{b.targetAudience}</p></div>
+                            <div className="flex gap-1"><button onClick={() => setEditingBanner(b)} className="p-1.5 text-slate-400 hover:text-orange-600"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteBanner(b.id).then(fetchBanners)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'instructor_levels' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-800">Níveis e Honorários Docentes</h3>
+                    <button onClick={() => setEditingLevel({ name: '', honorarium: 0, observations: '' })} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Nível</button>
+                </div>
+                {editingLevel && (
+                    <form onSubmit={handleSaveLevel} className="bg-slate-50 p-6 rounded-xl border mb-8 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold mb-1">Nome do Nível</label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} placeholder="Ex: Master II" required />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1">Honorário Padrão (R$)</label>
+                                <input type="number" className="w-full p-2 border rounded text-sm" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value)})} required />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-bold mb-1">Observações / Regras</label>
+                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingLevel.observations} onChange={e => setEditingLevel({...editingLevel, observations: e.target.value})} />
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingLevel(null)} className="px-4 py-2 text-sm">Cancelar</button><button type="submit" className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold text-sm">Salvar Nível</button></div>
+                    </form>
+                )}
+                <div className="space-y-2">
+                    {instructorLevels.map(lvl => (
+                        <div key={lvl.id} className="p-4 border rounded-xl flex justify-between items-center bg-white hover:border-purple-200 transition-all">
+                            <div className="flex items-center gap-4">
+                                <div className="bg-purple-50 p-2 rounded-lg text-purple-600"><Award size={20}/></div>
+                                <div><h4 className="font-bold text-slate-800">{lvl.name}</h4><p className="text-xs text-slate-500">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lvl.honorarium)}</p></div>
+                            </div>
+                            <div className="flex gap-2"><button onClick={() => setEditingLevel(lvl)} className="p-2 text-slate-400 hover:text-purple-600"><Edit2 size={18}/></button><button onClick={() => appBackend.deleteInstructorLevel(lvl.id).then(fetchInstructorLevels)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={18}/></button></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'database' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V18.1)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (JSON Customizado no Connection Plug).</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V18.1</button> : (
+                    <div className="relative animate-in slide-in-from-top-4">
+                        <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
+                        <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>
+                    </div>
+                )}
+            </div>
+        )}
+
       </div>
     </div>
   );

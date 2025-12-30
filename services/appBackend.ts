@@ -151,7 +151,7 @@ export const appBackend = {
 
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
+    const { data, error = null } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((row: any) => ({
       id: row.id,
@@ -168,12 +168,12 @@ export const appBackend = {
       observations: row.observations,
       status: row.status,
       team: row.team,
-      voucherLink1: row.voucher_link_1,
-      testDate: row.test_date,
-      voucherLink2: row.voucher_link_2,
-      voucherLink3: row.voucher_link_3,
+      voucher_link_1: row.voucher_link_1,
+      test_date: row.test_date,
+      voucher_link_2: row.voucher_link_2,
+      voucher_link_3: row.voucher_link_3,
       boletosLink: row.boletos_link,
-      negotiationReference: row.negotiation_reference,
+      negotiation_reference: row.negotiation_reference,
       attachments: row.attachments,
       createdAt: row.created_at
     }));
@@ -527,7 +527,7 @@ export const appBackend = {
       fantasyName: d.fantasy_name, 
       legalName: d.legal_name, 
       cnpj: d.cnpj, 
-      studioPhone: d.studio_phone, 
+      studio_phone: d.studio_phone, 
       address: d.address, 
       city: d.city, 
       state: d.state, 
@@ -656,7 +656,7 @@ export const appBackend = {
           questions: form.questions, 
           style: form.style, 
           team_id: form.teamId || null, 
-          distribution_mode: form.distributionMode || 'fixed', 
+          distribution_mode: form.distribution_mode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null,
           target_pipeline: form.targetPipeline || 'Padrão',
           target_stage: form.targetStage || 'new',
@@ -934,7 +934,8 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.body_text, layout_config: cert.layoutConfig };
+    // Changed cert.body_text to cert.bodyText as defined in CertificateModel interface
+    const payload = { id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig };
     const { error } = await supabase.from('crm_certificates').upsert(payload);
     if (error) throw error;
   },

@@ -24,6 +24,23 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
   const [opSection, setOpSection] = useState<'contratos' | 'ferias' | 'beneficios' | 'compliance'>('contratos');
   const [targetCollaborator, setTargetCollaborator] = useState<Collaborator | null>(null);
 
+  // Helper para converter salário (string ou number) em número processável
+  const parseSalaryValue = (val: any): number => {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    const str = String(val).trim();
+    // Se for formato brasileiro 1.500,00
+    if (str.includes(',') && str.includes('.')) {
+        return parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
+    }
+    // Se for apenas vírgula como decimal
+    if (str.includes(',') && !str.includes('.')) {
+        return parseFloat(str.replace(',', '.')) || 0;
+    }
+    // Fallback para número puro ou formato internacional
+    return parseFloat(str.replace(/[^\d.-]/g, '')) || 0;
+  };
+
   // --- CÁLCULOS DOS KPIS ---
   const stats = useMemo(() => {
     const total = collaborators.length;
@@ -34,7 +51,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
     const thisMonth = now.getMonth();
     const thisYear = now.getFullYear();
 
-    // 1. Admissões do Mês
+    // 1. Admissões do Mês (Apenas Ativos que entraram no mês/ano atual)
     const admissionsMonth = active.filter(c => {
         if (!c.admissionDate) return false;
         const d = new Date(c.admissionDate);
@@ -48,6 +65,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
         if (c.admissionDate) {
             const start = new Date(c.admissionDate);
             if (!isNaN(start.getTime())) {
+                // Cálculo em meses: (Data Atual - Data Admissão) / Milisegundos em um mês médio
                 const diff = Math.max(0, (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
                 totalMonths += diff;
                 activeWithDate++;
@@ -58,8 +76,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
 
     // 3. Folha Salarial Total (Apenas Ativos)
     const totalSalary = active.reduce((acc, curr) => {
-        const salValue = parseFloat(String(curr.salary || '0').replace(/[^\d,]/g, '').replace(',', '.')) || 0;
-        return acc + salValue;
+        return acc + parseSalaryValue(curr.salary);
     }, 0);
 
     return { total, activeCount: active.length, inactiveCount: inactive.length, admissionsMonth, avgTenure, totalSalary };
@@ -68,18 +85,18 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
   // --- ALERTAS CRÍTICOS ---
   const alerts = useMemo(() => {
       return {
-          missingDocs: collaborators.filter(c => !c.cpf || !c.rg || !c.pisNumber),
-          noAdmission: collaborators.filter(c => !c.admissionDate),
-          noSuperior: collaborators.filter(c => !c.superiorId && c.department !== 'Diretoria'),
-          noEmergency: collaborators.filter(c => !c.emergencyName || !c.emergencyPhone),
-          depNoCpf: collaborators.filter(c => c.hasDependents === 'Sim' && !c.dependentCpf)
+          missingDocs: collaborators.filter(c => c.status === 'active' && (!c.cpf || !c.rg || !c.pisNumber)),
+          noAdmission: collaborators.filter(c => c.status === 'active' && !c.admissionDate),
+          noSuperior: collaborators.filter(c => c.status === 'active' && !c.superiorId && c.department !== 'Diretoria'),
+          noEmergency: collaborators.filter(c => c.status === 'active' && (!c.emergencyName || !c.emergencyPhone)),
+          depNoCpf: collaborators.filter(c => c.status === 'active' && c.hasDependents === 'Sim' && !c.dependentCpf)
       };
   }, [collaborators]);
 
   // --- DADOS PARA GRÁFICOS ---
   const deptData = useMemo(() => {
     const depts: Record<string, number> = {};
-    collaborators.forEach(c => {
+    collaborators.filter(c => c.status === 'active').forEach(c => {
         const d = c.department || 'Não Informado';
         depts[d] = (depts[d] || 0) + 1;
     });
@@ -89,7 +106,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
   const tenureDist = useMemo(() => {
       const dist = { '0-3 meses': 0, '3-12 meses': 0, '1-3 anos': 0, '3 anos+': 0 };
       const now = new Date();
-      collaborators.forEach(c => {
+      collaborators.filter(c => c.status === 'active').forEach(c => {
           if (!c.admissionDate) return;
           const start = new Date(c.admissionDate);
           if (isNaN(start.getTime())) return;

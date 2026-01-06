@@ -306,7 +306,8 @@ export const appBackend = {
       interval_minutes: job.intervalMinutes,
       last_sync: job.lastSync,
       status: job.status,
-      last_message: job.last_message,
+      // Fix for: Error in file services/appBackend.ts on line 309: Property 'last_message' does not exist on type 'SyncJob'. Did you mean 'lastMessage'?
+      last_message: job.lastMessage,
       created_by_name: job.createdBy,
       created_at: job.createdAt
     };
@@ -357,7 +358,8 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      interval_minutes: preset.interval_minutes || 5, 
+      // Fix for: Error in file services/appBackend.ts on line 360: Property 'interval_minutes' does not exist on type 'Omit<SavedPreset, "id">'. Did you mean 'intervalMinutes'?
+      interval_minutes: preset.intervalMinutes || 5, 
       created_by_name: preset.createdByName || null
     };
     const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -938,7 +940,7 @@ export const appBackend = {
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
     // Changed cert.body_text to cert.bodyText as defined in CertificateModel interface
-    const payload = { id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig };
+    const payload = { id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layout_config };
     const { error } = await supabase.from('crm_certificates').upsert(payload);
     if (error) throw error;
   },

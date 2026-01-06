@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer } from '../types';
+import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer, FormFolder } from '../types';
 import { FormViewer } from './FormViewer';
 import { 
   FileText, Plus, MoreVertical, Trash2, Eye, Edit2, 
@@ -8,7 +8,7 @@ import {
   Type, AlignLeft, Mail, Phone, Calendar, Hash, CheckSquare, Target, Share2, CheckCircle,
   LayoutTemplate, Monitor, Smartphone, Palette, Columns, X, Image as ImageIcon, Grid, Ban, Users, User, ArrowRightLeft, Info, Code, ExternalLink, Tag, Loader2,
   Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2, MousePointer2, AlignCenter, Layout, Sparkles,
-  Filter
+  Filter, Folder, FolderPlus, MoveRight, LayoutGrid, ChevronRight
 } from 'lucide-react';
 import { appBackend, Pipeline } from '../services/appBackend';
 import clsx from 'clsx';
@@ -57,11 +57,12 @@ const INITIAL_FORM: FormModel = {
   },
   distributionMode: 'fixed',
   targetPipeline: 'Padrão',
-  targetStage: 'new'
+  targetStage: 'new',
+  folderId: null
 };
 
 const CRM_FIELDS = [
-    { value: '', label: 'Nenhum (Não enviar p/ CRM)' },
+    { value: '', label: 'Nenhum (Campo Manual)' },
     { value: 'contact_name', label: 'Nome Completo (Cliente)' },
     { value: 'email', label: 'E-mail' },
     { value: 'phone', label: 'Telefone / WhatsApp' },
@@ -91,6 +92,8 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [view, setView] = useState<'list' | 'templates' | 'editor' | 'preview' | 'responses'>('list');
   const [editorStep, setEditorStep] = useState<'editor' | 'design' | 'settings'>('editor');
   const [forms, setForms] = useState<FormModel[]>([]);
+  const [folders, setFolders] = useState<FormFolder[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [currentForm, setCurrentForm] = useState<FormModel>(INITIAL_FORM);
   const [teams, setTeams] = useState<Team[]>([]);
   const [collaborators, setCollaborators] = useState<CollaboratorSimple[]>([]);
@@ -99,12 +102,17 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [sharingForm, setSharingForm] = useState<FormModel | null>(null);
   const [copiedType, setCopiedType] = useState<'link' | 'embed' | null>(null);
+  
+  // UI Folder States
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showMoveModal, setShowMoveModal] = useState<FormModel | null>(null);
 
   // Submissions State
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
 
-  useEffect(() => { loadForms(); loadMetadata(); }, []);
+  useEffect(() => { loadForms(); loadMetadata(); loadFolders(); }, []);
 
   const loadForms = async () => { 
       setLoading(true); 
@@ -116,6 +124,13 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       } finally {
           setLoading(false); 
       }
+  };
+
+  const loadFolders = async () => {
+    try {
+      const data = await appBackend.getFormFolders();
+      setFolders(data);
+    } catch (e) {}
   };
 
   const loadMetadata = async () => { 
@@ -131,6 +146,39 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       } catch (e) {} 
   };
 
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return;
+    const newFolder: FormFolder = {
+        id: crypto.randomUUID(),
+        name: newFolderName,
+        createdAt: new Date().toISOString()
+    };
+    await appBackend.saveFormFolder(newFolder);
+    await loadFolders();
+    setShowFolderModal(false);
+    setNewFolderName('');
+  };
+
+  const handleDeleteFolder = async (id: string) => {
+    if (window.confirm('Excluir esta pasta? Os formulários não serão apagados, apenas voltarão para a raiz.')) {
+        await appBackend.deleteFormFolder(id);
+        if (currentFolderId === id) setCurrentFolderId(null);
+        loadFolders();
+    }
+  };
+
+  const handleMoveForm = async (form: FormModel, folderId: string | null) => {
+    const updated = { ...form, folderId: folderId || null };
+    await appBackend.saveForm(updated);
+    await loadForms();
+    setShowMoveModal(null);
+  };
+
+  const filteredForms = useMemo(() => {
+    if (currentFolderId === null) return forms;
+    return forms.filter(f => f.folderId === currentFolderId);
+  }, [forms, currentFolderId]);
+
   const selectTemplate = (template: any) => { 
       const newForm: FormModel = { 
           ...INITIAL_FORM, 
@@ -139,7 +187,8 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
           description: template.description || '', 
           questions: template.id === 'blank' ? [] : template.questions.map((q: any) => ({ ...q, id: crypto.randomUUID() })), 
           createdAt: new Date().toISOString(), 
-          isLeadCapture: template.id !== 'blank' 
+          isLeadCapture: template.id !== 'blank',
+          folderId: currentFolderId
       }; 
       setCurrentForm(newForm); 
       setView('editor'); 
@@ -249,6 +298,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   };
 
   const updateQuestion = (id: string, field: keyof FormQuestion, value: any) => {
+      // Fixed: changed setCurrentSurvey to setCurrentForm as it is the correct state setter for this component
       setCurrentForm(prev => ({ ...prev, questions: prev.questions.map(q => {
           if (q.id === id) {
               if ((field === 'type' && (value === 'select' || value === 'checkbox')) && !q.options) {
@@ -787,6 +837,22 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                           </div>
                                       </div>
                                   )}
+
+                                  {/* PASTA SELECTOR NO EDITOR */}
+                                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Folder size={14}/> Organização</h4>
+                                      <div>
+                                          <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">Mover para Pasta</label>
+                                          <select 
+                                              className="w-full px-4 py-2 border rounded-lg bg-white text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                                              value={currentForm.folderId || ''}
+                                              onChange={e => setCurrentForm({...currentForm, folderId: e.target.value || null})}
+                                          >
+                                              <option value="">Sem pasta (Raiz)</option>
+                                              {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                          </select>
+                                      </div>
+                                  </div>
                               </div>
                           </section>
                       </div>
@@ -797,56 +863,207 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   );
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-            <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
-            <div><h2 className="text-2xl font-bold text-slate-800">Seus Formulários</h2><p className="text-slate-500 text-sm">Capte dados e leads integrados ao seu CRM.</p></div>
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 h-full flex flex-col md:flex-row gap-6 pb-20">
+      
+      {/* SIDEBAR: Pastas */}
+      <aside className="w-full md:w-64 flex-shrink-0 space-y-4">
+        <div>
+            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm font-medium mb-4">
+                <ArrowLeft size={16} /> Voltar ao Painel
+            </button>
+            <button 
+                onClick={() => setView('templates')} 
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2 mb-4 active:scale-95"
+            >
+                <Plus size={18} /> Novo Formulário
+            </button>
         </div>
-        <button onClick={() => setView('templates')} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-teal-600/20 transition-all active:scale-95"><Plus size={18} /> Criar Novo Formulário</button>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-2 shadow-sm">
+            <p className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Navegação</p>
+            
+            <button 
+                onClick={() => setCurrentFolderId(null)}
+                className={clsx(
+                    "w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1",
+                    currentFolderId === null ? "bg-teal-50 text-teal-700" : "text-slate-600 hover:bg-slate-50"
+                )}
+            >
+                <span className="flex items-center gap-2"><LayoutGrid size={16} /> Todos os Formulários</span>
+                <span className="text-xs opacity-60 bg-white px-1.5 rounded-full border border-slate-100">{forms.length}</span>
+            </button>
+
+            <div className="mt-4 flex items-center justify-between px-3 mb-2">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pastas</p>
+                <button onClick={() => setShowFolderModal(true)} className="text-slate-400 hover:text-teal-600 p-1 rounded-md hover:bg-teal-50 transition-colors" title="Nova Pasta">
+                    <FolderPlus size={16} />
+                </button>
+            </div>
+
+            <div className="space-y-0.5 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+                {folders.map(f => {
+                    const count = forms.filter(form => form.folderId === f.id).length;
+                    return (
+                        <div key={f.id} className="group relative">
+                            <button 
+                                onClick={() => setCurrentFolderId(f.id)}
+                                className={clsx(
+                                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                                    currentFolderId === f.id ? "bg-teal-50 text-teal-700" : "text-slate-600 hover:bg-slate-50"
+                                )}
+                            >
+                                <Folder size={16} className={currentFolderId === f.id ? "fill-teal-200 text-teal-600" : "text-slate-400 group-hover:text-teal-600"} />
+                                <span className="truncate flex-1 text-left">{f.name}</span>
+                                <span className="text-[10px] opacity-40">{count}</span>
+                            </button>
+                            <button 
+                                onClick={() => handleDeleteFolder(f.id)}
+                                className="absolute right-10 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Excluir Pasta"
+                            >
+                                <X size={12} />
+                            </button>
+                        </div>
+                    );
+                })}
+                {folders.length === 0 && (
+                    <div className="p-8 text-center bg-slate-50 rounded-lg border-2 border-dashed border-slate-100 mx-1">
+                        <Folder className="mx-auto text-slate-300 mb-2" size={24} />
+                        <p className="text-[10px] text-slate-400 italic">Sem pastas personalizadas.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  {currentFolderId ? (
+                      <>
+                        <Folder className="text-teal-600" /> {folders.find(f => f.id === currentFolderId)?.name}
+                      </>
+                  ) : (
+                      <>
+                        <LayoutGrid className="text-teal-600" /> Todos os Formulários
+                      </>
+                  )}
+              </h2>
+              <div className="flex items-center gap-2 text-xs text-slate-400 font-bold uppercase">
+                  {filteredForms.length} itens localizados
+              </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {loading ? (
+                <div className="col-span-full flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={32}/></div>
+            ) : filteredForms.length === 0 ? (
+                <div className="col-span-full text-center py-24 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
+                    <LayoutTemplate className="mx-auto mb-4 opacity-20" size={64}/>
+                    <p className="text-lg font-bold">Nenhum formulário nesta pasta</p>
+                    <p className="text-sm">Mova formulários para cá ou crie um novo.</p>
+                </div>
+            ) : (
+                filteredForms.map(f => (
+                    <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-teal-200 transition-all flex flex-col group overflow-hidden">
+                        <div className="p-6 flex-1">
+                            <div className="flex justify-between items-start mb-4">
+                                <span className={clsx("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border", f.isLeadCapture ? "bg-indigo-50 text-indigo-700 border-indigo-100" : "bg-slate-50 text-slate-400 border-slate-100")}>
+                                    {f.isLeadCapture ? 'Lead Capture ON' : 'Pesquisa Simples'}
+                                </span>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => setShowMoveModal(f)} className="p-1.5 text-slate-400 hover:text-teal-600 bg-slate-100 rounded-lg" title="Mover p/ Pasta"><MoveRight size={16}/></button>
+                                    <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-400 hover:text-teal-600 bg-slate-100 rounded-lg"><Edit2 size={16} /></button>
+                                    <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-400 hover:text-red-500 bg-slate-100 rounded-lg"><Trash2 size={16} /></button>
+                                </div>
+                            </div>
+                            <h3 className="font-black text-slate-800 text-lg mb-1 line-clamp-1">{f.title}</h3>
+                            <p className="text-xs text-slate-400 mb-6">{f.questions.length} campos de entrada</p>
+                            
+                            <div className="grid grid-cols-2 gap-3">
+                                <button 
+                                    onClick={() => handleViewResponses(f)}
+                                    className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center transition-colors"
+                                >
+                                    <Table size={20} className="mb-1 text-indigo-500" />
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Respostas</p>
+                                    <p className="text-xl font-black text-slate-800">{f.submissionsCount || 0}</p>
+                                </button>
+                                <button onClick={() => handleShare(f)} className="bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl flex flex-col items-center justify-center transition-colors shadow-sm">
+                                    <Share2 size={20} />
+                                    <span className="text-[10px] font-black uppercase mt-1">Enviar Link</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ))
+            )}
+          </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {loading ? <div className="col-span-full flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={32}/></div> : forms.map(f => (
-          <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-teal-200 transition-all flex flex-col group overflow-hidden">
-            <div className="p-6 flex-1">
-                <div className="flex justify-between items-start mb-4">
-                    <span className={clsx("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border", f.isLeadCapture ? "bg-indigo-50 text-indigo-700 border-indigo-100" : "bg-slate-50 text-slate-400 border-slate-100")}>
-                        {f.isLeadCapture ? 'Lead Capture ON' : 'Pesquisa Simples'}
-                    </span>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-400 hover:text-teal-600 bg-slate-100 rounded-lg"><Edit2 size={16} /></button>
-                        <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-400 hover:text-red-500 bg-slate-100 rounded-lg"><Trash2 size={16} /></button>
-                    </div>
-                </div>
-                <h3 className="font-black text-slate-800 text-lg mb-1 line-clamp-1">{f.title}</h3>
-                <p className="text-xs text-slate-400 mb-6">{f.questions.length} campos de entrada</p>
-                
-                <div className="grid grid-cols-2 gap-3">
-                    <button 
-                        onClick={() => handleViewResponses(f)}
-                        className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center transition-colors"
-                    >
-                        <Table size={20} className="mb-1 text-indigo-500" />
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Respostas</p>
-                        <p className="text-xl font-black text-slate-800">{f.submissionsCount || 0}</p>
-                    </button>
-                    <button onClick={() => handleShare(f)} className="bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl flex flex-col items-center justify-center transition-colors shadow-sm">
-                        <Share2 size={20} />
-                        <span className="text-[10px] font-black uppercase mt-1">Enviar Link</span>
-                    </button>
-                </div>
-            </div>
+      {/* --- MODALS --- */}
+
+      {/* Create Folder Modal */}
+      {showFolderModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
+                  <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800">Nova Pasta de Formulários</h3>
+                      <button onClick={() => setShowFolderModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  </div>
+                  <div className="p-5">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Pasta</label>
+                      <input 
+                          type="text" 
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          placeholder="Ex: Eventos 2025"
+                          value={newFolderName}
+                          onChange={e => setNewFolderName(e.target.value)}
+                          autoFocus
+                      />
+                  </div>
+                  <div className="px-5 py-3 bg-slate-50 flex justify-end gap-2">
+                      <button onClick={() => setShowFolderModal(false)} className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-200 rounded">Cancelar</button>
+                      <button onClick={handleCreateFolder} className="px-3 py-1.5 bg-teal-600 text-white rounded text-sm font-bold hover:bg-teal-700 shadow-sm">Criar Pasta</button>
+                  </div>
+              </div>
           </div>
-        ))}
-        {!loading && forms.length === 0 && (
-            <div className="col-span-full text-center py-24 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
-                <LayoutTemplate className="mx-auto mb-4 opacity-20" size={64}/>
-                <p className="text-lg font-bold">Nenhum formulário criado ainda</p>
-                <p className="text-sm">Clique em "Criar Novo" para começar a captar leads.</p>
-            </div>
-        )}
-      </div>
+      )}
+
+      {/* Move Form Modal */}
+      {showMoveModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
+                  <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800">Mover Formulário</h3>
+                      <button onClick={() => setShowMoveModal(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  </div>
+                  <div className="p-5">
+                      <p className="text-sm text-slate-500 mb-4">Selecione a pasta de destino para: <br/><strong className="text-slate-800">{showMoveModal.title}</strong></p>
+                      <div className="space-y-1">
+                          <button 
+                              onClick={() => handleMoveForm(showMoveModal, null)}
+                              className={clsx("w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors", !showMoveModal.folderId ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                          >
+                              <span className="flex items-center gap-2"><LayoutGrid size={16} /> Sem Pasta (Raiz)</span>
+                              {!showMoveModal.folderId && <Check size={14}/>}
+                          </button>
+                          {folders.map(f => (
+                              <button 
+                                  key={f.id}
+                                  onClick={() => handleMoveForm(showMoveModal, f.id)}
+                                  className={clsx("w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors", showMoveModal.folderId === f.id ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                              >
+                                  <span className="flex items-center gap-2"><Folder size={16} /> {f.name}</span>
+                                  {showMoveModal.folderId === f.id && <Check size={14}/>}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {sharingForm && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">

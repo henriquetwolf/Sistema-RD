@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation } from '../types';
+import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -263,6 +263,7 @@ export const appBackend = {
           id: trigger.id || undefined,
           pipeline_name: trigger.pipelineName,
           stage_id: trigger.stageId,
+          // Fixed property access: using payloadJson from interface instead of snake_case payload_json
           payload_json: trigger.payloadJson
       });
       if (error) throw error;
@@ -434,6 +435,7 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
+      // Fixed property access: mapping camelCase properties from CompanySetting interface to snake_case columns
       const payload = { 
           id: company.id || undefined, 
           legal_name: company.legalName, 
@@ -663,7 +665,8 @@ export const appBackend = {
           fixed_owner_id: form.fixedOwnerId || null,
           target_pipeline: form.targetPipeline || 'Padrão',
           target_stage: form.targetStage || 'new',
-          submissions_count: form.submissionsCount || 0 
+          submissions_count: form.submissionsCount || 0,
+          folder_id: form.folderId || null
       };
       const { error } = await supabase.from('crm_forms').upsert(payload);
       if (error) throw error;
@@ -688,8 +691,28 @@ export const appBackend = {
           questions: d.questions || [], 
           style: d.style || {}, 
           createdAt: d.created_at, 
-          submissionsCount: d.submissions_count || 0 
+          submissionsCount: d.submissions_count || 0,
+          folderId: d.folder_id
       }));
+  },
+
+  getFormFolders: async (): Promise<FormFolder[]> => {
+    if (!isConfigured) return [];
+    const { data, error = null } = await supabase.from('crm_form_folders').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
+  },
+
+  saveFormFolder: async (folder: FormFolder): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_form_folders').upsert({ id: folder.id, name: folder.name });
+    if (error) throw error;
+  },
+
+  deleteFormFolder: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_form_folders').delete().eq('id', id);
+    if (error) throw error;
   },
 
   saveSurvey: async (survey: SurveyModel): Promise<void> => {
@@ -779,7 +802,8 @@ export const appBackend = {
               fixedOwnerId: form.fixed_owner_id || null, targetPipeline: form.target_pipeline,
               targetStage: form.target_stage, questions: form.questions || [], 
               style: form.style || {}, createdAt: form.created_at, 
-              submissionsCount: form.submissions_count || 0 
+              submissionsCount: form.submissions_count || 0,
+              folderId: form.folder_id
           };
       }
       const { data: survey, error: surveyErr = null } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
@@ -939,8 +963,8 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    // Changed cert.body_text to cert.bodyText as defined in CertificateModel interface
-    const payload = { id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layout_config };
+    // Fixed layout_config access: mapping layoutConfig property from CertificateModel interface to snake_case column
+    const payload = { id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig };
     const { error } = await supabase.from('crm_certificates').upsert(payload);
     if (error) throw error;
   },
@@ -1004,7 +1028,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('title', { ascending: true });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
+    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, max_selections: d.max_selections }));
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {

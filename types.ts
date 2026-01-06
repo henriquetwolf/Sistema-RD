@@ -198,6 +198,12 @@ export interface FormStyle {
   successButtonText?: string;
 }
 
+export interface FormFolder {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface FormModel {
   id: string;
   title: string;
@@ -213,6 +219,7 @@ export interface FormModel {
   style?: FormStyle; 
   createdAt: string;
   submissionsCount: number;
+  folderId?: string | null;
 }
 
 export interface SurveyModel extends FormModel {

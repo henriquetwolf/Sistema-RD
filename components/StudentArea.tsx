@@ -200,40 +200,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-6 space-y-8">
                 
-                {/* Dashboard Hero */}
-                <section className="bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-900 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-purple-900/20 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
-                    <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-60 h-60 bg-purple-500/20 rounded-full blur-3xl"></div>
-                    
-                    <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
-                        <div className="max-w-xl">
-                            <div className="inline-flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-4 border border-white/30 backdrop-blur-md">
-                                <Sparkles size={12} className="text-amber-400" /> Seja bem-vindo à sua evolução
-                            </div>
-                            <h2 className="text-4xl font-black mb-3 tracking-tight leading-tight">
-                                Olá, <span className="text-purple-200">{student.name.split(' ')[0]}</span>!
-                            </h2>
-                            <p className="text-purple-100/80 text-lg leading-relaxed font-medium">
-                                Acompanhe sua jornada acadêmica, gerencie seus certificados e descubra novos workshops exclusivos da maior rede de Pilates do mundo.
-                            </p>
-                        </div>
-                        
-                        <div className="flex gap-4">
-                            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-5 flex flex-col items-center justify-center min-w-[120px]">
-                                <Trophy size={28} className="text-amber-400 mb-1" />
-                                <span className="text-2xl font-black">{certificates.length}</span>
-                                <span className="text-[10px] font-bold uppercase text-purple-200">Certificados</span>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-5 flex flex-col items-center justify-center min-w-[120px]">
-                                <BookOpen size={28} className="text-teal-400 mb-1" />
-                                <span className="text-2xl font-black">{classes.length}</span>
-                                <span className="text-[10px] font-bold uppercase text-purple-200">Turmas</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Notifications Area (Surveys) */}
+                {/* Notifications Area (Surveys) - Top priority alerts */}
                 {mySurveys.length > 0 && (
                     <section className="space-y-4 animate-in slide-in-from-top-4">
                         <div className="flex items-center justify-between px-2">
@@ -260,18 +227,62 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     </section>
                 )}
 
-                {/* Promotional Carousel/Banners */}
-                {banners.length > 0 && (
-                    <section className="relative group">
-                        <div className="overflow-x-auto no-scrollbar flex gap-4 pb-2">
-                            {banners.map(banner => (
-                                <a key={banner.id} href={banner.linkUrl || '#'} target="_blank" rel="noreferrer" className="block min-w-[300px] md:min-w-[450px] rounded-[2rem] overflow-hidden shadow-lg hover:shadow-xl transition-all border-4 border-white">
-                                    <img src={banner.imageUrl} alt={banner.title} className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-700" />
-                                </a>
-                            ))}
+                {/* Dashboard Header Grid (Hero + Banners) */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Dashboard Hero */}
+                    <section className="bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-purple-900/20 relative overflow-hidden group flex flex-col justify-between">
+                        <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
+                        <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-60 h-60 bg-purple-500/20 rounded-full blur-3xl"></div>
+                        
+                        <div className="relative z-10">
+                            <div className="inline-flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-4 border border-white/30 backdrop-blur-md">
+                                <Sparkles size={12} className="text-amber-400" /> Seja bem-vindo
+                            </div>
+                            <h2 className="text-3xl font-black mb-3 tracking-tight leading-tight">
+                                Olá, <span className="text-purple-200">{student.name.split(' ')[0]}</span>!
+                            </h2>
+                            <p className="text-purple-100/80 text-base leading-relaxed font-medium mb-6">
+                                Acompanhe sua jornada acadêmica e gerencie seus certificados da maior rede de Pilates do mundo.
+                            </p>
+                        </div>
+                        
+                        <div className="relative z-10 flex gap-4 mt-auto">
+                            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-4 flex flex-col items-center justify-center flex-1">
+                                <Trophy size={24} className="text-amber-400 mb-1" />
+                                <span className="text-xl font-black">{certificates.length}</span>
+                                <span className="text-[10px] font-bold uppercase text-purple-200">Certificados</span>
+                            </div>
+                            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-4 flex flex-col items-center justify-center flex-1">
+                                <BookOpen size={24} className="text-teal-400 mb-1" />
+                                <span className="text-xl font-black">{classes.length}</span>
+                                <span className="text-[10px] font-bold uppercase text-purple-200">Turmas</span>
+                            </div>
                         </div>
                     </section>
-                )}
+
+                    {/* Promotional Carousel/Banners */}
+                    {banners.length > 0 ? (
+                        <section className="relative h-full flex flex-col gap-4">
+                            <div className="overflow-hidden rounded-[2.5rem] shadow-xl border-4 border-white h-full relative group">
+                                <div className="overflow-x-auto no-scrollbar flex h-full snap-x snap-mandatory">
+                                    {banners.map(banner => (
+                                        <a key={banner.id} href={banner.linkUrl || '#'} target="_blank" rel="noreferrer" className="block min-w-full h-full snap-start relative">
+                                            <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                                            <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/60 to-transparent text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <h4 className="font-bold text-sm">{banner.title}</h4>
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        </section>
+                    ) : (
+                        <div className="bg-slate-100 rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 p-8">
+                            <Layers size={32} className="mb-2 opacity-20" />
+                            <p className="text-xs font-bold uppercase tracking-widest">Sem banners ativos</p>
+                        </div>
+                    )}
+                </div>
 
                 {/* Main Navigation Tabs */}
                 <nav className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 overflow-x-auto no-scrollbar gap-1">

@@ -172,7 +172,7 @@ export const appBackend = {
       test_date: row.test_date,
       voucher_link_2: row.voucher_link_2,
       voucher_link_3: row.voucher_link_3,
-      boletosLink: row.boletos_link,
+      boletos_link: row.boletos_link,
       negotiation_reference: row.negotiation_reference,
       attachments: row.attachments,
       createdAt: row.created_at
@@ -306,7 +306,7 @@ export const appBackend = {
       interval_minutes: job.intervalMinutes,
       last_sync: job.lastSync,
       status: job.status,
-      last_message: job.lastMessage,
+      last_message: job.last_message,
       created_by_name: job.createdBy,
       created_at: job.createdAt
     };
@@ -357,7 +357,7 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      interval_minutes: preset.intervalMinutes || 5, 
+      interval_minutes: preset.interval_minutes || 5, 
       created_by_name: preset.createdByName || null
     };
     const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -656,7 +656,8 @@ export const appBackend = {
           questions: form.questions, 
           style: form.style, 
           team_id: form.teamId || null, 
-          distribution_mode: form.distribution_mode || 'fixed', 
+          // Fixed distribution_mode mapping: using distributionMode from FormModel interface
+          distribution_mode: form.distributionMode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null,
           target_pipeline: form.targetPipeline || 'Padrão',
           target_stage: form.targetStage || 'new',
@@ -678,7 +679,8 @@ export const appBackend = {
           isLeadCapture: d.is_lead_capture, 
           teamId: d.team_id, 
           distributionMode: d.distribution_mode, 
-          fixedOwnerId: d.fixedOwnerId, 
+          // Fixed fixedOwnerId mapping: using fixed_owner_id from DB
+          fixedOwnerId: d.fixed_owner_id, 
           targetPipeline: d.target_pipeline,
           targetStage: d.target_stage,
           questions: d.questions || [], 
@@ -771,7 +773,8 @@ export const appBackend = {
               id: form.id, title: form.title, description: form.description, 
               campaign: form.campaign, isLeadCapture: form.is_lead_capture, 
               teamId: form.team_id, distributionMode: form.distribution_mode, 
-              fixedOwnerId: form.fixedOwnerId || null, targetPipeline: form.target_pipeline,
+              // Fixed fixedOwnerId mapping: using fixed_owner_id from DB
+              fixedOwnerId: form.fixed_owner_id || null, targetPipeline: form.target_pipeline,
               targetStage: form.target_stage, questions: form.questions || [], 
               style: form.style || {}, createdAt: form.created_at, 
               submissionsCount: form.submissions_count || 0 
@@ -781,7 +784,7 @@ export const appBackend = {
       if (survey) {
           return { 
               id: survey.id, title: survey.title, description: survey.description, 
-              isLeadCapture: survey.is_lead_capture, 
+              isLeadCapture: survey.isLeadCapture, 
               questions: survey.questions || [], 
               style: survey.style || {}, createdAt: survey.created_at, 
               submissionsCount: survey.submissions_count || 0 

@@ -5,7 +5,7 @@ import {
   Heart, Baby, BarChart3, PieChart, LayoutDashboard, ClipboardList,
   AlertCircle, Calendar, Briefcase, DollarSign, MapPin, Building,
   ArrowRight, CheckCircle2, XCircle, ChevronRight, TrendingUp, Info,
-  Users2
+  Users2, UserPlus, Wallet, TrendingDown
 } from 'lucide-react';
 import { Collaborator, CollaboratorsManager } from './CollaboratorsManager';
 import { 
@@ -33,30 +33,36 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
     const now = new Date();
     const thisMonth = now.getMonth();
     const thisYear = now.getFullYear();
+
+    // 1. Admissões do Mês
     const admissionsMonth = active.filter(c => {
         if (!c.admissionDate) return false;
         const d = new Date(c.admissionDate);
-        return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+        return !isNaN(d.getTime()) && d.getMonth() === thisMonth && d.getFullYear() === thisYear;
     }).length;
 
+    // 2. Tempo Médio de Casa (Apenas Ativos)
     let totalMonths = 0;
+    let activeWithDate = 0;
     active.forEach(c => {
         if (c.admissionDate) {
             const start = new Date(c.admissionDate);
-            const diff = Math.max(0, (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
-            totalMonths += diff;
+            if (!isNaN(start.getTime())) {
+                const diff = Math.max(0, (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+                totalMonths += diff;
+                activeWithDate++;
+            }
         }
     });
-    const avgTenure = active.length > 0 ? (totalMonths / active.length).toFixed(1) : "0";
+    const avgTenure = activeWithDate > 0 ? (totalMonths / activeWithDate).toFixed(1) : "0.0";
 
-    const essentialFields: (keyof Collaborator)[] = ['fullName', 'email', 'cpf', 'rg', 'admissionDate', 'role', 'department'];
-    const completeCount = collaborators.filter(c => essentialFields.every(f => !!c[f])).length;
-    const completionRate = total > 0 ? Math.round((completeCount / total) * 100) : 0;
+    // 3. Folha Salarial Total (Apenas Ativos)
+    const totalSalary = active.reduce((acc, curr) => {
+        const salValue = parseFloat(String(curr.salary || '0').replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+        return acc + salValue;
+    }, 0);
 
-    const healthRate = total > 0 ? Math.round((collaborators.filter(c => c.hasHealthPlan === 'Sim').length / total) * 100) : 0;
-    const dependentRate = total > 0 ? Math.round((collaborators.filter(c => c.hasDependents === 'Sim').length / total) * 100) : 0;
-
-    return { total, activeCount: active.length, inactiveCount: inactive.length, admissionsMonth, avgTenure, completionRate, healthRate, dependentRate };
+    return { total, activeCount: active.length, inactiveCount: inactive.length, admissionsMonth, avgTenure, totalSalary };
   }, [collaborators]);
 
   // --- ALERTAS CRÍTICOS ---
@@ -86,6 +92,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
       collaborators.forEach(c => {
           if (!c.admissionDate) return;
           const start = new Date(c.admissionDate);
+          if (isNaN(start.getTime())) return;
           const months = (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
           if (months <= 3) dist['0-3 meses']++;
           else if (months <= 12) dist['3-12 meses']++;
@@ -110,9 +117,8 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
 
   const COLORS = ['#0d9488', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-  const formatCurrency = (val: string) => {
-      const num = parseFloat(val.replace(/[^\d,]/g, '').replace(',', '.'));
-      return isNaN(num) ? 'R$ 0,00' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+  const formatCurrency = (val: number) => {
+      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   };
 
   const goToCollaborator = (c: Collaborator) => {
@@ -157,21 +163,19 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
                       <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Clock size={64} className="text-teal-600" /></div>
                       <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Tempo Médio Casa</p>
                       <h3 className="text-3xl font-black text-slate-800">{stats.avgTenure} <span className="text-sm font-normal text-slate-400">meses</span></h3>
-                      <div className="mt-2 text-[10px] font-bold text-teal-600 uppercase flex items-center gap-1"><TrendingUp size={12}/> Estabilidade de equipe</div>
+                      <div className="mt-2 text-[10px] font-bold text-teal-600 uppercase flex items-center gap-1"><TrendingUp size={12}/> ESTABILIDADE DE EQUIPE</div>
                   </div>
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                      <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><ShieldCheck size={64} className="text-indigo-600" /></div>
-                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Qualidade Cadastral</p>
-                      <h3 className="text-3xl font-black text-slate-800">{stats.completionRate}%</h3>
-                      <div className="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
-                          <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${stats.completionRate}%` }}></div>
-                      </div>
+                      <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><UserPlus size={64} className="text-indigo-600" /></div>
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Admissões no Mês</p>
+                      <h3 className="text-3xl font-black text-slate-800">{stats.admissionsMonth}</h3>
+                      <div className="mt-2 text-[10px] font-bold text-indigo-600 uppercase flex items-center gap-1">Talentos integrados</div>
                   </div>
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                      <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Heart size={64} className="text-rose-600" /></div>
-                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Adesão Saúde</p>
-                      <h3 className="text-3xl font-black text-slate-800">{stats.healthRate}%</h3>
-                      <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-tighter">{stats.dependentRate}% possuem dependentes</p>
+                      <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Wallet size={64} className="text-emerald-600" /></div>
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Folha Salarial Bruta</p>
+                      <h3 className="text-2xl font-black text-emerald-600">{formatCurrency(stats.totalSalary)}</h3>
+                      <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-tighter">Investimento mensal estimado</p>
                   </div>
               </div>
 
@@ -184,7 +188,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
                             <BarChart data={deptData} layout="vertical" margin={{ left: 20 }}>
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                 <XAxis type="number" hide />
-                                <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
+                                <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} tick={{fontSize: 10, fontBold: true}} />
                                 <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
                                 <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20}>
                                     {deptData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
@@ -200,7 +204,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={tenureDist}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontBold: true}} />
                                 <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
                                 <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
                                 <Bar dataKey="value" fill="#0d9488" radius={[4, 4, 0, 0]} barSize={40} />
@@ -407,14 +411,7 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
                                   <div className="absolute top-0 right-0 p-8 opacity-10"><DollarSign size={120}/></div>
                                   <h4 className="text-sm font-black uppercase tracking-widest mb-2 text-indigo-300">Resumo de Remuneração</h4>
                                   <p className="text-4xl font-black mb-4">
-                                      {formatCurrency(
-                                          collaborators
-                                            .filter(c => c.status === 'active')
-                                            .reduce((acc, curr) => {
-                                                const sal = parseFloat(curr.salary.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
-                                                return acc + sal;
-                                            }, 0).toString()
-                                      )}
+                                      {formatCurrency(stats.totalSalary)}
                                   </p>
                                   <p className="text-xs text-indigo-200">Folha salarial bruta estimada (apenas colaboradores ativos).</p>
                               </div>

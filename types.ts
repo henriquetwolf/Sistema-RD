@@ -1,27 +1,4 @@
 
-export interface SupportTicket {
-  id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  userType: 'student' | 'instructor' | 'studio';
-  subject: string;
-  category: string;
-  status: 'open' | 'in_progress' | 'closed';
-  createdAt: string;
-  updatedAt: string;
-  lastMessage?: string;
-}
-
-export interface TicketMessage {
-  id: string;
-  ticketId: string;
-  senderName: string;
-  senderType: 'user' | 'agent';
-  text: string;
-  createdAt: string;
-}
-
 export interface BillingRecord {
   id: number;
   "Identificador do cliente": string;
@@ -472,5 +449,33 @@ export interface TeacherNews {
   title: string;
   content: string;
   imageUrl?: string;
+  createdAt: string;
+}
+
+// Support System Interfaces
+export type UserType = 'student' | 'instructor' | 'studio';
+export type TicketStatus = 'open' | 'in_progress' | 'closed';
+
+export interface SupportTicket {
+  id: string;
+  userType: UserType;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  subject: string;
+  category: string;
+  status: TicketStatus;
+  createdAt: string;
+  updatedAt: string;
+  lastMessage?: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderName: string;
+  senderType: 'user' | 'agent';
+  message: string;
   createdAt: string;
 }

@@ -1,8 +1,17 @@
-
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo, TeacherNews, SupportTicket, TicketMessage } from '../types';
+import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo, TeacherNews, SupportTicket, TicketMessage, UserType, TicketStatus } from '../types';
 
-// Interfaces added to fix missing type errors
+const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
+const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
+
+const isConfigured = !!APP_URL && !!APP_KEY;
+
+const supabase = createClient(
+  APP_URL || 'https://placeholder.supabase.co', 
+  APP_KEY || 'placeholder'
+);
+
+// Added exported interfaces to resolve import errors in CRM and Settings components
 export interface PipelineStage {
   id: string;
   title: string;
@@ -19,28 +28,18 @@ export interface WebhookTrigger {
   id: string;
   pipelineName: string;
   stageId: string;
-  payloadJson: string;
+  payloadJson?: string;
   createdAt: string;
 }
 
 export interface CompanySetting {
-  id?: string;
+  id: string;
   legalName: string;
   cnpj: string;
   webhookUrl: string;
   productTypes: string[];
   productIds: string[];
 }
-
-const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
-const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
-
-const isConfigured = !!APP_URL && !!APP_KEY;
-
-const supabase = createClient(
-  APP_URL || 'https://placeholder.supabase.co', 
-  APP_KEY || 'placeholder'
-);
 
 export const appBackend = {
   isLocalMode: !isConfigured,
@@ -71,61 +70,67 @@ export const appBackend = {
     }
   },
 
-  // --- SUPORTE / CHAMADOS ---
-
-  getSupportTickets: async (userId?: string, userType?: string): Promise<SupportTicket[]> => {
-      if (!isConfigured) return [];
-      let query = supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
-      if (userId) query = query.eq('user_id', userId);
-      if (userType) query = query.eq('user_type', userType);
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []).map(d => ({
-          id: d.id, userId: d.user_id, userName: d.user_name, userEmail: d.user_email, userType: d.user_type,
-          subject: d.subject, category: d.category, status: d.status, createdAt: d.created_at, updatedAt: d.updated_at, lastMessage: d.last_message
-      }));
+  // Support Tickets Management
+  getSupportTickets: async (userId?: string, userType?: UserType): Promise<SupportTicket[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
+    if (userId && userType) {
+        query = query.eq('user_id', userId).eq('user_type', userType);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map(d => ({
+        id: d.id, userType: d.user_type, userId: d.user_id, userName: d.user_name, userEmail: d.user_email,
+        subject: d.subject, category: d.category, status: d.status, createdAt: d.created_at, updatedAt: d.updated_at,
+        lastMessage: d.last_message
+    }));
   },
 
   getTicketMessages: async (ticketId: string): Promise<TicketMessage[]> => {
-      if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-      if (error) throw error;
-      return (data || []).map(d => ({
-          id: d.id, ticketId: d.ticket_id, senderName: d.sender_name, senderType: d.sender_type, text: d.text, createdAt: d.created_at
-      }));
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data || []).map(d => ({
+        id: d.id, ticketId: d.ticket_id, senderId: d.sender_id, senderName: d.sender_name, senderType: d.sender_type,
+        message: d.message, createdAt: d.created_at
+    }));
   },
 
   saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<SupportTicket> => {
-      if (!isConfigured) throw new Error("Backend not configured");
-      const payload = {
-          user_id: ticket.userId, user_name: ticket.userName, user_email: ticket.userEmail, user_type: ticket.userType,
-          subject: ticket.subject, category: ticket.category, status: ticket.status || 'open', updated_at: new Date().toISOString()
-      };
-      const { data, error } = await supabase.from('crm_support_tickets').upsert([payload]).select().single();
-      if (error) throw error;
-      return {
-          id: data.id, userId: data.user_id, userName: data.user_name, userEmail: data.user_email, userType: data.user_type,
-          subject: data.subject, category: data.category, status: data.status, createdAt: data.created_at, updatedAt: data.updated_at
-      };
+    if (!isConfigured) throw new Error("Backend not configured");
+    const payload = {
+        user_type: ticket.userType, user_id: ticket.userId, user_name: ticket.userName, user_email: ticket.userEmail,
+        subject: ticket.subject, category: ticket.category, status: ticket.status || 'open', updated_at: new Date().toISOString()
+    };
+    let data, error;
+    if (ticket.id) {
+        const res = await supabase.from('crm_support_tickets').update(payload).eq('id', ticket.id).select().single();
+        data = res.data; error = res.error;
+    } else {
+        const res = await supabase.from('crm_support_tickets').insert([payload]).select().single();
+        data = res.data; error = res.error;
+    }
+    if (error) throw error;
+    return { ...ticket, id: data.id, createdAt: data.created_at, updatedAt: data.updated_at } as SupportTicket;
   },
 
   addTicketMessage: async (msg: Omit<TicketMessage, 'id' | 'createdAt'>): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_support_messages').insert([{
-          ticket_id: msg.ticketId, sender_name: msg.senderName, sender_type: msg.senderType, text: msg.text
-      }]);
-      if (error) throw error;
-      await supabase.from('crm_support_tickets').update({ last_message: msg.text, updated_at: new Date().toISOString() }).eq('id', msg.ticketId);
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_support_messages').insert([{
+        ticket_id: msg.ticketId, sender_id: msg.senderId, sender_name: msg.senderName, sender_type: msg.senderType, message: msg.message
+    }]);
+    if (error) throw error;
+    // Update ticket last activity
+    await supabase.from('crm_support_tickets').update({ last_message: msg.message, updated_at: new Date().toISOString() }).eq('id', msg.ticketId);
   },
 
-  updateTicketStatus: async (ticketId: string, status: string): Promise<void> => {
+  updateTicketStatus: async (ticketId: string, status: TicketStatus): Promise<void> => {
       if (!isConfigured) return;
       const { error } = await supabase.from('crm_support_tickets').update({ status, updated_at: new Date().toISOString() }).eq('id', ticketId);
       if (error) throw error;
   },
 
-  // (Manter os métodos existentes...)
+  // Rest of existing methods...
   logActivity: async (log: Omit<ActivityLog, 'id' | 'createdAt' | 'userName'>): Promise<void> => {
       if (!isConfigured) return;
       let userName = 'Sistema';
@@ -218,7 +223,6 @@ export const appBackend = {
   savePreset: async (preset: Omit<SavedPreset, 'id'>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
-    // Fix: changed preset.target_table_name to preset.tableName as target_table_name does not exist on SavedPreset type
     const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.intervalMinutes || 5, created_by_name: preset.createdByName || null };
     const { data, error = null } = await supabase.from('app_presets').insert([payload]).select().single();
     if (error) throw error;
@@ -324,7 +328,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, imageUrl: d.image_url, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, image_url: d.image_url, createdAt: d.created_at }));
   },
   saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
     if (!isConfigured) return;
@@ -338,14 +342,14 @@ export const appBackend = {
   },
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, target_pipeline: form.targetPipeline || 'Padrão', target_stage: form.targetStage || 'new', submissions_count: form.submissionsCount || 0, folder_id: form.folderId || null };
+      const payload = { id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distribution_mode || 'fixed', fixed_owner_id: form.fixedOwnerId || null, target_pipeline: form.targetPipeline || 'Padrão', target_stage: form.target_stage || 'new', submissions_count: form.submissionsCount || 0, folder_id: form.folderId || null };
       await supabase.from('crm_forms').upsert(payload);
   },
   getForms: async (): Promise<FormModel[]> => {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.isLeadCapture, teamId: d.team_id, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, targetPipeline: d.target_pipeline, targetStage: d.target_stage, questions: d.questions || [], style: d.style || {}, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id }));
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, teamId: d.team_id, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, targetPipeline: d.target_pipeline, targetStage: d.target_stage, questions: d.questions || [], style: d.style || {}, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id }));
   },
   getFormFolders: async (): Promise<FormFolder[]> => {
     if (!isConfigured) return [];
@@ -370,7 +374,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_surveys').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, description: d.description, isLeadCapture: d.isLeadCapture, questions: d.questions || [], style: d.style || {}, targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active, createdAt: d.created_at, submissionsCount: d.submissions_count || 0 }));
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, description: d.description, isLeadCapture: d.is_lead_capture, questions: d.questions || [], style: d.style || {}, targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active, createdAt: d.created_at, submissionsCount: d.submissions_count || 0 }));
   },
   getEligibleSurveysForStudent: async (studentDealId: string): Promise<SurveyModel[]> => {
       if (!isConfigured) return [];
@@ -393,14 +397,14 @@ export const appBackend = {
           if (survey.only_if_finished) { if (deal.product_type === 'Presencial') return deal.stage === 'closed'; return true; }
           return true;
       });
-      return eligible.map((d: any) => ({ id: d.id, title: d.title, description: d.description, isLeadCapture: d.isLeadCapture, questions: d.questions || [], style: d.style || {}, targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active, createdAt: d.created_at, submissionsCount: d.submissions_count || 0 }));
+      return eligible.map((d: any) => ({ id: d.id, title: d.title, description: d.description, isLeadCapture: d.is_lead_capture, questions: d.questions || [], style: d.style || {}, targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active, createdAt: d.created_at, submissionsCount: d.submissions_count || 0 }));
   },
   getFormById: async (id: string): Promise<FormModel | null> => {
       if (!isConfigured) return null;
       const { data: form } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
       if (form) return { id: form.id, title: form.title, description: form.description, campaign: form.campaign, isLeadCapture: form.is_lead_capture, teamId: form.team_id, distributionMode: form.distribution_mode, fixedOwnerId: form.fixed_owner_id || null, targetPipeline: form.target_pipeline, targetStage: form.target_stage, questions: form.questions || [], style: form.style || {}, createdAt: form.created_at, submissionsCount: form.submissions_count || 0, folderId: form.folder_id };
       const { data: survey } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
-      if (survey) return { id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.is_lead_capture, questions: survey.questions || [], style: survey.style || {}, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 };
+      if (survey) return { id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.isLeadCapture, questions: survey.questions || [], style: survey.style || {}, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 };
       return null;
   },
   deleteForm: async (id: string): Promise<void> => {
@@ -537,7 +541,7 @@ export const appBackend = {
       const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
       const { data, error = null } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
+      return { id: data.id, eventId: data.event_id, date: data.date, title: block.title, maxSelections: data.max_selections };
   },
   deleteBlock: async (id: string): Promise<void> => {
       if (!isConfigured) return;
@@ -554,7 +558,7 @@ export const appBackend = {
     const payload = { id: workshop.id, event_id: workshop.eventId, block_id: workshop.blockId || null, title: workshop.title, description: workshop.description, speaker: workshop.speaker, date: workshop.date, time: workshop.time, spots: workshop.spots };
     const { data, error = null } = await supabase.from('crm_workshops').upsert(payload).select().single();
     if (error) throw error;
-    return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
+    return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: workshop.title, description: workshop.description, speaker: workshop.speaker, date: workshop.date, time: workshop.time, spots: workshop.spots };
   },
   deleteWorkshop: async (id: string): Promise<void> => {
     if (!isConfigured) return;
@@ -578,10 +582,11 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date, attachments: d.attachments, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registration_date: d.registration_date, studio_id: d.studio_id, tracking_code: d.tracking_code, observations: d.observations, conference_date: d.conference_date, attachments: d.attachments, createdAt: d.created_at }));
   },
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
+    // Fix: Use camelCase properties from record (InventoryRecord type) to satisfy the InventoryRecord interface defined in types.ts
     const payload = { type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments };
     if (record.id) await supabase.from('crm_inventory').update(payload).eq('id', record.id);
     else await supabase.from('crm_inventory').insert([payload]);

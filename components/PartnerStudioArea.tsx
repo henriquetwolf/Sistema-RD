@@ -39,41 +39,46 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-             <div className="w-10 h-10 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold shadow-lg"><Building2 size={24} /></div>
-             <div><h1 className="text-sm font-bold text-slate-800 leading-tight">{studio.fantasyName}</h1><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Portal do Studio Parceiro</p></div>
+             <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-bold border-2 border-white shadow-sm"><Building2 size={24} /></div>
+             <div><h1 className="text-sm font-bold text-slate-800 leading-tight">{studio.fantasyName}</h1><p className="text-xs text-slate-500">Painel do Studio Parceiro</p></div>
           </div>
-          <button onClick={onLogout} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><LogOut size={20} /></button>
+          <button onClick={onLogout} className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-colors"><LogOut size={20} /></button>
+        </div>
       </header>
 
-      <nav className="bg-white border-b border-slate-200">
-          <div className="max-w-5xl mx-auto flex">
-              <button onClick={() => setActiveTab('classes')} className={clsx("px-8 py-4 text-xs font-black uppercase tracking-widest border-b-4 transition-all", activeTab === 'classes' ? "border-teal-600 text-teal-700" : "border-transparent text-slate-400")}>Minhas Turmas</button>
-              <button onClick={() => setActiveTab('inventory')} className={clsx("px-8 py-4 text-xs font-black uppercase tracking-widest border-b-4 transition-all", activeTab === 'inventory' ? "border-teal-600 text-teal-700" : "border-transparent text-slate-400")}>Estoque Local</button>
-              <button onClick={() => setActiveTab('support')} className={clsx("px-8 py-4 text-xs font-black uppercase tracking-widest border-b-4 transition-all", activeTab === 'support' ? "border-teal-600 text-teal-700" : "border-transparent text-slate-400")}>Falar com VOLL</button>
+      <nav className="bg-white border-b border-slate-200 shrink-0">
+          <div className="max-w-5xl mx-auto px-4 flex overflow-x-auto no-scrollbar">
+              <button onClick={() => setActiveTab('classes')} className={clsx("px-6 py-4 text-sm font-bold border-b-2 transition-all whitespace-nowrap", activeTab === 'classes' ? "border-teal-600 text-teal-700" : "border-transparent text-slate-500 hover:text-slate-700")}>Turmas Locais</button>
+              <button onClick={() => setActiveTab('inventory')} className={clsx("px-6 py-4 text-sm font-bold border-b-2 transition-all whitespace-nowrap", activeTab === 'inventory' ? "border-teal-600 text-teal-700" : "border-transparent text-slate-500 hover:text-slate-700")}>Estoque</button>
+              <button onClick={() => setActiveTab('support')} className={clsx("px-6 py-4 text-sm font-bold border-b-2 transition-all whitespace-nowrap", activeTab === 'support' ? "border-teal-600 text-teal-700" : "border-transparent text-slate-500 hover:text-slate-700")}>Canal de Suporte</button>
           </div>
       </nav>
 
       <main className="flex-1 max-w-5xl mx-auto w-full p-6">
-        {isLoading ? <div className="flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={40} /></div> : (
-            <div className="animate-in fade-in">
+        {isLoading ? (
+            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
+        ) : (
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {activeTab === 'classes' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {classes.map(cls => (
-                            <div key={cls.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                                <div><h3 className="font-bold text-slate-800">{cls.course}</h3><p className="text-xs text-slate-500 mb-4">{cls.city}/{cls.state}</p></div>
-                                <div className="flex items-center justify-between pt-4 border-t border-slate-50"><span className="text-[10px] font-black uppercase text-teal-600">Mod 1: {new Date(cls.date_mod_1).toLocaleDateString()}</span><ChevronRight size={16} className="text-slate-300"/></div>
+                            <div key={cls.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                                <h3 className="font-bold text-slate-800 text-lg mb-1">{cls.course}</h3>
+                                <p className="text-sm text-slate-500 flex items-center gap-1"><MapPin size={14} /> {cls.city}/{cls.state}</p>
+                                <div className="mt-4 pt-4 border-t flex justify-between"><span className="text-[10px] font-black uppercase text-teal-600">Mod 1: {new Date(cls.date_mod_1).toLocaleDateString()}</span><ChevronRight size={16} className="text-slate-300"/></div>
                             </div>
                         ))}
                     </div>
                 )}
-                {activeTab === 'inventory' && <div className="bg-white p-6 rounded-3xl border text-center text-slate-400 py-20"><Package size={48} className="mx-auto opacity-10 mb-4"/>Controle de estoque do studio disponível.</div>}
                 {activeTab === 'support' && (
                     <div className="max-w-4xl mx-auto">
                         <SupportChannel userId={studio.id} userName={studio.fantasyName} userEmail={studio.email} userType="studio" />
                     </div>
                 )}
+                {activeTab === 'inventory' && <div className="bg-white p-12 rounded-xl text-center text-slate-400">Funcionalidade de controle de estoque detalhada.</div>}
             </div>
         )}
       </main>

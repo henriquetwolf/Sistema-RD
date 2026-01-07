@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { SupportTicket, TicketMessage } from '../types';
+import { SupportTicket, TicketMessage, TicketStatus, UserType } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
-    MessageCircle, Search, Filter, RefreshCw, Loader2, Send, 
-    CheckCircle, Clock, Inbox, User, UserCheck, Shield, ChevronRight, 
-    ArrowLeft, MoreVertical, X, Globe, Mail, Phone, Tag, Building2, School, GraduationCap
+    MessageCircle, Send, ChevronRight, Loader2, Search, Filter, 
+    RefreshCw, CheckCircle2, Clock, Inbox, User, Mail, Smartphone,
+    ArrowLeft, MoreVertical, X, Globe, Building2, School, GraduationCap
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -14,17 +14,14 @@ export const SupportManager: React.FC = () => {
     const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
     const [messages, setMessages] = useState<TicketMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [isSending, setIsSending] = useState(false);
     
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState('all');
-    const [typeFilter, setTypeFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [typeFilter, setTypeFilter] = useState<string>('all');
 
-    const [chatInput, setChatInput] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    
     const selectedTicket = tickets.find(t => t.id === selectedTicketId);
 
     useEffect(() => {
@@ -54,21 +51,19 @@ export const SupportManager: React.FC = () => {
     };
 
     const fetchMessages = async (ticketId: string, showLoading = true) => {
-        if (showLoading) setIsLoadingMessages(true);
         try {
             const data = await appBackend.getTicketMessages(ticketId);
             setMessages(data);
-        } catch (e) {} finally { if (showLoading) setIsLoadingMessages(false); }
+        } catch (e) {}
     };
 
-    const handleSendReply = async (e: React.FormEvent) => {
+    const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!chatInput.trim() || !selectedTicketId) return;
         setIsSending(true);
         const text = chatInput;
         setChatInput('');
         try {
-            // Pegar nome do agente logado
             let agentName = "Atendente VOLL";
             const savedCollab = sessionStorage.getItem('collaborator_session');
             if (savedCollab) {
@@ -76,8 +71,13 @@ export const SupportManager: React.FC = () => {
             }
 
             await appBackend.addTicketMessage({
-                ticketId: selectedTicketId, senderName: agentName, senderType: 'agent', text
+                ticketId: selectedTicketId,
+                senderId: 'agent',
+                senderName: agentName,
+                senderType: 'agent',
+                message: text
             });
+
             if (selectedTicket?.status === 'open') {
                 await appBackend.updateTicketStatus(selectedTicketId, 'in_progress');
                 fetchTickets(false);
@@ -86,13 +86,15 @@ export const SupportManager: React.FC = () => {
         } catch (e: any) { alert(e.message); setChatInput(text); } finally { setIsSending(false); }
     };
 
-    const handleUpdateStatus = async (status: string) => {
+    const handleUpdateStatus = async (status: TicketStatus) => {
         if (!selectedTicketId) return;
         try {
             await appBackend.updateTicketStatus(selectedTicketId, status);
             fetchTickets(false);
         } catch (e) {}
     };
+
+    const [chatInput, setChatInput] = useState('');
 
     const filteredTickets = useMemo(() => {
         return tickets.filter(t => {
@@ -128,7 +130,7 @@ export const SupportManager: React.FC = () => {
             <aside className={clsx("flex flex-col border-r border-slate-200 w-full md:w-80 lg:w-96 shrink-0", selectedTicketId ? "hidden md:flex" : "flex")}>
                 <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-4">
                     <div className="flex justify-between items-center">
-                        <h2 className="text-lg font-black text-slate-800 flex items-center gap-2"><MessageCircle className="text-teal-600" /> Suporte Unificado</h2>
+                        <h2 className="text-lg font-black text-slate-800 flex items-center gap-2"><MessageCircle className="text-teal-600" /> Chamados</h2>
                         <button onClick={() => fetchTickets()} className="p-2 text-slate-400 hover:text-teal-600"><RefreshCw size={18} className={clsx(isLoading && "animate-spin")} /></button>
                     </div>
                     <div className="space-y-2">
@@ -144,7 +146,7 @@ export const SupportManager: React.FC = () => {
                                 <option value="closed">Finalizados</option>
                             </select>
                             <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="flex-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase px-2 py-1.5 outline-none">
-                                <option value="all">Tipos: Todos</option>
+                                <option value="all">Origem: Todas</option>
                                 <option value="student">Alunos</option>
                                 <option value="instructor">Instrutores</option>
                                 <option value="studio">Studios</option>
@@ -204,38 +206,34 @@ export const SupportManager: React.FC = () => {
                             <div className="flex gap-2">
                                 {selectedTicket.status !== 'closed' ? (
                                     <button onClick={() => handleUpdateStatus('closed')} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-2 transition-all shadow-md active:scale-95">
-                                        <CheckCircle size={16}/> Finalizar Chamado
+                                        <CheckCircle2 size={16}/> Finalizar
                                     </button>
                                 ) : (
                                     <button onClick={() => handleUpdateStatus('in_progress')} className="bg-amber-100 text-amber-700 hover:bg-amber-200 px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-2 transition-all">
-                                        <RefreshCw size={16}/> Reabrir Chamado
+                                        <RefreshCw size={16}/> Reabrir
                                     </button>
                                 )}
                             </div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-slate-50">
-                            {isLoadingMessages ? (
-                                <div className="flex justify-center py-10"><Loader2 className="animate-spin text-teal-600" /></div>
-                            ) : (
-                                messages.map(msg => (
-                                    <div key={msg.id} className={clsx("flex", msg.senderType === 'user' ? "justify-start" : "justify-end")}>
-                                        <div className={clsx("max-w-[70%] px-4 py-3 rounded-2xl shadow-sm text-sm relative", msg.senderType === 'user' ? "bg-white text-slate-800 rounded-tl-none border border-slate-100" : "bg-indigo-600 text-white rounded-tr-none shadow-indigo-600/10")}>
-                                            <p className="whitespace-pre-wrap">{msg.text}</p>
-                                            <div className={clsx("text-[9px] mt-2 font-black uppercase flex justify-between gap-4", msg.senderType === 'user' ? "text-slate-400" : "text-indigo-200")}>
-                                                <span>{msg.senderName}</span>
-                                                <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                            </div>
+                            {messages.map(msg => (
+                                <div key={msg.id} className={clsx("flex", msg.senderType === 'agent' ? "justify-end" : "justify-start")}>
+                                    <div className={clsx("max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm relative", msg.senderType === 'user' ? "bg-white text-slate-800 rounded-tl-none border border-slate-100" : "bg-indigo-600 text-white rounded-tr-none shadow-indigo-600/10")}>
+                                        <p className="whitespace-pre-wrap">{msg.message}</p>
+                                        <div className={clsx("text-[9px] mt-2 font-black uppercase flex justify-between gap-4", msg.senderType === 'user' ? "text-slate-400" : "text-indigo-200")}>
+                                            <span>{msg.senderName}</span>
+                                            <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                         </div>
                                     </div>
-                                ))
-                            )}
+                                </div>
+                            ))}
                             <div ref={messagesEndRef} />
                         </div>
 
                         {selectedTicket.status !== 'closed' && (
-                            <div className="p-4 bg-white border-t border-slate-200 shadow-2xl">
-                                <form onSubmit={handleSendReply} className="flex gap-2">
+                            <div className="p-4 bg-white border-t border-slate-200 shadow-2xl shrink-0">
+                                <form onSubmit={handleSendMessage} className="flex gap-2">
                                     <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-500 focus:bg-white transition-all text-sm" placeholder="Responda ao chamado aqui..." />
                                     <button type="submit" disabled={isSending || !chatInput.trim()} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl hover:bg-indigo-700 disabled:opacity-50 transition-all font-black uppercase text-xs flex items-center gap-2 shadow-lg shadow-indigo-600/20">
                                         {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} Responder
@@ -246,9 +244,9 @@ export const SupportManager: React.FC = () => {
                     </>
                 ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
-                        <Shield size={80} className="opacity-5 mb-4" />
-                        <h4 className="text-xl font-bold">Inbox Central de Suporte</h4>
-                        <p className="text-sm">Selecione uma conversa à esquerda para gerenciar.</p>
+                        <MessageCircle size={80} className="opacity-5 mb-4" />
+                        <h4 className="text-xl font-bold">Central de Suporte Rede</h4>
+                        <p className="text-sm font-medium">Selecione um chamado à esquerda para iniciar o atendimento.</p>
                     </div>
                 )}
             </main>

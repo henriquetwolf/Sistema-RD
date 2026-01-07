@@ -31,6 +31,7 @@ import { WhatsAppInbox } from './components/WhatsAppInbox';
 import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
+import { SupportManager } from './components/SupportManager'; // NOVO
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -41,7 +42,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard
+  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard, LifeBuoy
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -70,7 +71,7 @@ function App() {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const jobsRef = useRef<SyncJob[]>([]); 
   
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios' | 'inventory' | 'billing'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios' | 'inventory' | 'billing' | 'support'>('overview');
 
   // Overview Stats State
   const [overviewStats, setOverviewStats] = useState({
@@ -510,13 +511,14 @@ function App() {
                 </div>
             </header>
 
-            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp') && "max-w-full")}>
+            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'support') && "max-w-full")}>
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                     <aside className="w-full md:w-64 flex-shrink-0">
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
                             <nav className="space-y-1">
                                 {canAccess('overview') && <button onClick={() => setDashboardTab('overview')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'overview' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LayoutDashboard size={18} /> Visão Geral</button>}
-                                {canAccess('hr') && <button onClick={() => setDashboardTab('hr')} className={clsx("selection:w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'hr' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Heart size={18} /> Recursos Humanos</button>}
+                                {canAccess('support') && <button onClick={() => setDashboardTab('support')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'support' ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LifeBuoy size={18} /> Suporte Rede</button>}
+                                {canAccess('hr') && <button onClick={() => setDashboardTab('hr')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'hr' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Heart size={18} /> Recursos Humanos</button>}
                                 {canAccess('crm') && <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Kanban size={18} /> CRM Comercial</button>}
                                 {canAccess('billing') && <button onClick={() => setDashboardTab('billing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'billing' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> Cobrança</button>}
                                 {canAccess('inventory') && <button onClick={() => setDashboardTab('inventory')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'inventory' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Package size={18} /> Controle de Estoque</button>}
@@ -610,45 +612,12 @@ function App() {
                                                 </div>
                                             </div>
                                         </section>
-
-                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                            <section className="space-y-4">
-                                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14} /> Últimas Alterações</h3>
-                                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                                                    {recentChanges.length === 0 ? (
-                                                        <div className="p-10 text-center text-slate-400 text-sm">Sem atividades recentes.</div>
-                                                    ) : (
-                                                        <div className="divide-y divide-slate-100">
-                                                            {recentChanges.map((activity, idx) => (
-                                                                <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                                                                    <div className="flex items-center gap-4">
-                                                                        <div className={clsx("w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border", activity.type === 'teacher' ? "bg-orange-50 border-orange-100 text-orange-600" : activity.type === 'studio' ? "bg-teal-50 border-teal-100 text-teal-600" : "bg-indigo-50 border-indigo-100 text-indigo-600")}>{activity.type === 'teacher' ? <School size={18} /> : activity.type === 'studio' ? <Building2 size={18} /> : <Target size={18} />}</div>
-                                                                        <div><p className="text-sm font-bold text-slate-800">{activity.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Novo {activity.type === 'teacher' ? 'Instrutor' : activity.type === 'studio' ? 'Studio' : 'Lead'} Cadastrado</p></div>
-                                                                    </div>
-                                                                    <div className="text-right shrink-0"><p className="text-xs font-medium text-slate-500">{new Date(activity.date).toLocaleDateString()}</p><p className="text-[10px] text-slate-400">{new Date(activity.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p></div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    <div className="p-3 bg-slate-50 text-center border-t border-slate-100"><button onClick={() => setDashboardTab('crm')} className="text-xs font-bold text-indigo-600 hover:underline">Ver todas as atividades do CRM</button></div>
-                                                </div>
-                                            </section>
-
-                                            <section className="space-y-4">
-                                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutDashboard size={14} /> Atalhos Rápidos</h3>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div onClick={() => setDashboardTab('crm')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Kanban size={24} /></div><h4 className="font-bold text-slate-800 mb-1">CRM</h4><p className="text-xs text-slate-500">Gestão Comercial.</p></div>
-                                                    <div onClick={() => setDashboardTab('billing')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><CreditCard size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Cobrança</h4><p className="text-xs text-slate-500">Financeiro.</p></div>
-                                                    <div onClick={() => setDashboardTab('hr')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-rose-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-rose-600 group-hover:text-white transition-colors"><Heart size={24} /></div><h4 className="font-bold text-slate-800 mb-1">RH</h4><p className="text-xs text-slate-500">Painel Executivo.</p></div>
-                                                    <div onClick={() => setDashboardTab('teachers')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-colors"><School size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Instrutores</h4><p className="text-xs text-slate-500">Gestão docente.</p></div>
-                                                </div>
-                                            </section>
-                                        </div>
                                     </>
                                 )}
                             </div>
                         )}
-                        {dashboardTab === 'hr' && <HrDashboard collaborators={allCollaborators} onEditCollaborator={(c) => { setDashboardTab('hr'); /* Isso agora será tratado internamente pelo HrDashboard */ }} />}
+                        {dashboardTab === 'hr' && <HrDashboard collaborators={allCollaborators} onEditCollaborator={(c) => { setDashboardTab('hr'); }} />}
+                        {dashboardTab === 'support' && <SupportManager />}
                         {dashboardTab === 'inventory' && <InventoryManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'billing' && <BillingManager />}
                         {dashboardTab === 'crm' && <div className="h-full"><CrmBoard /></div>}

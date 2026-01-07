@@ -1,4 +1,27 @@
 
+export interface SupportTicket {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userType: 'student' | 'instructor' | 'studio';
+  subject: string;
+  category: string;
+  status: 'open' | 'in_progress' | 'closed';
+  createdAt: string;
+  updatedAt: string;
+  lastMessage?: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  senderName: string;
+  senderType: 'user' | 'agent';
+  text: string;
+  createdAt: string;
+}
+
 export interface BillingRecord {
   id: number;
   "Identificador do cliente": string;
@@ -444,7 +467,6 @@ export interface Product {
   createdAt: string;
 }
 
-// Added TeacherNews interface to resolve module export error
 export interface TeacherNews {
   id: string;
   title: string;

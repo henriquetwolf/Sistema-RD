@@ -4,7 +4,7 @@ import {
   LogOut, Calendar, MapPin, Loader2, BookOpen, User, 
   ChevronRight, Users, ExternalLink, GraduationCap,
   Newspaper, Bell, Sparkles, X, Clock, Image as ImageIcon,
-  ArrowRight
+  ArrowRight, Info, Plane, Coffee, Bed, Map, DollarSign, Package, Monitor
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
@@ -24,6 +24,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const [seenNewsIds, setSeenNewsIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedClass, setSelectedClass] = useState<any | null>(null);
+  const [viewingDetails, setViewingDetails] = useState<any | null>(null);
   const [selectedNews, setSelectedNews] = useState<TeacherNews | null>(null);
 
   useEffect(() => {
@@ -130,7 +131,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 space-y-8">
         
-        {/* BANNERS SECTION - Now Above News */}
+        {/* BANNERS SECTION */}
         {banners.length > 0 && (
             <section className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-700">
                 {banners.map(banner => (
@@ -150,7 +151,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
             </section>
         )}
 
-        {/* NOVIDADES SECTION - Now Below Banners */}
+        {/* NOVIDADES SECTION */}
         {news.length > 0 && (
             <section className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
                 <div className="flex items-center justify-between px-2">
@@ -257,22 +258,31 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                                     </div>
                                 </div>
 
-                                <button 
-                                    onClick={() => setSelectedClass({
-                                        id: cls.id,
-                                        course: cls.course,
-                                        city: cls.city,
-                                        state: cls.state,
-                                        mod1Code: cls.mod_1_code,
-                                        mod2Code: cls.mod_2_code,
-                                        dateMod1: cls.date_mod_1,
-                                        dateMod2: cls.date_mod_2
-                                    })}
-                                    className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500 hover:text-purple-700 hover:bg-purple-50 transition-all group/btn"
-                                >
-                                    Ver Lista de Alunos
-                                    <ArrowRight size={18} className="text-slate-300 group-hover/btn:translate-x-1 group-hover/btn:text-purple-600 transition-all" />
-                                </button>
+                                <div className="flex flex-col border-t border-slate-100 bg-slate-50">
+                                    <button 
+                                        onClick={() => setViewingDetails(cls)}
+                                        className="px-8 py-4 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:bg-white transition-all border-b border-slate-100 group/det"
+                                    >
+                                        <span className="flex items-center gap-2"><Info size={14} /> Ver Detalhes Logísticos</span>
+                                        <ChevronRight size={14} className="group-hover/det:translate-x-1 transition-transform" />
+                                    </button>
+                                    <button 
+                                        onClick={() => setSelectedClass({
+                                            id: cls.id,
+                                            course: cls.course,
+                                            city: cls.city,
+                                            state: cls.state,
+                                            mod1Code: cls.mod_1_code,
+                                            mod2Code: cls.mod_2_code,
+                                            dateMod1: cls.date_mod_1,
+                                            dateMod2: cls.date_mod_2
+                                        })}
+                                        className="px-8 py-5 flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500 hover:text-purple-700 hover:bg-white transition-all group/btn"
+                                    >
+                                        Ver Lista de Alunos
+                                        <ArrowRight size={18} className="text-slate-300 group-hover/btn:translate-x-1 group-hover/btn:text-purple-600 transition-all" />
+                                    </button>
+                                </div>
                             </div>
                         );
                     })}
@@ -281,7 +291,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
         </div>
       </main>
 
-      {/* Class Detail Modal */}
+      {/* Class Students Modal */}
       {selectedClass && (
           <ClassStudentsViewer 
               classItem={selectedClass} 
@@ -290,6 +300,132 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
               hideFinancials={true} 
               canTakeAttendance={true} 
           />
+      )}
+
+      {/* Logistics Details Modal */}
+      {viewingDetails && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <div>
+                          <h3 className="text-2xl font-black text-slate-800 leading-tight">{viewingDetails.course}</h3>
+                          <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">Detalhes Logísticos #{viewingDetails.class_code}</p>
+                      </div>
+                      <button onClick={() => setViewingDetails(null)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><X size={24} /></button>
+                  </div>
+                  
+                  <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-10">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                          
+                          {/* COLUNA MODULO 1 */}
+                          <div className="space-y-6">
+                              <h4 className="text-xs font-black text-purple-600 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-purple-100">
+                                  <Calendar size={16}/> Logística Módulo 1
+                              </h4>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Cód. Módulo</p>
+                                      <p className="text-xs font-mono font-bold text-slate-700 truncate">{viewingDetails.mod_1_code || '--'}</p>
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Data</p>
+                                      <p className="text-xs font-bold text-slate-700">{viewingDetails.date_mod_1 ? new Date(viewingDetails.date_mod_1).toLocaleDateString() : '--'}</p>
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 md:col-span-2">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Studio / Local</p>
+                                      <p className="text-sm font-bold text-slate-800 flex items-center gap-1"><MapPin size={12} className="text-purple-600"/> {viewingDetails.studio_mod_1 || '--'}</p>
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 md:col-span-2">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Passagem / Voo</p>
+                                      <p className="text-xs font-bold text-slate-700 flex items-center gap-2"><Plane size={14} className="text-indigo-500"/> {viewingDetails.ticket_mod_1 || '--'}</p>
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 md:col-span-2">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Hotel e Localização</p>
+                                      <p className="text-xs font-bold text-slate-700 flex items-center gap-2"><Bed size={14} className="text-blue-500"/> {viewingDetails.hotel_mod_1 || '--'}</p>
+                                      {viewingDetails.hotel_loc_mod_1 && <p className="text-[10px] text-slate-400 mt-1 italic flex items-center gap-1"><Map size={10}/> {viewingDetails.hotel_loc_mod_1}</p>}
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Coffee Break</p>
+                                      <p className="text-xs font-bold text-slate-700 flex items-center gap-2"><Coffee size={14} className="text-amber-600"/> {viewingDetails.coffee_mod_1 || '--'}</p>
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Ajuda de Custo</p>
+                                      <p className="text-xs font-bold text-emerald-600 flex items-center gap-1"><DollarSign size={14}/> {viewingDetails.cost_help_1 || '--'}</p>
+                                  </div>
+                              </div>
+                          </div>
+
+                          {/* COLUNA MODULO 2 */}
+                          <div className="space-y-6">
+                              <h4 className="text-xs font-black text-orange-600 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-orange-100">
+                                  <Calendar size={16}/> Logística Módulo 2
+                              </h4>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Cód. Módulo</p>
+                                      <p className="text-xs font-mono font-bold text-slate-700 truncate">{viewingDetails.mod_2_code || '--'}</p>
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Data</p>
+                                      <p className="text-xs font-bold text-slate-700">{viewingDetails.date_mod_2 ? new Date(viewingDetails.date_mod_2).toLocaleDateString() : '--'}</p>
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 md:col-span-2">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Passagem / Voo</p>
+                                      <p className="text-xs font-bold text-slate-700 flex items-center gap-2"><Plane size={14} className="text-indigo-500"/> {viewingDetails.ticket_mod_2 || '--'}</p>
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 md:col-span-2">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Hotel e Localização</p>
+                                      <p className="text-xs font-bold text-slate-700 flex items-center gap-2"><Bed size={14} className="text-blue-500"/> {viewingDetails.hotel_mod_2 || '--'}</p>
+                                      {viewingDetails.hotel_loc_mod_2 && <p className="text-[10px] text-slate-400 mt-1 italic flex items-center gap-1"><Map size={10}/> {viewingDetails.hotel_loc_mod_2}</p>}
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Coffee Break</p>
+                                      <p className="text-xs font-bold text-slate-700 flex items-center gap-2"><Coffee size={14} className="text-amber-600"/> {viewingDetails.coffee_mod_2 || '--'}</p>
+                                  </div>
+                                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Ajuda de Custo</p>
+                                      <p className="text-xs font-bold text-emerald-600 flex items-center gap-1"><DollarSign size={14}/> {viewingDetails.cost_help_2 || '--'}</p>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* MATERIAIS E INFRAESTRUTURA */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t border-slate-100">
+                          <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                   <Package size={16} className="text-teal-600"/> Materiais Disponíveis
+                               </h4>
+                               <p className="text-sm font-bold text-slate-700 leading-relaxed">{viewingDetails.material || 'Nenhum material registrado.'}</p>
+                          </div>
+                          <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                   <Monitor size={16} className="text-indigo-600"/> Infraestrutura Técnica
+                               </h4>
+                               <p className="text-sm font-bold text-slate-700 leading-relaxed">{viewingDetails.infrastructure || 'Nenhum registro técnico.'}</p>
+                          </div>
+                      </div>
+
+                      {/* OBSERVAÇÕES */}
+                      {viewingDetails.observations && (
+                          <div className="bg-amber-50/50 p-6 rounded-[2rem] border border-amber-100">
+                               <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                   <Info size={14}/> Observações Importantes
+                               </h4>
+                               <p className="text-sm text-amber-900 leading-relaxed italic">{viewingDetails.observations}</p>
+                          </div>
+                      )}
+                  </div>
+
+                  <div className="px-10 py-6 bg-slate-50 border-t border-slate-100 rounded-b-[2.5rem] flex justify-end">
+                      <button onClick={() => setViewingDetails(null)} className="bg-slate-800 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-900 transition-all active:scale-95 shadow-lg">
+                          Fechar Detalhes
+                      </button>
+                  </div>
+              </div>
+          </div>
       )}
 
       {/* News Detail Modal */}

@@ -132,7 +132,7 @@ export const appBackend = {
 
   getActivityLogs: async (limit = 100): Promise<ActivityLog[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase
+      const { data, error = null } = await supabase
           .from('crm_activity_logs')
           .select('*')
           .order('created_at', { ascending: false })
@@ -163,9 +163,9 @@ export const appBackend = {
       responsibleAgent: row.responsible_agent,
       identifier_code: row.identifier_code,
       fullName: row.full_name,
-      productName: row.product_name,
-      originalValue: row.original_value,
-      paymentMethod: row.payment_method,
+      product_name: row.product_name,
+      original_value: row.original_value,
+      payment_method: row.payment_method,
       observations: row.observations,
       status: row.status,
       team: row.team,
@@ -1069,12 +1069,14 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('title', { ascending: true });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, max_selections: d.max_selections }));
+    // Corrected mapping: using maxSelections from EventBlock interface instead of snake_case max_selections
+    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
       if (!isConfigured) throw new Error("Backend not configured");
-      const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.max_selections };
+      // Corrected property access: using block.maxSelections from interface instead of snake_case max_selections
+      const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
       const { data, error = null } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, date: data.date, title: block.title, maxSelections: data.max_selections };

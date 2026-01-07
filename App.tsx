@@ -31,7 +31,7 @@ import { WhatsAppInbox } from './components/WhatsAppInbox';
 import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
-import { SupportManager } from './components/SupportManager'; // NOVO
+import { SupportManager } from './components/SupportManager';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -285,7 +285,6 @@ function App() {
         await new Promise(resolve => setTimeout(resolve, 3000));
         await batchUploadData(client, job.config, parsed.data, () => {});
         
-        // ATUALIZA NO BANCO
         const lastSync = new Date().toISOString();
         const lastMsg = `Ciclo Completo: ${parsed.rowCount} linhas.`;
         await appBackend.updateJobStatus(job.id, 'success', lastSync, lastMsg);
@@ -375,19 +374,17 @@ function App() {
               createdAt: new Date().toISOString()
           };
 
-          // SALVA NO BANCO
           await appBackend.saveSyncJob(newJob);
           
           setJobs(prev => [...prev, newJob]);
           setStep(AppStep.DASHBOARD);
-          setDashboardTab('global_settings'); // Redireciona para onde as conexões agora vivem
+          setDashboardTab('global_settings');
           setStatus('idle');
           if (isAutoSync) setTimeout(() => performJobSync(newJob), 500);
       } catch (e: any) { 
           console.error("Erro no processo de conexão:", e);
           setErrorMessage(`Falha no processamento: ${e.message}`); 
           setStatus('error'); 
-          // Scroll to top to show error
           window.scrollTo({ top: 0, behavior: 'smooth' });
       }
   };
@@ -408,7 +405,7 @@ function App() {
   };
 
   const canAccess = (module: string): boolean => {
-      if (session) return true;
+      if (session) return true; // Super Admin (Supabase Session)
       if (currentCollaborator) return !!currentCollaborator.role.permissions[module];
       return false;
   };
@@ -452,13 +449,12 @@ function App() {
   if (currentStudent) return <StudentArea student={currentStudent} onLogout={handleLogout} />;
   if (currentStudio) return <PartnerStudioArea studio={currentStudio} onLogout={handleLogout} />;
 
-  // Pega o nome do colaborador ou tenta pegar o nome do metadado do usuário Supabase (Super Admin)
   const currentUserName = currentCollaborator 
     ? currentCollaborator.name 
     : (session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Super Admin');
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20 font-sans">
       {step !== AppStep.DASHBOARD ? (
         <div className="max-w-4xl mx-auto py-8 px-4">
              <div className="flex items-center justify-between mb-8">
@@ -543,7 +539,7 @@ function App() {
                     <div className="flex-1 min-w-0">
                         {dashboardTab === 'overview' && (
                             <div className="space-y-8 animate-in fade-in duration-500">
-                                <section className="bg-gradient-to-r from-teal-600 to-indigo-700 rounded-3xl p-8 text-white shadow-xl shadow-teal-900/20 relative overflow-hidden group">
+                                <section className="bg-gradient-to-r from-teal-600 to-indigo-700 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden group">
                                     <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
                                     <div className="relative z-10">
                                         <div className="flex items-center gap-3 mb-2">
@@ -556,7 +552,7 @@ function App() {
                                             Bem-vindo, <span className="text-teal-200">{currentUserName}</span>!
                                         </h2>
                                         <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed">
-                                            Seu centro de comando está pronto. Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.
+                                            Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.
                                         </p>
                                     </div>
                                 </section>
@@ -568,19 +564,19 @@ function App() {
                                         <section className="space-y-4">
                                             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Target size={14} /> Desempenho de Hoje</h3>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-teal-300 transition-all">
                                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Target size={64} className="text-indigo-600" /></div>
                                                     <p className="text-sm font-medium text-slate-500 mb-1">Novos Leads (Dia)</p>
                                                     <h4 className="text-3xl font-black text-slate-800">{overviewStats.leadsToday}</h4>
                                                     <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-indigo-600 uppercase"><Clock size={10} /> Atualizado agora</div>
                                                 </div>
-                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-green-300 transition-all">
                                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><CheckCircle size={64} className="text-green-600" /></div>
                                                     <p className="text-sm font-medium text-slate-500 mb-1">Vendas Fechadas (Dia)</p>
                                                     <h4 className="text-3xl font-black text-slate-800">{overviewStats.salesToday}</h4>
                                                     <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-green-600 uppercase"><TrendingUp size={10} /> Batendo meta</div>
                                                 </div>
-                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-emerald-300 transition-all">
                                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><DollarSign size={64} className="text-emerald-600" /></div>
                                                     <p className="text-sm font-medium text-slate-500 mb-1">Faturamento (Dia)</p>
                                                     <h4 className="text-3xl font-black text-emerald-600">{formatCurrency(overviewStats.revenueToday)}</h4>
@@ -612,6 +608,37 @@ function App() {
                                                 </div>
                                             </div>
                                         </section>
+
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                            <section className="space-y-4">
+                                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14} /> Alterações</h3>
+                                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                                    {recentChanges.length === 0 ? (
+                                                        <div className="p-10 text-center text-slate-400 text-sm">Sem atividades recentes.</div>
+                                                    ) : (
+                                                        <div className="divide-y divide-slate-100">
+                                                            {recentChanges.map((activity, idx) => (
+                                                                <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                                                    <div className="flex items-center gap-4">
+                                                                        <div className={clsx("w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border", activity.type === 'teacher' ? "bg-orange-50 border-orange-100 text-orange-600" : activity.type === 'studio' ? "bg-teal-50 border-teal-100 text-teal-600" : "bg-indigo-50 border-indigo-100 text-indigo-600")}>{activity.type === 'teacher' ? <School size={18} /> : activity.type === 'studio' ? <Building2 size={18} /> : <Target size={18} />}</div>
+                                                                        <div><p className="text-sm font-bold text-slate-800">{activity.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Novo {activity.type === 'teacher' ? 'Instrutor' : activity.type === 'studio' ? 'Studio' : 'Lead'} Cadastrado</p></div>
+                                                                    </div>
+                                                                    <div className="text-right shrink-0"><p className="text-xs font-medium text-slate-500">{new Date(activity.date).toLocaleDateString()}</p><p className="text-[10px] text-slate-400">{new Date(activity.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p></div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </section>
+
+                                            <section className="space-y-4">
+                                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutDashboard size={14} /> Atalhos Rápidos</h3>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div onClick={() => setDashboardTab('crm')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Kanban size={24} /></div><h4 className="font-bold text-slate-800 mb-1">CRM</h4><p className="text-xs text-slate-500">Gestão Comercial.</p></div>
+                                                    <div onClick={() => setDashboardTab('billing')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><CreditCard size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Cobrança</h4><p className="text-xs text-slate-500">Financeiro.</p></div>
+                                                </div>
+                                            </section>
+                                        </div>
                                     </>
                                 )}
                             </div>

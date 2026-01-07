@@ -12,7 +12,6 @@ const supabase = createClient(
   APP_KEY || 'placeholder'
 );
 
-// Add missing interfaces used by CRM and other modules
 export interface PipelineStage {
   id: string;
   title: string;
@@ -121,7 +120,7 @@ export const appBackend = {
       if (error) throw error;
   },
 
-  // --- EXISTING LOGS/UTILITIES ---
+  // --- LOGS ---
   logActivity: async (log: Omit<ActivityLog, 'id' | 'createdAt' | 'userName'>): Promise<void> => {
       if (!isConfigured) return;
       let userName = 'Sistema';
@@ -141,6 +140,7 @@ export const appBackend = {
       return (data || []).map(d => ({ id: d.id, userName: d.user_name, action: d.action as any, module: d.module, details: d.details, recordId: d.record_id, createdAt: d.created_at }));
   },
 
+  // --- BROADCASTS ---
   getBroadcasts: async (group?: string): Promise<Broadcast[]> => {
       if (!isConfigured) return [];
       let query = supabase.from('crm_broadcasts').select('*').order('created_at', { ascending: false });
@@ -162,32 +162,34 @@ export const appBackend = {
 
   deleteBroadcast: async (id: string): Promise<void> => { if (isConfigured) await supabase.from('crm_broadcasts').delete().eq('id', id); },
 
-  // --- REST OF SERVICES ---
+  // --- BILLING ---
   getBillingNegotiations: async () => isConfigured ? (await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false })).data : [],
   saveBillingNegotiation: async (n: any) => isConfigured && await supabase.from('crm_billing_negotiations').upsert(n),
-  // Add deleteBillingNegotiation
   deleteBillingNegotiation: async (id: string) => isConfigured && await supabase.from('crm_billing_negotiations').delete().eq('id', id),
-  
+
+  // --- PIPELINES ---
   getPipelines: async () => isConfigured ? (await supabase.from('crm_pipelines').select('*')).data : [],
   savePipeline: async (p: any) => isConfigured && await supabase.from('crm_pipelines').upsert(p),
-  // Add deletePipeline
   deletePipeline: async (id: string) => isConfigured && await supabase.from('crm_pipelines').delete().eq('id', id),
-  
+
+  // --- WEBHOOKS ---
   getWebhookTriggers: async () => isConfigured ? (await supabase.from('crm_webhook_triggers').select('*')).data : [],
   saveWebhookTrigger: async (t: any) => isConfigured && await supabase.from('crm_webhook_triggers').upsert(t),
-  
+  deleteWebhookTrigger: async (id: string) => isConfigured && await supabase.from('crm_webhook_triggers').delete().eq('id', id),
+
+  // --- SYNC JOBS ---
   getSyncJobs: async () => isConfigured ? (await supabase.from('crm_sync_jobs').select('*')).data : [],
   saveSyncJob: async (j: any) => isConfigured && await supabase.from('crm_sync_jobs').upsert(j),
-  // Add updateJobStatus and deleteSyncJob
   updateJobStatus: async (id: string, status: string, lastSync: string, lastMessage: string) => 
     isConfigured && await supabase.from('crm_sync_jobs').update({ status, last_sync: lastSync, last_message: lastMessage }).eq('id', id),
   deleteSyncJob: async (id: string) => isConfigured && await supabase.from('crm_sync_jobs').delete().eq('id', id),
 
+  // --- PRESETS ---
   getPresets: async () => isConfigured ? (await supabase.from('app_presets').select('*')).data : [],
   savePreset: async (p: any) => isConfigured && (await supabase.from('app_presets').insert(p).select().single()).data,
-  // Add deletePreset
   deletePreset: async (id: string) => isConfigured && await supabase.from('app_presets').delete().eq('id', id),
-  
+
+  // --- APP SETTINGS ---
   getAppSetting: async (k: string) => isConfigured ? (await supabase.from('app_settings').select('value').eq('key', k).maybeSingle()).data?.value : null,
   saveAppSetting: async (k: string, v: any) => isConfigured && await supabase.from('app_settings').upsert({ key: k, value: v }),
   getAppLogo: async () => await appBackend.getAppSetting('app_logo_url'),
@@ -196,84 +198,124 @@ export const appBackend = {
   saveInventorySecurityMargin: async (v: number) => await appBackend.saveAppSetting('inventory_security_margin', v),
   getWhatsAppConfig: async () => await appBackend.getAppSetting('whatsapp_config'),
   saveWhatsAppConfig: async (c: any) => await appBackend.saveAppSetting('whatsapp_config', c),
+
+  // --- COMPANIES ---
   getCompanies: async () => isConfigured ? (await supabase.from('crm_companies').select('*')).data : [],
   saveCompany: async (c: any) => isConfigured && await supabase.from('crm_companies').upsert(c),
+  deleteCompany: async (id: string) => isConfigured && await supabase.from('crm_companies').delete().eq('id', id),
+
+  // --- ROLES ---
   getRoles: async () => isConfigured ? (await supabase.from('crm_roles').select('*')).data : [],
   saveRole: async (r: any) => isConfigured && await supabase.from('crm_roles').upsert(r),
+  deleteRole: async (id: string) => isConfigured && await supabase.from('crm_roles').delete().eq('id', id),
+
+  // --- BANNERS ---
   getBanners: async (a: any) => isConfigured ? (await supabase.from('app_banners').select('*').eq('target_audience', a)).data : [],
   saveBanner: async (b: any) => isConfigured && await supabase.from('app_banners').upsert(b),
+  deleteBanner: async (id: string) => isConfigured && await supabase.from('app_banners').delete().eq('id', id),
+
+  // --- PARTNER STUDIOS ---
   getPartnerStudios: async () => isConfigured ? (await supabase.from('crm_partner_studios').select('*')).data : [],
   savePartnerStudio: async (s: any) => isConfigured && await supabase.from('crm_partner_studios').upsert(s),
-  // Add deletePartnerStudio
   deletePartnerStudio: async (id: string) => isConfigured && await supabase.from('crm_partner_studios').delete().eq('id', id),
-  
+
+  // --- INSTRUCTOR LEVELS ---
   getInstructorLevels: async () => isConfigured ? (await supabase.from('crm_instructor_levels').select('*')).data : [],
   saveInstructorLevel: async (l: any) => isConfigured && await supabase.from('crm_instructor_levels').upsert(l),
-  getTeacherNews: async () => isConfigured ? (await supabase.from('crm_teacher_news').select('*')).data : [],
+  deleteInstructorLevel: async (id: string) => isConfigured && await supabase.from('crm_instructor_levels').delete().eq('id', id),
+
+  // --- TEACHER NEWS ---
+  getTeacherNews: async () => isConfigured ? (await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false })).data : [],
   saveTeacherNews: async (n: any) => isConfigured && await supabase.from('crm_teacher_news').upsert(n),
-  // Add deleteTeacherNews
   deleteTeacherNews: async (id: string) => isConfigured && await supabase.from('crm_teacher_news').delete().eq('id', id),
-  
-  getForms: async () => isConfigured ? (await supabase.from('crm_forms').select('*')).data : [],
+
+  // --- FORMS ---
+  getForms: async () => isConfigured ? (await supabase.from('crm_forms').select('*').order('created_at', { ascending: false })).data : [],
   saveForm: async (f: any) => isConfigured && await supabase.from('crm_forms').upsert(f),
-  // Add deleteForm
   deleteForm: async (id: string) => isConfigured && await supabase.from('crm_forms').delete().eq('id', id),
-  
   getFormById: async (id: string) => isConfigured ? (await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle()).data : null,
   getFormFolders: async () => isConfigured ? (await supabase.from('crm_form_folders').select('*')).data : [],
   saveFormFolder: async (f: any) => isConfigured && await supabase.from('crm_form_folders').upsert(f),
-  // Add deleteFormFolder
   deleteFormFolder: async (id: string) => isConfigured && await supabase.from('crm_form_folders').delete().eq('id', id),
-  
+
+  // --- SURVEYS ---
   getSurveys: async () => isConfigured ? (await supabase.from('crm_surveys').select('*')).data : [],
   saveSurvey: async (s: any) => isConfigured && await supabase.from('crm_surveys').upsert(s),
   getEligibleSurveysForStudent: async (sid: string) => isConfigured ? (await supabase.from('crm_surveys').select('*').eq('is_active', true)).data : [],
-  submitForm: async (fid: string, ans: any, lead: boolean, sid?: string) => isConfigured && await supabase.from('crm_form_submissions').insert([{ form_id: fid, answers: ans, student_id: sid }]),
+  submitForm: async (fid: string, ans: any, lead: boolean, sid?: string) => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_form_submissions').insert([{ form_id: fid, answers: ans, student_id: sid }]);
+    if (error) throw error;
+  },
   getFormSubmissions: async (fid: string) => isConfigured ? (await supabase.from('crm_form_submissions').select('*').eq('form_id', fid)).data : [],
+
+  // --- CONTRACTS ---
   getFolders: async () => isConfigured ? (await supabase.from('app_contract_folders').select('*')).data : [],
   saveFolder: async (f: any) => isConfigured && await supabase.from('app_contract_folders').upsert(f),
-  // Add deleteFolder
   deleteFolder: async (id: string) => isConfigured && await supabase.from('app_contract_folders').delete().eq('id', id),
-  
   getContracts: async () => isConfigured ? (await supabase.from('app_contracts').select('*')).data : [],
   getContractById: async (id: string) => isConfigured ? (await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle()).data : null,
   saveContract: async (c: any) => isConfigured && await supabase.from('app_contracts').upsert(c),
-  // Add deleteContract
   deleteContract: async (id: string) => isConfigured && await supabase.from('app_contracts').delete().eq('id', id),
-  
-  signContract: async (cid: string, sid: string, sig: string) => isConfigured && await supabase.from('app_contracts').update({ signers: sig }).eq('id', cid),
+  signContract: async (cid: string, sid: string, signature: string) => {
+    if (!isConfigured) return;
+    const { data: contract } = await supabase.from('app_contracts').select('signers').eq('id', cid).single();
+    const signers = (contract?.signers || []).map((s: any) => s.id === sid ? { ...s, status: 'signed', signatureData: signature, signedAt: new Date().toISOString() } : s);
+    const allSigned = signers.every((s: any) => s.status === 'signed');
+    await supabase.from('app_contracts').update({ signers, status: allSigned ? 'signed' : 'sent' }).eq('id', cid);
+  },
+
+  // --- CERTIFICATES ---
   getCertificates: async () => isConfigured ? (await supabase.from('crm_certificates').select('*')).data : [],
   saveCertificate: async (c: any) => isConfigured && await supabase.from('crm_certificates').upsert(c),
-  // Add deleteCertificate
   deleteCertificate: async (id: string) => isConfigured && await supabase.from('crm_certificates').delete().eq('id', id),
-  
-  issueCertificate: async (sid: string, tid: string) => isConfigured && (await supabase.from('crm_student_certificates').insert([{ student_deal_id: sid, certificate_template_id: tid, hash: 'h' }])).data,
-  getStudentCertificate: async (h: string) => isConfigured ? (await supabase.from('crm_student_certificates').select('*').eq('hash', h).single()).data : null,
-  // Add deleteStudentCertificate
+  issueCertificate: async (sid: string, tid: string) => {
+    if (!isConfigured) throw new Error("Backend not configured.");
+    const hash = crypto.randomUUID();
+    await supabase.from('crm_student_certificates').insert([{ student_deal_id: sid, certificate_template_id: tid, hash, issued_at: new Date().toISOString() }]);
+    return hash;
+  },
+  getStudentCertificate: async (h: string) => {
+    if (!isConfigured) return null;
+    const { data: cert } = await supabase.from('crm_student_certificates').select('*').eq('hash', h).maybeSingle();
+    if (!cert) return null;
+    const { data: deal } = await supabase.from('crm_deals').select('company_name, contact_name, course_city').eq('id', cert.student_deal_id).single();
+    const { data: template } = await supabase.from('crm_certificates').select('*').eq('id', cert.certificate_template_id).single();
+    return {
+      studentName: deal?.company_name || deal?.contact_name || 'Aluno',
+      studentCity: deal?.course_city || 'Local',
+      template,
+      issuedAt: cert.issued_at
+    };
+  },
   deleteStudentCertificate: async (id: string) => isConfigured && await supabase.from('crm_student_certificates').delete().eq('id', id),
-  
+
+  // --- EVENTS ---
   getEvents: async () => isConfigured ? (await supabase.from('crm_events').select('*')).data : [],
-  saveEvent: async (e: any) => isConfigured && (await supabase.from('crm_events').upsert(e).select().single()).data,
-  // Add deleteEvent
+  saveEvent: async (e: any) => isConfigured ? (await supabase.from('crm_events').upsert(e).select().single()).data : null,
   deleteEvent: async (id: string) => isConfigured && await supabase.from('crm_events').delete().eq('id', id),
-  
   getBlocks: async (eid: string) => isConfigured ? (await supabase.from('crm_event_blocks').select('*').eq('event_id', eid)).data : [],
-  saveBlock: async (b: any) => isConfigured && (await supabase.from('crm_event_blocks').upsert(b).select().single()).data,
-  // Add deleteBlock
+  saveBlock: async (b: any) => isConfigured ? (await supabase.from('crm_event_blocks').upsert(b).select().single()).data : null,
   deleteBlock: async (id: string) => isConfigured && await supabase.from('crm_event_blocks').delete().eq('id', id),
-  
   getWorkshops: async (eid: string) => isConfigured ? (await supabase.from('crm_workshops').select('*').eq('event_id', eid)).data : [],
-  saveWorkshop: async (w: any) => isConfigured && (await supabase.from('crm_workshops').upsert(w).select().single()).data,
-  // Add deleteWorkshop
+  saveWorkshop: async (w: any) => isConfigured ? (await supabase.from('crm_workshops').upsert(w).select().single()).data : null,
   deleteWorkshop: async (id: string) => isConfigured && await supabase.from('crm_workshops').delete().eq('id', id),
-  
   getEventRegistrations: async (eid: string) => isConfigured ? (await supabase.from('crm_event_registrations').select('*').eq('event_id', eid)).data : [],
-  saveEventRegistrations: async (eid: string, sid: string, sn: string, se: string, wids: string[]) => isConfigured && await supabase.from('crm_event_registrations').insert(wids.map(w => ({ event_id: eid, workshop_id: w, student_id: sid }))),
+  saveEventRegistrations: async (eid: string, sid: string, sn: string, se: string, wids: string[]) => {
+    if (!isConfigured) return;
+    await supabase.from('crm_event_registrations').delete().eq('event_id', eid).eq('student_id', sid);
+    if (wids.length > 0) {
+      await supabase.from('crm_event_registrations').insert(wids.map(w => ({ event_id: eid, workshop_id: w, student_id: sid, student_name: sn, student_email: se })));
+    }
+  },
+
+  // --- INVENTORY ---
   getInventory: async () => isConfigured ? (await supabase.from('crm_inventory').select('*')).data : [],
   saveInventoryRecord: async (r: any) => isConfigured && await supabase.from('crm_inventory').upsert(r),
-  // Add deleteInventoryRecord
   deleteInventoryRecord: async (id: string) => isConfigured && await supabase.from('crm_inventory').delete().eq('id', id),
-  
+
+  // --- COURSE INFO ---
   getCourseInfos: async () => isConfigured ? (await supabase.from('crm_course_info').select('*')).data : [],
-  saveCourseInfo: async (i: any) => isConfigured && await supabase.from('crm_course_info').upsert(i)
+  saveCourseInfo: async (i: any) => isConfigured && await supabase.from('crm_course_info').upsert(i),
+  deleteCourseInfo: async (id: string) => isConfigured && await supabase.from('crm_course_info').delete().eq('id', id)
 };

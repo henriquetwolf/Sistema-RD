@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -31,7 +30,6 @@ import { WhatsAppInbox } from './components/WhatsAppInbox';
 import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
-import { CommunicationHub } from './components/CommunicationHub';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -42,7 +40,7 @@ import {
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HardDrive,
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard, Megaphone
+  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -71,7 +69,7 @@ function App() {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const jobsRef = useRef<SyncJob[]>([]); 
   
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios' | 'inventory' | 'billing' | 'communication'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios' | 'inventory' | 'billing'>('overview');
 
   // Overview Stats State
   const [overviewStats, setOverviewStats] = useState({
@@ -120,7 +118,6 @@ function App() {
                     else setPublicError("O formulário solicitado não existe ou foi removido.");
                 } else if (contractId) {
                     const contract = await appBackend.getContractById(contractId);
-                    // Fixed: form was undefined, changed to contract
                     if (contract) setPublicContract(contract);
                     else setPublicError("O contrato solicitado não foi localizado.");
                 } else if (certificateHash) {
@@ -489,7 +486,6 @@ function App() {
              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 min-h-[400px]">
                 {step === AppStep.UPLOAD && <UploadPanel onFilesSelected={handleFilesSelected} onUrlConfirmed={setTempSheetUrl} onEntitySelected={setSelectedEntity} isLoading={status === 'parsing'} />}
                 {step === AppStep.CONFIG && <ConfigPanel config={config} setConfig={setConfig} onNext={() => setStep(AppStep.PREVIEW)} onBack={() => setStep(AppStep.UPLOAD)} currentCreatorName={currentUserName} />}
-                {/* Fixed incorrect usage of 'job' variable by using 'config' state instead */}
                 {step === AppStep.PREVIEW && <PreviewPanel files={filesData} tableName={config.tableName} config={config} onUpdateFiles={setFilesData} onUpdateConfig={setConfig} onSync={handleCreateConnection} onBack={() => setStep(AppStep.CONFIG)} onClearTable={async () => { const client = createSupabaseClient(config.url, config.key); await clearTableData(client, config.tableName, config.primaryKey || 'id'); }} />}
              </div>
              {step === AppStep.PREVIEW && (
@@ -521,7 +517,6 @@ function App() {
                                 {canAccess('overview') && <button onClick={() => setDashboardTab('overview')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'overview' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LayoutDashboard size={18} /> Visão Geral</button>}
                                 {canAccess('hr') && <button onClick={() => setDashboardTab('hr')} className={clsx("selection:w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'hr' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Heart size={18} /> Recursos Humanos</button>}
                                 {canAccess('crm') && <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Kanban size={18} /> CRM Comercial</button>}
-                                {canAccess('communication') && <button onClick={() => setDashboardTab('communication')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'communication' ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Megaphone size={18} /> Comunicação</button>}
                                 {canAccess('billing') && <button onClick={() => setDashboardTab('billing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'billing' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> Cobrança</button>}
                                 {canAccess('inventory') && <button onClick={() => setDashboardTab('inventory')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'inventory' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Package size={18} /> Controle de Estoque</button>}
                                 {canAccess('whatsapp') && <button onClick={() => setDashboardTab('whatsapp')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'whatsapp' ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MessageCircle size={18} /> Atendimento</button>}
@@ -621,8 +616,8 @@ function App() {
                                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                     <div onClick={() => setDashboardTab('crm')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Kanban size={24} /></div><h4 className="font-bold text-slate-800 mb-1">CRM</h4><p className="text-xs text-slate-500">Gestão Comercial.</p></div>
                                                     <div onClick={() => setDashboardTab('billing')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><CreditCard size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Cobrança</h4><p className="text-xs text-slate-500">Financeiro.</p></div>
-                                                    <div onClick={() => setDashboardTab('communication')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors"><Megaphone size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Comunicação</h4><p className="text-xs text-slate-500">Broadcasting.</p></div>
                                                     <div onClick={() => setDashboardTab('hr')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-rose-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-rose-600 group-hover:text-white transition-colors"><Heart size={24} /></div><h4 className="font-bold text-slate-800 mb-1">RH</h4><p className="text-xs text-slate-500">Painel Executivo.</p></div>
+                                                    <div onClick={() => setDashboardTab('teachers')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-colors"><School size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Instrutores</h4><p className="text-xs text-slate-500">Gestão docente.</p></div>
                                                 </div>
                                             </section>
                                         </div>
@@ -630,11 +625,10 @@ function App() {
                                 )}
                             </div>
                         )}
-                        {dashboardTab === 'hr' && <HrDashboard collaborators={allCollaborators} onEditCollaborator={(c) => { setDashboardTab('hr'); }} />}
+                        {dashboardTab === 'hr' && <HrDashboard collaborators={allCollaborators} onEditCollaborator={(c) => { setDashboardTab('hr'); /* Isso agora será tratado internamente pelo HrDashboard */ }} />}
                         {dashboardTab === 'inventory' && <InventoryManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'billing' && <BillingManager />}
                         {dashboardTab === 'crm' && <div className="h-full"><CrmBoard /></div>}
-                        {dashboardTab === 'communication' && <CommunicationHub onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'classes' && <ClassesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'franchises' && <FranchisesManager onBack={() => setDashboardTab('overview')} />}

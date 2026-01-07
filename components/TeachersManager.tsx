@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   School, Plus, Search, MoreVertical, User, 
   Mail, ArrowLeft, Save, Edit2, Trash2,
   MapPin, FileText, Phone, Loader2, X, Shield, Lock, Unlock,
   Briefcase, DollarSign, Award, GraduationCap, Calendar, 
-  Building, CreditCard, Truck, Info, CheckCircle2, AlertCircle, Smartphone, Map
+  Building, CreditCard, Truck, Info, CheckCircle2, AlertCircle, Smartphone, Map, Filter, Eraser
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -24,7 +24,13 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  
+  // Estados de Filtro
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [levelFilter, setLevelFilter] = useState<string>('all');
+  const [stateFilter, setStateFilter] = useState<string>('all');
+  
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   const initialFormState: Teacher = {
@@ -160,25 +166,106 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
       }
   };
 
-  const filtered = teachers.filter(t => 
-    (t.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (t.email || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Extrair valores únicos para os filtros
+  const uniqueLevels = useMemo(() => {
+    return Array.from(new Set(teachers.map(t => t.teacherLevel).filter(Boolean))).sort();
+  }, [teachers]);
+
+  const uniqueStates = useMemo(() => {
+    return Array.from(new Set(teachers.map(t => t.state).filter(Boolean))).sort();
+  }, [teachers]);
+
+  // Lógica de filtragem
+  const filtered = teachers.filter(t => {
+    const matchesSearch = (t.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (t.email || '').toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' ? true : 
+                         statusFilter === 'active' ? t.isActive : !t.isActive;
+    
+    const matchesLevel = levelFilter === 'all' ? true : t.teacherLevel === levelFilter;
+    
+    const matchesState = stateFilter === 'all' ? true : t.state === stateFilter;
+
+    return matchesSearch && matchesStatus && matchesLevel && matchesState;
+  });
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setLevelFilter('all');
+    setStateFilter('all');
+  };
+
+  const isFilterActive = searchTerm !== '' || statusFilter !== 'all' || levelFilter !== 'all' || stateFilter !== 'all';
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
             <div><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><School className="text-orange-600" /> Gestão de Professores</h2><p className="text-slate-500 text-sm">Cadastro docente, honorários e logística.</p></div>
         </div>
-        <button onClick={() => { setFormData(initialFormState); setShowModal(true); }} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"><Plus size={18} /> Novo Professor</button>
+        <button onClick={() => { setFormData(initialFormState); setShowModal(true); }} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95"><Plus size={18} /> Novo Professor</button>
       </div>
 
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input type="text" placeholder="Buscar por nome, email..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all" />
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Buscar por nome ou email..." 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all text-sm" 
+            />
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center text-slate-400 mr-1">
+                <Filter size={16} />
+                <span className="text-[10px] font-black uppercase ml-1">Filtros</span>
+            </div>
+
+            <select 
+              value={statusFilter} 
+              onChange={e => setStatusFilter(e.target.value as any)}
+              className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none focus:border-orange-500"
+            >
+              <option value="all">Todos Status</option>
+              <option value="active">Ativos</option>
+              <option value="inactive">Inativos</option>
+            </select>
+
+            <select 
+              value={levelFilter} 
+              onChange={e => setLevelFilter(e.target.value)}
+              className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none focus:border-orange-500 max-w-[150px]"
+            >
+              <option value="all">Todos Níveis</option>
+              {uniqueLevels.map(lvl => <option key={lvl} value={lvl}>{lvl}</option>)}
+            </select>
+
+            <select 
+              value={stateFilter} 
+              onChange={e => setStateFilter(e.target.value)}
+              className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none focus:border-orange-500 w-24"
+            >
+              <option value="all">Todos UFs</option>
+              {uniqueStates.map(st => <option key={st} value={st}>{st}</option>)}
+            </select>
+
+            {isFilterActive && (
+              <button 
+                onClick={clearFilters}
+                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
+                title="Limpar filtros"
+              >
+                <Eraser size={14} /> Limpar
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -186,28 +273,40 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
         {isLoading ? (
           <div className="col-span-full flex justify-center py-12"><Loader2 className="animate-spin text-orange-600" size={32} /></div>
         ) : filtered.length === 0 ? (
-          <div className="col-span-full text-center py-12 text-slate-400">Nenhum professor encontrado.</div>
+          <div className="col-span-full text-center py-20 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400">
+              <User size={48} className="mx-auto mb-4 opacity-20" />
+              <p className="font-bold">Nenhum professor localizado</p>
+              <p className="text-sm">Tente ajustar seus filtros ou cadastre um novo docente.</p>
+          </div>
         ) : (
           filtered.map(teacher => (
-            <div key={teacher.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-5 flex flex-col group relative">
+            <div key={teacher.id} className={clsx("bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-5 flex flex-col group relative", !teacher.isActive && "opacity-60")}>
                 <div className="flex justify-between items-start mb-4">
                     <div className="w-14 h-14 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xl overflow-hidden border-2 border-white shadow-sm">
                         {teacher.photoUrl ? <img src={teacher.photoUrl} alt="" className="w-full h-full object-cover" /> : (teacher.fullName || '?').charAt(0)}
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => { setFormData(teacher); setShowModal(true); }} className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
                         <button onClick={() => handleDelete(teacher.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
                     </div>
                 </div>
                 <h3 className="font-bold text-slate-800 text-lg mb-1">{teacher.fullName}</h3>
-                <div className="space-y-2 text-sm text-slate-500 mb-4">
-                    <p className="flex items-center gap-2 truncate"><Mail size={14} /> {teacher.email}</p>
-                    <p className="flex items-center gap-2"><Smartphone size={14} /> {teacher.phone}</p>
-                    <p className="flex items-center gap-2"><MapPin size={14} /> {teacher.city || 'Não inf.'} - {teacher.state}</p>
+                <div className="space-y-2 text-sm text-slate-500 mb-4 flex-1">
+                    <p className="flex items-center gap-2 truncate"><Mail size={14} className="shrink-0 text-slate-400" /> <span className="truncate">{teacher.email}</span></p>
+                    <p className="flex items-center gap-2"><Smartphone size={14} className="shrink-0 text-slate-400" /> {teacher.phone}</p>
+                    <p className="flex items-center gap-2"><MapPin size={14} className="shrink-0 text-slate-400" /> {teacher.city || 'S/ Cidade'} - {teacher.state || 'S/ UF'}</p>
                 </div>
                 <div className="mt-auto pt-4 border-t border-slate-100 flex justify-between items-center">
-                    <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase", teacher.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>{teacher.isActive ? 'Ativo' : 'Inativo'}</span>
-                    <span className="text-xs font-bold text-slate-700">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(teacher.levelHonorarium)}</span>
+                    <div className="flex flex-col">
+                        <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase w-fit", teacher.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                            {teacher.isActive ? 'Ativo' : 'Inativo'}
+                        </span>
+                        {teacher.teacherLevel && <span className="text-[9px] text-slate-400 font-black uppercase mt-1 tracking-tighter">{teacher.teacherLevel}</span>}
+                    </div>
+                    <div className="text-right">
+                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Honorário</p>
+                        <span className="text-sm font-black text-slate-700">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(teacher.levelHonorarium)}</span>
+                    </div>
                 </div>
             </div>
           ))
@@ -216,7 +315,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl my-8 animate-in zoom-in-95 flex flex-col max-h-[95vh]">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[95vh]">
                 <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                     <div>
                         <h3 className="text-xl font-bold text-slate-800">{formData.id ? 'Editar Professor' : 'Novo Professor'}</h3>

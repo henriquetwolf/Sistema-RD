@@ -232,8 +232,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V21)
--- Suporte a pastas de formulários, Informações Globais de Cursos e Novidades Docentes
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V20)
+-- Suporte a pastas de formulários e Informações Globais de Cursos
 CREATE TABLE IF NOT EXISTS public.crm_form_folders (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name text NOT NULL,
@@ -263,14 +263,6 @@ CREATE TABLE IF NOT EXISTS public.crm_course_info (
     requirements text,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.crm_teacher_news (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    title text NOT NULL,
-    content text,
-    image_url text,
-    created_at timestamptz DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.crm_billing_negotiations (
@@ -303,7 +295,6 @@ GRANT ALL ON public.crm_form_folders TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_webhook_triggers TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_billing_negotiations TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_course_info TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_teacher_news TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload config';
   `.trim();
@@ -942,9 +933,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V21)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Pastas de Formulários, Info de Cursos e Novidades Docentes).</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V21</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V20)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Pastas de Formulários e Info de Cursos).</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V20</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

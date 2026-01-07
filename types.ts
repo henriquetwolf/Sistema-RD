@@ -1,12 +1,4 @@
 
-export interface TeacherNews {
-  id: string;
-  title: string;
-  content: string;
-  imageUrl?: string;
-  createdAt: string;
-}
-
 export interface BillingRecord {
   id: number;
   "Identificador do cliente": string;

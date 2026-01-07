@@ -1,4 +1,26 @@
 
+export interface Ticket {
+  id: string;
+  title: string;
+  category: string;
+  status: 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  senderId: string;
+  senderName: string;
+  senderType: 'student' | 'instructor' | 'studio';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  content: string;
+  senderName: string;
+  senderType: 'agent' | 'user';
+  createdAt: string;
+}
+
 export interface BillingRecord {
   id: number;
   "Identificador do cliente": string;
@@ -444,11 +466,21 @@ export interface Product {
   createdAt: string;
 }
 
-// Added TeacherNews interface to resolve module export error
 export interface TeacherNews {
   id: string;
   title: string;
   content: string;
   imageUrl?: string;
+  createdAt: string;
+}
+
+export interface Broadcast {
+  id: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  targetGroup: string;
+  targetFilter?: string;
+  senderName: string;
   createdAt: string;
 }

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock, Banner, SurveyModel, CourseInfo } from '../types';
+import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock, Banner, SurveyModel, CourseInfo, PartnerStudio } from '../types';
 import { appBackend } from '../services/appBackend';
 import { FormViewer } from './FormViewer';
 import { 
@@ -37,6 +37,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [selectedEvent, setSelectedEvent] = useState<EventModel | null>(null);
     const [selectedClass, setSelectedClass] = useState<any | null>(null);
     const [selectedCourseInfo, setSelectedCourseInfo] = useState<CourseInfo | null>(null);
+    const [selectedStudioDetails, setSelectedStudioDetails] = useState<PartnerStudio | null>(null);
 
     useEffect(() => {
         loadStudentData();
@@ -53,8 +54,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     useEffect(() => {
         if (selectedClass) {
             loadCourseInfo(selectedClass.course);
+            loadStudioDetails(selectedClass.studio_mod_1);
         } else {
             setSelectedCourseInfo(null);
+            setSelectedStudioDetails(null);
         }
     }, [selectedClass]);
 
@@ -74,6 +77,45 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     materials: data.materials || '',
                     requirements: data.requirements || '',
                     updatedAt: data.updated_at
+                });
+            }
+        } catch (e) {}
+    };
+
+    const loadStudioDetails = async (fantasyName: string) => {
+        if (!fantasyName) return;
+        try {
+            const { data } = await appBackend.client
+                .from('crm_partner_studios')
+                .select('*')
+                .eq('fantasy_name', fantasyName)
+                .maybeSingle();
+            
+            if (data) {
+                setSelectedStudioDetails({
+                    id: data.id,
+                    status: data.status,
+                    responsibleName: data.responsible_name,
+                    cpf: data.cpf,
+                    phone: data.phone,
+                    email: data.email,
+                    fantasyName: data.fantasy_name,
+                    legalName: data.legal_name,
+                    cnpj: data.cnpj,
+                    address: data.address,
+                    city: data.city,
+                    state: data.state,
+                    country: data.country,
+                    hasReformer: data.has_reformer,
+                    qtyReformer: data.qty_reformer,
+                    hasLadderBarrel: data.has_ladder_barrel,
+                    qtyLadderBarrel: data.qty_ladder_barrel,
+                    hasChair: data.has_chair,
+                    qtyChair: data.qty_chair,
+                    hasCadillac: data.has_cadillac,
+                    qtyCadillac: data.qty_cadillac,
+                    hasChairsForCourse: data.has_chairs_for_course,
+                    hasTv: data.has_tv
                 });
             }
         } catch (e) {}
@@ -521,6 +563,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                             <div>
                                                 <p className="font-black text-slate-800">{selectedClass.city}, {selectedClass.state}</p>
                                                 <p className="text-sm text-slate-500 mt-1">{selectedClass.studio_mod_1 || 'Studio a definir'}</p>
+                                                {selectedStudioDetails && (
+                                                    <div className="mt-2 p-3 bg-white rounded-xl border border-slate-100 shadow-sm animate-in fade-in slide-in-from-top-1">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Endereço Completo</p>
+                                                        <p className="text-xs text-slate-600 leading-tight">{selectedStudioDetails.address}</p>
+                                                        <p className="text-[10px] text-slate-400 mt-1">{selectedStudioDetails.city} - {selectedStudioDetails.state}</p>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

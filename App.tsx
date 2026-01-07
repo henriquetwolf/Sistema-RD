@@ -451,9 +451,10 @@ function App() {
   if (currentStudent) return <StudentArea student={currentStudent} onLogout={handleLogout} />;
   if (currentStudio) return <PartnerStudioArea studio={currentStudio} onLogout={handleLogout} />;
 
+  // Pega o nome do colaborador ou tenta pegar o nome do metadado do usuário Supabase (Super Admin)
   const currentUserName = currentCollaborator 
     ? currentCollaborator.name 
-    : (session?.user?.user_metadata?.full_name || 'Super Admin');
+    : (session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Super Admin');
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">

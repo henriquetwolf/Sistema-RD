@@ -36,6 +36,39 @@ export interface BillingNegotiation {
   createdAt: string;
 }
 
+export interface Ticket {
+  id: string;
+  title: string;
+  category: string;
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  priority: 'low' | 'medium' | 'high';
+  senderId: string;
+  senderName: string;
+  senderType: 'student' | 'instructor' | 'studio';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  content: string;
+  senderName: string;
+  senderType: 'agent' | 'user'; // agent = admin/system, user = student/teacher/studio
+  createdAt: string;
+}
+
+export interface Broadcast {
+  id: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  targetGroup: 'students' | 'instructors' | 'studios';
+  targetFilter?: string;
+  senderName: string;
+  createdAt: string;
+}
+
 export interface CourseInfo {
   id: string;
   courseName: string;
@@ -444,7 +477,6 @@ export interface Product {
   createdAt: string;
 }
 
-// Added TeacherNews interface to resolve module export error
 export interface TeacherNews {
   id: string;
   title: string;

@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo } from '../types';
+import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo, TeacherNews } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -546,18 +546,18 @@ export const appBackend = {
       agency: d.agency, 
       account: d.account, 
       beneficiary: d.beneficiary, 
-      pixKey: d.pix_key, 
-      hasReformer: d.has_reformer, 
-      qtyReformer: d.qty_reformer, 
-      hasLadderBarrel: d.has_ladder_barrel, 
-      qtyLadderBarrel: d.qty_ladder_barrel, 
-      hasChair: d.has_chair, 
-      qtyChair: d.qty_chair, 
-      hasCadillac: d.has_cadillac, 
-      qtyCadillac: d.qty_cadillac, 
-      hasChairsForCourse: d.has_chairs_for_course, 
-      hasTv: d.has_tv, 
-      maxKitsCapacity: d.max_kits_capacity, 
+      pix_key: d.pix_key, 
+      has_reformer: d.has_reformer, 
+      qty_reformer: d.qty_reformer, 
+      has_ladder_barrel: d.has_ladder_barrel, 
+      qty_ladder_barrel: d.qty_ladder_barrel, 
+      has_chair: d.has_chair, 
+      qty_chair: d.qty_chair, 
+      has_cadillac: d.has_cadillac, 
+      qty_cadillac: d.qty_cadillac, 
+      has_chairs_for_course: d.has_chairs_for_course, 
+      has_tv: d.has_tv, 
+      max_kits_capacity: d.max_kits_capacity, 
       attachments: d.attachments
     }));
   },
@@ -1148,6 +1148,43 @@ export const appBackend = {
   deleteCourseInfo: async (id: string): Promise<void> => {
       if (!isConfigured) return;
       const { error } = await supabase.from('crm_course_info').delete().eq('id', id);
+      if (error) throw error;
+  },
+
+  getTeacherNews: async (): Promise<TeacherNews[]> => {
+      if (!isConfigured) return [];
+      const { data, error = null } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          content: d.content || '',
+          imageUrl: d.image_url || '',
+          createdAt: d.created_at
+      }));
+  },
+
+  saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
+      if (!isConfigured) return;
+      const payload = {
+          title: news.title,
+          content: news.content,
+          image_url: news.imageUrl
+      };
+      let error;
+      if (news.id) {
+          const result = await supabase.from('crm_teacher_news').update(payload).eq('id', news.id);
+          error = result.error;
+      } else {
+          const result = await supabase.from('crm_teacher_news').insert([{ ...payload, id: crypto.randomUUID() }]);
+          error = result.error;
+      }
+      if (error) throw error;
+  },
+
+  deleteTeacherNews: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_teacher_news').delete().eq('id', id);
       if (error) throw error;
   }
 };

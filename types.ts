@@ -36,6 +36,15 @@ export interface BillingNegotiation {
   createdAt: string;
 }
 
+export interface CourseInfo {
+  id: string;
+  courseName: string;
+  details: string;
+  materials: string;
+  requirements: string;
+  updatedAt: string;
+}
+
 export interface Franchise {
   id: string;
   saleNumber: string;

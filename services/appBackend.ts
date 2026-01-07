@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder } from '../types';
+import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -1110,4 +1110,44 @@ export const appBackend = {
     const { error = null } = await supabase.from('crm_inventory').delete().eq('id', id);
     if (error) throw error;
   },
+
+  getCourseInfos: async (): Promise<CourseInfo[]> => {
+      if (!isConfigured) return [];
+      const { data, error = null } = await supabase.from('crm_course_info').select('*').order('course_name', { ascending: true });
+      if (error) throw error;
+      return (data || []).map((d: any) => ({
+          id: d.id,
+          courseName: d.course_name,
+          details: d.details || '',
+          materials: d.materials || '',
+          requirements: d.requirements || '',
+          updatedAt: d.updated_at
+      }));
+  },
+
+  saveCourseInfo: async (info: Partial<CourseInfo>): Promise<void> => {
+      if (!isConfigured) return;
+      const payload = {
+          course_name: info.courseName,
+          details: info.details,
+          materials: info.materials,
+          requirements: info.requirements,
+          updated_at: new Date().toISOString()
+      };
+      let error;
+      if (info.id) {
+          const result = await supabase.from('crm_course_info').update(payload).eq('id', info.id);
+          error = result.error;
+      } else {
+          const result = await supabase.from('crm_course_info').insert([{ ...payload, id: crypto.randomUUID() }]);
+          error = result.error;
+      }
+      if (error) throw error;
+  },
+
+  deleteCourseInfo: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_course_info').delete().eq('id', id);
+      if (error) throw error;
+  }
 };

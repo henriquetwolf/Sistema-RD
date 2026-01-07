@@ -1,12 +1,12 @@
 
 import React, { useEffect, useState } from 'react';
-import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock, Banner, SurveyModel } from '../types';
+import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock, Banner, SurveyModel, CourseInfo } from '../types';
 import { appBackend } from '../services/appBackend';
 import { FormViewer } from './FormViewer';
 import { 
     LogOut, GraduationCap, BookOpen, Award, ExternalLink, Calendar, MapPin, 
     Video, Download, Loader2, UserCircle, User, CheckCircle, Mic, CheckSquare, Clock, Users, X, Save, Lock, AlertCircle, DollarSign, Layers, Edit2, List,
-    PieChart, Send, ArrowRight, Sparkles, Bell, Bookmark, Search, Zap, Trophy, ChevronRight
+    PieChart, Send, ArrowRight, Sparkles, Bell, Bookmark, Search, Zap, Trophy, ChevronRight, Book, ListTodo
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -36,6 +36,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     
     const [selectedEvent, setSelectedEvent] = useState<EventModel | null>(null);
     const [selectedClass, setSelectedClass] = useState<any | null>(null);
+    const [selectedCourseInfo, setSelectedCourseInfo] = useState<CourseInfo | null>(null);
 
     useEffect(() => {
         loadStudentData();
@@ -48,6 +49,35 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             loadEventsData();
         }
     }, [activeTab]);
+
+    useEffect(() => {
+        if (selectedClass) {
+            loadCourseInfo(selectedClass.course);
+        } else {
+            setSelectedCourseInfo(null);
+        }
+    }, [selectedClass]);
+
+    const loadCourseInfo = async (courseName: string) => {
+        try {
+            const { data } = await appBackend.client
+                .from('crm_course_info')
+                .select('*')
+                .eq('course_name', courseName)
+                .maybeSingle();
+            
+            if (data) {
+                setSelectedCourseInfo({
+                    id: data.id,
+                    courseName: data.course_name,
+                    details: data.details || '',
+                    materials: data.materials || '',
+                    requirements: data.requirements || '',
+                    updatedAt: data.updated_at
+                });
+            }
+        } catch (e) {}
+    };
 
     const loadBanners = async () => {
         try {
@@ -438,7 +468,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             {/* Class Details Modal */}
             {selectedClass && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-3xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
                         <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                             <div>
                                 <h3 className="text-2xl font-black text-slate-800 leading-tight">{selectedClass.course}</h3>
@@ -448,7 +478,40 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                 <X size={24} />
                             </button>
                         </div>
-                        <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-8">
+                        <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-10">
+                            
+                            {/* Seção de Informações Globais do Curso (Vindo de Configurações) */}
+                            {selectedCourseInfo && (
+                                <div className="space-y-6 animate-in fade-in duration-500">
+                                    <div className="bg-teal-50 p-6 rounded-[2rem] border border-teal-100">
+                                        <h4 className="text-[10px] font-black text-teal-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                            <Book size={14}/> Sobre este Curso
+                                        </h4>
+                                        <p className="text-sm text-teal-900 leading-relaxed whitespace-pre-wrap">{selectedCourseInfo.details}</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {selectedCourseInfo.materials && (
+                                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                                    <Layers size={14}/> Materiais Inclusos
+                                                </h4>
+                                                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{selectedCourseInfo.materials}</p>
+                                            </div>
+                                        )}
+                                        {selectedCourseInfo.requirements && (
+                                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                                    <ListTodo size={14}/> Orientações Importantes
+                                                </h4>
+                                                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{selectedCourseInfo.requirements}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="h-px bg-slate-100 w-full"></div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-6">
                                     <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
@@ -502,7 +565,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                             
                             {selectedClass.observations && (
                                 <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Informações Importantes</h4>
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Informações Adicionais</h4>
                                     <p className="text-sm text-slate-600 leading-relaxed italic">{selectedClass.observations}</p>
                                 </div>
                             )}

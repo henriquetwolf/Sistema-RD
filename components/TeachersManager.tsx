@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   School, Plus, Search, MoreVertical, User, Users,
   Mail, ArrowLeft, Save, Edit2, Trash2,
   MapPin, FileText, Phone, Loader2, X, Shield, Lock, Unlock,
   Briefcase, DollarSign, Award, GraduationCap, Calendar, 
-  Building, CreditCard, Truck, Info, CheckCircle2, AlertCircle, Smartphone, Map, Filter, Eraser, Sparkles, Image as ImageIcon, Send, History, Newspaper
+  Building, CreditCard, Truck, Info, CheckCircle2, AlertCircle, Smartphone, Map, Filter, Eraser, Sparkles, Image as ImageIcon, Send, History, Newspaper, Upload
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { TeacherNews, InstructorLevel } from '../types';
@@ -46,6 +46,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
 
   const [formData, setFormData] = useState<Teacher>(initialFormState);
   const [newsFormData, setNewsFormData] = useState<Partial<TeacherNews>>({ title: '', content: '', imageUrl: '' });
+
+  const newsFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (activeTab === 'teachers') {
@@ -142,6 +144,16 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
           teacherLevel: levelName,
           levelHonorarium: selectedLevel ? selectedLevel.honorarium : formData.levelHonorarium
       });
+  };
+
+  const handleNewsImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewsFormData({ ...newsFormData, imageUrl: reader.result as string });
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    }
   };
 
   const handleSaveNews = async () => {
@@ -290,8 +302,37 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                           <textarea className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-2xl text-sm h-32 resize-none transition-all outline-none leading-relaxed" value={newsFormData.content} onChange={e => setNewsFormData({...newsFormData, content: e.target.value})} placeholder="Escreva o aviso detalhado aqui..." />
                       </div>
                       <div>
-                          <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">URL da Imagem de Destaque (Opcional)</label>
-                          <div className="relative"><ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input type="text" className="w-full pl-10 pr-4 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-2xl text-xs font-mono transition-all outline-none" value={newsFormData.imageUrl} onChange={e => setNewsFormData({...newsFormData, imageUrl: e.target.value})} placeholder="https://..." /></div>
+                          <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Imagem de Destaque (Opcional)</label>
+                          <div className="flex flex-col gap-4">
+                              <div className="flex items-center gap-4">
+                                  <button 
+                                    onClick={() => newsFileInputRef.current?.click()}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all border border-slate-200"
+                                  >
+                                      <Upload size={16}/> Selecionar Imagem
+                                  </button>
+                                  {newsFormData.imageUrl && (
+                                      <button 
+                                        onClick={() => setNewsFormData({ ...newsFormData, imageUrl: '' })}
+                                        className="text-red-500 hover:text-red-700 text-xs font-bold"
+                                      >
+                                          Remover
+                                      </button>
+                                  )}
+                                  <input 
+                                    ref={newsFileInputRef}
+                                    type="file" 
+                                    className="hidden" 
+                                    accept="image/*" 
+                                    onChange={handleNewsImageUpload} 
+                                  />
+                              </div>
+                              {newsFormData.imageUrl && (
+                                  <div className="w-32 h-32 rounded-xl overflow-hidden border-2 border-slate-100 shadow-sm">
+                                      <img src={newsFormData.imageUrl} className="w-full h-full object-cover" />
+                                  </div>
+                              )}
+                          </div>
                       </div>
                   </div>
                   <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-3xl">

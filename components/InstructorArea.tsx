@@ -130,7 +130,27 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 space-y-8">
         
-        {/* NOVIDADES SECTION */}
+        {/* BANNERS SECTION - Now Above News */}
+        {banners.length > 0 && (
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-700">
+                {banners.map(banner => (
+                    <a 
+                        key={banner.id}
+                        href={banner.linkUrl || '#'}
+                        target={banner.linkUrl ? "_blank" : "_self"}
+                        rel="noreferrer"
+                        className={clsx(
+                            "block rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-xl transition-all border-4 border-white",
+                            !banner.linkUrl && "cursor-default"
+                        )}
+                    >
+                        <img src={banner.imageUrl} alt={banner.title} className="w-full h-auto object-cover max-h-48" />
+                    </a>
+                ))}
+            </section>
+        )}
+
+        {/* NOVIDADES SECTION - Now Below Banners */}
         {news.length > 0 && (
             <section className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
                 <div className="flex items-center justify-between px-2">
@@ -169,26 +189,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                         );
                     })}
                 </div>
-            </section>
-        )}
-
-        {/* BANNERS SECTION */}
-        {banners.length > 0 && (
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-700">
-                {banners.map(banner => (
-                    <a 
-                        key={banner.id}
-                        href={banner.linkUrl || '#'}
-                        target={banner.linkUrl ? "_blank" : "_self"}
-                        rel="noreferrer"
-                        className={clsx(
-                            "block rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-xl transition-all border-4 border-white",
-                            !banner.linkUrl && "cursor-default"
-                        )}
-                    >
-                        <img src={banner.imageUrl} alt={banner.title} className="w-full h-auto object-cover max-h-48" />
-                    </a>
-                ))}
             </section>
         )}
 

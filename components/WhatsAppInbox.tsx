@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageCircle, Search, Filter, MoreVertical, Paperclip, Mic, Send, 
@@ -407,7 +406,6 @@ Deno.serve(async (req) => {
             <div className="flex gap-2">
                 <button onClick={() => setShowNewChatModal(true)} className="p-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors" title="Nova Conversa"><Plus size={18} /></button>
                 <button onClick={() => setShowSettings(true)} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-slate-200 rounded-lg" title="Configurações"><Settings size={18} /></button>
-                {/* Corrected: fetchConversations call inside lambda to avoid MouseEvent parameter mismatch */}
                 <button onClick={() => fetchConversations()} className="p-1.5 text-slate-400 hover:text-teal-600"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""} /></button>
             </div>
         </div>
@@ -459,4 +457,55 @@ Deno.serve(async (req) => {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
                 <MessageCircle size={64} className="opacity-20 mb-4" />
-                <p className="text-
+                <p className="text-lg font-bold">Selecione uma conversa</p>
+                <p className="text-sm">Clique em um contato na lista para iniciar o atendimento.</p>
+            </div>
+          )}
+      </div>
+
+      {/* New Chat Modal */}
+      {showNewChatModal && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2"><Plus className="text-teal-600" size={20} /> Nova Conversa</h3>
+                      <button onClick={() => setShowNewChatModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  </div>
+                  <form onSubmit={handleStartNewChat} className="p-6 space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Número de Telefone</label>
+                          <input 
+                            type="text" 
+                            className="w-full px-4 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 outline-none" 
+                            placeholder="5511999999999" 
+                            value={newChatPhone} 
+                            onChange={e => setNewChatPhone(e.target.value)} 
+                            required
+                          />
+                          <p className="text-[10px] text-slate-400 mt-1">Inclua o código do país (55) e o DDD.</p>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Nome do Contato</label>
+                          <input 
+                            type="text" 
+                            className="w-full px-4 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 outline-none" 
+                            placeholder="Nome Completo" 
+                            value={newChatName} 
+                            onChange={e => setNewChatName(e.target.value)} 
+                            required
+                          />
+                      </div>
+                      <div className="flex justify-end gap-3 pt-4 border-t">
+                          <button type="button" onClick={() => setShowNewChatModal(false)} className="px-4 py-2 text-slate-500 text-sm font-bold">Cancelar</button>
+                          <button type="submit" disabled={isCreatingChat} className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2">
+                              {isCreatingChat ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                              Iniciar
+                          </button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      )}
+    </div>
+  );
+};

@@ -45,6 +45,36 @@ export interface CourseInfo {
   updatedAt: string;
 }
 
+export type SupportStatus = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
+export type SupportPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type SupportCategory = 'Financeiro' | 'Técnico' | 'Pedagógico' | 'Logística' | 'Outros';
+
+export interface SupportTicket {
+  id: string;
+  title: string;
+  description: string;
+  category: SupportCategory;
+  priority: SupportPriority;
+  status: SupportStatus;
+  senderId: string;
+  senderName: string;
+  senderType: 'student' | 'instructor' | 'studio' | 'admin';
+  assignedTo?: string; // ID do Admin responsável
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupportMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderName: string;
+  senderType: 'admin' | 'user';
+  content: string;
+  attachments?: string; // Links separados por vírgula
+  createdAt: string;
+}
+
 export interface Franchise {
   id: string;
   saleNumber: string;
@@ -444,7 +474,6 @@ export interface Product {
   createdAt: string;
 }
 
-// Added TeacherNews interface to resolve module export error
 export interface TeacherNews {
   id: string;
   title: string;

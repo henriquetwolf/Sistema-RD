@@ -443,3 +443,12 @@ export interface Product {
   certificateTemplateId?: string;
   createdAt: string;
 }
+
+// Added TeacherNews interface to resolve module export error
+export interface TeacherNews {
+  id: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  createdAt: string;
+}

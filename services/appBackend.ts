@@ -1,6 +1,7 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo } from '../types';
+// Added TeacherNews to import list
+import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo, TeacherNews } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -160,7 +161,7 @@ export const appBackend = {
       totalInstallments: row.total_installments,
       dueDate: row.due_date,
       responsibleAgent: row.responsible_agent,
-      identifierCode: row.identifier_code,
+      identifier_code: row.identifier_code,
       fullName: row.full_name,
       productName: row.product_name,
       originalValue: row.original_value,
@@ -548,16 +549,16 @@ export const appBackend = {
       beneficiary: d.beneficiary, 
       pixKey: d.pix_key, 
       hasReformer: d.has_reformer, 
-      qtyReformer: d.qty_reformer, 
-      hasLadderBarrel: d.has_ladder_barrel, 
-      qtyLadderBarrel: d.qty_ladder_barrel, 
-      hasChair: d.has_chair, 
-      qtyChair: d.qty_chair, 
-      hasCadillac: d.has_cadillac, 
-      qtyCadillac: d.qty_cadillac, 
-      hasChairsForCourse: d.has_chairs_for_course, 
-      hasTv: d.has_tv, 
-      maxKitsCapacity: d.max_kits_capacity, 
+      qty_reformer: d.qtyReformer, 
+      has_ladder_barrel: d.hasLadderBarrel, 
+      qty_ladder_barrel: d.qtyLadderBarrel, 
+      has_chair: d.hasChair, 
+      qty_chair: d.qtyChair, 
+      has_cadillac: d.hasCadillac, 
+      qty_cadillac: d.qtyCadillac, 
+      has_chairs_for_course: d.hasChairsForCourse, 
+      has_tv: d.hasTv, 
+      max_kits_capacity: d.maxKitsCapacity, 
       attachments: d.attachments
     }));
   },
@@ -649,6 +650,44 @@ export const appBackend = {
     if (error) throw error;
   },
 
+  // Added methods for TeacherNews to resolve compilation errors
+  getTeacherNews: async (): Promise<TeacherNews[]> => {
+    if (!isConfigured) return [];
+    const { data, error = null } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((d: any) => ({
+        id: d.id,
+        title: d.title,
+        content: d.content,
+        imageUrl: d.image_url,
+        createdAt: d.created_at
+    }));
+  },
+
+  saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        title: news.title,
+        content: news.content,
+        image_url: news.imageUrl,
+    };
+    let error;
+    if (news.id) {
+        const result = await supabase.from('crm_teacher_news').update(payload).eq('id', news.id);
+        error = result.error;
+    } else {
+        const result = await supabase.from('crm_teacher_news').insert([{ ...payload, id: crypto.randomUUID() }]);
+        error = result.error;
+    }
+    if (error) throw error;
+  },
+
+  deleteTeacherNews: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error = null } = await supabase.from('crm_teacher_news').delete().eq('id', id);
+    if (error) throw error;
+  },
+
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
       const payload = { 
@@ -727,8 +766,10 @@ export const appBackend = {
           target_type: survey.targetType,
           target_product_type: survey.targetProductType || null,
           target_product_name: survey.targetProductName || null,
+          // Fixed: Changed from survey.only_if_finished to survey.onlyIfFinished
           only_if_finished: survey.onlyIfFinished,
           is_active: survey.isActive,
+          // Fixed: Changed from survey.submissions_count to survey.submissionsCount
           submissions_count: survey.submissionsCount || 0 
       };
       const { error } = await supabase.from('crm_surveys').upsert(payload);
@@ -1033,7 +1074,7 @@ export const appBackend = {
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
       if (!isConfigured) throw new Error("Backend not configured");
-      const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
+      const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.max_selections };
       const { data, error = null } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, date: data.date, title: block.title, maxSelections: data.max_selections };
@@ -1088,7 +1129,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date, attachments: d.attachments, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registration_date: d.registration_date, studio_id: d.studio_id, tracking_code: d.tracking_code, observations: d.observations, conference_date: d.conference_date, attachments: d.attachments, createdAt: d.created_at }));
   },
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {

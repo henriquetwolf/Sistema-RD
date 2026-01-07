@@ -35,6 +35,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [surveyInitialAnswers, setSurveyInitialAnswers] = useState<Record<string, any>>({});
     
     const [selectedEvent, setSelectedEvent] = useState<EventModel | null>(null);
+    const [selectedClass, setSelectedClass] = useState<any | null>(null);
 
     useEffect(() => {
         loadStudentData();
@@ -362,7 +363,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                     <div className={clsx("w-3 h-3 rounded-full shadow-sm", cls.status === 'Confirmado' ? 'bg-green-500' : 'bg-amber-400')}></div>
                                                     <span className="text-xs font-black text-slate-700 uppercase tracking-tighter">{cls.status}</span>
                                                 </div>
-                                                <button className="text-xs font-black text-purple-600 hover:text-purple-800 uppercase tracking-widest flex items-center gap-1 group/btn">
+                                                <button 
+                                                    onClick={() => setSelectedClass(cls)}
+                                                    className="text-xs font-black text-purple-600 hover:text-purple-800 uppercase tracking-widest flex items-center gap-1 group/btn"
+                                                >
                                                     Ver Detalhes <ChevronRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
                                                 </button>
                                             </div>
@@ -430,6 +434,87 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     )}
                 </div>
             </main>
+
+            {/* Class Details Modal */}
+            {selectedClass && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                        <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-800 leading-tight">{selectedClass.course}</h3>
+                                <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">Detalhes da Turma #{selectedClass.class_code}</p>
+                            </div>
+                            <button onClick={() => setSelectedClass(null)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-6">
+                                    <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Localização</h4>
+                                        <div className="flex items-start gap-3">
+                                            <MapPin size={20} className="text-purple-600 mt-1" />
+                                            <div>
+                                                <p className="font-black text-slate-800">{selectedClass.city}, {selectedClass.state}</p>
+                                                <p className="text-sm text-slate-500 mt-1">{selectedClass.studio_mod_1 || 'Studio a definir'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-purple-50 p-6 rounded-[2rem] border border-purple-100">
+                                        <h4 className="text-[10px] font-black text-purple-400 uppercase tracking-[0.2em] mb-4">Módulo 01</h4>
+                                        <div className="space-y-4">
+                                            <div className="flex items-center gap-3">
+                                                <Calendar size={18} className="text-purple-600" />
+                                                <span className="font-bold text-slate-700">{selectedClass.date_mod_1 ? new Date(selectedClass.date_mod_1).toLocaleDateString('pt-BR') : 'Data a confirmar'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <User size={18} className="text-purple-600" />
+                                                <span className="font-bold text-slate-700">Instrutor: {selectedClass.instructor_mod_1 || 'A definir'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-6">
+                                    <div className="bg-orange-50 p-6 rounded-[2rem] border border-orange-100">
+                                        <h4 className="text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-4">Módulo 02</h4>
+                                        <div className="space-y-4">
+                                            <div className="flex items-center gap-3">
+                                                <Calendar size={18} className="text-orange-600" />
+                                                <span className="font-bold text-slate-700">{selectedClass.date_mod_2 ? new Date(selectedClass.date_mod_2).toLocaleDateString('pt-BR') : 'Data a confirmar'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <User size={18} className="text-orange-600" />
+                                                <span className="font-bold text-slate-700">Instrutor: {selectedClass.instructor_mod_2 || 'A definir'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100">
+                                        <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] mb-4">Seu Status</h4>
+                                        <div className="flex items-center gap-3">
+                                            <div className={clsx("w-3 h-3 rounded-full shadow-sm", selectedClass.status === 'Confirmado' ? 'bg-green-500' : 'bg-amber-400')}></div>
+                                            <span className="font-black text-slate-800 uppercase text-xs">{selectedClass.status}</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-2 font-medium">Sua matrícula está ativa para este curso.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {selectedClass.observations && (
+                                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Informações Importantes</h4>
+                                    <p className="text-sm text-slate-600 leading-relaxed italic">{selectedClass.observations}</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-10 py-6 bg-slate-50 border-t border-slate-100 rounded-b-[2.5rem] flex justify-end">
+                            <button onClick={() => setSelectedClass(null)} className="bg-slate-800 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-900 transition-all active:scale-95 shadow-lg">
+                                Entendi
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <footer className="py-12 text-center text-slate-400 bg-white/40 border-t border-slate-200 mt-12">
                 <p className="text-[10px] font-black uppercase tracking-[0.4em] mb-4">VOLL Pilates Group &copy; {new Date().getFullYear()}</p>

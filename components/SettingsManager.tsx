@@ -84,7 +84,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const PERMISSION_MODULES = [
       { id: 'overview', label: 'Visão Geral' },
-      { id: 'support', label: 'Chamados / Suporte' },
       { id: 'hr', label: 'Recursos Humanos' },
       { id: 'crm', label: 'CRM Comercial' },
       { id: 'billing', label: 'Cobrança' },
@@ -237,36 +236,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V22)
--- Suporte a Chamados de Atendimento Interno
-CREATE TABLE IF NOT EXISTS public.crm_support_tickets (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_type text NOT NULL, -- student, instructor, studio
-    user_id text NOT NULL,
-    user_name text NOT NULL,
-    user_email text NOT NULL,
-    subject text NOT NULL,
-    category text,
-    status text DEFAULT 'open',
-    last_message text,
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.crm_support_messages (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    ticket_id uuid REFERENCES public.crm_support_tickets(id) ON DELETE CASCADE,
-    sender_id text NOT NULL,
-    sender_name text NOT NULL,
-    sender_type text NOT NULL, -- user, agent
-    message text NOT NULL,
-    created_at timestamptz DEFAULT now()
-);
-
-GRANT ALL ON public.crm_support_tickets TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_support_messages TO anon, authenticated, service_role;
-
--- (Manter as outras tabelas existentes no script...)
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V21)
+-- Suporte a Central de Novidades para Professores
 CREATE TABLE IF NOT EXISTS public.crm_teacher_news (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     title text NOT NULL,
@@ -275,6 +246,7 @@ CREATE TABLE IF NOT EXISTS public.crm_teacher_news (
     created_at timestamptz DEFAULT now()
 );
 
+-- Suporte a pastas de formulários e Informações Globais de Cursos
 CREATE TABLE IF NOT EXISTS public.crm_form_folders (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name text NOT NULL,
@@ -975,9 +947,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V22)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para habilitar o sistema de suporte unificado.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Suporte V22</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V21)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Central de Novidades, Pastas e Info Cursos).</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V21</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

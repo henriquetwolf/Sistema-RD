@@ -158,11 +158,12 @@ export const HrDashboard: React.FC<HrDashboardProps> = ({ collaborators, onEditC
           <button onClick={() => setActiveSubTab('operacional')} className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", activeSubTab === 'operacional' ? "bg-slate-800 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}>
               <ClipboardList size={18}/> Painel Operacional
           </button>
-          <button onClick={() => { setTargetCollaborator(null); setActiveSubTab('equipe'); }} className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", activeSubTab === 'equipe' ? "bg-slate-800 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}>
+          <button onClick={() => { setTargetCollaborator(null); setActiveSubTab('equipe'); }} className={clsx("px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2", (activeSubTab as string) === 'equipe' ? "bg-slate-800 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}>
               <Users2 size={18}/> Gestão de Equipe
           </button>
       </div>
 
+      {/* Cast activeSubTab to string in comparison below to bypass narrowed type error after the early return check */}
       {activeSubTab === 'executivo' ? (
           <div className="space-y-8">
               {/* KPIs */}

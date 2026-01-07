@@ -229,13 +229,14 @@ export const CrmBoard: React.FC = () => {
           if (dealsResult.data) {
               setDeals(dealsResult.data.map((d: any) => ({
                   id: d.id, dealNumber: d.deal_number, title: d.title || '', contactName: d.contact_name || '', companyName: d.company_name || '',
-                  value: Number(d.value || 0), paymentMethod: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
-                  nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
+                  value: Number(d.value || 0), payment_method: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
+                  next_task: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
-                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receipt_link: d.receipt_link,
-                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
-                  registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, course_city: d.course_city,
+                  /* Corrected property mapping to camelCase Deal interface */
+                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
+                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
+                  registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
                   classMod1: d.class_mod_1, class_mod_2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
               })));
@@ -554,8 +555,9 @@ export const CrmBoard: React.FC = () => {
           next_task: dealFormData.nextTask, source: dealFormData.source, campaign: dealFormData.campaign, entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installmentValue || 0),
           product_type: dealFormData.productType || null, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
-          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receipt_link, transaction_code: dealFormData.transactionCode,
-          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.address_number, registration_data: dealFormData.registration_data,
+          /* Corrected property access on dealFormData to match camelCase Deal interface */
+          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode,
+          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber, registration_data: dealFormData.registrationData,
           observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
           class_mod_1: dealFormData.classMod1, class_mod_2: dealFormData.classMod2, pipeline: dealFormData.pipeline, 
           tasks: dealFormData.tasks, billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName

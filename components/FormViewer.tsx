@@ -197,11 +197,13 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
                     <div key={q.id} className="space-y-4">
                         <label className="block text-lg font-bold flex items-center gap-2" style={{ color: style.textColor }}>
                         {q.title} {q.required && <span className="text-red-500">*</span>}
-                        {isSystemAuto && <Lock size={14} className="text-slate-400" title="Informação automática do sistema" />}
+                        {/* Corrected: Wrapped icon in span to use title attribute safely */}
+                        {isSystemAuto && <span title="Informação automática do sistema"><Lock size={14} className="text-slate-400" /></span>}
                         </label>
                         
                         {q.type === 'paragraph' ? (
-                            <textarea readOnly={isSystemAuto} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 p-4 min-h-[140px] transition-all bg-slate-50/50 text-base", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70")} style={{ focusRingColor: style.primaryColor, focusBorderColor: style.primaryColor }} placeholder="Escreva sua resposta longa aqui..." value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)} />
+                            /* Corrected: Removed invalid style properties focusRingColor and focusBorderColor */
+                            <textarea readOnly={isSystemAuto} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 p-4 min-h-[140px] transition-all bg-slate-50/50 text-base", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70")} style={{ borderColor: style.primaryColor }} placeholder="Escreva sua resposta longa aqui..." value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)} />
                         ) : q.type === 'select' ? (
                             <select disabled={isSystemAuto} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 px-4 py-3.5 transition-all bg-slate-50/50 text-base font-medium", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70")} value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)}>
                                 <option value="">Escolha uma opção...</option>

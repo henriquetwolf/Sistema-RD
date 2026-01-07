@@ -179,6 +179,10 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
     return forms.filter(f => f.folderId === currentFolderId);
   }, [forms, currentFolderId]);
 
+  const templateOptions = [
+      { id: 'blank', title: 'Em Branco', description: 'Crie seu formulário do zero.' },
+  ];
+
   const selectTemplate = (template: any) => { 
       const newForm: FormModel = { 
           ...INITIAL_FORM, 
@@ -298,7 +302,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   };
 
   const updateQuestion = (id: string, field: keyof FormQuestion, value: any) => {
-      // Fixed: changed setCurrentSurvey to setCurrentForm as it is the correct state setter for this component
       setCurrentForm(prev => ({ ...prev, questions: prev.questions.map(q => {
           if (q.id === id) {
               if ((field === 'type' && (value === 'select' || value === 'checkbox')) && !q.options) {
@@ -555,7 +558,10 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                                             <option key={field.value} value={field.value}>{field.label}</option>
                                                         ))}
                                                     </select>
-                                                    <Info size={14} className="text-indigo-300 hidden md:block" title="Escolha qual campo da Negociação será preenchido com esta resposta." />
+                                                    {/* Corrected: Wrapped Info icon in span to use title safely */}
+                                                    <span title="Escolha qual campo da Negociação será preenchido com esta resposta." className="hidden md:block">
+                                                        <Info size={14} className="text-indigo-300" />
+                                                    </span>
                                                 </div>
                                             )}
 

@@ -315,7 +315,10 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                                 >
                                                     {SYSTEM_MAPPINGS.map(sm => <option key={sm.value} value={sm.value}>{sm.label}</option>)}
                                                 </select>
-                                                <Info size={14} className="text-blue-300 hidden md:block" title="O sistema preencherá este campo automaticamente para o aluno." />
+                                                {/* Wrapped Info in span to fix: Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>' */}
+                                                <span title="O sistema preencherá este campo automaticamente para o aluno." className="hidden md:block">
+                                                    <Info size={14} className="text-blue-300" />
+                                                </span>
                                             </div>
 
                                             {(q.type === 'select' || q.type === 'checkbox') && (

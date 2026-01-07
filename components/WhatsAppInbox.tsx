@@ -308,7 +308,7 @@ Deno.serve(async (req) => {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="md:col-span-2">
                                   <label className="block text-xs font-bold text-slate-600 mb-1">Access Token (Permanente)</label>
-                                  <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 outline-none h-20 resize-none" placeholder="EAAG..." value={config.accessToken} onChange={e => setConfig({...config, accessToken: e.target.value})} />
+                                  <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-50 outline-none h-20 resize-none" placeholder="EAAG..." value={config.accessToken} onChange={e => setConfig({...config, accessToken: e.target.value})} />
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-600 mb-1">ID do Telefone</label>
@@ -407,7 +407,8 @@ Deno.serve(async (req) => {
             <div className="flex gap-2">
                 <button onClick={() => setShowNewChatModal(true)} className="p-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors" title="Nova Conversa"><Plus size={18} /></button>
                 <button onClick={() => setShowSettings(true)} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-slate-200 rounded-lg" title="Configurações"><Settings size={18} /></button>
-                <button onClick={fetchConversations} className="p-1.5 text-slate-400 hover:text-teal-600"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""} /></button>
+                {/* Corrected: fetchConversations call inside lambda to avoid MouseEvent parameter mismatch */}
+                <button onClick={() => fetchConversations()} className="p-1.5 text-slate-400 hover:text-teal-600"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""} /></button>
             </div>
         </div>
         <div className="flex-1 overflow-y-auto bg-white">
@@ -458,23 +459,4 @@ Deno.serve(async (req) => {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
                 <MessageCircle size={64} className="opacity-20 mb-4" />
-                <p className="text-sm">Selecione uma conversa ou inicie uma nova.</p>
-                <button onClick={() => setShowNewChatModal(true)} className="mt-4 bg-teal-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-teal-700">Nova Conversa</button>
-            </div>
-          )}
-      </div>
-      {showNewChatModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
-                  <div className="p-4 border-b flex justify-between items-center bg-slate-50"><h3 className="font-bold text-slate-800">Iniciar Chat</h3><button onClick={() => setShowNewChatModal(false)}><X size={20} /></button></div>
-                  <form onSubmit={handleStartNewChat} className="p-6 space-y-4">
-                      <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Nome do Contato</label><input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex: João Aluno" value={newChatName} onChange={e => setNewChatName(e.target.value)} required /></div>
-                      <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">WhatsApp (Com DDD)</label><input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="5511999999999" value={newChatPhone} onChange={e => setNewChatPhone(e.target.value)} required /><p className="text-[10px] text-slate-400 mt-1">Inclua o 55 e o DDD.</p></div>
-                      <button type="submit" disabled={isCreatingChat} className="w-full bg-teal-600 text-white py-2 rounded-lg font-bold hover:bg-teal-700 transition-colors disabled:opacity-50">{isCreatingChat ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Começar Conversa'}</button>
-                  </form>
-              </div>
-          </div>
-      )}
-    </div>
-  );
-};
+                <p className="text-

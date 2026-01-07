@@ -611,32 +611,10 @@ function App() {
                                             </div>
                                         </section>
 
-                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                            <section className="space-y-4">
-                                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14} /> Alterações</h3>
-                                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                                                    {recentChanges.length === 0 ? (
-                                                        <div className="p-10 text-center text-slate-400 text-sm">Sem atividades recentes.</div>
-                                                    ) : (
-                                                        <div className="divide-y divide-slate-100">
-                                                            {recentChanges.map((activity, idx) => (
-                                                                <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                                                                    <div className="flex items-center gap-4">
-                                                                        <div className={clsx("w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border", activity.type === 'teacher' ? "bg-orange-50 border-orange-100 text-orange-600" : activity.type === 'studio' ? "bg-teal-50 border-teal-100 text-teal-600" : "bg-indigo-50 border-indigo-100 text-indigo-600")}>{activity.type === 'teacher' ? <School size={18} /> : activity.type === 'studio' ? <Building2 size={18} /> : <Target size={18} />}</div>
-                                                                        <div><p className="text-sm font-bold text-slate-800">{activity.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Novo {activity.type === 'teacher' ? 'Instrutor' : activity.type === 'studio' ? 'Studio' : 'Lead'} Cadastrado</p></div>
-                                                                    </div>
-                                                                    <div className="text-right shrink-0"><p className="text-xs font-medium text-slate-500">{new Date(activity.date).toLocaleDateString()}</p><p className="text-[10px] text-slate-400">{new Date(activity.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p></div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    <div className="p-3 bg-slate-50 text-center border-t border-slate-100"><button onClick={() => setDashboardTab('crm')} className="text-xs font-bold text-indigo-600 hover:underline">Ver todas as atividades do CRM</button></div>
-                                                </div>
-                                            </section>
-
+                                        <div className="grid grid-cols-1 gap-8">
                                             <section className="space-y-4">
                                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutDashboard size={14} /> Atalhos Rápidos</h3>
-                                                <div className="grid grid-cols-2 gap-4">
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                     <div onClick={() => setDashboardTab('crm')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Kanban size={24} /></div><h4 className="font-bold text-slate-800 mb-1">CRM</h4><p className="text-xs text-slate-500">Gestão Comercial.</p></div>
                                                     <div onClick={() => setDashboardTab('billing')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><CreditCard size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Cobrança</h4><p className="text-xs text-slate-500">Financeiro.</p></div>
                                                     <div onClick={() => setDashboardTab('hr')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-rose-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-rose-600 group-hover:text-white transition-colors"><Heart size={24} /></div><h4 className="font-bold text-slate-800 mb-1">RH</h4><p className="text-xs text-slate-500">Painel Executivo.</p></div>

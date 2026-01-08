@@ -1,6 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo, TeacherNews, SupportTicket } from '../types';
+import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo, TeacherNews, SupportTicket, SupportMessage } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -190,6 +190,25 @@ export const appBackend = {
     }));
   },
 
+  getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase
+          .from('crm_support_messages')
+          .select('*')
+          .eq('ticket_id', ticketId)
+          .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data || []).map((m: any) => ({
+          id: m.id,
+          ticketId: m.ticket_id,
+          senderId: m.sender_id,
+          senderName: m.sender_name,
+          senderRole: m.sender_role,
+          content: m.content,
+          createdAt: m.created_at
+      }));
+  },
+
   saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
@@ -209,6 +228,32 @@ export const appBackend = {
     } else {
       await supabase.from('crm_support_tickets').insert([{ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString() }]);
     }
+  },
+
+  addSupportMessage: async (msg: Omit<SupportMessage, 'id' | 'createdAt'>): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_support_messages').insert([{
+          id: crypto.randomUUID(),
+          ticket_id: msg.ticketId,
+          sender_id: msg.senderId,
+          sender_name: msg.senderName,
+          sender_role: msg.senderRole,
+          content: msg.content,
+          created_at: new Date().toISOString()
+      }]);
+      if (error) throw error;
+
+      // Reabre o chamado se for o usuário enviando e o chamado estava fechado
+      if (msg.senderRole !== 'admin') {
+          await supabase.from('crm_support_tickets')
+            .update({ status: 'open', updated_at: new Date().toISOString() })
+            .eq('id', msg.ticketId);
+      } else {
+          // Atualiza o tempo de resposta se for admin
+          await supabase.from('crm_support_tickets')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('id', msg.ticketId);
+      }
   },
 
   deleteSupportTicket: async (id: string): Promise<void> => {
@@ -373,6 +418,7 @@ export const appBackend = {
       interval_minutes: job.intervalMinutes,
       last_sync: job.lastSync,
       status: job.status,
+      /* Corrected property: job.last_message -> job.lastMessage */
       last_message: job.lastMessage,
       created_by_name: job.createdBy,
       created_at: job.createdAt
@@ -425,7 +471,6 @@ export const appBackend = {
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
       interval_minutes: preset.intervalMinutes || 5, 
-      // Fix: Property 'created_by_name' does not exist on type 'Omit<SavedPreset, "id">'. Did you mean 'createdByName'?
       created_by_name: preset.createdByName || null
     };
     const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -595,7 +640,7 @@ export const appBackend = {
       fantasyName: d.fantasy_name, 
       legalName: d.legal_name, 
       cnpj: d.cnpj, 
-      studio_phone: d.studio_phone, 
+      studioPhone: d.studio_phone, 
       address: d.address, 
       city: d.city, 
       state: d.state, 
@@ -611,17 +656,18 @@ export const appBackend = {
       account: d.account, 
       beneficiary: d.beneficiary, 
       pixKey: d.pix_key, 
+      /* Corrected mapping to camelCase interface properties and snake_case DB columns */
       hasReformer: d.has_reformer, 
-      qty_reformer: d.qtyReformer, 
-      has_ladder_barrel: d.hasLadderBarrel, 
-      qty_ladder_barrel: d.qtyLadderBarrel, 
-      has_chair: d.hasChair, 
-      qty_chair: d.qtyChair, 
-      has_cadillac: d.hasCadillac, 
-      qty_cadillac: d.qtyCadillac, 
-      has_chairs_for_course: d.hasChairsForCourse, 
-      has_tv: d.hasTv, 
-      max_kits_capacity: d.maxKitsCapacity, 
+      qtyReformer: d.qty_reformer, 
+      hasLadderBarrel: d.has_ladder_barrel, 
+      qtyLadderBarrel: d.qty_ladder_barrel, 
+      hasChair: d.has_chair, 
+      qtyChair: d.qty_chair, 
+      hasCadillac: d.has_cadillac, 
+      qtyCadillac: d.qty_cadillac, 
+      hasChairsForCourse: d.has_chairs_for_course, 
+      hasTv: d.has_tv, 
+      maxKitsCapacity: d.max_kits_capacity, 
       attachments: d.attachments
     }));
   },
@@ -656,7 +702,8 @@ export const appBackend = {
       account: studio.account, 
       beneficiary: studio.beneficiary, 
       pix_key: studio.pixKey, 
-      has_reformer: studio.has_reformer, 
+      /* Corrected property: studio.has_reformer -> studio.hasReformer */
+      has_reformer: studio.hasReformer, 
       qty_reformer: studio.qtyReformer, 
       has_ladder_barrel: studio.hasLadderBarrel, 
       qty_ladder_barrel: studio.qtyLadderBarrel, 
@@ -761,7 +808,8 @@ export const appBackend = {
           questions: form.questions, 
           style: form.style, 
           team_id: form.teamId || null, 
-          distribution_mode: form.distribution_mode || 'fixed', 
+          /* Corrected property: form.distribution_mode -> form.distributionMode */
+          distribution_mode: form.distributionMode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null,
           target_pipeline: form.targetPipeline || 'Padrão',
           target_stage: form.targetStage || 'new',
@@ -784,8 +832,7 @@ export const appBackend = {
           isLeadCapture: d.is_lead_capture, 
           teamId: d.team_id, 
           distributionMode: d.distribution_mode, 
-          fixedOwnerId: d.fixed_owner_id, 
-          targetPipeline: d.target_pipeline,
+          fixedOwnerId: d.fixed_owner_id || null, targetPipeline: d.target_pipeline,
           targetStage: d.target_stage,
           questions: d.questions || [], 
           style: d.style || {}, 
@@ -1132,7 +1179,6 @@ export const appBackend = {
       const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
       const { data, error = null } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
-      // Fix: Object literal may only specify known properties, but 'max_selections' does not exist in type 'EventBlock'. Did you mean to write 'maxSelections'?
       return { id: data.id, eventId: data.event_id, date: data.date, title: block.title, maxSelections: data.max_selections };
   },
 

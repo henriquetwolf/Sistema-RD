@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
-import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { SupportTicket } from '../types';
+import { SupportTicket, SupportMessage } from '../types';
 import clsx from 'clsx';
 
 interface SupportTicketModalProps {
@@ -24,12 +24,28 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
   const [myTickets, setMyTickets] = useState<SupportTicket[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [thread, setThread] = useState<SupportMessage[]>([]);
+  const [isLoadingThread, setIsLoadingThread] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [isSendingReply, setIsSendingReply] = useState(false);
+
+  const threadEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen && activeTab === 'history') {
       fetchHistory();
     }
   }, [isOpen, activeTab]);
+
+  useEffect(() => {
+      if (selectedTicket) {
+          fetchThread(selectedTicket.id);
+      }
+  }, [selectedTicket]);
+
+  useEffect(() => {
+      threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [thread]);
 
   const fetchHistory = async () => {
     setIsLoadingHistory(true);
@@ -41,6 +57,31 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
     } finally {
       setIsLoadingHistory(false);
     }
+  };
+
+  const fetchThread = async (ticketId: string) => {
+      setIsLoadingThread(true);
+      try {
+          const data = await appBackend.getSupportTicketMessages(ticketId);
+          setThread(data);
+      } catch (e) { console.error(e); } finally { setIsLoadingThread(false); }
+  };
+
+  const handleSendReply = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!replyText.trim() || !selectedTicket) return;
+      setIsSendingReply(true);
+      try {
+          await appBackend.addSupportMessage({
+              ticketId: selectedTicket.id,
+              senderId: senderId,
+              senderName: senderName,
+              senderRole: senderRole,
+              content: replyText.trim()
+          });
+          setReplyText('');
+          await fetchThread(selectedTicket.id);
+      } catch (e) { alert("Erro ao enviar mensagem."); } finally { setIsSendingReply(false); }
   };
 
   if (!isOpen) return null;
@@ -66,6 +107,7 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
           setSubject('');
           setMessage('');
           setActiveTab('history');
+          fetchHistory();
       }, 2500);
     } catch (e) {
       alert("Erro ao enviar chamado. Tente novamente.");
@@ -111,9 +153,9 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
             </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
             {activeTab === 'new' ? (
-                <>
+                <div className="flex-1 overflow-y-auto">
                 {isSuccess ? (
                     <div className="p-12 text-center space-y-6 animate-in zoom-in-90 duration-300">
                         <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-inner"><CheckCircle2 size={40}/></div>
@@ -156,23 +198,18 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                         </div>
                     </form>
                 )}
-                </>
+                </div>
             ) : (
-                <div className="p-8 space-y-4">
+                <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
                     {selectedTicket ? (
-                        <div className="animate-in slide-in-from-right-4 duration-300 space-y-6 pb-6">
-                            <button 
-                                onClick={() => setSelectedTicket(null)}
-                                className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1 hover:underline"
-                            >
-                                <ChevronRight size={14} className="rotate-180" /> Voltar ao Histórico
-                            </button>
-                            
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <h4 className="text-xl font-black text-slate-800">{selectedTicket.subject}</h4>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Enviado em {new Date(selectedTicket.createdAt).toLocaleString()}</p>
-                                </div>
+                        <div className="flex-1 flex flex-col overflow-hidden animate-in slide-in-from-right-4 duration-300">
+                            <div className="bg-white px-8 py-4 border-b flex justify-between items-center shrink-0">
+                                <button 
+                                    onClick={() => setSelectedTicket(null)}
+                                    className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1 hover:underline"
+                                >
+                                    <ChevronRight size={14} className="rotate-180" /> Voltar ao Histórico
+                                </button>
                                 <span className={clsx(
                                     "text-[9px] font-black px-2 py-1 rounded border uppercase",
                                     selectedTicket.status === 'open' ? "bg-red-50 text-red-700 border-red-100" :
@@ -182,69 +219,117 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                                     {selectedTicket.status === 'open' ? 'Aberto' : selectedTicket.status === 'pending' ? 'Em Análise' : 'Resolvido'}
                                 </span>
                             </div>
-
-                            <div className="space-y-4">
-                                <div className="bg-slate-50 p-5 rounded-2xl border text-sm text-slate-600 leading-relaxed italic">
-                                    <span className="block text-[10px] font-black text-slate-400 uppercase mb-2 not-italic">Minha Mensagem:</span>
-                                    {selectedTicket.message}
+                            
+                            <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+                                <div>
+                                    <h4 className="text-xl font-black text-slate-800">{selectedTicket.subject}</h4>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Protocolo #{selectedTicket.id.split('-')[0]}</p>
                                 </div>
 
-                                {selectedTicket.response ? (
-                                    <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 text-sm text-indigo-900 leading-relaxed shadow-sm">
-                                        <span className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase mb-3">
-                                            <MessageCircle size={14}/> Resposta da Administração:
-                                        </span>
-                                        <p className="font-medium">{selectedTicket.response}</p>
-                                        <div className="mt-4 pt-3 border-t border-indigo-100 flex items-center gap-2 text-[10px] text-indigo-400 font-bold">
-                                            <Clock size={12}/> Resolvido em {new Date(selectedTicket.updatedAt).toLocaleDateString()}
+                                <div className="space-y-4">
+                                    {/* Mensagem Inicial */}
+                                    <div className="flex justify-start">
+                                        <div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]">
+                                            <span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem Inicial:</span>
+                                            <p className="text-sm text-slate-600 leading-relaxed italic">{selectedTicket.message}</p>
+                                            <span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span>
                                         </div>
                                     </div>
-                                ) : (
-                                    <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100 flex items-start gap-3">
-                                        <Clock className="text-amber-500 shrink-0" size={20}/>
-                                        <div>
-                                            <p className="text-sm font-bold text-amber-800">Aguardando Resposta</p>
-                                            <p className="text-xs text-amber-600 mt-0.5">Nossa equipe administrativa já visualizou seu chamado e responderá em breve.</p>
+
+                                    {/* Thread de Conversa */}
+                                    {thread.map(msg => (
+                                        <div key={msg.id} className={clsx("flex", msg.senderRole === 'admin' ? "justify-start" : "justify-end")}>
+                                            <div className={clsx(
+                                                "p-4 rounded-2xl shadow-sm max-w-[85%] relative border",
+                                                msg.senderRole === 'admin' ? "bg-indigo-50 border-indigo-100 rounded-tl-none" : "bg-white border-slate-100 rounded-tr-none"
+                                            )}>
+                                                <span className={clsx(
+                                                    "block text-[10px] font-black uppercase mb-2",
+                                                    msg.senderRole === 'admin' ? "text-indigo-600" : "text-slate-400"
+                                                )}>
+                                                    {msg.senderRole === 'admin' ? <span className="flex items-center gap-1"><MessageCircle size={12}/> Resposta da Administração</span> : 'Réplica do Usuário'}
+                                                </span>
+                                                <p className="text-sm text-slate-700 leading-relaxed font-medium">{msg.content}</p>
+                                                <span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(msg.createdAt).toLocaleString()}</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    ))}
+                                    
+                                    {/* Resposta Legada (Se existir no campo response antigo) */}
+                                    {selectedTicket.response && thread.length === 0 && (
+                                        <div className="flex justify-start">
+                                            <div className="bg-indigo-50 p-5 rounded-2xl rounded-tl-none border border-indigo-100 shadow-sm max-w-[85%]">
+                                                <span className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase mb-3">
+                                                    <MessageCircle size={14}/> Resposta da Administração:
+                                                </span>
+                                                <p className="text-sm text-indigo-900 leading-relaxed font-medium">{selectedTicket.response}</p>
+                                                <span className="block text-right text-[9px] text-indigo-300 mt-2">{new Date(selectedTicket.updatedAt).toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {isLoadingThread && (
+                                        <div className="flex justify-center py-4"><Loader2 className="animate-spin text-indigo-600" /></div>
+                                    )}
+                                    <div ref={threadEndRef} />
+                                </div>
+                            </div>
+
+                            {/* Campo de Réplica */}
+                            <div className="bg-white p-4 border-t shrink-0">
+                                <form onSubmit={handleSendReply} className="flex gap-2">
+                                    <textarea 
+                                        className="flex-1 px-4 py-2 bg-slate-50 border rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-12 transition-all"
+                                        placeholder="Digite aqui para continuar a conversa..."
+                                        value={replyText}
+                                        onChange={e => setReplyText(e.target.value)}
+                                        required
+                                    />
+                                    <button 
+                                        type="submit" 
+                                        disabled={isSendingReply || !replyText.trim()}
+                                        className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-indigo-600/20"
+                                    >
+                                        {isSendingReply ? <Loader2 size={20} className="animate-spin" /> : <Send size={20}/>}
+                                    </button>
+                                </form>
                             </div>
                         </div>
                     ) : (
-                        <>
-                        {isLoadingHistory ? (
-                            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-600" /></div>
-                        ) : myTickets.length === 0 ? (
-                            <div className="text-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-                                <History size={48} className="mx-auto text-slate-200 mb-4" />
-                                <h4 className="font-bold text-slate-400 uppercase text-xs">Nenhum chamado anterior</h4>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {myTickets.map(t => (
-                                    <div 
-                                        key={t.id} 
-                                        onClick={() => setSelectedTicket(t)}
-                                        className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer flex items-center justify-between group"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className={clsx(
-                                                "w-3 h-3 rounded-full shrink-0 shadow-sm",
-                                                t.status === 'open' ? "bg-red-500" : t.status === 'pending' ? "bg-amber-400" : "bg-green-500"
-                                            )}></div>
-                                            <div>
-                                                <h4 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{t.subject}</h4>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
-                                                    {new Date(t.createdAt).toLocaleDateString()} • {t.status === 'closed' ? 'Resolvido' : 'Pendente'}
-                                                </p>
+                        <div className="p-8 space-y-4 flex-1 overflow-y-auto custom-scrollbar">
+                            {isLoadingHistory ? (
+                                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-600" /></div>
+                            ) : myTickets.length === 0 ? (
+                                <div className="text-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                                    <History size={48} className="mx-auto text-slate-200 mb-4" />
+                                    <h4 className="font-bold text-slate-400 uppercase text-xs">Nenhum chamado anterior</h4>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {myTickets.map(t => (
+                                        <div 
+                                            key={t.id} 
+                                            onClick={() => setSelectedTicket(t)}
+                                            className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer flex items-center justify-between group"
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className={clsx(
+                                                    "w-3 h-3 rounded-full shrink-0 shadow-sm",
+                                                    t.status === 'open' ? "bg-red-500" : t.status === 'pending' ? "bg-amber-400" : "bg-green-500"
+                                                )}></div>
+                                                <div>
+                                                    <h4 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{t.subject}</h4>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
+                                                        {new Date(t.createdAt).toLocaleDateString()} • {t.status === 'closed' ? 'Resolvido' : 'Pendente'}
+                                                    </p>
+                                                </div>
                                             </div>
+                                            <ChevronRight size={18} className="text-slate-300 group-hover:translate-x-1 transition-all" />
                                         </div>
-                                        <ChevronRight size={18} className="text-slate-300 group-hover:translate-x-1 transition-all" />
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        </>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             )}

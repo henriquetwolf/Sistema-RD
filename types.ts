@@ -465,3 +465,13 @@ export interface SupportTicket {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface SupportMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: 'student' | 'instructor' | 'studio' | 'admin';
+  content: string;
+  createdAt: string;
+}

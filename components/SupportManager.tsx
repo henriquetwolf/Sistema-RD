@@ -1,9 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
-/* Added ChevronRight to imports */
+import React, { useState, useEffect, useRef } from 'react';
 import { LifeBuoy, Search, Filter, Clock, CheckCircle, AlertTriangle, User, Mail, MessageSquare, Trash2, Loader2, RefreshCw, X, Send, ChevronRight } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { SupportTicket } from '../types';
+import { SupportTicket, SupportMessage } from '../types';
 import clsx from 'clsx';
 
 export const SupportManager: React.FC = () => {
@@ -13,12 +12,27 @@ export const SupportManager: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'pending' | 'closed'>('all');
   const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'instructor' | 'studio'>('all');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  
+  const [thread, setThread] = useState<SupportMessage[]>([]);
+  const [isLoadingThread, setIsLoadingThread] = useState(false);
   const [response, setResponse] = useState('');
   const [isSavingResponse, setIsSavingResponse] = useState(false);
+
+  const threadEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchTickets();
   }, []);
+
+  useEffect(() => {
+      if (selectedTicket) {
+          fetchThread(selectedTicket.id);
+      }
+  }, [selectedTicket]);
+
+  useEffect(() => {
+      threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [thread]);
 
   const fetchTickets = async () => {
     setIsLoading(true);
@@ -32,10 +46,21 @@ export const SupportManager: React.FC = () => {
     }
   };
 
+  const fetchThread = async (ticketId: string) => {
+      setIsLoadingThread(true);
+      try {
+          const data = await appBackend.getSupportTicketMessages(ticketId);
+          setThread(data);
+      } catch (e) { console.error(e); } finally { setIsLoadingThread(false); }
+  };
+
   const handleUpdateStatus = async (ticket: SupportTicket, newStatus: SupportTicket['status']) => {
     try {
       await appBackend.saveSupportTicket({ ...ticket, status: newStatus });
       setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, status: newStatus } : t));
+      if (selectedTicket?.id === ticket.id) {
+          setSelectedTicket({ ...selectedTicket, status: newStatus });
+      }
     } catch (e) {
       alert("Erro ao atualizar status.");
     }
@@ -45,22 +70,42 @@ export const SupportManager: React.FC = () => {
     if (!selectedTicket || !response.trim()) return;
     setIsSavingResponse(true);
     try {
+      // Adiciona mensagem ao histórico
+      await appBackend.addSupportMessage({
+          ticketId: selectedTicket.id,
+          senderId: 'admin',
+          senderName: 'Administração VOLL',
+          senderRole: 'admin',
+          content: response.trim()
+      });
+
+      // Atualiza o chamado
       const updatedTicket = { 
         ...selectedTicket, 
-        response: response.trim(), 
-        status: 'closed' as const,
+        status: 'pending' as const, // Muda para pendente ou deixa como estava
         updatedAt: new Date().toISOString()
       };
       await appBackend.saveSupportTicket(updatedTicket);
       setTickets(prev => prev.map(t => t.id === selectedTicket.id ? updatedTicket : t));
       setSelectedTicket(updatedTicket);
       setResponse('');
-      alert("Resposta enviada e chamado finalizado.");
+      await fetchThread(selectedTicket.id);
     } catch (e) {
       alert("Erro ao salvar resposta.");
     } finally {
       setIsSavingResponse(false);
     }
+  };
+
+  const handleCloseTicket = async () => {
+      if (!selectedTicket) return;
+      if (!window.confirm("Finalizar este atendimento? O usuário receberá o status de resolvido.")) return;
+      
+      try {
+          await handleUpdateStatus(selectedTicket, 'closed');
+          alert("Chamado fechado com sucesso!");
+          setSelectedTicket(null);
+      } catch (e) {}
   };
 
   const handleDelete = async (id: string) => {
@@ -89,7 +134,7 @@ export const SupportManager: React.FC = () => {
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <LifeBuoy className="text-indigo-600" /> Suporte Interno
           </h2>
-          <p className="text-slate-500 text-sm">Gerencie solicitações de ajuda de alunos, instrutores e studios.</p>
+          <p className="text-slate-500 text-sm">Gerencie solicitações de ajuda e interaja via chat.</p>
         </div>
         <button onClick={fetchTickets} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
           <RefreshCw size={20} className={clsx(isLoading && "animate-spin")} />
@@ -130,7 +175,7 @@ export const SupportManager: React.FC = () => {
               <th className="px-6 py-4">Status</th>
               <th className="px-6 py-4">Usuário / Origem</th>
               <th className="px-6 py-4">Assunto</th>
-              <th className="px-6 py-4">Data</th>
+              <th className="px-6 py-4">Última Ativ.</th>
               <th className="px-6 py-4 text-right">Ações</th>
             </tr>
           </thead>
@@ -148,7 +193,7 @@ export const SupportManager: React.FC = () => {
                     t.status === 'pending' ? "bg-amber-50 text-amber-700 border-amber-100" :
                     "bg-green-50 text-green-700 border-green-100"
                   )}>
-                    {t.status === 'open' ? 'Aberto' : t.status === 'pending' ? 'Em Análise' : 'Fechado'}
+                    {t.status === 'open' ? 'Aberto' : t.status === 'pending' ? 'Análise' : 'Fechado'}
                   </span>
                 </td>
                 <td className="px-6 py-4">
@@ -163,7 +208,7 @@ export const SupportManager: React.FC = () => {
                   </div>
                 </td>
                 <td className="px-6 py-4 font-medium text-slate-600 truncate max-w-xs">{t.subject}</td>
-                <td className="px-6 py-4 text-xs text-slate-400">{new Date(t.createdAt).toLocaleDateString()}</td>
+                <td className="px-6 py-4 text-xs text-slate-400">{new Date(t.updatedAt).toLocaleDateString()}</td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={(e) => { e.stopPropagation(); handleDelete(t.id); }} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
@@ -178,74 +223,111 @@ export const SupportManager: React.FC = () => {
 
       {selectedTicket && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-            <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col h-[90vh]">
+            <div className="px-8 py-5 border-b flex justify-between items-center bg-slate-50 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="bg-indigo-100 p-2 rounded-lg text-indigo-700"><MessageSquare size={20}/></div>
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800">Visualizar Chamado</h3>
+                  <h3 className="text-xl font-bold text-slate-800">Atendimento ao Chamado</h3>
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Protocolo: {selectedTicket.id.split('-')[0]}</p>
                 </div>
               </div>
               <button onClick={() => setSelectedTicket(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors"><X size={24}/></button>
             </div>
 
-            <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border">
-                    <div className="w-10 h-10 rounded-full bg-white border flex items-center justify-center text-indigo-600 font-bold"><User size={20}/></div>
-                    <div><p className="text-xs font-black text-slate-400 uppercase">Solicitante</p><p className="text-sm font-bold text-slate-800">{selectedTicket.senderName}</p><p className="text-[10px] text-slate-500">{selectedTicket.senderEmail}</p></div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border">
-                    <Clock className="text-slate-400 ml-2" size={20}/>
-                    <div><p className="text-xs font-black text-slate-400 uppercase">Data Abertura</p><p className="text-sm font-bold text-slate-800">{new Date(selectedTicket.createdAt).toLocaleString()}</p></div>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
-                    <p className="text-xs font-black text-indigo-700 uppercase mb-2">Ações de Status</p>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleUpdateStatus(selectedTicket, 'open')} className={clsx("flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'open' ? "bg-red-600 text-white shadow-md" : "bg-white text-red-600 border border-red-200")}>Aberto</button>
-                      <button onClick={() => handleUpdateStatus(selectedTicket, 'pending')} className={clsx("flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'pending' ? "bg-amber-500 text-white shadow-md" : "bg-white text-amber-500 border border-amber-200")}>Análise</button>
-                      <button onClick={() => handleUpdateStatus(selectedTicket, 'closed')} className={clsx("flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'closed' ? "bg-green-600 text-white shadow-md" : "bg-white text-green-600 border border-green-200")}>Fechado</button>
+            <div className="flex-1 flex overflow-hidden">
+                {/* Lateral: Info do chamado */}
+                <aside className="w-80 border-r border-slate-100 p-8 space-y-6 hidden lg:block overflow-y-auto custom-scrollbar">
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border">
+                            <div className="w-10 h-10 rounded-full bg-white border flex items-center justify-center text-indigo-600 font-bold"><User size={20}/></div>
+                            <div><p className="text-[10px] font-black text-slate-400 uppercase">Solicitante</p><p className="text-sm font-bold text-slate-800">{selectedTicket.senderName}</p><p className="text-[10px] text-slate-500">{selectedTicket.senderEmail}</p></div>
+                        </div>
+                        <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                            <p className="text-[10px] font-black text-indigo-700 uppercase mb-3">Status e Ações</p>
+                            <div className="flex flex-col gap-2">
+                                <button onClick={() => handleUpdateStatus(selectedTicket, 'open')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'open' ? "bg-red-600 text-white shadow-md" : "bg-white text-red-600 border border-red-200")}>Aberto</button>
+                                <button onClick={() => handleUpdateStatus(selectedTicket, 'pending')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'pending' ? "bg-amber-500 text-white shadow-md" : "bg-white text-amber-500 border border-amber-200")}>Análise</button>
+                                <button onClick={handleCloseTicket} className="w-full py-2 rounded-lg text-[10px] font-black uppercase bg-green-600 text-white hover:bg-green-700 transition-all shadow-md">Encerrar Chamado</button>
+                            </div>
+                        </div>
                     </div>
-                  </div>
-                </div>
-              </div>
+                    <div>
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase mb-2">Assunto Original</h4>
+                        <p className="text-sm font-bold text-slate-700 bg-white p-3 rounded-xl border">{selectedTicket.subject}</p>
+                    </div>
+                </aside>
 
-              <div>
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Mensagem do Usuário</h4>
-                <div className="bg-slate-50 p-6 rounded-2xl border text-sm text-slate-700 leading-relaxed font-medium">
-                  <p className="font-black text-slate-900 mb-3 text-base">Assunto: {selectedTicket.subject}</p>
-                  {selectedTicket.message}
-                </div>
-              </div>
+                {/* Chat Area */}
+                <main className="flex-1 flex flex-col bg-slate-50/50 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+                        {/* Mensagem Inicial */}
+                        <div className="flex justify-start">
+                            <div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]">
+                                <span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem do Solicitante:</span>
+                                <p className="text-sm text-slate-700 leading-relaxed font-medium">{selectedTicket.message}</p>
+                                <span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span>
+                            </div>
+                        </div>
 
-              <div>
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Resposta da Administração</h4>
-                {selectedTicket.response ? (
-                  <div className="bg-green-50 p-6 rounded-2xl border border-green-100 text-sm text-green-800 leading-relaxed italic">
-                    {selectedTicket.response}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <textarea 
-                      className="w-full h-32 p-4 border rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none" 
-                      placeholder="Escreva a resposta para o usuário..." 
-                      value={response} 
-                      onChange={e => setResponse(e.target.value)} 
-                    />
-                    <button 
-                      onClick={handleSaveResponse} 
-                      disabled={isSavingResponse || !response.trim()} 
-                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
-                    >
-                      {isSavingResponse ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} Enviar Resposta e Finalizar Chamado
-                    </button>
-                  </div>
-                )}
-              </div>
+                        {/* Conversa Posterior */}
+                        {thread.map(msg => (
+                            <div key={msg.id} className={clsx("flex", msg.senderRole === 'admin' ? "justify-end" : "justify-start")}>
+                                <div className={clsx(
+                                    "p-5 rounded-2xl shadow-sm max-w-[85%] relative border",
+                                    msg.senderRole === 'admin' ? "bg-indigo-600 text-white border-indigo-700 rounded-tr-none" : "bg-white border-slate-100 rounded-tl-none"
+                                )}>
+                                    <span className={clsx(
+                                        "block text-[9px] font-black uppercase mb-2",
+                                        msg.senderRole === 'admin' ? "text-indigo-100" : "text-slate-400"
+                                    )}>
+                                        {msg.senderRole === 'admin' ? 'Administração VOLL' : 'Usuário (Réplica)'}
+                                    </span>
+                                    <p className="text-sm leading-relaxed font-medium">{msg.content}</p>
+                                    <span className={clsx(
+                                        "block text-right text-[9px] mt-2",
+                                        msg.senderRole === 'admin' ? "text-indigo-200" : "text-slate-400"
+                                    )}>{new Date(msg.createdAt).toLocaleString()}</span>
+                                </div>
+                            </div>
+                        ))}
+
+                        {/* Legado: resposta antiga no campo response se não houver thread */}
+                        {selectedTicket.response && thread.length === 0 && (
+                            <div className="flex justify-end">
+                                <div className="bg-indigo-600 text-white p-5 rounded-2xl rounded-tr-none border border-indigo-700 shadow-sm max-w-[85%]">
+                                    <span className="block text-[9px] font-black uppercase text-indigo-100 mb-2">Resposta Legada:</span>
+                                    <p className="text-sm leading-relaxed font-medium">{selectedTicket.response}</p>
+                                    <span className="block text-right text-[9px] text-indigo-200 mt-2">{new Date(selectedTicket.updatedAt).toLocaleString()}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {isLoadingThread && (
+                            <div className="flex justify-center py-4"><Loader2 className="animate-spin text-indigo-600" /></div>
+                        )}
+                        <div ref={threadEndRef} />
+                    </div>
+
+                    {/* Input de Resposta */}
+                    <div className="bg-white p-6 border-t shrink-0">
+                        <div className="flex gap-3">
+                            <textarea 
+                                className="flex-1 px-4 py-3 bg-slate-50 border rounded-2xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-20 transition-all" 
+                                placeholder="Digite sua resposta..." 
+                                value={response} 
+                                onChange={e => setResponse(e.target.value)} 
+                            />
+                            <button 
+                                onClick={handleSaveResponse} 
+                                disabled={isSavingResponse || !response.trim()} 
+                                className="bg-indigo-600 text-white px-6 rounded-2xl font-bold hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 shadow-xl shadow-indigo-600/20"
+                            >
+                                {isSavingResponse ? <Loader2 size={24} className="animate-spin"/> : <Send size={24}/>}
+                            </button>
+                        </div>
+                    </div>
+                </main>
             </div>
           </div>
         </div>

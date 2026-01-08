@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2 } from 'lucide-react';
+import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2, Lock } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { SupportTicket, SupportMessage, SupportTag } from '../types';
 import { Teacher } from './TeachersManager';
@@ -71,18 +71,27 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
     }
   }, [isOpen, activeTab, senderRole]);
 
+  // Determina se os campos de fechamento devem ser bloqueados (apenas para instrutores logados)
+  const isFcAutoFilled = useMemo(() => {
+      return selectedTag === 'Fechamento de Curso' && !!instructorProfile && senderRole === 'instructor';
+  }, [selectedTag, instructorProfile, senderRole]);
+
   // Efeito de preenchimento automático para Fechamento de Curso
   useEffect(() => {
       if (selectedTag === 'Fechamento de Curso' && instructorProfile && senderRole === 'instructor') {
+          // Contato
           setFcPhone(instructorProfile.phone || '');
+          
+          // Banco e Agência
           setFcBank(instructorProfile.bank || '');
           setFcAgency(instructorProfile.agency || '');
           
+          // Conta
           const account = instructorProfile.accountNumber || '';
           const digit = instructorProfile.accountDigit || '';
           setFcAccount(digit ? `${account}-${digit}` : account);
           
-          // Define PIX baseado se a conta é PJ ou PF
+          // Lógica de PIX e Titular
           if (instructorProfile.hasPjAccount) {
               setFcPix(instructorProfile.pixKeyPj || instructorProfile.cnpj || '');
               setFcHolder(instructorProfile.companyName || instructorProfile.fullName);
@@ -90,6 +99,14 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
               setFcPix(instructorProfile.pixKeyPf || instructorProfile.cpf || '');
               setFcHolder(instructorProfile.fullName);
           }
+      } else if (selectedTag === 'Fechamento de Curso' && (!instructorProfile || senderRole !== 'instructor')) {
+          // Limpa se trocar de papel ou se não for instrutor (prevenção)
+          setFcPhone('');
+          setFcBank('');
+          setFcAgency('');
+          setFcAccount('');
+          setFcPix('');
+          setFcHolder('');
       }
   }, [selectedTag, instructorProfile, senderRole]);
 
@@ -371,7 +388,15 @@ ${expensesText}
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Celular *</label>
-                                        <input type="text" required placeholder="(00) 00000-0000" className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={fcPhone} onChange={e => setFcPhone(e.target.value)} />
+                                        <input 
+                                            type="text" 
+                                            required 
+                                            placeholder="(00) 00000-0000" 
+                                            className={clsx("w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all", isFcAutoFilled ? "bg-slate-100 font-bold text-slate-600" : "bg-white")} 
+                                            value={fcPhone} 
+                                            onChange={e => !isFcAutoFilled && setFcPhone(e.target.value)} 
+                                            readOnly={isFcAutoFilled}
+                                        />
                                     </div>
                                 </div>
 
@@ -513,7 +538,12 @@ ${expensesText}
                                 </div>
 
                                 {/* DADOS BANCÁRIOS */}
-                                <div className="p-6 bg-slate-900 rounded-[2rem] text-white space-y-6 shadow-xl">
+                                <div className="p-6 bg-slate-900 rounded-[2rem] text-white space-y-6 shadow-xl relative">
+                                    {isFcAutoFilled && (
+                                        <div className="absolute top-4 right-6 flex items-center gap-1.5 text-[10px] font-black text-teal-400 uppercase tracking-widest bg-white/5 px-2.5 py-1 rounded-full border border-teal-400/20">
+                                            <Lock size={12}/> Dados Protegidos
+                                        </div>
+                                    )}
                                     <div className="flex items-center gap-3 border-b border-white/10 pb-4">
                                         <div className="p-2 bg-white/10 rounded-xl"><CreditCard size={20}/></div>
                                         <h4 className="text-sm font-black uppercase tracking-widest">Dados Bancários para Reembolso</h4>
@@ -521,25 +551,61 @@ ${expensesText}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Chave PIX *</label>
-                                            <input type="text" required className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcPix} onChange={e => setFcPix(e.target.value)} />
+                                            <input 
+                                                type="text" 
+                                                required 
+                                                className={clsx("w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                value={fcPix} 
+                                                onChange={e => !isFcAutoFilled && setFcPix(e.target.value)} 
+                                                readOnly={isFcAutoFilled}
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Banco</label>
-                                            <input type="text" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcBank} onChange={e => setFcBank(e.target.value)} />
+                                            <input 
+                                                type="text" 
+                                                className={clsx("w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                value={fcBank} 
+                                                onChange={e => !isFcAutoFilled && setFcBank(e.target.value)} 
+                                                readOnly={isFcAutoFilled}
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Agência</label>
-                                            <input type="text" className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcAgency} onChange={e => setFcAgency(e.target.value)} />
+                                            <input 
+                                                type="text" 
+                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all bg-white/5", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                value={fcAgency} 
+                                                onChange={e => !isFcAutoFilled && setFcAgency(e.target.value)} 
+                                                readOnly={isFcAutoFilled}
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Conta</label>
-                                            <input type="text" className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcAccount} onChange={e => setFcAccount(e.target.value)} />
+                                            <input 
+                                                type="text" 
+                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all bg-white/5", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                value={fcAccount} 
+                                                onChange={e => !isFcAutoFilled && setFcAccount(e.target.value)} 
+                                                readOnly={isFcAutoFilled}
+                                            />
                                         </div>
                                         <div className="md:col-span-2">
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome do Titular (Caso seja conjunta)</label>
-                                            <input type="text" className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcHolder} onChange={e => setFcHolder(e.target.value)} />
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome do Titular</label>
+                                            <input 
+                                                type="text" 
+                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all bg-white/5", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                value={fcHolder} 
+                                                onChange={e => !isFcAutoFilled && setFcHolder(e.target.value)} 
+                                                readOnly={isFcAutoFilled}
+                                            />
                                         </div>
                                     </div>
+                                    {isFcAutoFilled && (
+                                        <p className="text-[9px] text-teal-400/60 font-bold italic text-center">
+                                            * Para alterar seus dados bancários, acesse as configurações do seu perfil de instrutor.
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         ) : (

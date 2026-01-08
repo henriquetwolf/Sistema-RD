@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2, Lock } from 'lucide-react';
+import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2, Lock, Landmark } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { SupportTicket, SupportMessage, SupportTag } from '../types';
 import { Teacher } from './TeachersManager';
@@ -32,6 +32,7 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
   const [tags, setTags] = useState<SupportTag[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   
   // Estados para Fechamento de Curso
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
@@ -76,45 +77,48 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
 
   // Determina se os campos de fechamento devem ser bloqueados (apenas para instrutores logados)
   const isFcAutoFilled = useMemo(() => {
-      return selectedTag === 'Fechamento de Curso' && !!instructorProfile && senderRole === 'instructor';
-  }, [selectedTag, instructorProfile, senderRole]);
+      return selectedTag === 'Fechamento de Curso' && senderRole === 'instructor';
+  }, [selectedTag, senderRole]);
 
-  // Efeito de preenchimento automático para Fechamento de Curso
+  // Efeito de preenchimento automático para Fechamento de Curso - BUSCA EM TEMPO REAL NO BANCO
   useEffect(() => {
-      if (selectedTag === 'Fechamento de Curso' && instructorProfile && senderRole === 'instructor') {
-          // Contato
-          setFcPhone(instructorProfile.phone || '');
-          
-          // Banco e Agência
-          setFcBank(instructorProfile.bank || '');
-          setFcAgency(instructorProfile.agency || '');
-          
-          // Conta
-          setFcAccountNumber(instructorProfile.accountNumber || '');
-          setFcAccountDigit(instructorProfile.accountDigit || '');
-          
-          // PIX
-          setFcPixPj(instructorProfile.pixKeyPj || '');
-          setFcPixPf(instructorProfile.pixKeyPf || '');
+      const loadFreshInstructorData = async () => {
+          if (selectedTag === 'Fechamento de Curso' && senderRole === 'instructor') {
+              setIsLoadingProfile(true);
+              try {
+                  const { data, error } = await appBackend.client
+                      .from('crm_teachers')
+                      .select('*')
+                      .eq('id', senderId)
+                      .maybeSingle();
 
-          // Titularidade baseada na conta
-          if (instructorProfile.hasPjAccount) {
-              setFcHolder(instructorProfile.companyName || instructorProfile.fullName);
-          } else {
-              setFcHolder(instructorProfile.fullName);
+                  if (data && !error) {
+                      setFcPhone(data.phone || '');
+                      setFcBank(data.bank || '');
+                      setFcAgency(data.agency || '');
+                      setFcAccountNumber(data.account_number || '');
+                      setFcAccountDigit(data.account_digit || '');
+                      setFcPixPj(data.pix_key_pj || '');
+                      setFcPixPf(data.pix_key_pf || '');
+
+                      if (data.has_pj_account) {
+                          setFcHolder(data.company_name || data.full_name);
+                      } else {
+                          setFcHolder(data.full_name);
+                      }
+                  }
+              } catch (e) {
+                  console.error("Erro ao carregar perfil para fechamento:", e);
+              } finally {
+                  setIsLoadingProfile(false);
+              }
           }
-      } else if (selectedTag === 'Fechamento de Curso' && (!instructorProfile || senderRole !== 'instructor')) {
-          // Limpa se trocar de papel ou se não for instrutor (prevenção)
-          setFcPhone('');
-          setFcBank('');
-          setFcAgency('');
-          setFcAccountNumber('');
-          setFcAccountDigit('');
-          setFcPixPj('');
-          setFcPixPf('');
-          setFcHolder('');
+      };
+
+      if (isOpen) {
+          loadFreshInstructorData();
       }
-  }, [selectedTag, instructorProfile, senderRole]);
+  }, [selectedTag, senderId, senderRole, isOpen]);
 
   useEffect(() => {
       if (selectedTicket) fetchThread(selectedTicket.id);
@@ -392,7 +396,7 @@ ${expensesText}
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">E-mail</label>
                                         <input type="email" readOnly className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500" value={senderEmail} />
                                     </div>
-                                    <div>
+                                    <div className="relative">
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Celular *</label>
                                         <input 
                                             type="text" 
@@ -403,6 +407,7 @@ ${expensesText}
                                             onChange={e => !isFcAutoFilled && setFcPhone(e.target.value)} 
                                             readOnly={isFcAutoFilled}
                                         />
+                                        {isFcAutoFilled && <Lock className="absolute right-3 top-8 text-slate-300" size={14}/>}
                                     </div>
                                 </div>
 
@@ -544,32 +549,40 @@ ${expensesText}
                                 </div>
 
                                 {/* DADOS BANCÁRIOS IDENTICOS AO CADASTRO */}
-                                <div className="p-6 bg-slate-900 rounded-[2rem] text-white space-y-6 shadow-xl relative">
-                                    {isFcAutoFilled && (
+                                <div className="p-6 bg-slate-900 rounded-[2rem] text-white space-y-6 shadow-xl relative min-h-[100px]">
+                                    {isLoadingProfile && (
+                                        <div className="absolute inset-0 z-10 bg-slate-900/80 rounded-[2rem] flex flex-col items-center justify-center gap-2">
+                                            <Loader2 className="animate-spin text-teal-400" size={24}/>
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-teal-400/60">Buscando seus dados...</span>
+                                        </div>
+                                    )}
+                                    {isFcAutoFilled && !isLoadingProfile && (
                                         <div className="absolute top-4 right-6 flex items-center gap-1.5 text-[10px] font-black text-teal-400 uppercase tracking-widest bg-white/5 px-2.5 py-1 rounded-full border border-teal-400/20">
                                             <Lock size={12}/> Dados Protegidos
                                         </div>
                                     )}
                                     <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-                                        <div className="p-2 bg-white/10 rounded-xl"><Wallet size={20}/></div>
+                                        <div className="p-2 bg-white/10 rounded-xl text-teal-400"><Landmark size={20}/></div>
                                         <h4 className="text-sm font-black uppercase tracking-widest">Dados Bancários para Reembolso</h4>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Banco</label>
-                                            <input 
-                                                type="text" 
-                                                className={clsx("w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
-                                                value={fcBank} 
-                                                onChange={e => !isFcAutoFilled && setFcBank(e.target.value)} 
-                                                readOnly={isFcAutoFilled}
-                                            />
+                                            <div className="relative">
+                                                <input 
+                                                    type="text" 
+                                                    className={clsx("w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none transition-all", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
+                                                    value={fcBank} 
+                                                    onChange={e => !isFcAutoFilled && setFcBank(e.target.value)} 
+                                                    readOnly={isFcAutoFilled}
+                                                />
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Agência</label>
                                             <input 
                                                 type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all bg-white/5", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
                                                 value={fcAgency} 
                                                 onChange={e => !isFcAutoFilled && setFcAgency(e.target.value)} 
                                                 readOnly={isFcAutoFilled}
@@ -579,7 +592,7 @@ ${expensesText}
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nº Conta</label>
                                             <input 
                                                 type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all bg-white/5", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
                                                 value={fcAccountNumber} 
                                                 onChange={e => !isFcAutoFilled && setFcAccountNumber(e.target.value)} 
                                                 readOnly={isFcAutoFilled}
@@ -589,7 +602,7 @@ ${expensesText}
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Dígito</label>
                                             <input 
                                                 type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all bg-white/5", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
                                                 value={fcAccountDigit} 
                                                 onChange={e => !isFcAutoFilled && setFcAccountDigit(e.target.value)} 
                                                 readOnly={isFcAutoFilled}
@@ -599,7 +612,7 @@ ${expensesText}
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Chave PIX PJ</label>
                                             <input 
                                                 type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all bg-white/5", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
                                                 value={fcPixPj} 
                                                 onChange={e => !isFcAutoFilled && setFcPixPj(e.target.value)} 
                                                 readOnly={isFcAutoFilled}
@@ -609,7 +622,7 @@ ${expensesText}
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Chave PIX PF</label>
                                             <input 
                                                 type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all bg-white/5", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
                                                 value={fcPixPf} 
                                                 onChange={e => !isFcAutoFilled && setFcPixPf(e.target.value)} 
                                                 readOnly={isFcAutoFilled}
@@ -619,7 +632,7 @@ ${expensesText}
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome do Titular</label>
                                             <input 
                                                 type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all bg-white/5", isFcAutoFilled && "text-slate-400 cursor-not-allowed")} 
+                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
                                                 value={fcHolder} 
                                                 onChange={e => !isFcAutoFilled && setFcHolder(e.target.value)} 
                                                 readOnly={isFcAutoFilled}
@@ -628,7 +641,7 @@ ${expensesText}
                                     </div>
                                     {isFcAutoFilled && (
                                         <p className="text-[9px] text-teal-400/60 font-bold italic text-center">
-                                            * Para alterar seus dados bancários, acesse as configurações do seu perfil de instrutor.
+                                            * Dados extraídos do seu perfil. Para alterar, acesse suas configurações de instrutor.
                                         </p>
                                     )}
                                 </div>
@@ -653,7 +666,7 @@ ${expensesText}
                             </div>
                         )}
                         
-                        <button type="submit" disabled={isSubmitting} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 mt-4">
+                        <button type="submit" disabled={isSubmitting || isLoadingProfile} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 mt-4">
                             {isSubmitting ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} Enviar {selectedTag === 'Fechamento de Curso' ? 'Fechamento' : 'Chamado'}
                         </button>
                     </form>
@@ -666,7 +679,7 @@ ${expensesText}
                             <div className="bg-white px-8 py-4 border-b flex justify-between items-center shrink-0">
                                 <button onClick={() => setSelectedTicket(null)} className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1 hover:underline"><ChevronRight size={14} className="rotate-180" /> Histórico</button>
                                 <div className="flex flex-col items-end">
-                                    <span className={clsx("text-[9px] font-black px-2 py-1 rounded border uppercase", selectedTicket.status === 'open' ? "bg-red-50" : selectedTicket.status === 'pending' ? "bg-amber-50" : "bg-green-50 text-green-700 border-green-100")}>{selectedTicket.status}</span>
+                                    <span className={clsx("text-[9px] font-black px-2 py-1 rounded border uppercase", selectedTicket.status === 'open' ? "bg-red-50" : selectedTicket.status === 'pending' ? "bg-amber-400" : "bg-green-50 text-green-700 border-green-100")}>{selectedTicket.status}</span>
                                     {selectedTicket.assignedName && <span className="text-[8px] font-bold text-slate-400 mt-1">Atendente: {selectedTicket.assignedName}</span>}
                                 </div>
                             </div>

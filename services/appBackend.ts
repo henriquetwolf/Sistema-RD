@@ -1,5 +1,4 @@
 
-
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -94,7 +93,6 @@ export const appBackend = {
           action: log.action,
           module: log.module,
           details: log.details,
-          // FIX: Changed log.record_id to log.recordId to match ActivityLog interface
           record_id: log.recordId
       }]);
   },
@@ -231,7 +229,7 @@ export const appBackend = {
       id: row.id, openInstallments: row.open_installments, totalNegotiatedValue: row.total_negotiated_value, totalInstallments: row.total_installments,
       dueDate: row.due_date, responsibleAgent: row.responsible_agent, identifier_code: row.identifier_code, fullName: row.full_name,
       productName: row.product_name, originalValue: row.original_value, paymentMethod: row.payment_method, observations: row.observations,
-      status: row.status, team: row.team, voucherLink1: row.voucher_link_1, testDate: row.test_date, voucherLink2: row.voucher_link_2,
+      status: row.status, team: row.team, voucher_link_1: row.voucher_link_1, testDate: row.test_date, voucherLink2: row.voucher_link_2,
       voucherLink3: row.voucher_link_3, boletosLink: row.boletos_link, negotiationReference: row.negotiation_reference, attachments: row.attachments, createdAt: row.created_at
     }));
   },
@@ -281,7 +279,7 @@ export const appBackend = {
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
       if (!isConfigured) return;
-      await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || undefined, pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payload_json });
+      await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || undefined, pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson });
   },
 
   deleteWebhookTrigger: async (id: string): Promise<void> => {
@@ -303,7 +301,6 @@ export const appBackend = {
     const { data: { user } } = await supabase.auth.getUser();
     const payload = {
       id: job.id, user_id: user?.id, name: job.name, sheet_url: job.sheetUrl, config: job.config, active: job.active,
-      // FIXED: Corrected property naming from job.last_sync to job.lastSync and job.last_message to job.lastMessage to match SyncJob interface
       interval_minutes: job.intervalMinutes, last_sync: job.lastSync, status: job.status, last_message: job.lastMessage,
       created_by_name: job.createdBy, created_at: job.createdAt
     };
@@ -332,7 +329,7 @@ export const appBackend = {
   savePreset: async (preset: Omit<any, 'id'>): Promise<any> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
-    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.target_table_name, target_primary_key: preset.target_primary_key || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.created_by_name || null };
+    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.target_table_name, target_primary_key: preset.primaryKey || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.created_by_name || null };
     const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
     if (error) throw error;
     return {
@@ -491,10 +488,9 @@ export const appBackend = {
       if (!isConfigured) return;
       const payload = { 
           id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, 
-          // FIXED: Corrected property naming from form.distribution_mode to form.distributionMode to match FormModel interface
           questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null, target_pipeline: form.targetPipeline || 'Padrão', target_stage: form.targetStage || 'new',
-          submissions_count: form.submissions_count || 0, folder_id: form.folder_id || null
+          submissions_count: form.submissionsCount || 0, folder_id: form.folderId || null
       };
       await supabase.from('crm_forms').upsert(payload);
   },
@@ -531,7 +527,7 @@ export const appBackend = {
       if (!isConfigured) return;
       const payload = { 
           id: survey.id || undefined, title: survey.title, description: survey.description, is_lead_capture: survey.isLeadCapture, questions: survey.questions, 
-          style: survey.style, target_type: survey.target_type, target_product_type: survey.targetProductType || null, target_product_name: survey.targetProductName || null,
+          style: survey.style, target_type: survey.targetType, target_product_type: survey.targetProductType || null, target_product_name: survey.targetProductName || null,
           only_if_finished: survey.onlyIfFinished, is_active: survey.isActive, submissions_count: survey.submissionsCount || 0 
       };
       await supabase.from('crm_surveys').upsert(payload);
@@ -588,7 +584,7 @@ export const appBackend = {
           questions: form.questions || [], style: form.style || {}, createdAt: form.created_at, submissionsCount: form.submissions_count || 0, folderId: form.folder_id
       };
       const { data: survey } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
-      if (survey) return { id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.is_lead_capture, questions: survey.questions || [], style: survey.style || {}, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 };
+      if (survey) return { id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.isLeadCapture, questions: survey.questions || [], style: survey.style || {}, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 };
       return null;
   },
 
@@ -638,14 +634,13 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
       if (!isConfigured) return null;
       const { data, error = null } = await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle();
       if (error || !data) return null;
-      // FIX: Changed d.signers to data.signers
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
@@ -675,7 +670,6 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    // FIX: Corrected mapping of database snake_case columns to camelCase CertificateModel interface properties
     return (data || []).map((d: any) => ({ 
       id: d.id, 
       title: d.title, 
@@ -690,7 +684,6 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    // FIX: Corrected object property usage from cert.body_text to cert.bodyText
     await supabase.from('crm_certificates').upsert({ 
       id: cert.id || undefined, 
       title: cert.title, 
@@ -740,9 +733,6 @@ export const appBackend = {
       return (data || []).map((d: any) => ({ id: d.id, courseName: d.course_name, details: d.details || '', materials: d.materials || '', requirements: d.requirements || '', updatedAt: d.updated_at }));
   },
 
-  /**
-   * FIXED: Added missing methods for course info, certificates, workshops, events and inventory
-   */
   saveCourseInfo: async (info: Partial<CourseInfo>): Promise<void> => {
       if (!isConfigured) return;
       await supabase.from('crm_course_info').upsert({

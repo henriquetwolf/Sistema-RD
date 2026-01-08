@@ -322,7 +322,7 @@ Deno.serve(async (req) => {
                                           <div className="bg-indigo-950/40 p-4 rounded-xl border border-indigo-500/30">
                                               <p className="text-indigo-400 font-black text-xs uppercase mb-3 flex items-center gap-2"><Info size={14}/> Passo a Passo (Zero Instalação)</p>
                                               <ol className="text-white text-[11px] space-y-3 list-decimal ml-4 leading-relaxed">
-                                                  <li>Vá no seu painel do Supabase e clique em <strong>SQL Editor</strong> (ícone `>_`).</li>
+                                                  <li>Vá no seu painel do Supabase e clique em <strong>SQL Editor</strong> (ícone &gt;_).</li>
                                                   <li>Clique em "New Query", cole o código abaixo e clique em <strong>RUN</strong>.</li>
                                                   <li>No painel da Evolution API, vá em Webhooks e use a URL abaixo:</li>
                                               </ol>

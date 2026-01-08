@@ -1,7 +1,10 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-// Added 'Users' to the import list from lucide-react
-import { LifeBuoy, Search, Filter, Clock, CheckCircle, AlertTriangle, User, Users, Mail, MessageSquare, Trash2, Loader2, RefreshCw, X, Send, ChevronRight, LayoutGrid, Kanban, BarChart3, TrendingUp, Download, Paperclip, FileText, Image as ImageIcon, Timer, BarChart } from 'lucide-react';
+import { 
+  LifeBuoy, Search, Filter, Clock, CheckCircle, AlertTriangle, User, Users, 
+  Mail, MessageSquare, Trash2, Loader2, RefreshCw, X, Send, ChevronRight, 
+  LayoutGrid, Kanban, BarChart3, TrendingUp, Download, Paperclip, FileText, 
+  Image as ImageIcon, Timer, BarChart 
+} from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { SupportTicket, SupportMessage, CollaboratorSession } from '../types';
 import { BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, Legend } from 'recharts';
@@ -157,7 +160,6 @@ export const SupportManager: React.FC = () => {
           
           const dayEntry: any = { date: dayLabel };
           responders.forEach(r => {
-              // Conta quantos tickets foram atualizados (atendidos) por esse responsável nesse dia
               dayEntry[r] = tickets.filter(t => t.assignedName === r && t.updatedAt.split('T')[0] === dStr).length;
           });
           trendData.push(dayEntry);
@@ -169,11 +171,11 @@ export const SupportManager: React.FC = () => {
   const uniqueResponders = useMemo(() => {
       const names = tickets.map(t => t.assignedName).filter(Boolean) as string[];
       return Array.from(new Set(names)).sort();
-  }, [uniqueResponders]);
+  }, [tickets]);
 
   const filtered = tickets.filter(t => {
-    const matchesSearch = t.senderName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          t.subject.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (t.senderName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (t.subject || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
     const matchesRole = roleFilter === 'all' || t.senderRole === roleFilter;
     const matchesResponder = responderFilter === 'all' || t.assignedName === responderFilter;
@@ -215,7 +217,6 @@ export const SupportManager: React.FC = () => {
       {/* VIEW: DASHBOARD */}
       {viewMode === 'dashboard' && (
           <div className="space-y-6 animate-in fade-in duration-300 pb-10">
-              {/* KPIs de Topo */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Chamados no Mês</p>
@@ -240,11 +241,9 @@ export const SupportManager: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Gráfico de Atendimentos por Responsável */}
                   <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
                       <div className="flex items-center justify-between mb-8">
                           <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
-                              {/* Corrected: Users icon is now imported and available */}
                               <Users size={16} className="text-indigo-500" /> Atendimentos por Responsável (7 dias)
                           </h3>
                       </div>
@@ -254,10 +253,7 @@ export const SupportManager: React.FC = () => {
                                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                   <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
                                   <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                                  <Tooltip 
-                                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}}
-                                    cursor={{fill: '#f8fafc'}}
-                                  />
+                                  <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} cursor={{fill: '#f8fafc'}} />
                                   <Legend iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 'bold', paddingTop: '10px'}} />
                                   {dashStats.responders.map((r, i) => (
                                       <Bar key={r} dataKey={r} stackId="a" fill={COLORS[i % COLORS.length]} radius={i === dashStats.responders.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
@@ -267,7 +263,6 @@ export const SupportManager: React.FC = () => {
                       </div>
                   </div>
 
-                  {/* Gráfico de Distribuição por Horário */}
                   <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
                       <div className="flex items-center justify-between mb-8">
                           <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">

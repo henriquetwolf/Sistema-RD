@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard } from 'lucide-react';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { SupportTicket, SupportMessage, SupportTag } from '../types';
 import clsx from 'clsx';
@@ -12,6 +13,14 @@ interface SupportTicketModalProps {
     senderName: string;
     senderEmail: string;
     senderRole: SupportTicket['senderRole'];
+}
+
+interface ExpenseEntry {
+    id: string;
+    category: string;
+    value: string;
+    obs: string;
+    attachment: { url: string, name: string } | null;
 }
 
 export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, onClose, senderId, senderName, senderEmail, senderRole }) => {
@@ -29,10 +38,12 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
   const [fcState, setFcState] = useState('');
   const [fcCity, setFcCity] = useState('');
   const [fcClass, setFcClass] = useState('');
-  const [fcCategory, setFcCategory] = useState('');
-  const [fcValue, setFcValue] = useState('');
-  const [fcObs, setFcObs] = useState('');
-  const [fcMoreDocs, setFcMoreDocs] = useState('Não');
+  
+  // Lista dinâmica de despesas
+  const [fcExpenses, setFcExpenses] = useState<ExpenseEntry[]>([
+      { id: crypto.randomUUID(), category: '', value: '', obs: '', attachment: null }
+  ]);
+
   const [fcPix, setFcPix] = useState('');
   const [fcBank, setFcBank] = useState('');
   const [fcAgency, setFcAgency] = useState('');
@@ -100,15 +111,34 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
       } catch (e) { console.error(e); } finally { setIsLoadingThread(false); }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, expenseId?: string) => {
       if (e.target.files && e.target.files[0]) {
           const file = e.target.files[0];
           const reader = new FileReader();
           reader.onloadend = () => {
-              setAttachment({ url: reader.result as string, name: file.name });
+              const fileData = { url: reader.result as string, name: file.name };
+              if (expenseId) {
+                  setFcExpenses(prev => prev.map(exp => exp.id === expenseId ? { ...exp, attachment: fileData } : exp));
+              } else {
+                  setAttachment(fileData);
+              }
           };
           reader.readAsDataURL(file);
       }
+  };
+
+  const handleAddExpense = () => {
+      setFcExpenses([...fcExpenses, { id: crypto.randomUUID(), category: '', value: '', obs: '', attachment: null }]);
+  };
+
+  const handleRemoveExpense = (id: string) => {
+      if (fcExpenses.length > 1) {
+          setFcExpenses(fcExpenses.filter(e => e.id !== id));
+      }
+  };
+
+  const handleUpdateExpense = (id: string, field: keyof ExpenseEntry, value: any) => {
+      setFcExpenses(prev => prev.map(exp => exp.id === id ? { ...exp, [field]: value } : exp));
   };
 
   const handleSendReply = async (e: React.FormEvent) => {
@@ -131,6 +161,10 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
       } catch (e) { alert("Erro ao enviar mensagem."); } finally { setIsSendingReply(false); }
   };
 
+  const totalExpenses = useMemo(() => {
+      return fcExpenses.reduce((acc, curr) => acc + (parseFloat(curr.value) || 0), 0);
+  }, [fcExpenses]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -138,11 +172,19 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
     let finalSubject = subject;
 
     if (selectedTag === 'Fechamento de Curso') {
-        if (!fcState || !fcCity || !fcClass || !fcCategory || !fcValue || !fcPix) {
-            alert("Por favor, preencha todos os campos obrigatórios do fechamento.");
+        const isAnyMissing = fcExpenses.some(exp => !exp.category || !exp.value || !exp.attachment);
+        if (!fcState || !fcCity || !fcClass || !fcPix || isAnyMissing) {
+            alert("Por favor, preencha todos os campos obrigatórios e anexe os comprovantes de cada despesa.");
             return;
         }
+
         finalSubject = `Fechamento de Curso - ${fcClass} - ${fcCity}`;
+        
+        let expensesText = "";
+        fcExpenses.forEach((exp, idx) => {
+            expensesText += `\n**DESPESA ${idx + 1}:**\n- Categoria: ${exp.category}\n- Valor: R$ ${exp.value}\n- Observação: ${exp.obs || 'Nenhuma'}\n- Anexo: ${exp.attachment?.name || 'Sim'}\n`;
+        });
+
         finalMessage = `
 ### RELATÓRIO DE FECHAMENTO DE CURSO ###
 **Instrutor:** ${senderName}
@@ -153,11 +195,9 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
 **Localização:** ${fcCity} / ${fcState}
 **Turma Selecionada:** ${fcClass}
 
---- FINANCEIRO E REEMBOLSOS ---
-**Categoria da Despesa:** ${fcCategory}
-**Valor Total Gasto:** R$ ${fcValue}
-**Possui mais documentos?** ${fcMoreDocs}
-**Observações sobre NF/Comprovante:** ${fcObs || 'Nenhuma'}
+--- LISTAGEM DE CUSTOS ---
+${expensesText}
+**VALOR TOTAL GERAL:** R$ ${totalExpenses.toFixed(2)}
 
 --- DADOS BANCÁRIOS ---
 **Chave PIX:** ${fcPix}
@@ -183,8 +223,22 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
         subject: finalSubject.trim(), message: finalMessage.trim(), tag: selectedTag, status: 'open'
       });
 
-      // Se houver anexo inicial, adiciona como primeira mensagem
-      if (attachment) {
+      // Se for fechamento, anexa todos os documentos das despesas como mensagens
+      if (selectedTag === 'Fechamento de Curso') {
+          for (const exp of fcExpenses) {
+              if (exp.attachment) {
+                  await appBackend.addSupportMessage({
+                      ticketId: ticketId,
+                      senderId: senderId,
+                      senderName: senderName,
+                      senderRole: senderRole,
+                      content: `Comprovante: ${exp.category} - Valor: R$ ${exp.value}`,
+                      attachmentUrl: exp.attachment.url,
+                      attachmentName: exp.attachment.name
+                  } as any);
+              }
+          }
+      } else if (attachment) {
           await appBackend.addSupportMessage({
               ticketId: ticketId,
               senderId: senderId,
@@ -198,7 +252,14 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
 
       setIsSuccess(true);
       setTimeout(() => {
-          setIsSuccess(false); setSubject(''); setMessage(''); setSelectedTag(''); setAttachment(null); setActiveTab('history'); fetchHistory();
+          setIsSuccess(false); 
+          setSubject(''); 
+          setMessage(''); 
+          setSelectedTag(''); 
+          setAttachment(null);
+          setFcExpenses([{ id: crypto.randomUUID(), category: '', value: '', obs: '', attachment: null }]);
+          setActiveTab('history'); 
+          fetchHistory();
       }, 2500);
     } catch (e) { alert("Erro ao enviar chamado."); } finally { setIsSubmitting(false); }
   };
@@ -302,48 +363,114 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                                     </div>
                                 </div>
 
-                                {/* CUSTOS */}
-                                <div className="p-4 border-2 border-indigo-50 rounded-2xl space-y-4">
-                                    <div className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-2"><DollarSign size={12}/> Custos Referentes ao Curso</div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 mb-1">Categoria do Arquivo</label>
-                                            <select required className="w-full px-3 py-2 border rounded-xl text-sm" value={fcCategory} onChange={e => setFcCategory(e.target.value)}>
-                                                <option value="">Selecione...</option>
-                                                <option value="Nota fiscal">Nota fiscal</option>
-                                                <option value="Transporte">Transporte</option>
-                                                <option value="Estacionamento">Estacionamento</option>
-                                                <option value="Pedágio">Pedágio</option>
-                                                <option value="Outros">Outros</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 mb-1">Valor Gasto (R$)</label>
-                                            <input type="number" step="0.01" required className="w-full px-3 py-2 border rounded-xl text-sm font-bold text-green-700" value={fcValue} onChange={e => setFcValue(e.target.value)} placeholder="0.00" />
-                                        </div>
+                                {/* LISTAGEM DE CUSTOS DINÂMICA */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between px-1">
+                                        <div className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-2"><DollarSign size={12}/> Custos Referentes ao Curso</div>
+                                        <button 
+                                            type="button" 
+                                            onClick={handleAddExpense}
+                                            className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase flex items-center gap-1 hover:bg-indigo-100 transition-colors"
+                                        >
+                                            <Plus size={12}/> Adicionar Custo
+                                        </button>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 mb-1">Anexar NF ou Comprovante *</label>
-                                        <div onClick={() => fileInputRef.current?.click()} className={clsx("w-full py-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-all", attachment ? "bg-green-50 border-green-300 text-green-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-white hover:border-indigo-300")}>
-                                            {/* FIX: Changed CheckCircle to CheckCircle2 as it is the correct imported name */}
-                                            {attachment ? <><CheckCircle2 size={24}/> <span className="text-xs font-bold">{attachment.name}</span></> : <><Paperclip size={24}/> <span className="text-xs font-medium">Clique para anexar arquivo</span></>}
-                                            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
-                                        </div>
-                                    </div>
+                                    {fcExpenses.map((expense, index) => (
+                                        <div key={expense.id} className="p-4 border-2 border-indigo-50 rounded-2xl space-y-4 relative bg-white animate-in slide-in-from-right-2">
+                                            {fcExpenses.length > 1 && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => handleRemoveExpense(expense.id)}
+                                                    className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 transition-colors"
+                                                >
+                                                    <Trash2 size={14}/>
+                                                </button>
+                                            )}
+                                            
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold">
+                                                    {index + 1}
+                                                </span>
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nova Despesa</span>
+                                            </div>
 
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 mb-1">Observação sobre a NF/Comprovante</label>
-                                        <textarea className="w-full px-3 py-2 border rounded-xl text-sm resize-none h-20" value={fcObs} onChange={e => setFcObs(e.target.value)} placeholder="Algo que precisamos saber sobre este documento?" />
-                                    </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Categoria do Arquivo *</label>
+                                                    <select 
+                                                        required 
+                                                        className="w-full px-3 py-2 border rounded-xl text-sm" 
+                                                        value={expense.category} 
+                                                        onChange={e => handleUpdateExpense(expense.id, 'category', e.target.value)}
+                                                    >
+                                                        <option value="">Selecione...</option>
+                                                        <option value="Nota fiscal">Nota fiscal</option>
+                                                        <option value="Transporte">Transporte</option>
+                                                        <option value="Estacionamento">Estacionamento</option>
+                                                        <option value="Pedágio">Pedágio</option>
+                                                        <option value="Outros">Outros</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Valor Gasto (R$) *</label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01" 
+                                                        required 
+                                                        className="w-full px-3 py-2 border rounded-xl text-sm font-bold text-green-700" 
+                                                        value={expense.value} 
+                                                        onChange={e => handleUpdateExpense(expense.id, 'value', e.target.value)} 
+                                                        placeholder="0.00" 
+                                                    />
+                                                </div>
+                                            </div>
 
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 mb-2">Possui mais algum documento para anexar?</label>
-                                        <div className="flex gap-4">
-                                            <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="moreDocs" checked={fcMoreDocs === 'Sim'} onChange={() => setFcMoreDocs('Sim')} /> <span className="text-sm">Sim</span></label>
-                                            <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="moreDocs" checked={fcMoreDocs === 'Não'} onChange={() => setFcMoreDocs('Não')} /> <span className="text-sm">Não</span></label>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 mb-1">Observação</label>
+                                                <input 
+                                                    type="text"
+                                                    className="w-full px-3 py-2 border rounded-xl text-sm" 
+                                                    value={expense.obs} 
+                                                    onChange={e => handleUpdateExpense(expense.id, 'obs', e.target.value)} 
+                                                    placeholder="Breve comentário sobre este item..." 
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 mb-1">Comprovante deste item *</label>
+                                                <div 
+                                                    onClick={() => {
+                                                        const el = document.getElementById(`file-${expense.id}`);
+                                                        el?.click();
+                                                    }} 
+                                                    className={clsx(
+                                                        "w-full py-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-all", 
+                                                        expense.attachment ? "bg-green-50 border-green-300 text-green-600" : "bg-slate-50 border-slate-100 text-slate-400 hover:bg-white hover:border-indigo-200"
+                                                    )}
+                                                >
+                                                    {expense.attachment ? (
+                                                        <><CheckCircle2 size={18}/> <span className="text-[10px] font-bold truncate max-w-[80%]">{expense.attachment.name}</span></>
+                                                    ) : (
+                                                        <><Paperclip size={18}/> <span className="text-[10px] font-medium uppercase">Anexar NF / Recibo</span></>
+                                                    )}
+                                                    <input 
+                                                        id={`file-${expense.id}`}
+                                                        type="file" 
+                                                        className="hidden" 
+                                                        onChange={(e) => handleFileUpload(e, expense.id)} 
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
-                                        <p className="text-[10px] text-slate-400 mt-1 italic">Se sim, você poderá anexar na tela seguinte do chamado.</p>
+                                    ))}
+
+                                    <div className="bg-slate-900 rounded-2xl p-4 flex items-center justify-between text-white">
+                                        <div className="flex items-center gap-2">
+                                            <div className="p-2 bg-white/10 rounded-lg text-teal-400"><DollarSign size={18}/></div>
+                                            <span className="text-xs font-black uppercase tracking-widest">Total a Reembolsar</span>
+                                        </div>
+                                        <span className="text-xl font-black text-teal-400">R$ {totalExpenses.toFixed(2)}</span>
                                     </div>
                                 </div>
 
@@ -351,7 +478,7 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                                 <div className="p-6 bg-slate-900 rounded-[2rem] text-white space-y-6 shadow-xl">
                                     <div className="flex items-center gap-3 border-b border-white/10 pb-4">
                                         <div className="p-2 bg-white/10 rounded-xl"><CreditCard size={20}/></div>
-                                        <h4 className="text-sm font-black uppercase tracking-widest">Confirmação de Dados Bancários</h4>
+                                        <h4 className="text-sm font-black uppercase tracking-widest">Dados Bancários para Reembolso</h4>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
@@ -390,9 +517,8 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                                 <div className="border-t pt-4">
                                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Anexar Arquivo (Opcional)</label>
                                     <div onClick={() => fileInputRef.current?.click()} className={clsx("w-full py-4 border-2 border-dashed rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition-all", attachment ? "bg-green-50 border-green-300 text-green-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-white hover:border-indigo-300")}>
-                                        {/* FIX: Changed Check to CheckCircle2 (which is already imported) */}
                                         {attachment ? <><CheckCircle2 size={16}/> {attachment.name}</> : <><Paperclip size={18}/> Clique para anexar</>}
-                                        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+                                        <input type="file" ref={fileInputRef} className="hidden" onChange={e => handleFileUpload(e)} />
                                     </div>
                                 </div>
                             </div>
@@ -455,7 +581,7 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                                 )}
                                 <form onSubmit={handleSendReply} className="flex gap-2">
                                     <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all"><Paperclip size={20}/></button>
-                                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+                                    <input type="file" ref={fileInputRef} className="hidden" onChange={e => handleFileUpload(e)} />
                                     <textarea className="flex-1 px-4 py-2 bg-slate-50 border rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-12 transition-all" placeholder="Continuar conversa..." value={replyText} onChange={e => setReplyText(e.target.value)} />
                                     <button type="submit" disabled={isSendingReply || (!replyText.trim() && !attachment)} className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-indigo-600/20">{isSendingReply ? <Loader2 size={20} className="animate-spin" /> : <Send size={20}/>}</button>
                                 </form>

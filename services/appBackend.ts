@@ -1,4 +1,5 @@
 
+
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -280,7 +281,7 @@ export const appBackend = {
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
       if (!isConfigured) return;
-      await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || undefined, pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson });
+      await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || undefined, pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payload_json });
   },
 
   deleteWebhookTrigger: async (id: string): Promise<void> => {
@@ -331,7 +332,7 @@ export const appBackend = {
   savePreset: async (preset: Omit<any, 'id'>): Promise<any> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
-    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.target_table_name, target_primary_key: preset.primaryKey || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.created_by_name || null };
+    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.target_table_name, target_primary_key: preset.target_primary_key || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.created_by_name || null };
     const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
     if (error) throw error;
     return {
@@ -493,7 +494,7 @@ export const appBackend = {
           // FIXED: Corrected property naming from form.distribution_mode to form.distributionMode to match FormModel interface
           questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null, target_pipeline: form.targetPipeline || 'Padrão', target_stage: form.targetStage || 'new',
-          submissions_count: form.submissionsCount || 0, folder_id: form.folderId || null
+          submissions_count: form.submissions_count || 0, folder_id: form.folder_id || null
       };
       await supabase.from('crm_forms').upsert(payload);
   },
@@ -530,7 +531,7 @@ export const appBackend = {
       if (!isConfigured) return;
       const payload = { 
           id: survey.id || undefined, title: survey.title, description: survey.description, is_lead_capture: survey.isLeadCapture, questions: survey.questions, 
-          style: survey.style, target_type: survey.targetType, target_product_type: survey.targetProductType || null, target_product_name: survey.targetProductName || null,
+          style: survey.style, target_type: survey.target_type, target_product_type: survey.targetProductType || null, target_product_name: survey.targetProductName || null,
           only_if_finished: survey.onlyIfFinished, is_active: survey.isActive, submissions_count: survey.submissionsCount || 0 
       };
       await supabase.from('crm_surveys').upsert(payload);
@@ -587,7 +588,7 @@ export const appBackend = {
           questions: form.questions || [], style: form.style || {}, createdAt: form.created_at, submissionsCount: form.submissions_count || 0, folderId: form.folder_id
       };
       const { data: survey } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
-      if (survey) return { id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.isLeadCapture, questions: survey.questions || [], style: survey.style || {}, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 };
+      if (survey) return { id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.is_lead_capture, questions: survey.questions || [], style: survey.style || {}, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 };
       return null;
   },
 
@@ -637,14 +638,15 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
       if (!isConfigured) return null;
       const { data, error = null } = await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: d.signers || [], createdAt: data.created_at };
+      // FIX: Changed d.signers to data.signers
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
@@ -815,7 +817,7 @@ export const appBackend = {
       const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date').order('title');
       if (error) throw error;
       return (data || []).map((b: any) => ({
-          id: b.id, eventId: b.event_id, date: b.date, title: b.title, maxSelections: b.max_selections
+          id: b.id, eventId: b.event_id, date: b.date, title: b.title, max_selections: b.max_selections
       }));
   },
 

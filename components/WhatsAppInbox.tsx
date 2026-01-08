@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageCircle, Search, Filter, MoreVertical, Paperclip, Mic, Send, 
@@ -34,9 +35,9 @@ interface WAMessage {
 }
 
 interface WAConfig {
-  accessToken: string;
-  phoneNumberId: string;
-  wabaId: string;
+  instanceUrl: string;
+  instanceName: string;
+  apiKey: string;
   webhookVerifyToken: string;
 }
 
@@ -59,9 +60,9 @@ export const WhatsAppInbox: React.FC = () => {
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
   const [config, setConfig] = useState<WAConfig>({
-      accessToken: '',
-      phoneNumberId: '',
-      wabaId: '',
+      instanceUrl: '',
+      instanceName: '',
+      apiKey: '',
       webhookVerifyToken: ''
   });
 
@@ -128,7 +129,8 @@ export const WhatsAppInbox: React.FC = () => {
     setInputText('');
     try {
         const result = await whatsappService.sendTextMessage(selectedChat.contact_phone, messageText);
-        const waId = result.messages?.[0]?.id;
+        // Evolution API retorna um objeto diferente, o ID da mensagem costuma estar em data.key.id ou similar dependendo da versão
+        const waId = result.key?.id || result.messageId; 
         await whatsappService.syncMessage(selectedChatId, messageText, 'agent', waId);
         await fetchMessages(selectedChatId, false);
         await fetchConversations(false);
@@ -142,15 +144,15 @@ export const WhatsAppInbox: React.FC = () => {
       setIsSavingConfig(true);
       try {
           const cleanConfig = {
-              accessToken: config.accessToken.trim(),
-              phoneNumberId: config.phoneNumberId.trim(),
-              wabaId: config.wabaId.trim(),
+              instanceUrl: config.instanceUrl.trim(),
+              instanceName: config.instanceName.trim(),
+              apiKey: config.apiKey.trim(),
               webhookVerifyToken: config.webhookVerifyToken.trim()
           };
           await appBackend.saveWhatsAppConfig(cleanConfig);
           setConfig(cleanConfig);
           setShowSettings(false);
-          alert("Configurações salvas!");
+          alert("Configurações da Evolution API salvas!");
       } catch (e: any) { alert(`Erro ao salvar: ${e.message}`); } finally { setIsSavingConfig(false); }
   };
 
@@ -174,109 +176,59 @@ export const WhatsAppInbox: React.FC = () => {
   const supabaseProjectRef = (appBackend.client as any).supabaseUrl?.match(/https:\/\/(.*?)\.supabase\.co/)?.[1] || 'SEU-PROJETO';
   const callbackUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/whatsapp-webhook`;
 
-  const sqlScript = `
--- 1. CRIAR TABELAS (Ignora se já existirem)
-CREATE TABLE IF NOT EXISTS public.crm_whatsapp_chats (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    wa_id text UNIQUE NOT NULL,
-    contact_name text,
-    contact_phone text,
-    last_message text,
-    status text DEFAULT 'open',
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    chat_id uuid REFERENCES public.crm_whatsapp_chats(id) ON DELETE CASCADE,
-    text text,
-    sender_type text CHECK (sender_type IN ('user', 'agent', 'system')),
-    wa_message_id text,
-    status text,
-    created_at timestamptz DEFAULT now()
-);
-
--- 2. HABILITAR SEGURANÇA RLS
-ALTER TABLE public.crm_whatsapp_chats ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.crm_whatsapp_messages ENABLE ROW LEVEL SECURITY;
-
--- 3. CRIAR POLÍTICAS IDEMPOTENTES (Apaga antes de criar para não dar erro)
-DROP POLICY IF EXISTS "Acesso total chats" ON public.crm_whatsapp_chats;
-CREATE POLICY "Acesso total chats" ON public.crm_whatsapp_chats FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Acesso total messages" ON public.crm_whatsapp_messages;
-CREATE POLICY "Acesso total messages" ON public.crm_whatsapp_messages FOR ALL USING (true) WITH CHECK (true);
-  `.trim();
-
   const edgeFunctionCode = `
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// VERIFY_TOKEN deve ser exatamente o que você digitar na tela da Meta
+// VERIFY_TOKEN opcional para Evolution API (segurança adicional)
 const VERIFY_TOKEN = "${config.webhookVerifyToken || 'seu_token_aqui'}";
 
 Deno.serve(async (req) => {
   const { method } = req;
-  const url = new URL(req.url);
-
-  // 1. VALIDAÇÃO DA META (Obrigatório para ativar o Webhook)
-  if (method === "GET") {
-    const mode = url.searchParams.get("hub.mode");
-    const token = url.searchParams.get("hub.verify_token");
-    const challenge = url.searchParams.get("hub.challenge");
-
-    if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("Validação efetuada com sucesso!");
-      // Meta exige retorno do challenge em texto puro com status 200
-      return new Response(challenge, { 
-        status: 200, 
-        headers: { "Content-Type": "text/plain" } 
-      });
-    }
-    return new Response("Token Inválido", { status: 403 });
-  }
-
-  // 2. RECEBIMENTO DE MENSAGENS REAL TIME
+  
   if (method === "POST") {
     try {
       const body = await req.json();
-      const entry = body.entry?.[0];
-      const changes = entry?.changes?.[0];
-      const value = changes?.value;
-      const message = value?.messages?.[0];
-      const contact = value?.contacts?.[0];
+      
+      // Evolution API Event Check
+      // O evento padrão de nova mensagem é 'messages.upsert'
+      if (body.event === "messages.upsert") {
+        const message = body.data?.message;
+        const key = body.data?.key;
+        
+        if (!key.fromMe) { // Apenas processa mensagens recebidas (não enviadas por nós)
+          const supabase = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+          );
 
-      if (message && message.type === 'text') {
-        const supabase = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        );
+          const waId = key.remoteJid.split('@')[0];
+          const text = message.conversation || message.extendedTextMessage?.text || "(Mensagem sem texto)";
+          const contactName = body.data?.pushName || waId;
 
-        const waId = message.from; 
-        const text = message.text.body;
-        const contactName = contact?.profile?.name || waId;
+          // Buscar ou criar conversa
+          let { data: chat } = await supabase.from('crm_whatsapp_chats').select('id').eq('wa_id', waId).single();
+          if (!chat) {
+            const { data: newChat } = await supabase.from('crm_whatsapp_chats').insert([{
+               wa_id: waId, contact_name: contactName, contact_phone: waId, last_message: text, status: 'open'
+            }]).select().single();
+            chat = newChat;
+          }
 
-        // Buscar ou criar conversa
-        let { data: chat } = await supabase.from('crm_whatsapp_chats').select('id').eq('wa_id', waId).single();
-        if (!chat) {
-          const { data: newChat } = await supabase.from('crm_whatsapp_chats').insert([{
-             wa_id: waId, contact_name: contactName, contact_phone: waId, last_message: text, status: 'open'
-          }]).select().single();
-          chat = newChat;
+          // Salvar mensagem
+          await supabase.from('crm_whatsapp_messages').insert([{
+            chat_id: chat.id, text: text, sender_type: 'user', status: 'received'
+          }]);
+
+          // Atualizar preview do chat
+          await supabase.from('crm_whatsapp_chats').update({ 
+              last_message: text, updated_at: new Date().toISOString() 
+          }).eq('id', chat.id);
         }
-
-        // Salvar mensagem
-        await supabase.from('crm_whatsapp_messages').insert([{
-          chat_id: chat.id, text: text, sender_type: 'user', status: 'received'
-        }]);
-
-        // Atualizar preview do chat
-        await supabase.from('crm_whatsapp_chats').update({ 
-            last_message: text, updated_at: new Date().toISOString() 
-        }).eq('id', chat.id);
       }
+      
       return new Response("OK", { status: 200 });
     } catch (e) {
+      console.error(e);
       return new Response("Error", { status: 500 });
     }
   }
@@ -293,8 +245,8 @@ Deno.serve(async (req) => {
                       <div className="flex items-center gap-3">
                           <div className="bg-teal-100 p-2 rounded-full text-teal-700"><Settings size={20} /></div>
                           <div>
-                              <h2 className="text-lg font-bold text-slate-800">Conectar WhatsApp</h2>
-                              <p className="text-xs text-slate-500">Configuração da Meta Cloud API</p>
+                              <h2 className="text-lg font-bold text-slate-800">Conectar Evolution API</h2>
+                              <p className="text-xs text-slate-500">Configuração de Servidor VPS</p>
                           </div>
                       </div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600"><X size={20} /></button>
@@ -303,19 +255,20 @@ Deno.serve(async (req) => {
                   <div className="p-6 space-y-6 bg-slate-50">
                       {/* PASSO 1 */}
                       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                          <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2 mb-2"><Lock size={16} className="text-teal-600" /> 1. Credenciais da Meta</h3>
+                          <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2 mb-2"><Server size={16} className="text-teal-600" /> 1. Credenciais da Instância</h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Access Token (Permanente)</label>
-                                  <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-50 outline-none h-20 resize-none" placeholder="EAAG..." value={config.accessToken} onChange={e => setConfig({...config, accessToken: e.target.value})} />
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">URL Base da API (VPS)</label>
+                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-50 outline-none" placeholder="https://api.suaempresa.com.br" value={config.instanceUrl} onChange={e => setConfig({...config, instanceUrl: e.target.value})} />
+                                  <p className="text-[10px] text-slate-400 mt-1">A URL de onde sua Evolution API está rodando.</p>
                               </div>
                               <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">ID do Telefone</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" value={config.phoneNumberId} onChange={e => setConfig({...config, phoneNumberId: e.target.value})} />
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Nome da Instância</label>
+                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" placeholder="ex: Atendimento_01" value={config.instanceName} onChange={e => setConfig({...config, instanceName: e.target.value})} />
                               </div>
                               <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">ID da Conta WABA</label>
-                                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" value={config.wabaId} onChange={e => setConfig({...config, wabaId: e.target.value})} />
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">Global API Key / Instance Token</label>
+                                  <input type="password" title="Chave de segurança da Evolution" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" value={config.apiKey} onChange={e => setConfig({...config, apiKey: e.target.value})} />
                               </div>
                           </div>
                       </div>
@@ -323,65 +276,41 @@ Deno.serve(async (req) => {
                       {/* PASSO 2 */}
                       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                           <div className="flex justify-between items-center">
-                              <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2"><Globe size={16} className="text-blue-600" /> 2. Configuração do Webhook</h3>
+                              <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2"><Globe size={16} className="text-blue-600" /> 2. Sincronização de Mensagens (Webhook)</h3>
                               <button onClick={() => setShowWebhookHelp(!showWebhookHelp)} className="text-xs text-blue-600 font-bold flex items-center gap-1 hover:underline">
-                                  {showWebhookHelp ? 'Ocultar Guia' : 'Como resolver o erro?'}
+                                  {showWebhookHelp ? 'Ocultar Guia' : 'Como configurar?'}
                                   <ChevronDown size={14} className={clsx(showWebhookHelp && "rotate-180")} />
                               </button>
                           </div>
 
-                          <div className="space-y-4">
-                              <div>
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">Token de Verificação (Crie um agora e cole na Meta)</label>
-                                  <div className="flex gap-2">
-                                      <input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-blue-700 bg-blue-50" value={config.webhookVerifyToken} onChange={e => setConfig({...config, webhookVerifyToken: e.target.value})} />
-                                      <button onClick={() => setConfig({...config, webhookVerifyToken: Math.random().toString(36).substring(2, 12)})} className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"><RefreshCw size={14}/></button>
-                                  </div>
-                              </div>
-
-                              {showWebhookHelp && (
-                                  <div className="animate-in slide-in-from-top-2 p-5 bg-slate-900 rounded-xl space-y-6">
-                                      {/* SQL CORRIGIDO */}
-                                      <div className="bg-blue-950/40 p-4 rounded-lg border border-blue-500/30">
-                                          <p className="text-blue-400 font-black text-xs uppercase mb-2 flex items-center gap-2"><Database size={14}/> Passo A: Rode o SQL no Supabase</p>
-                                          <p className="text-white text-[11px] mb-3 leading-relaxed">Este código apaga políticas antigas se existirem, evitando o erro de "already exists".</p>
-                                          <div className="relative">
-                                              <pre className="text-[10px] bg-black text-slate-400 p-3 rounded-lg overflow-x-auto max-h-32 border border-slate-800">{sqlScript}</pre>
-                                              <button onClick={() => navigator.clipboard.writeText(sqlScript)} className="absolute top-2 right-2 bg-slate-800 text-white px-2 py-1 rounded text-[10px]">Copiar SQL</button>
-                                          </div>
-                                      </div>
-
-                                      {/* COMANDO DE DEPLOY */}
-                                      <div className="bg-red-950/40 p-4 rounded-lg border border-red-500/50">
-                                          <p className="text-red-400 font-black text-xs uppercase mb-2 flex items-center gap-2"><AlertTriangle size={16}/> Passo B: Deploy sem trava de segurança</p>
-                                          <p className="text-white text-[11px] leading-relaxed">O erro de validação ocorre porque o Supabase bloqueia a Meta por padrão. Você <strong>DEVE</strong> usar este comando exato no terminal:</p>
-                                          <div className="mt-3 bg-black rounded p-3 flex justify-between items-center gap-3">
-                                              <code className="text-pink-400 text-[10px] font-mono leading-tight">supabase functions deploy whatsapp-webhook --no-verify-jwt</code>
-                                              <button onClick={() => navigator.clipboard.writeText('supabase functions deploy whatsapp-webhook --no-verify-jwt')} className="text-slate-500 hover:text-white"><Copy size={14}/></button>
-                                          </div>
-                                      </div>
-
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {showWebhookHelp && (
+                              <div className="animate-in slide-in-from-top-2 p-5 bg-slate-900 rounded-xl space-y-6">
+                                  <div className="bg-blue-950/40 p-4 rounded-lg border border-blue-500/30">
+                                      <p className="text-blue-400 font-black text-xs uppercase mb-2 flex items-center gap-2"><Info size={14}/> Como Ativar o Recebimento</p>
+                                      <p className="text-white text-[11px] mb-4 leading-relaxed">
+                                          No painel da Evolution API ou via requisição <strong>/webhook/set</strong>, configure o seguinte:
+                                      </p>
+                                      <div className="space-y-4">
                                           <div className="space-y-1">
-                                              <span className="text-[10px] text-slate-400 uppercase font-black">URL de Callback (Na Meta)</span>
+                                              <span className="text-[10px] text-slate-400 uppercase font-black">URL do Webhook (Copie e cole na Evolution)</span>
                                               <div className="flex gap-2 items-center bg-black/40 p-2 rounded border border-slate-800"><code className="text-xs text-teal-400 truncate">{callbackUrl}</code><button onClick={() => navigator.clipboard.writeText(callbackUrl)} className="text-slate-500 hover:text-white"><Copy size={12}/></button></div>
                                           </div>
                                           <div className="space-y-1">
-                                              <span className="text-[10px] text-slate-400 uppercase font-black">Token de Verificação (Na Meta)</span>
-                                              <div className="flex gap-2 items-center bg-black/40 p-2 rounded border border-slate-800"><code className="text-xs text-teal-400 truncate">{config.webhookVerifyToken || '(Defina acima)'}</code><button onClick={() => navigator.clipboard.writeText(config.webhookVerifyToken)} className="text-slate-500 hover:text-white"><Copy size={12}/></button></div>
-                                          </div>
-                                      </div>
-
-                                      <div className="pt-2 border-t border-slate-800">
-                                          <p className="text-white text-xs font-bold mb-3 flex items-center gap-2"><Code size={14} className="text-amber-400"/> Código da Edge Function (Corrigido):</p>
-                                          <div className="relative">
-                                              <pre className="text-[10px] bg-black text-slate-300 p-4 rounded-lg overflow-x-auto max-h-48 custom-scrollbar border border-slate-800 leading-relaxed">{edgeFunctionCode}</pre>
-                                              <button onClick={() => navigator.clipboard.writeText(edgeFunctionCode)} className="absolute top-2 right-2 bg-slate-800 text-white px-3 py-1 rounded text-[10px] font-bold">Copiar Código</button>
+                                              <span className="text-[10px] text-slate-400 uppercase font-black">Eventos a monitorar</span>
+                                              <div className="flex gap-2 items-center bg-black/40 p-2 rounded border border-slate-800"><code className="text-xs text-indigo-400">MESSAGES_UPSERT</code></div>
                                           </div>
                                       </div>
                                   </div>
-                              )}
-                          </div>
+
+                                  <div className="pt-2 border-t border-slate-800">
+                                      <p className="text-white text-xs font-bold mb-3 flex items-center gap-2"><Code size={14} className="text-amber-400"/> Código da Edge Function (Formatada para Evolution):</p>
+                                      <div className="relative">
+                                          <pre className="text-[10px] bg-black text-slate-300 p-4 rounded-lg overflow-x-auto max-h-48 custom-scrollbar border border-slate-800 leading-relaxed">{edgeFunctionCode}</pre>
+                                          <button onClick={() => navigator.clipboard.writeText(edgeFunctionCode)} className="absolute top-2 right-2 bg-slate-800 text-white px-3 py-1 rounded text-[10px] font-bold">Copiar Código</button>
+                                      </div>
+                                  </div>
+                              </div>
+                          )}
                       </div>
                   </div>
 
@@ -389,7 +318,7 @@ Deno.serve(async (req) => {
                       <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
                       <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-green-600 hover:bg-green-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-green-600/20 flex items-center gap-2">
                           {isSavingConfig ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                          Salvar Configurações
+                          Salvar Configuração Evolution
                       </button>
                   </div>
               </div>
@@ -405,13 +334,13 @@ Deno.serve(async (req) => {
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><MessageCircle className="text-teal-600" /> Atendimento</h2>
             <div className="flex gap-2">
                 <button onClick={() => setShowNewChatModal(true)} className="p-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors" title="Nova Conversa"><Plus size={18} /></button>
-                <button onClick={() => setShowSettings(true)} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-slate-200 rounded-lg" title="Configurações"><Settings size={18} /></button>
+                <button onClick={() => setShowSettings(true)} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-slate-200 rounded-lg" title="Configurações Evolution"><Settings size={18} /></button>
                 <button onClick={() => fetchConversations()} className="p-1.5 text-slate-400 hover:text-teal-600"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""} /></button>
             </div>
         </div>
         <div className="flex-1 overflow-y-auto bg-white">
             {isLoading && conversations.length === 0 ? (<div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-teal-600" /></div>) : 
-            conversations.length === 0 ? (<div className="p-8 text-center text-slate-400 text-sm">Nenhuma conversa encontrada.</div>) : (
+            conversations.length === 0 ? (<div className="p-8 text-center text-slate-400 text-sm">Nenhuma conversa encontrada via Evolution.</div>) : (
                 conversations.map(conv => (
                     <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-4 border-b border-slate-50 cursor-pointer hover:bg-slate-50 transition-all border-l-4", selectedChatId === conv.id ? "bg-teal-50/30 border-l-teal-500" : "border-l-transparent")}>
                         <div className="flex justify-between items-start mb-1"><span className="font-bold text-sm text-slate-800">{conv.contact_name}</span><span className="text-[10px] text-slate-400">{new Date(conv.updated_at).toLocaleDateString()}</span></div>
@@ -458,7 +387,7 @@ Deno.serve(async (req) => {
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
                 <MessageCircle size={64} className="opacity-20 mb-4" />
                 <p className="text-lg font-bold">Selecione uma conversa</p>
-                <p className="text-sm">Clique em um contato na lista para iniciar o atendimento.</p>
+                <p className="text-sm">Clique em um contato na lista para iniciar o atendimento via Evolution.</p>
             </div>
           )}
       </div>
@@ -509,3 +438,13 @@ Deno.serve(async (req) => {
     </div>
   );
 };
+
+// Sub-componentes ícones que faltavam
+const Server = ({ size, className }: { size?: number, className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size || 24} height={size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <rect width="20" height="8" x="2" y="2" rx="2" ry="2"/>
+        <rect width="20" height="8" x="2" y="14" rx="2" ry="2"/>
+        <line x1="6" x2="6.01" y1="6" y2="6"/>
+        <line x1="6" x2="6.01" y1="18" y2="18"/>
+    </svg>
+);

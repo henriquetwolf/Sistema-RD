@@ -3,53 +3,49 @@ import { appBackend } from './appBackend';
 
 export const whatsappService = {
     /**
-     * Envia uma mensagem de texto real via WhatsApp Cloud API
+     * Envia uma mensagem de texto real via Evolution API
      */
     sendTextMessage: async (to: string, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
         
-        if (!config || !config.accessToken || !config.phoneNumberId) {
-            throw new Error("Configurações incompletas. Vá em Atendimento > Engrenagem e preencha o Token e o Phone Number ID.");
+        if (!config || !config.instanceUrl || !config.instanceName || !config.apiKey) {
+            throw new Error("Configurações da Evolution API incompletas. Vá em Atendimento > Configurações e preencha a URL, Instância e API Key.");
         }
 
-        const url = `https://graph.facebook.com/v21.0/${config.phoneNumberId.trim()}/messages`;
+        // Formata a URL: Remove barras extras e garante o endpoint correto
+        const baseUrl = config.instanceUrl.replace(/\/$/, "");
+        const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;
         
-        // Limpar número e garantir formato internacional (apenas números)
+        // Limpar número: A Evolution API geralmente prefere o número com código do país e sem caracteres especiais
         const cleanNumber = to.replace(/\D/g, '');
-        const token = config.accessToken.trim();
 
         try {
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    'apikey': config.apiKey.trim(),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    messaging_product: "whatsapp",
-                    recipient_type: "individual",
-                    to: cleanNumber,
-                    type: "text",
-                    text: { body: text }
+                    number: cleanNumber,
+                    options: {
+                        delay: 1200,
+                        presence: "composing",
+                        linkPreview: false
+                    },
+                    text: text
                 })
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                // Erros específicos da Meta
-                if (data.error?.code === 190) {
-                    throw new Error("Token de Acesso inválido ou expirado. Gere um novo Token Permanente no Painel da Meta.");
-                }
-                if (data.error?.message?.includes("parse")) {
-                    throw new Error("O Token salvo tem caracteres inválidos ou espaços. Copie o Token novamente e salve nas configurações.");
-                }
-                throw new Error(data.error?.message || "Erro na API da Meta");
+                throw new Error(data.message || data.error || "Erro na Evolution API");
             }
 
             return data;
         } catch (error: any) {
-            console.error("WhatsApp API Error:", error);
+            console.error("Evolution API Error:", error);
             throw error;
         }
     },

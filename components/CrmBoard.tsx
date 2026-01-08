@@ -6,8 +6,7 @@ import {
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
   MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2, Palette, Settings as SettingsIcon, ChevronDown, CheckCircle, Circle,
-  /* ADDED: Missing CheckSquare import */
-  CheckSquare
+  CheckSquare, AlertTriangle, Bell
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend, CompanySetting, Pipeline, PipelineStage, WebhookTrigger } from '../services/appBackend';
@@ -143,7 +142,7 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
 };
 
 export const CrmBoard: React.FC = () => {
-  const [activeView, setActiveView] = useState<'pipeline' | 'teams' | 'pipelines_config'>('pipeline');
+  const [activeView, setActiveView] = useState<'pipeline' | 'teams' | 'pipelines_config' | 'tasks'>('pipeline');
   const [deals, setDeals] = useState<Deal[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -236,15 +235,15 @@ export const CrmBoard: React.FC = () => {
           if (dealsResult.data) {
               setDeals(dealsResult.data.map((d: any) => ({
                   id: d.id, dealNumber: d.deal_number, title: d.title || '', contactName: d.contact_name || '', companyName: d.company_name || '',
-                  value: Number(d.value || 0), payment_method: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
-                  next_task: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
+                  value: Number(d.value || 0), paymentMethod: d.payment_method || '', stage: d.stage || 'new', owner: d.owner_id || '', status: d.status || 'warm',
+                  nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
-                  /* Corrected property mapping to camelCase Deal interface */
+                  /* FIXED: Corrected property mapping to camelCase Deal interface */
                   email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
-                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
+                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
-                  classMod1: d.class_mod_1, class_mod_2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
+                  classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
               })));
           } else {
@@ -365,7 +364,6 @@ export const CrmBoard: React.FC = () => {
     return { count: stageDeals.length, total: stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0) };
   };
 
-  /* FIXED: Changed setDraggedTicketId to setDraggedDealId in handleDragStart */
   const handleDragStart = (e: React.DragEvent, dealId: string) => { setDraggedDealId(dealId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dealId); };
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
   
@@ -598,7 +596,7 @@ export const CrmBoard: React.FC = () => {
           next_task: dealFormData.nextTask, source: dealFormData.source, campaign: dealFormData.campaign, entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installmentValue || 0),
           product_type: dealFormData.productType || null, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
-          /* Corrected property access on dealFormData to match camelCase Deal interface */
+          /* FIXED: Corrected property access on dealFormData to match camelCase Deal interface */
           cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode,
           zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber, registration_data: dealFormData.registrationData,
           observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
@@ -670,6 +668,39 @@ export const CrmBoard: React.FC = () => {
       }));
   };
 
+  // --- Task Reporting ---
+  const allPendingTasks = useMemo(() => {
+    const tasks: any[] = [];
+    deals.forEach(deal => {
+        (deal.tasks || []).forEach(task => {
+            if (!task.isDone) {
+                tasks.push({
+                    ...task,
+                    dealId: deal.id,
+                    dealTitle: deal.title,
+                    dealNumber: deal.dealNumber,
+                    clientName: deal.companyName || deal.contactName,
+                    ownerName: getOwnerName(deal.owner),
+                    parentDeal: deal
+                });
+            }
+        });
+    });
+    return tasks.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  }, [deals, collaborators]);
+
+  const getDealTaskStatus = (deal: Deal) => {
+      const pending = (deal.tasks || []).filter(t => !t.isDone);
+      if (pending.length === 0) return null;
+      
+      const today = new Date().toISOString().split('T')[0];
+      const urgent = pending.sort((a,b) => a.dueDate.localeCompare(b.dueDate))[0];
+      
+      if (urgent.dueDate < today) return { color: 'text-red-500', label: 'Atrasada' };
+      if (urgent.dueDate === today) return { color: 'text-amber-500', label: 'Hoje' };
+      return { color: 'text-blue-500', label: 'Futura' };
+  };
+
   const filteredDeals = (deals || []).filter(d => 
     (d.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (d.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -682,6 +713,10 @@ export const CrmBoard: React.FC = () => {
         <div className="flex items-center gap-2">
             <div className="flex items-center bg-slate-100 rounded-lg p-1">
                 <button onClick={() => setActiveView('pipeline')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'pipeline' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutGrid size={16} /> Pipeline</button>
+                <button onClick={() => setActiveView('tasks')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all relative", activeView === 'tasks' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                    <ListTodo size={16} /> Agenda 
+                    {allPendingTasks.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{allPendingTasks.length}</span>}
+                </button>
                 <button onClick={() => setActiveView('teams')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'teams' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Users size={16} /> Equipes</button>
                 <button onClick={() => setActiveView('pipelines_config')} className={clsx("px-4 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all", activeView === 'pipelines_config' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><SettingsIcon size={16} /> Funis</button>
             </div>
@@ -689,7 +724,7 @@ export const CrmBoard: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-4 flex-1 justify-end">
-            {activeView === 'pipeline' ? (
+            {activeView === 'pipeline' || activeView === 'tasks' ? (
                 <>
                     <div className="relative max-w-xs w-full hidden md:block">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -747,30 +782,40 @@ export const CrmBoard: React.FC = () => {
                                     {columnDeals.length === 0 ? (
                                         <div className="h-24 border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs">Arraste aqui</div>
                                     ) : (
-                                        columnDeals.map(deal => (
-                                        <div key={deal.id} draggable onDragStart={(e) => handleDragStart(e, deal.id)} onClick={() => openEditDealModal(deal)} className={clsx("group bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md relative cursor-grab active:cursor-grabbing", draggedDealId === deal.id ? "opacity-40 ring-2 ring-indigo-400" : "")}>
-                                            <div className={clsx("absolute left-0 top-3 bottom-3 w-1 rounded-r", deal.status === 'hot' ? 'bg-red-400' : deal.status === 'warm' ? 'bg-yellow-400' : 'bg-blue-300')}></div>
-                                            <div className="pl-3">
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <div>
-                                                        {deal.dealNumber && <span className="text-[10px] text-slate-400 font-mono block">#{deal.dealNumber}</span>}
-                                                        <h4 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight">{deal.title}</h4>
-                                                    </div>
-                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex">
-                                                        <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'prev')}} className="p-1 hover:bg-slate-100 rounded text-slate-500"><ChevronRight size={14} className="rotate-180" /></button>
-                                                        <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'next')}} className="p-1 hover:bg-green-50 rounded text-green-600"><ChevronRight size={14} /></button>
+                                        columnDeals.map(deal => {
+                                            const taskStatus = getDealTaskStatus(deal);
+                                            return (
+                                                <div key={deal.id} draggable onDragStart={(e) => handleDragStart(e, deal.id)} onClick={() => openEditDealModal(deal)} className={clsx("group bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md relative cursor-grab active:cursor-grabbing", draggedDealId === deal.id ? "opacity-40 ring-2 ring-indigo-400" : "")}>
+                                                    <div className={clsx("absolute left-0 top-3 bottom-3 w-1 rounded-r", deal.status === 'hot' ? 'bg-red-400' : deal.status === 'warm' ? 'bg-yellow-400' : 'bg-blue-300')}></div>
+                                                    <div className="pl-3">
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <div>
+                                                                {deal.dealNumber && <span className="text-[10px] text-slate-400 font-mono block">#{deal.dealNumber}</span>}
+                                                                <h4 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight">{deal.title}</h4>
+                                                            </div>
+                                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex">
+                                                                <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'prev')}} className="p-1 hover:bg-slate-100 rounded text-slate-500"><ChevronRight size={14} className="rotate-180" /></button>
+                                                                <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'next')}} className="p-1 hover:bg-green-50 rounded text-green-600"><ChevronRight size={14} /></button>
+                                                            </div>
+                                                        </div>
+                                                        <p className="text-xs text-slate-500 mb-2 truncate">{deal.companyName}</p>
+                                                        <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="font-bold text-slate-700 text-sm">{formatCurrency(deal.value)}</span>
+                                                                {taskStatus && (
+                                                                    <div className={clsx("flex items-center gap-0.5 ml-1", taskStatus.color)} title={`Tarefa ${taskStatus.label}`}>
+                                                                        <Clock size={10} />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm" title={`Responsável: ${getOwnerName(deal.owner)}`}>
+                                                                {(getOwnerName(deal.owner) || '?').charAt(0)}
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <p className="text-xs text-slate-500 mb-2 truncate">{deal.companyName}</p>
-                                                <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                                                    <span className="font-bold text-slate-700 text-sm">{formatCurrency(deal.value)}</span>
-                                                    <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm" title={`Responsável: ${getOwnerName(deal.owner)}`}>
-                                                        {(getOwnerName(deal.owner) || '?').charAt(0)}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                     </div>
                                 </div>
@@ -779,6 +824,83 @@ export const CrmBoard: React.FC = () => {
                         </div>
                     </div>
                 ))}
+                </div>
+            )}
+
+            {activeView === 'tasks' && (
+                <div className="max-w-6xl mx-auto animate-in fade-in duration-300">
+                    <div className="mb-6 flex justify-between items-end">
+                        <div>
+                            <h2 className="text-xl font-bold text-slate-800">Agenda de Tarefas</h2>
+                            <p className="text-sm text-slate-500">Controle global de todos os agendamentos pendentes.</p>
+                        </div>
+                        <div className="flex gap-4">
+                            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-[10px] font-bold uppercase tracking-widest">
+                                <Clock size={14} className="text-red-500" /> {allPendingTasks.filter(t => t.dueDate < new Date().toISOString().split('T')[0]).length} Atrasadas
+                            </div>
+                            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-[10px] font-bold uppercase tracking-widest">
+                                <Calendar size={14} className="text-amber-500" /> {allPendingTasks.filter(t => t.dueDate === new Date().toISOString().split('T')[0]).length} Hoje
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <table className="w-full text-left text-sm border-collapse">
+                            <thead className="bg-slate-50 border-b border-slate-200">
+                                <tr>
+                                    <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Data</th>
+                                    <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Tipo</th>
+                                    <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Descrição</th>
+                                    <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Negócio / Cliente</th>
+                                    <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Responsável</th>
+                                    <th className="px-6 py-3"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {allPendingTasks.length === 0 ? (
+                                    <tr><td colSpan={6} className="py-20 text-center text-slate-400 italic">Nenhum agendamento pendente.</td></tr>
+                                ) : allPendingTasks.map(task => {
+                                    const isOverdue = task.dueDate < new Date().toISOString().split('T')[0];
+                                    const isToday = task.dueDate === new Date().toISOString().split('T')[0];
+                                    
+                                    return (
+                                        <tr key={task.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <span className={clsx("font-bold", isOverdue ? "text-red-600" : isToday ? "text-amber-600" : "text-slate-700")}>
+                                                    {new Date(task.dueDate).toLocaleDateString()}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className={clsx("w-fit p-1.5 rounded-lg", 
+                                                    task.type === 'call' ? "bg-blue-50 text-blue-600" :
+                                                    task.type === 'email' ? "bg-purple-50 text-purple-600" :
+                                                    task.type === 'meeting' ? "bg-orange-50 text-orange-600" : "bg-slate-50 text-slate-600"
+                                                )}>
+                                                    {task.type === 'call' && <Phone size={14}/>}
+                                                    {task.type === 'email' && <Mail size={14}/>}
+                                                    {task.type === 'meeting' && <Users size={14}/>}
+                                                    {task.type === 'todo' && <CheckSquare size={14}/>}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 font-medium text-slate-800">{task.description}</td>
+                                            <td className="px-6 py-4">
+                                                <button onClick={() => openEditDealModal(task.parentDeal)} className="text-left group">
+                                                    <p className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">#{task.dealNumber} - {task.dealTitle}</p>
+                                                    <p className="text-[10px] text-slate-400 uppercase font-black">{task.clientName}</p>
+                                                </button>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="text-xs font-bold text-slate-500">{task.ownerName}</span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button onClick={() => openEditDealModal(task.parentDeal)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"><ChevronRight size={20}/></button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
             

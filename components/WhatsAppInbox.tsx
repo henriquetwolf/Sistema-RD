@@ -129,6 +129,7 @@ export const WhatsAppInbox: React.FC = () => {
     setInputText('');
     try {
         const result = await whatsappService.sendTextMessage(selectedChat.contact_phone, messageText);
+        // Evolution API retorna um objeto diferente, o ID da mensagem costuma estar em data.key.id ou similar dependendo da versão
         const waId = result.key?.id || result.messageId; 
         await whatsappService.syncMessage(selectedChatId, messageText, 'agent', waId);
         await fetchMessages(selectedChatId, false);
@@ -178,116 +179,57 @@ export const WhatsAppInbox: React.FC = () => {
   const edgeFunctionCode = `
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-/**
- * WEBHOOK PARA EVOLUTION API -> SUPABASE CLOUD
- * Este script deve ser implantado como uma Supabase Edge Function.
- */
+// VERIFY_TOKEN opcional para Evolution API (segurança adicional)
+const VERIFY_TOKEN = "${config.webhookVerifyToken || 'seu_token_aqui'}";
 
 Deno.serve(async (req) => {
   const { method } = req;
   
-  // Tratamento de pre-flight CORS se necessário
-  if (method === "OPTIONS") {
-    return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*" } });
-  }
-
   if (method === "POST") {
     try {
       const body = await req.json();
-      console.log("🔔 Webhook recebido da Evolution API:", body.event);
-
-      // Evento de mensagem (Evolution v1.x e v2.x)
-      if (body.event === "messages.upsert" || body.event === "MESSAGES_UPSERT") {
-        const messageData = body.data;
-        const message = messageData?.message;
-        const key = messageData?.key;
+      
+      // Evolution API Event Check
+      // O evento padrão de nova mensagem é 'messages.upsert'
+      if (body.event === "messages.upsert") {
+        const message = body.data?.message;
+        const key = body.data?.key;
         
-        // 1. Ignorar se for mensagem enviada por nós mesmos (evita loop)
-        if (key?.fromMe) {
-          console.log("ℹ️ Mensagem enviada pelo agente. Ignorando...");
-          return new Response("Ignored: fromMe", { status: 200 });
-        }
+        if (!key.fromMe) { // Apenas processa mensagens recebidas (não enviadas por nós)
+          const supabase = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+          );
 
-        const supabase = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        );
+          const waId = key.remoteJid.split('@')[0];
+          const text = message.conversation || message.extendedTextMessage?.text || "(Mensagem sem texto)";
+          const contactName = body.data?.pushName || waId;
 
-        // 2. Extrair dados básicos
-        const waId = key.remoteJid.split('@')[0];
-        const text = message?.conversation || 
-                     message?.extendedTextMessage?.text || 
-                     message?.imageMessage?.caption ||
-                     "(Mídia ou Mensagem sem texto)";
-        
-        const pushName = messageData?.pushName || waId;
+          // Buscar ou criar conversa
+          let { data: chat } = await supabase.from('crm_whatsapp_chats').select('id').eq('wa_id', waId).single();
+          if (!chat) {
+            const { data: newChat } = await supabase.from('crm_whatsapp_chats').insert([{
+               wa_id: waId, contact_name: contactName, contact_phone: waId, last_message: text, status: 'open'
+            }]).select().single();
+            chat = newChat;
+          }
 
-        console.log(\`📩 Nova mensagem de \${pushName} (\${waId}): \${text.substring(0, 30)}...\`);
-
-        // 3. Buscar ou criar o chat
-        let { data: chat, error: chatError } = await supabase
-          .from('crm_whatsapp_chats')
-          .select('id')
-          .eq('wa_id', waId)
-          .maybeSingle();
-
-        if (chatError) throw chatError;
-
-        if (!chat) {
-          console.log("🆕 Criando nova conversa para:", waId);
-          const { data: newChat, error: createError } = await supabase
-            .from('crm_whatsapp_chats')
-            .insert([{
-               wa_id: waId, 
-               contact_name: pushName, 
-               contact_phone: waId, 
-               last_message: text, 
-               status: 'open',
-               updated_at: new Date().toISOString()
-            }])
-            .select()
-            .single();
-          
-          if (createError) throw createError;
-          chat = newChat;
-        }
-
-        // 4. Salvar a mensagem recebida
-        const { error: msgError } = await supabase
-          .from('crm_whatsapp_messages')
-          .insert([{
-            chat_id: chat.id, 
-            text: text, 
-            sender_type: 'user', 
-            status: 'received',
-            wa_message_id: key.id
+          // Salvar mensagem
+          await supabase.from('crm_whatsapp_messages').insert([{
+            chat_id: chat.id, text: text, sender_type: 'user', status: 'received'
           }]);
 
-        if (msgError) throw msgError;
-
-        // 5. Atualizar o preview do chat e timestamp
-        await supabase
-          .from('crm_whatsapp_chats')
-          .update({ 
-              last_message: text, 
-              updated_at: new Date().toISOString(),
-              unread_count: 1 // Você pode incrementar isso se desejar
-          })
-          .eq('id', chat.id);
-
-        console.log("✅ Mensagem processada com sucesso.");
+          // Atualizar preview do chat
+          await supabase.from('crm_whatsapp_chats').update({ 
+              last_message: text, updated_at: new Date().toISOString() 
+          }).eq('id', chat.id);
+        }
       }
       
-      return new Response(JSON.stringify({ success: true }), { 
-        status: 200,
-        headers: { "Content-Type": "application/json" } 
-      });
+      return new Response("OK", { status: 200 });
     } catch (e) {
-      console.error("❌ Erro no Webhook:", e.message);
-      return new Response(JSON.stringify({ error: e.message }), { 
-        status: 500,
-        headers: { "Content-Type": "application/json" }
-      });
+      console.error(e);
+      return new Response("Error", { status: 500 });
     }
   }
 

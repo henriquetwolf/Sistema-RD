@@ -1,7 +1,6 @@
 
 import { createClient, Session } from '@supabase/supabase-js';
-// Added TeacherNews to import list
-import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo, TeacherNews } from '../types';
+import { SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, CourseInfo, TeacherNews, SupportTicket } from '../types';
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -125,7 +124,6 @@ export const appBackend = {
           action: log.action,
           module: log.module,
           details: log.details,
-          // Fixed record_id access: mapping camelCase recordId from interface to snake_case column in DB
           record_id: log.recordId
       }]);
   },
@@ -148,6 +146,51 @@ export const appBackend = {
           recordId: d.record_id,
           createdAt: d.created_at
       }));
+  },
+
+  getSupportTickets: async (): Promise<SupportTicket[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_support_tickets').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((t: any) => ({
+      id: t.id,
+      senderId: t.sender_id,
+      senderName: t.sender_name,
+      senderEmail: t.sender_email,
+      senderRole: t.sender_role,
+      subject: t.subject,
+      message: t.message,
+      status: t.status,
+      response: t.response,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at
+    }));
+  },
+
+  saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      sender_id: ticket.senderId,
+      sender_name: ticket.senderName,
+      sender_email: ticket.senderEmail,
+      sender_role: ticket.senderRole,
+      subject: ticket.subject,
+      message: ticket.message,
+      status: ticket.status || 'open',
+      response: ticket.response,
+      updated_at: new Date().toISOString()
+    };
+    
+    if (ticket.id) {
+      await supabase.from('crm_support_tickets').update(payload).eq('id', ticket.id);
+    } else {
+      await supabase.from('crm_support_tickets').insert([{ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString() }]);
+    }
+  },
+
+  deleteSupportTicket: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_support_tickets').delete().eq('id', id);
   },
 
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
@@ -264,7 +307,6 @@ export const appBackend = {
           id: trigger.id || undefined,
           pipeline_name: trigger.pipelineName,
           stage_id: trigger.stageId,
-          // Fixed property access: using payloadJson from interface instead of snake_case payload_json
           payload_json: trigger.payloadJson
       });
       if (error) throw error;
@@ -308,7 +350,6 @@ export const appBackend = {
       interval_minutes: job.intervalMinutes,
       last_sync: job.lastSync,
       status: job.status,
-      // Fix for: Error in file services/appBackend.ts on line 309: Property 'last_message' does not exist on type 'SyncJob'. Did you mean 'lastMessage'?
       last_message: job.lastMessage,
       created_by_name: job.createdBy,
       created_at: job.createdAt
@@ -360,7 +401,6 @@ export const appBackend = {
       api_key: preset.key, 
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
-      // Fix for: Error in file services/appBackend.ts on line 360: Property 'interval_minutes' does not exist on type 'Omit<SavedPreset, "id">'. Did you mean 'intervalMinutes'?
       interval_minutes: preset.intervalMinutes || 5, 
       created_by_name: preset.createdByName || null
     };
@@ -436,7 +476,6 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
       if (!isConfigured) return;
-      // Fixed property access: mapping camelCase properties from CompanySetting interface to snake_case columns
       const payload = { 
           id: company.id || undefined, 
           legal_name: company.legalName, 
@@ -650,7 +689,6 @@ export const appBackend = {
     if (error) throw error;
   },
 
-  // Added methods for TeacherNews to resolve compilation errors
   getTeacherNews: async (): Promise<TeacherNews[]> => {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
@@ -699,7 +737,6 @@ export const appBackend = {
           questions: form.questions, 
           style: form.style, 
           team_id: form.teamId || null, 
-          // Fixed distribution_mode mapping: using distributionMode from FormModel interface
           distribution_mode: form.distributionMode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null,
           target_pipeline: form.targetPipeline || 'Padrão',
@@ -723,7 +760,6 @@ export const appBackend = {
           isLeadCapture: d.is_lead_capture, 
           teamId: d.team_id, 
           distributionMode: d.distribution_mode, 
-          // Fixed fixedOwnerId mapping: using fixed_owner_id from DB
           fixedOwnerId: d.fixed_owner_id, 
           targetPipeline: d.target_pipeline,
           targetStage: d.target_stage,
@@ -766,10 +802,8 @@ export const appBackend = {
           target_type: survey.targetType,
           target_product_type: survey.targetProductType || null,
           target_product_name: survey.targetProductName || null,
-          // Fixed: Changed from survey.only_if_finished to survey.onlyIfFinished
           only_if_finished: survey.onlyIfFinished,
           is_active: survey.isActive,
-          // Fixed: Changed from survey.submissions_count to survey.submissionsCount
           submissions_count: survey.submissionsCount || 0 
       };
       const { error } = await supabase.from('crm_surveys').upsert(payload);
@@ -839,7 +873,6 @@ export const appBackend = {
               id: form.id, title: form.title, description: form.description, 
               campaign: form.campaign, isLeadCapture: form.is_lead_capture, 
               teamId: form.team_id, distributionMode: form.distribution_mode, 
-              // Fixed fixedOwnerId mapping: using fixed_owner_id from DB
               fixedOwnerId: form.fixed_owner_id || null, targetPipeline: form.target_pipeline,
               targetStage: form.target_stage, questions: form.questions || [], 
               style: form.style || {}, createdAt: form.created_at, 
@@ -1004,7 +1037,6 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    // Fixed layout_config access: mapping layoutConfig property from CertificateModel interface to snake_case column
     const payload = { id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig };
     const { error } = await supabase.from('crm_certificates').upsert(payload);
     if (error) throw error;
@@ -1037,7 +1069,6 @@ export const appBackend = {
     };
   },
 
-  // Added missing deleteStudentCertificate method to fix compilation error in StudentsManager
   deleteStudentCertificate: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_student_certificates').delete().eq('id', id);
@@ -1069,13 +1100,11 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('title', { ascending: true });
     if (error) throw error;
-    // Corrected mapping: using maxSelections from EventBlock interface instead of snake_case max_selections
     return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
       if (!isConfigured) throw new Error("Backend not configured");
-      // Corrected property access: using block.maxSelections from interface instead of snake_case max_selections
       const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
       const { data, error = null } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;

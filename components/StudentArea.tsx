@@ -3,10 +3,11 @@ import React, { useEffect, useState } from 'react';
 import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock, Banner, SurveyModel, CourseInfo, PartnerStudio } from '../types';
 import { appBackend } from '../services/appBackend';
 import { FormViewer } from './FormViewer';
+import { SupportTicketModal } from './SupportTicketModal';
 import { 
     LogOut, GraduationCap, BookOpen, Award, ExternalLink, Calendar, MapPin, 
     Video, Download, Loader2, UserCircle, User, CheckCircle, Mic, CheckSquare, Clock, Users, X, Save, Lock, AlertCircle, DollarSign, Layers, Edit2, List,
-    PieChart, Send, ArrowRight, Sparkles, Bell, Bookmark, Search, Zap, Trophy, ChevronRight, Book, ListTodo
+    PieChart, Send, ArrowRight, Sparkles, Bell, Bookmark, Search, Zap, Trophy, ChevronRight, Book, ListTodo, LifeBuoy
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -38,6 +39,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [selectedClass, setSelectedClass] = useState<any | null>(null);
     const [selectedCourseInfo, setSelectedCourseInfo] = useState<CourseInfo | null>(null);
     const [selectedStudioDetails, setSelectedStudioDetails] = useState<PartnerStudio | null>(null);
+    const [showSupportModal, setShowSupportModal] = useState(false);
 
     useEffect(() => {
         loadStudentData();
@@ -248,7 +250,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
     return (
         <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
-            {/* Minimal Transparent Header */}
             <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30 shadow-sm">
                 <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-6">
@@ -260,6 +261,12 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
+                        <button 
+                            onClick={() => setShowSupportModal(true)}
+                            className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all active:scale-95 flex items-center gap-2 font-bold text-xs"
+                        >
+                            <LifeBuoy size={20} /> <span className="hidden sm:inline">Suporte</span>
+                        </button>
                         <div className="flex flex-col items-end text-right">
                             <span className="text-sm font-black text-slate-800 leading-none">{student.name}</span>
                             <span className="text-[10px] font-bold text-purple-600 uppercase tracking-tighter">Matrícula Ativa</span>
@@ -273,7 +280,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-6 space-y-8">
                 
-                {/* Notifications Area (Surveys) - Top priority alerts */}
                 {mySurveys.length > 0 && (
                     <section className="space-y-4 animate-in slide-in-from-top-4">
                         <div className="flex items-center justify-between px-2">
@@ -300,9 +306,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     </section>
                 )}
 
-                {/* Dashboard Header Grid (Hero + Banners) */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Dashboard Hero */}
                     <section className="bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-purple-900/20 relative overflow-hidden group flex flex-col justify-between">
                         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
                         <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-60 h-60 bg-purple-500/20 rounded-full blur-3xl"></div>
@@ -333,7 +337,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         </div>
                     </section>
 
-                    {/* Promotional Carousel/Banners */}
                     {banners.length > 0 ? (
                         <section className="relative h-full flex flex-col gap-4">
                             <div className="overflow-hidden rounded-[2.5rem] shadow-xl border-4 border-white h-full relative group">
@@ -357,7 +360,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     )}
                 </div>
 
-                {/* Main Navigation Tabs */}
                 <nav className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 overflow-x-auto no-scrollbar gap-1">
                     {[
                         { id: 'classes', label: 'Minhas Turmas', icon: GraduationCap, color: 'text-purple-600', bg: 'bg-purple-50' },
@@ -381,7 +383,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     ))}
                 </nav>
 
-                {/* Tab Content Rendering */}
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                     {activeTab === 'classes' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -507,7 +508,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 </div>
             </main>
 
-            {/* Class Details Modal */}
             {selectedClass && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-3xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
@@ -522,7 +522,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         </div>
                         <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-10">
                             
-                            {/* Seção de Informações Globais do Curso (Vindo de Configurações) */}
                             {selectedCourseInfo && (
                                 <div className="space-y-6 animate-in fade-in duration-500">
                                     <div className="bg-teal-50 p-6 rounded-[2rem] border border-teal-100">
@@ -627,6 +626,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     </div>
                 </div>
             )}
+
+            <SupportTicketModal 
+                isOpen={showSupportModal} 
+                onClose={() => setShowSupportModal(false)}
+                senderId={student.deals[0]?.id || 'guest'}
+                senderName={student.name}
+                senderEmail={student.email}
+                senderRole="student"
+            />
 
             <footer className="py-12 text-center text-slate-400 bg-white/40 border-t border-slate-200 mt-12">
                 <p className="text-[10px] font-black uppercase tracking-[0.4em] mb-4">VOLL Pilates Group &copy; {new Date().getFullYear()}</p>

@@ -5,12 +5,13 @@ import {
   ChevronRight, Users, ExternalLink, GraduationCap,
   Newspaper, Bell, Sparkles, X, Clock, Image as ImageIcon,
   ArrowRight, Info, Plane, Coffee, Bed, Map, DollarSign, Package, Monitor,
-  FileCheck, LayoutDashboard, FileText, CheckCircle
+  FileCheck, LayoutDashboard, FileText, CheckCircle, LifeBuoy
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
 import { Teacher } from './TeachersManager';
 import { Banner, TeacherNews, Contract } from '../types';
+import { SupportTicketModal } from './SupportTicketModal';
 import clsx from 'clsx';
 
 interface InstructorAreaProps {
@@ -30,6 +31,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const [viewingDetails, setViewingDetails] = useState<any | null>(null);
   const [selectedNews, setSelectedNews] = useState<TeacherNews | null>(null);
   const [viewingContract, setViewingContract] = useState<Contract | null>(null);
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   useEffect(() => {
     fetchMyClasses();
@@ -37,7 +39,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
     fetchNews();
     fetchMyContracts();
     
-    // Carregar IDs visualizados do localStorage
     const saved = localStorage.getItem(`seen_news_${instructor.id}`);
     if (saved) {
         try {
@@ -69,7 +70,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const fetchMyContracts = async () => {
       try {
           const allContracts = await appBackend.getContracts();
-          // Filtrar apenas contratos onde o instrutor assinou
           const filtered = allContracts.filter(c => 
             c.signers.some(s => s.email.toLowerCase() === instructor.email.toLowerCase() && s.status === 'signed')
           );
@@ -112,7 +112,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      {/* Enhanced Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -137,6 +136,13 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
           </div>
           <div className="flex items-center gap-2">
             <button 
+                onClick={() => setShowSupportModal(true)}
+                className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all active:scale-95 flex items-center gap-2 font-bold text-xs"
+            >
+                <LifeBuoy size={20} /> Suporte
+            </button>
+            <div className="w-px h-6 bg-slate-200 mx-2"></div>
+            <button 
                 onClick={onLogout}
                 className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all active:scale-95"
                 title="Sair"
@@ -147,10 +153,8 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
         </div>
       </header>
 
-      {/* Main Content Area */}
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 space-y-8">
         
-        {/* Navigation Tabs */}
         <div className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 w-fit mx-auto md:mx-0">
             <button 
                 onClick={() => setActiveViewTab('dashboard')}
@@ -177,7 +181,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
 
         {activeViewTab === 'dashboard' ? (
             <div className="space-y-8 animate-in fade-in duration-500">
-                {/* BANNERS SECTION */}
                 {banners.length > 0 && (
                     <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {banners.map(banner => (
@@ -197,7 +200,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                     </section>
                 )}
 
-                {/* NOVIDADES SECTION */}
                 {news.length > 0 && (
                     <section className="space-y-4">
                         <div className="flex items-center justify-between px-2">
@@ -388,7 +390,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
         )}
       </main>
 
-      {/* Class Detail Modal */}
       {selectedClass && (
           <ClassStudentsViewer 
               classItem={selectedClass} 
@@ -399,7 +400,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
           />
       )}
 
-      {/* Logistics Details Modal */}
       {viewingDetails && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
@@ -414,7 +414,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                   <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-10">
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                           
-                          {/* COLUNA MODULO 1 */}
                           <div className="space-y-6">
                               <h4 className="text-xs font-black text-purple-600 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-purple-100">
                                   <Calendar size={16}/> Logística Módulo 1
@@ -453,7 +452,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                               </div>
                           </div>
 
-                          {/* COLUNA MODULO 2 */}
                           <div className="space-y-6">
                               <h4 className="text-xs font-black text-orange-600 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-orange-100">
                                   <Calendar size={16}/> Logística Módulo 2
@@ -489,7 +487,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                           </div>
                       </div>
 
-                      {/* MATERIAIS E INFRAESTRUTURA */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t border-slate-100">
                           <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -505,7 +502,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                           </div>
                       </div>
 
-                      {/* OBSERVAÇÕES */}
                       {viewingDetails.observations && (
                           <div className="bg-amber-50/50 p-6 rounded-[2rem] border border-amber-100">
                                <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 flex items-center gap-2">
@@ -525,7 +521,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
           </div>
       )}
 
-      {/* News Detail Modal */}
       {selectedNews && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
@@ -560,7 +555,6 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
           </div>
       )}
 
-      {/* Contract Viewer Modal */}
       {viewingContract && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
@@ -604,6 +598,15 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
               </div>
           </div>
       )}
+
+      <SupportTicketModal 
+          isOpen={showSupportModal} 
+          onClose={() => setShowSupportModal(false)}
+          senderId={instructor.id}
+          senderName={instructor.fullName}
+          senderEmail={instructor.email}
+          senderRole="instructor"
+      />
 
       <footer className="py-12 text-center text-slate-400 bg-white/40 border-t border-slate-200 mt-12">
           <p className="text-[10px] font-black uppercase tracking-[0.4em] mb-4">VOLL Pilates Group &copy; {new Date().getFullYear()}</p>

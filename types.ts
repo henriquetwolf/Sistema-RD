@@ -444,11 +444,24 @@ export interface Product {
   createdAt: string;
 }
 
-// Added TeacherNews interface to resolve module export error
 export interface TeacherNews {
   id: string;
   title: string;
   content: string;
   imageUrl?: string;
   createdAt: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderEmail: string;
+  senderRole: 'student' | 'instructor' | 'studio' | 'admin';
+  subject: string;
+  message: string;
+  status: 'open' | 'pending' | 'closed';
+  response?: string;
+  createdAt: string;
+  updatedAt: string;
 }

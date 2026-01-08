@@ -3,10 +3,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LogOut, Calendar, MapPin, Loader2, Package, Building2, 
   ChevronRight, Inbox, Truck, Clock, CheckCircle2, User, Info,
-  CheckSquare, Save, X, MessageSquare, TrendingDown, History, AlertCircle
+  CheckSquare, Save, X, MessageSquare, TrendingDown, History, AlertCircle, LifeBuoy
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { PartnerStudioSession, InventoryRecord } from '../types';
+import { SupportTicketModal } from './SupportTicketModal';
 import clsx from 'clsx';
 
 interface PartnerStudioAreaProps {
@@ -25,6 +26,7 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
   const [confirmingRecord, setConfirmingRecord] = useState<InventoryRecord | null>(null);
   const [confirmNote, setConfirmNote] = useState('');
   const [isConfirming, setIsConfirming] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -33,14 +35,12 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 1. Turmas do Studio
       const { data: classesData } = await appBackend.client
         .from('crm_classes')
         .select('*')
         .eq('studio_mod_1', studio.fantasyName)
         .order('date_mod_1', { ascending: true });
 
-      // 2. Remessas (Entradas no Studio)
       const { data: invData } = await appBackend.client
         .from('crm_inventory')
         .select('*')
@@ -48,12 +48,10 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
         .eq('type', 'exit')
         .order('registration_date', { ascending: false });
 
-      // 3. Matrículas (Para Programado)
       const { data: dealsData } = await appBackend.client
         .from('crm_deals')
         .select('id, class_mod_1, stage');
 
-      // 4. Presenças (Para Baixa Real)
       const { data: attendData } = await appBackend.client
         .from('crm_attendance')
         .select('student_id, class_id, present')
@@ -72,7 +70,6 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
     }
   };
 
-  // --- CÁLCULO DE ESTOQUE INTELIGENTE ---
   const stockInfo = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -82,7 +79,6 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
     const validAttendance = attendance || [];
     const validDeals = allDeals || [];
 
-    // 1. Total Recebido (Físico vindo da Matriz)
     const received = validInventory.reduce((acc, curr) => ({
         nova: acc.nova + (curr.itemApostilaNova || 0),
         classico: acc.classico + (curr.itemApostilaClassico || 0),
@@ -97,7 +93,6 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
         if (cls.status !== 'Confirmado' && cls.status !== 'Concluído') return;
 
         const dateMod2 = cls.date_mod_2 ? new Date(cls.date_mod_2) : null;
-        // Gatilho: 3 dias após o fim do Mod 2
         const isFinalizedForStock = (dateMod2 && !isNaN(dateMod2.getTime()))
             ? (new Date(dateMod2.getTime() + 3 * 24 * 60 * 60 * 1000) < today) 
             : false;
@@ -106,7 +101,6 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
         const isClassico = cls.course?.toLowerCase().includes('clássico');
 
         if (isFinalizedForStock) {
-            // BAIXA REAL: Alunos com presença no Módulo 1
             const classAttendance = validAttendance.filter(a => a.class_id === cls.id);
             const presentCount = new Set(classAttendance.map(a => a.student_id)).size;
             
@@ -115,7 +109,6 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
             consumed.sacochila += presentCount;
             consumed.lapis += presentCount;
         } else {
-            // SAÍDA PROGRAMADA: Todos os matriculados
             const enrolled = validDeals.filter(d => d.class_mod_1 === cls.mod_1_code).length;
 
             if (isCompleta) scheduled.nova += enrolled;
@@ -168,7 +161,16 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
              <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-bold border-2 border-white shadow-sm"><Building2 size={24} /></div>
              <div><h1 className="text-sm font-bold text-slate-800 leading-tight">{studio.fantasyName}</h1><p className="text-xs text-slate-500">Portal do Studio Parceiro</p></div>
           </div>
-          <button onClick={onLogout} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><LogOut size={20} /></button>
+          <div className="flex items-center gap-4">
+            <button 
+                onClick={() => setShowSupportModal(true)}
+                className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all active:scale-95 flex items-center gap-2 font-bold text-xs"
+            >
+                <LifeBuoy size={20} /> <span className="hidden sm:inline">Suporte</span>
+            </button>
+            <div className="w-px h-6 bg-slate-200"></div>
+            <button onClick={onLogout} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><LogOut size={20} /></button>
+          </div>
         </div>
       </header>
 
@@ -211,7 +213,6 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
 
                 {activeTab === 'inventory' && (
                     <div className="space-y-8">
-                        {/* PAINEL DE CONTROLE DE ESTOQUE LOCAL */}
                         <section className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Package size={20} className="text-teal-600"/> Gestão de Estoque do Studio</h2>
@@ -321,6 +322,15 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
               </div>
           </div>
       )}
+
+      <SupportTicketModal 
+          isOpen={showSupportModal} 
+          onClose={() => setShowSupportModal(false)}
+          senderId={studio.id}
+          senderName={studio.fantasyName}
+          senderEmail={studio.email}
+          senderRole="studio"
+      />
       
       <footer className="mt-auto p-8 text-center bg-white border-t border-slate-100">
           <p className="text-xs text-slate-400">Sistema VOLL Pilates Group &copy; {new Date().getFullYear()}</p>

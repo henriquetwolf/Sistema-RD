@@ -167,6 +167,29 @@ export const appBackend = {
     }));
   },
 
+  getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase
+        .from('crm_support_tickets')
+        .select('*')
+        .eq('sender_id', senderId)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((t: any) => ({
+      id: t.id,
+      senderId: t.sender_id,
+      senderName: t.sender_name,
+      senderEmail: t.sender_email,
+      senderRole: t.sender_role,
+      subject: t.subject,
+      message: t.message,
+      status: t.status,
+      response: t.response,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at
+    }));
+  },
+
   saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
@@ -402,6 +425,7 @@ export const appBackend = {
       target_table_name: preset.tableName, 
       target_primary_key: preset.primaryKey || null, 
       interval_minutes: preset.intervalMinutes || 5, 
+      // Fix: Property 'created_by_name' does not exist on type 'Omit<SavedPreset, "id">'. Did you mean 'createdByName'?
       created_by_name: preset.createdByName || null
     };
     const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
@@ -632,7 +656,7 @@ export const appBackend = {
       account: studio.account, 
       beneficiary: studio.beneficiary, 
       pix_key: studio.pixKey, 
-      has_reformer: studio.hasReformer, 
+      has_reformer: studio.has_reformer, 
       qty_reformer: studio.qtyReformer, 
       has_ladder_barrel: studio.hasLadderBarrel, 
       qty_ladder_barrel: studio.qtyLadderBarrel, 
@@ -737,7 +761,7 @@ export const appBackend = {
           questions: form.questions, 
           style: form.style, 
           team_id: form.teamId || null, 
-          distribution_mode: form.distributionMode || 'fixed', 
+          distribution_mode: form.distribution_mode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null,
           target_pipeline: form.targetPipeline || 'Padrão',
           target_stage: form.targetStage || 'new',
@@ -1108,6 +1132,7 @@ export const appBackend = {
       const payload = { id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
       const { data, error = null } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
+      // Fix: Object literal may only specify known properties, but 'max_selections' does not exist in type 'EventBlock'. Did you mean to write 'maxSelections'?
       return { id: data.id, eventId: data.event_id, date: data.date, title: block.title, maxSelections: data.max_selections };
   },
 

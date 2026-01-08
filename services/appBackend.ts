@@ -93,7 +93,8 @@ export const appBackend = {
           action: log.action,
           module: log.module,
           details: log.details,
-          record_id: log.record_id
+          // FIX: Changed log.record_id to log.recordId to match ActivityLog interface
+          record_id: log.recordId
       }]);
   },
 
@@ -330,7 +331,7 @@ export const appBackend = {
   savePreset: async (preset: Omit<any, 'id'>): Promise<any> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
-    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.createdByName || null };
+    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.target_table_name, target_primary_key: preset.primaryKey || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.created_by_name || null };
     const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
     if (error) throw error;
     return {
@@ -636,14 +637,14 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
       if (!isConfigured) return null;
       const { data, error = null } = await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: d.signers || [], createdAt: data.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
@@ -672,12 +673,31 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, background_base_64: d.background_base_64, back_background_base_64: d.back_background_base_64, linkedProductId: d.linked_product_id, body_text: d.body_text, layout_config: d.layout_config, createdAt: d.created_at }));
+    // FIX: Corrected mapping of database snake_case columns to camelCase CertificateModel interface properties
+    return (data || []).map((d: any) => ({ 
+      id: d.id, 
+      title: d.title, 
+      backgroundData: d.background_base_64, 
+      backBackgroundData: d.back_background_base_64, 
+      linkedProductId: d.linked_product_id, 
+      bodyText: d.body_text, 
+      layoutConfig: d.layout_config, 
+      createdAt: d.created_at 
+    }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_certificates').upsert({ id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.body_text, layout_config: cert.layoutConfig });
+    // FIX: Corrected object property usage from cert.body_text to cert.bodyText
+    await supabase.from('crm_certificates').upsert({ 
+      id: cert.id || undefined, 
+      title: cert.title, 
+      background_base_64: cert.backgroundData, 
+      back_background_base_64: cert.backBackgroundData, 
+      linked_product_id: cert.linkedProductId, 
+      body_text: cert.bodyText, 
+      layout_config: cert.layoutConfig 
+    });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag } from 'lucide-react';
+import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { SupportTicket, SupportMessage, SupportTag } from '../types';
 import clsx from 'clsx';
@@ -23,6 +23,22 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   
+  // Estados para Fechamento de Curso
+  const [availableClasses, setAvailableClasses] = useState<any[]>([]);
+  const [fcPhone, setFcPhone] = useState('');
+  const [fcState, setFcState] = useState('');
+  const [fcCity, setFcCity] = useState('');
+  const [fcClass, setFcClass] = useState('');
+  const [fcCategory, setFcCategory] = useState('');
+  const [fcValue, setFcValue] = useState('');
+  const [fcObs, setFcObs] = useState('');
+  const [fcMoreDocs, setFcMoreDocs] = useState('Não');
+  const [fcPix, setFcPix] = useState('');
+  const [fcBank, setFcBank] = useState('');
+  const [fcAgency, setFcAgency] = useState('');
+  const [fcAccount, setFcAccount] = useState('');
+  const [fcHolder, setFcHolder] = useState('');
+
   const [myTickets, setMyTickets] = useState<SupportTicket[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
@@ -39,6 +55,7 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
     if (isOpen) {
         if (activeTab === 'history') fetchHistory();
         fetchTags();
+        if (senderRole === 'instructor') fetchClassesData();
     }
   }, [isOpen, activeTab, senderRole]);
 
@@ -49,6 +66,16 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
   useEffect(() => {
       threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [thread]);
+
+  const fetchClassesData = async () => {
+      try {
+          const { data } = await appBackend.client
+            .from('crm_classes')
+            .select('state, city, class_code, course')
+            .order('state');
+          if (data) setAvailableClasses(data);
+      } catch (e) { console.error(e); }
+  };
 
   const fetchTags = async () => {
       try {
@@ -104,30 +131,88 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
       } catch (e) { alert("Erro ao enviar mensagem."); } finally { setIsSendingReply(false); }
   };
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subject.trim() || !message.trim() || !selectedTag) {
-        alert("Por favor, preencha o assunto, a categoria e a mensagem.");
-        return;
+    
+    let finalMessage = message;
+    let finalSubject = subject;
+
+    if (selectedTag === 'Fechamento de Curso') {
+        if (!fcState || !fcCity || !fcClass || !fcCategory || !fcValue || !fcPix) {
+            alert("Por favor, preencha todos os campos obrigatórios do fechamento.");
+            return;
+        }
+        finalSubject = `Fechamento de Curso - ${fcClass} - ${fcCity}`;
+        finalMessage = `
+### RELATÓRIO DE FECHAMENTO DE CURSO ###
+**Instrutor:** ${senderName}
+**E-mail:** ${senderEmail}
+**Celular:** ${fcPhone}
+
+--- DADOS DA TURMA ---
+**Localização:** ${fcCity} / ${fcState}
+**Turma Selecionada:** ${fcClass}
+
+--- FINANCEIRO E REEMBOLSOS ---
+**Categoria da Despesa:** ${fcCategory}
+**Valor Total Gasto:** R$ ${fcValue}
+**Possui mais documentos?** ${fcMoreDocs}
+**Observações sobre NF/Comprovante:** ${fcObs || 'Nenhuma'}
+
+--- DADOS BANCÁRIOS ---
+**Chave PIX:** ${fcPix}
+**Banco:** ${fcBank}
+**Agência:** ${fcAgency}
+**Conta:** ${fcAccount}
+**Titular:** ${fcHolder || 'O próprio instrutor'}
+
+########################################
+        `.trim();
+    } else {
+        if (!subject.trim() || !message.trim() || !selectedTag) {
+            alert("Por favor, preencha o assunto, a categoria e a mensagem.");
+            return;
+        }
     }
+
     setIsSubmitting(true);
     try {
+      const ticketId = crypto.randomUUID();
       await appBackend.saveSupportTicket({
-        senderId, senderName, senderEmail, senderRole,
-        subject: subject.trim(), message: message.trim(), tag: selectedTag, status: 'open'
+        id: ticketId, senderId, senderName, senderEmail, senderRole,
+        subject: finalSubject.trim(), message: finalMessage.trim(), tag: selectedTag, status: 'open'
       });
+
+      // Se houver anexo inicial, adiciona como primeira mensagem
+      if (attachment) {
+          await appBackend.addSupportMessage({
+              ticketId: ticketId,
+              senderId: senderId,
+              senderName: senderName,
+              senderRole: senderRole,
+              content: "Anexo enviado na abertura do chamado.",
+              attachmentUrl: attachment.url,
+              attachmentName: attachment.name
+          } as any);
+      }
+
       setIsSuccess(true);
       setTimeout(() => {
-          setIsSuccess(false); setSubject(''); setMessage(''); setSelectedTag(''); setActiveTab('history'); fetchHistory();
+          setIsSuccess(false); setSubject(''); setMessage(''); setSelectedTag(''); setAttachment(null); setActiveTab('history'); fetchHistory();
       }, 2500);
     } catch (e) { alert("Erro ao enviar chamado."); } finally { setIsSubmitting(false); }
   };
 
+  // Listas filtradas para o formulário de fechamento
+  const fcStates = Array.from(new Set(availableClasses.map(c => c.state))).sort();
+  const fcCities = Array.from(new Set(availableClasses.filter(c => c.state === fcState).map(c => c.city))).sort();
+  const fcClasses = availableClasses.filter(c => c.city === fcCity && c.state === fcState);
+
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[85vh]">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
         <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50 shrink-0">
           <div className="flex items-center gap-3">
               <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600"><LifeBuoy size={20}/></div>
@@ -154,32 +239,168 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-6">
-                        <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex gap-3 text-xs text-blue-800"><AlertCircle className="shrink-0 text-blue-600" size={16}/><p>Olá <strong>{senderName}</strong>, descreva abaixo sua necessidade.</p></div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Assunto</label>
-                                <input type="text" required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold" placeholder="Assunto do chamado..." value={subject} onChange={e => setSubject(e.target.value)} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Categoria / Assunto</label>
-                                <div className="relative">
-                                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                                    <select 
-                                        required 
-                                        className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold bg-white appearance-none"
-                                        value={selectedTag}
-                                        onChange={e => setSelectedTag(e.target.value)}
-                                    >
-                                        <option value="">Selecione uma categoria...</option>
-                                        {tags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-                                        {tags.length === 0 && <option value="Geral">Geral</option>}
-                                    </select>
-                                    <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 rotate-90" size={16} />
-                                </div>
+                        <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex gap-3 text-xs text-blue-800"><AlertCircle className="shrink-0 text-blue-600" size={16}/><p>Olá <strong>{senderName}</strong>, preencha os dados abaixo para darmos continuidade.</p></div>
+                        
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Categoria / Assunto</label>
+                            <div className="relative">
+                                <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                                <select 
+                                    required 
+                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold bg-white appearance-none"
+                                    value={selectedTag}
+                                    onChange={e => setSelectedTag(e.target.value)}
+                                >
+                                    <option value="">Selecione uma categoria...</option>
+                                    {tags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                </select>
+                                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 rotate-90" size={16} />
                             </div>
                         </div>
-                        <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Mensagem Detalhada</label><textarea required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all h-32 resize-none leading-relaxed" placeholder="Explique o que está acontecendo..." value={message} onChange={e => setMessage(e.target.value)} /></div>
-                        <button type="submit" disabled={isSubmitting} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70">{isSubmitting ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} Enviar Chamado</button>
+
+                        {selectedTag === 'Fechamento de Curso' ? (
+                            <div className="space-y-6 animate-in slide-in-from-top-4 duration-500">
+                                {/* DADOS PESSOAIS */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="md:col-span-2">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Completo</label>
+                                        <input type="text" readOnly className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500" value={senderName} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">E-mail</label>
+                                        <input type="email" readOnly className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500" value={senderEmail} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Celular *</label>
+                                        <input type="text" required placeholder="(00) 00000-0000" className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={fcPhone} onChange={e => setFcPhone(e.target.value)} />
+                                    </div>
+                                </div>
+
+                                {/* LOCALIZAÇÃO E TURMA */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <div className="md:col-span-3 text-[10px] font-black text-indigo-600 uppercase mb-1 flex items-center gap-2"><MapPin size={12}/> Localização do Curso</div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1">Estado</label>
+                                        <select required className="w-full px-2 py-1.5 border rounded-lg text-xs font-bold" value={fcState} onChange={e => { setFcState(e.target.value); setFcCity(''); setFcClass(''); }}>
+                                            <option value="">UF</option>
+                                            {fcStates.map(s => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1">Cidade</label>
+                                        <select required className="w-full px-2 py-1.5 border rounded-lg text-xs font-bold" value={fcCity} onChange={e => { setFcCity(e.target.value); setFcClass(''); }} disabled={!fcState}>
+                                            <option value="">Cidade</option>
+                                            {fcCities.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1">Turma Ministrada</label>
+                                        <select required className="w-full px-2 py-1.5 border rounded-lg text-xs font-bold" value={fcClass} onChange={e => setFcClass(e.target.value)} disabled={!fcCity}>
+                                            <option value="">Cód. Turma</option>
+                                            {fcClasses.map(c => <option key={c.class_code} value={`${c.class_code} - ${c.course}`}>{c.class_code} - {c.course}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* CUSTOS */}
+                                <div className="p-4 border-2 border-indigo-50 rounded-2xl space-y-4">
+                                    <div className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-2"><DollarSign size={12}/> Custos Referentes ao Curso</div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 mb-1">Categoria do Arquivo</label>
+                                            <select required className="w-full px-3 py-2 border rounded-xl text-sm" value={fcCategory} onChange={e => setFcCategory(e.target.value)}>
+                                                <option value="">Selecione...</option>
+                                                <option value="Nota fiscal">Nota fiscal</option>
+                                                <option value="Transporte">Transporte</option>
+                                                <option value="Estacionamento">Estacionamento</option>
+                                                <option value="Pedágio">Pedágio</option>
+                                                <option value="Outros">Outros</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 mb-1">Valor Gasto (R$)</label>
+                                            <input type="number" step="0.01" required className="w-full px-3 py-2 border rounded-xl text-sm font-bold text-green-700" value={fcValue} onChange={e => setFcValue(e.target.value)} placeholder="0.00" />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1">Anexar NF ou Comprovante *</label>
+                                        <div onClick={() => fileInputRef.current?.click()} className={clsx("w-full py-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-all", attachment ? "bg-green-50 border-green-300 text-green-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-white hover:border-indigo-300")}>
+                                            {/* FIX: Changed CheckCircle to CheckCircle2 as it is the correct imported name */}
+                                            {attachment ? <><CheckCircle2 size={24}/> <span className="text-xs font-bold">{attachment.name}</span></> : <><Paperclip size={24}/> <span className="text-xs font-medium">Clique para anexar arquivo</span></>}
+                                            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1">Observação sobre a NF/Comprovante</label>
+                                        <textarea className="w-full px-3 py-2 border rounded-xl text-sm resize-none h-20" value={fcObs} onChange={e => setFcObs(e.target.value)} placeholder="Algo que precisamos saber sobre este documento?" />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-2">Possui mais algum documento para anexar?</label>
+                                        <div className="flex gap-4">
+                                            <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="moreDocs" checked={fcMoreDocs === 'Sim'} onChange={() => setFcMoreDocs('Sim')} /> <span className="text-sm">Sim</span></label>
+                                            <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="moreDocs" checked={fcMoreDocs === 'Não'} onChange={() => setFcMoreDocs('Não')} /> <span className="text-sm">Não</span></label>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 mt-1 italic">Se sim, você poderá anexar na tela seguinte do chamado.</p>
+                                    </div>
+                                </div>
+
+                                {/* DADOS BANCÁRIOS */}
+                                <div className="p-6 bg-slate-900 rounded-[2rem] text-white space-y-6 shadow-xl">
+                                    <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+                                        <div className="p-2 bg-white/10 rounded-xl"><CreditCard size={20}/></div>
+                                        <h4 className="text-sm font-black uppercase tracking-widest">Confirmação de Dados Bancários</h4>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Chave PIX *</label>
+                                            <input type="text" required className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcPix} onChange={e => setFcPix(e.target.value)} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Banco</label>
+                                            <input type="text" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcBank} onChange={e => setFcBank(e.target.value)} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Agência</label>
+                                            <input type="text" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcAgency} onChange={e => setFcAgency(e.target.value)} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Conta</label>
+                                            <input type="text" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcAccount} onChange={e => setFcAccount(e.target.value)} />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome do Titular (Caso seja conjunta)</label>
+                                            <input type="text" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcHolder} onChange={e => setFcHolder(e.target.value)} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Assunto</label>
+                                    <input type="text" required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold" placeholder="Assunto do chamado..." value={subject} onChange={e => setSubject(e.target.value)} />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Mensagem Detalhada</label>
+                                    <textarea required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all h-32 resize-none leading-relaxed" placeholder="Explique o que está acontecendo..." value={message} onChange={e => setMessage(e.target.value)} />
+                                </div>
+                                <div className="border-t pt-4">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Anexar Arquivo (Opcional)</label>
+                                    <div onClick={() => fileInputRef.current?.click()} className={clsx("w-full py-4 border-2 border-dashed rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition-all", attachment ? "bg-green-50 border-green-300 text-green-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-white hover:border-indigo-300")}>
+                                        {/* FIX: Changed Check to CheckCircle2 (which is already imported) */}
+                                        {attachment ? <><CheckCircle2 size={16}/> {attachment.name}</> : <><Paperclip size={18}/> Clique para anexar</>}
+                                        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        <button type="submit" disabled={isSubmitting} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 mt-4">
+                            {isSubmitting ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} Enviar {selectedTag === 'Fechamento de Curso' ? 'Fechamento' : 'Chamado'}
+                        </button>
                     </form>
                 )}
                 </div>
@@ -201,7 +422,7 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                                 </div>
                                 <h4 className="text-xl font-black text-slate-800">{selectedTicket.subject}</h4>
                                 <div className="space-y-4">
-                                    <div className="flex justify-start"><div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]"><span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem Inicial:</span><p className="text-sm text-slate-600 leading-relaxed italic">{selectedTicket.message}</p><span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span></div></div>
+                                    <div className="flex justify-start"><div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]"><span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem Inicial:</span><p className="text-sm text-slate-600 leading-relaxed italic whitespace-pre-wrap">{selectedTicket.message}</p><span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span></div></div>
                                     {thread.map(msg => (
                                         <div key={msg.id} className={clsx("flex", msg.senderRole === 'admin' ? "justify-start" : "justify-end")}>
                                             <div className={clsx("p-4 rounded-2xl shadow-sm max-w-[85%] relative border", msg.senderRole === 'admin' ? "bg-indigo-50 border-indigo-100 rounded-tl-none" : "bg-white border-slate-100 rounded-tr-none")}>

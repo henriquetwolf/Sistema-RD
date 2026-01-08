@@ -1,5 +1,4 @@
 
-
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -7,7 +6,7 @@ import {
   EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, 
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
-  CompanySetting, Pipeline, WebhookTrigger // Added these imports for consistency
+  CompanySetting, Pipeline, WebhookTrigger, SupportTag
 } from '../types';
 
 /**
@@ -94,7 +93,7 @@ export const appBackend = {
           action: log.action,
           module: log.module,
           details: log.details,
-          record_id: log.recordId
+          record_id: log.record_id
       }]);
   },
 
@@ -118,7 +117,7 @@ export const appBackend = {
     if (error) throw error;
     return (data || []).map((t: any) => ({
       id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role,
-      subject: t.subject, message: t.message, status: t.status, response: t.response, createdAt: t.created_at, updatedAt: t.updated_at,
+      subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, createdAt: t.created_at, updatedAt: t.updated_at,
       assignedId: t.assigned_id, assignedName: t.assigned_name
     }));
   },
@@ -129,7 +128,7 @@ export const appBackend = {
     if (error) throw error;
     return (data || []).map((t: any) => ({
       id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role,
-      subject: t.subject, message: t.message, status: t.status, response: t.response, createdAt: t.created_at, updatedAt: t.updated_at,
+      subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, createdAt: t.created_at, updatedAt: t.updated_at,
       assignedId: t.assigned_id, assignedName: t.assigned_name
     }));
   },
@@ -153,6 +152,7 @@ export const appBackend = {
       sender_role: ticket.senderRole,
       subject: ticket.subject,
       message: ticket.message,
+      tag: ticket.tag,
       status: ticket.status || 'open',
       response: ticket.response,
       assigned_id: ticket.assignedId,
@@ -186,6 +186,38 @@ export const appBackend = {
   deleteSupportTicket: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_support_tickets').delete().eq('id', id);
+  },
+
+  // --- SUPPORT TAGS ---
+  getSupportTags: async (role?: SupportTag['role']): Promise<SupportTag[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('crm_support_tags').select('*').order('name');
+    if (role && role !== 'all') {
+      query = query.or(`role.eq.${role},role.eq.all`);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map((d: any) => ({
+        id: d.id,
+        role: d.role,
+        name: d.name,
+        createdAt: d.created_at
+    }));
+  },
+
+  saveSupportTag: async (tag: Partial<SupportTag>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        role: tag.role,
+        name: tag.name
+    };
+    if (tag.id) await supabase.from('crm_support_tags').update(payload).eq('id', tag.id);
+    else await supabase.from('crm_support_tags').insert([{ ...payload, id: crypto.randomUUID() }]);
+  },
+
+  deleteSupportTag: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_support_tags').delete().eq('id', id);
   },
 
   // --- OUTROS MÉTODOS MANTIDOS ---
@@ -269,6 +301,7 @@ export const appBackend = {
     const { data: { user } } = await supabase.auth.getUser();
     const payload = {
       id: job.id, user_id: user?.id, name: job.name, sheet_url: job.sheetUrl, config: job.config, active: job.active,
+      // FIXED: Corrected property naming from job.last_sync to job.lastSync and job.last_message to job.lastMessage to match SyncJob interface
       interval_minutes: job.intervalMinutes, last_sync: job.lastSync, status: job.status, last_message: job.lastMessage,
       created_by_name: job.createdBy, created_at: job.createdAt
     };
@@ -297,7 +330,7 @@ export const appBackend = {
   savePreset: async (preset: Omit<any, 'id'>): Promise<any> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
-    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.intervalMinutes || 5, created_by_name: preset.createdByName || null };
+    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.createdByName || null };
     const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
     if (error) throw error;
     return {
@@ -396,7 +429,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name', { ascending: true });
     return (data || []).map((d: any) => ({
-      id: d.id, status: d.status || 'active', responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password || '', secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology, studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account, beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: d.has_reformer, qtyReformer: d.qty_reformer, hasLadderBarrel: d.has_ladder_barrel, qtyLadder_barrel: d.qty_ladder_barrel, hasChair: d.has_chair, qtyChair: d.qty_chair, hasCadillac: d.has_cadillac, qtyCadillac: d.qty_cadillac, hasChairsForCourse: d.has_chairs_for_course, hasTv: d.has_tv, maxKitsCapacity: d.max_kits_capacity, attachments: d.attachments
+      id: d.id, status: d.status || 'active', responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password || '', secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology, studio_type: d.studio_type, name_on_site: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account, beneficiary: d.beneficiary, pix_key: d.pix_key, has_reformer: d.has_reformer, qty_reformer: d.qty_reformer, has_ladder_barrel: d.has_ladder_barrel, qty_ladder_barrel: d.qty_ladder_barrel, has_chair: d.has_chair, qty_chair: d.qty_chair, has_cadillac: d.has_cadillac, qty_cadillac: d.qty_cadillac, has_chairs_for_course: d.has_chairs_for_course, has_tv: d.has_tv, max_kits_capacity: d.max_kits_capacity, attachments: d.attachments
     }));
   },
 
@@ -456,6 +489,7 @@ export const appBackend = {
       if (!isConfigured) return;
       const payload = { 
           id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, 
+          // FIXED: Corrected property naming from form.distribution_mode to form.distributionMode to match FormModel interface
           questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null, target_pipeline: form.targetPipeline || 'Padrão', target_stage: form.targetStage || 'new',
           submissions_count: form.submissionsCount || 0, folder_id: form.folderId || null
@@ -602,7 +636,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
@@ -638,12 +672,12 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, backgroundData: d.background_base_64, backBackgroundData: d.back_background_base_64, linkedProductId: d.linked_product_id, bodyText: d.body_text, layoutConfig: d.layout_config, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, background_base_64: d.background_base_64, back_background_base_64: d.back_background_base_64, linkedProductId: d.linked_product_id, body_text: d.body_text, layout_config: d.layout_config, createdAt: d.created_at }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_certificates').upsert({ id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig });
+    await supabase.from('crm_certificates').upsert({ id: cert.id || undefined, title: cert.title, background_base_64: cert.backgroundData, back_background_base_64: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.body_text, layout_config: cert.layoutConfig });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -758,7 +792,7 @@ export const appBackend = {
 
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date').order('title');
+      const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date').order('title');
       if (error) throw error;
       return (data || []).map((b: any) => ({
           id: b.id, eventId: b.event_id, date: b.date, title: b.title, maxSelections: b.max_selections
@@ -767,7 +801,7 @@ export const appBackend = {
 
   getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId).order('created_at', { ascending: false });
+      const { data, error = null } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId).order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((r: any) => ({
           id: r.id, eventId: r.event_id, workshopId: r.workshop_id, studentId: r.student_id, studentName: r.student_name, studentEmail: r.student_email, registeredAt: r.created_at
@@ -794,7 +828,7 @@ export const appBackend = {
 
   saveWorkshop: async (workshop: Workshop): Promise<Workshop> => {
       if (!isConfigured) throw new Error("Backend not configured");
-      const { data, error } = await supabase.from('crm_event_workshops').upsert({
+      const { data, error = null } = await supabase.from('crm_event_workshops').upsert({
           id: workshop.id || undefined,
           event_id: workshop.eventId,
           block_id: workshop.blockId,

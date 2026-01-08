@@ -7,10 +7,10 @@ import {
     Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
     Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search,
     Play, Pause, Calendar, Smartphone, Link as LinkIcon, ChevronDown, Award, ShoppingBag, Zap, Filter,
-    List, ArrowRight, Braces, Sparkles, RefreshCw, BookOpen, Book, ListTodo, LifeBuoy
+    List, ArrowRight, Braces, Sparkles, RefreshCw, BookOpen, Book, ListTodo, LifeBuoy, Hash, Tag as TagIcon
 } from 'lucide-react';
 import { appBackend, CompanySetting, WebhookTrigger, Pipeline } from '../services/appBackend';
-import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, Product, CourseInfo } from '../types';
+import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, Product, CourseInfo, SupportTag } from '../types';
 import clsx from 'clsx';
 
 interface SettingsManagerProps {
@@ -36,7 +36,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   onStartWizard,
   onDeleteJob
 }) => {
-  const [activeTab, setActiveTab] = useState<'visual' | 'connections' | 'company' | 'roles' | 'database' | 'banners' | 'instructor_levels' | 'logs' | 'connection_plug' | 'course_info'>('visual');
+  const [activeTab, setActiveTab] = useState<'visual' | 'connections' | 'company' | 'roles' | 'database' | 'banners' | 'instructor_levels' | 'logs' | 'connection_plug' | 'course_info' | 'support_tags'>('visual');
   const [preview, setPreview] = useState<string | null>(currentLogo);
   const [securityMargin, setSecurityMargin] = useState<number>(5);
   const [isSaved, setIsSaved] = useState(false);
@@ -67,6 +67,10 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [editingCourseInfo, setEditingCourseInfo] = useState<Partial<CourseInfo> | null>(null);
   const [isLoadingCourseInfo, setIsLoadingCourseInfo] = useState(false);
   const [isSavingCourseInfo, setIsSavingCourseInfo] = useState(false);
+
+  const [supportTags, setSupportTags] = useState<SupportTag[]>([]);
+  const [isLoadingTags, setIsLoadingTags] = useState(false);
+  const [editingTag, setEditingTag] = useState<Partial<SupportTag> | null>(null);
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
@@ -114,6 +118,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       else if (activeTab === 'logs') fetchLogs();
       else if (activeTab === 'connection_plug') { fetchPipelines(); fetchWebhookTriggers(); }
       else if (activeTab === 'course_info') fetchCourseInfos();
+      else if (activeTab === 'support_tags') fetchSupportTags();
   }, [activeTab]);
 
   const fetchGlobalSettings = async () => {
@@ -121,6 +126,30 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
     setSecurityMargin(margin);
     const logo = await appBackend.getAppLogo();
     setPreview(logo);
+  };
+
+  const fetchSupportTags = async () => {
+      setIsLoadingTags(true);
+      try {
+          const data = await appBackend.getSupportTags();
+          setSupportTags(data);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsLoadingTags(false);
+      }
+  };
+
+  const handleSaveSupportTag = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editingTag || !editingTag.name || !editingTag.role) return;
+      try {
+          await appBackend.saveSupportTag(editingTag);
+          setEditingTag(null);
+          fetchSupportTags();
+      } catch (e: any) {
+          alert(`Erro ao salvar tag: ${e.message}`);
+      }
   };
 
   const fetchPipelines = async () => {
@@ -237,7 +266,19 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V24)
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V25)
+
+-- Suporte a Tags de Chamado
+CREATE TABLE IF NOT EXISTS public.crm_support_tags (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    role text NOT NULL, -- 'student', 'instructor', 'studio', 'all'
+    name text NOT NULL,
+    created_at timestamptz DEFAULT now()
+);
+
+-- Inclusão da coluna tag no ticket
+ALTER TABLE IF EXISTS public.crm_support_tickets 
+ADD COLUMN IF NOT EXISTS tag text;
 
 -- Atualização da Tabela de Tickets para incluir atendentes
 ALTER TABLE IF EXISTS public.crm_support_tickets 
@@ -258,6 +299,7 @@ CREATE TABLE IF NOT EXISTS public.crm_support_tickets (
     sender_role text NOT NULL,
     subject text NOT NULL,
     message text NOT NULL,
+    tag text,
     status text DEFAULT 'open',
     response text,
     assigned_id text,
@@ -282,6 +324,7 @@ CREATE TABLE IF NOT EXISTS public.crm_support_messages (
 -- Permissões
 GRANT ALL ON public.crm_support_tickets TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_support_messages TO anon, authenticated, service_role;
+GRANT ALL ON public.crm_support_tags TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload config';
   `.trim();
@@ -467,6 +510,7 @@ NOTIFY pgrst, 'reload config';
         <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto shrink-0 max-w-full no-scrollbar">
             <button onClick={() => setActiveTab('visual')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Geral</button>
             <button onClick={() => setActiveTab('course_info')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'course_info' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Info Cursos</button>
+            <button onClick={() => setActiveTab('support_tags')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'support_tags' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Tags Suporte</button>
             <button onClick={() => setActiveTab('connections')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'connections' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Conexões</button>
             <button onClick={() => setActiveTab('company')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'company' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Empresas</button>
             <button onClick={() => setActiveTab('connection_plug')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'connection_plug' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Connection Plug</button>
@@ -512,6 +556,92 @@ NOTIFY pgrst, 'reload config';
                     </div>
                 </div>
                 <div className="flex justify-end pt-4"><button onClick={handleSaveGlobal} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2">{isSaved ? <><Check size={18}/> Salvo!</> : <><Save size={18}/> Salvar Configurações</>}</button></div>
+            </div>
+        )}
+
+        {activeTab === 'support_tags' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 space-y-8 animate-in fade-in zoom-in-95">
+                <div className="flex items-center justify-between border-b pb-4">
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <TagIcon className="text-indigo-600" size={24} /> Categorias de Suporte
+                        </h3>
+                        <p className="text-sm text-slate-500">Crie opções de assuntos/departamentos para cada tipo de usuário selecionar no chamado.</p>
+                    </div>
+                    <button 
+                        onClick={() => setEditingTag({ role: 'student', name: '' })}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 shadow-sm transition-all active:scale-95"
+                    >
+                        <Plus size={16} /> Nova Categoria
+                    </button>
+                </div>
+
+                {editingTag && (
+                    <form onSubmit={handleSaveSupportTag} className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6 animate-in slide-in-from-top-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Público do Assunto</label>
+                                <select 
+                                    className="w-full px-4 py-2.5 border rounded-xl bg-white text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                                    value={editingTag.role}
+                                    onChange={e => setEditingTag({...editingTag, role: e.target.value as any})}
+                                    required
+                                >
+                                    <option value="student">Aluno</option>
+                                    <option value="instructor">Instrutor</option>
+                                    <option value="studio">Studio Parceiro</option>
+                                    <option value="all">Todos</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Nome da Categoria/Tag</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-4 py-2.5 border rounded-xl bg-white text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                                    value={editingTag.name}
+                                    onChange={e => setEditingTag({...editingTag, name: e.target.value})}
+                                    placeholder="Ex: Financeiro, Suporte Técnico, Logística..."
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                            <button type="button" onClick={() => setEditingTag(null)} className="px-6 py-2 text-slate-500 font-bold text-sm">Cancelar</button>
+                            <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2 transition-all">
+                                <Save size={18} /> Salvar Tag
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {['student', 'instructor', 'studio'].map(role => (
+                        <div key={role} className="space-y-4">
+                            <div className="flex items-center justify-between border-b pb-2">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    {role === 'student' ? 'Alunos' : role === 'instructor' ? 'Instrutores' : 'Studios'}
+                                </h4>
+                                <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                                    {supportTags.filter(t => t.role === role || t.role === 'all').length}
+                                </span>
+                            </div>
+                            <div className="space-y-2">
+                                {supportTags.filter(t => t.role === role || t.role === 'all').map(tag => (
+                                    <div key={tag.id} className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-all">
+                                        <span className="text-xs font-bold text-slate-700">{tag.name} {tag.role === 'all' && <span className="ml-1 text-[8px] opacity-30">(Universal)</span>}</span>
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => setEditingTag(tag)} className="p-1 text-slate-300 hover:text-indigo-600 transition-colors"><Edit2 size={14} /></button>
+                                            <button onClick={() => appBackend.deleteSupportTag(tag.id).then(fetchSupportTags)} className="p-1 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {supportTags.filter(t => t.role === role || t.role === 'all').length === 0 && (
+                                    <div className="p-8 text-center text-slate-300 italic text-[10px]">Nenhuma tag definida.</div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         )}
 
@@ -920,9 +1050,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V24)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Anexos em Chamados e Responsáveis pelo atendimento).</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V24</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V25)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Categorias de Suporte).</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V25</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

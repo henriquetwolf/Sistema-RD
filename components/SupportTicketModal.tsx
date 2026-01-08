@@ -1,9 +1,8 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
-import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText } from 'lucide-react';
+import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { SupportTicket, SupportMessage } from '../types';
+import { SupportTicket, SupportMessage, SupportTag } from '../types';
 import clsx from 'clsx';
 
 interface SupportTicketModalProps {
@@ -18,7 +17,9 @@ interface SupportTicketModalProps {
 export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, onClose, senderId, senderName, senderEmail, senderRole }) => {
   const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
   const [subject, setSubject] = useState('');
+  const [selectedTag, setSelectedTag] = useState('');
   const [message, setMessage] = useState('');
+  const [tags, setTags] = useState<SupportTag[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   
@@ -35,8 +36,11 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isOpen && activeTab === 'history') fetchHistory();
-  }, [isOpen, activeTab]);
+    if (isOpen) {
+        if (activeTab === 'history') fetchHistory();
+        fetchTags();
+    }
+  }, [isOpen, activeTab, senderRole]);
 
   useEffect(() => {
       if (selectedTicket) fetchThread(selectedTicket.id);
@@ -45,6 +49,13 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
   useEffect(() => {
       threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [thread]);
+
+  const fetchTags = async () => {
+      try {
+          const data = await appBackend.getSupportTags(senderRole as any);
+          setTags(data);
+      } catch (e) { console.error(e); }
+  };
 
   const fetchHistory = async () => {
     setIsLoadingHistory(true);
@@ -97,16 +108,19 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subject.trim() || !message.trim()) return;
+    if (!subject.trim() || !message.trim() || !selectedTag) {
+        alert("Por favor, preencha o assunto, a categoria e a mensagem.");
+        return;
+    }
     setIsSubmitting(true);
     try {
       await appBackend.saveSupportTicket({
         senderId, senderName, senderEmail, senderRole,
-        subject: subject.trim(), message: message.trim(), status: 'open'
+        subject: subject.trim(), message: message.trim(), tag: selectedTag, status: 'open'
       });
       setIsSuccess(true);
       setTimeout(() => {
-          setIsSuccess(false); setSubject(''); setMessage(''); setActiveTab('history'); fetchHistory();
+          setIsSuccess(false); setSubject(''); setMessage(''); setSelectedTag(''); setActiveTab('history'); fetchHistory();
       }, 2500);
     } catch (e) { alert("Erro ao enviar chamado."); } finally { setIsSubmitting(false); }
   };
@@ -141,9 +155,31 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex gap-3 text-xs text-blue-800"><AlertCircle className="shrink-0 text-blue-600" size={16}/><p>Olá <strong>{senderName}</strong>, descreva abaixo sua necessidade.</p></div>
-                        <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Assunto</label><input type="text" required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold" placeholder="Assunto do chamado..." value={subject} onChange={e => setSubject(e.target.value)} /></div>
-                        <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Mensagem</label><textarea required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all h-32 resize-none leading-relaxed" placeholder="Explique o que está acontecendo..." value={message} onChange={e => setMessage(e.target.value)} /></div>
-                        <button type="submit" disabled={isSubmitting} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50">{isSubmitting ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} Enviar Chamado</button>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Assunto</label>
+                                <input type="text" required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold" placeholder="Assunto do chamado..." value={subject} onChange={e => setSubject(e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Categoria / Assunto</label>
+                                <div className="relative">
+                                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                                    <select 
+                                        required 
+                                        className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold bg-white appearance-none"
+                                        value={selectedTag}
+                                        onChange={e => setSelectedTag(e.target.value)}
+                                    >
+                                        <option value="">Selecione uma categoria...</option>
+                                        {tags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                        {tags.length === 0 && <option value="Geral">Geral</option>}
+                                    </select>
+                                    <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 rotate-90" size={16} />
+                                </div>
+                            </div>
+                        </div>
+                        <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Mensagem Detalhada</label><textarea required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all h-32 resize-none leading-relaxed" placeholder="Explique o que está acontecendo..." value={message} onChange={e => setMessage(e.target.value)} /></div>
+                        <button type="submit" disabled={isSubmitting} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70">{isSubmitting ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} Enviar Chamado</button>
                     </form>
                 )}
                 </div>
@@ -160,6 +196,9 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                             </div>
                             
                             <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="bg-indigo-100 text-indigo-700 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">{selectedTicket.tag || 'Geral'}</span>
+                                </div>
                                 <h4 className="text-xl font-black text-slate-800">{selectedTicket.subject}</h4>
                                 <div className="space-y-4">
                                     <div className="flex justify-start"><div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]"><span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem Inicial:</span><p className="text-sm text-slate-600 leading-relaxed italic">{selectedTicket.message}</p><span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span></div></div>
@@ -210,7 +249,7 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
                                 <div className="space-y-3">
                                     {myTickets.map(t => (
                                         <div key={t.id} onClick={() => setSelectedTicket(t)} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer flex items-center justify-between group">
-                                            <div className="flex items-center gap-4"><div className={clsx("w-3 h-3 rounded-full shrink-0", t.status === 'open' ? "bg-red-50" : t.status === 'pending' ? "bg-amber-400" : "bg-green-500")}></div><div><h4 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{t.subject}</h4><p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{new Date(t.createdAt).toLocaleDateString()} • {t.status}</p></div></div>
+                                            <div className="flex items-center gap-4"><div className={clsx("w-3 h-3 rounded-full shrink-0", t.status === 'open' ? "bg-red-50" : t.status === 'pending' ? "bg-amber-400" : "bg-green-500")}></div><div><h4 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{t.subject}</h4><p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{t.tag || 'Geral'} • {new Date(t.createdAt).toLocaleDateString()} • {t.status}</p></div></div>
                                             <ChevronRight size={18} className="text-slate-300 group-hover:translate-x-1 transition-all" />
                                         </div>
                                     ))}

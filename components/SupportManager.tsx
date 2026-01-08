@@ -1,22 +1,25 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LifeBuoy, Search, Filter, Clock, CheckCircle, AlertTriangle, User, Users, 
   Mail, MessageSquare, Trash2, Loader2, RefreshCw, X, Send, ChevronRight, 
   LayoutGrid, Kanban, BarChart3, TrendingUp, Download, Paperclip, FileText, 
-  Image as ImageIcon, Timer, BarChart 
+  Image as ImageIcon, Timer, BarChart, Tag as TagIcon
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { SupportTicket, SupportMessage, CollaboratorSession } from '../types';
+import { SupportTicket, SupportMessage, CollaboratorSession, SupportTag } from '../types';
 import { BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, Legend } from 'recharts';
 import clsx from 'clsx';
 
 export const SupportManager: React.FC = () => {
   const [viewMode, setViewMode] = useState<'list' | 'board' | 'dashboard'>('dashboard');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [allTags, setAllTags] = useState<SupportTag[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'pending' | 'closed' | 'waiting'>('all');
   const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'instructor' | 'studio'>('all');
+  const [tagFilter, setTagFilter] = useState<string>('all');
   const [responderFilter, setResponderFilter] = useState<string>('all');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [draggedTicketId, setDraggedTicketId] = useState<string | null>(null);
@@ -35,7 +38,7 @@ export const SupportManager: React.FC = () => {
     return saved ? JSON.parse(saved) as CollaboratorSession : { name: 'Administrador', id: 'admin' };
   }, []);
 
-  useEffect(() => { fetchTickets(); }, []);
+  useEffect(() => { fetchTickets(); fetchTags(); }, []);
   useEffect(() => { if (selectedTicket) fetchThread(selectedTicket.id); }, [selectedTicket]);
   useEffect(() => { threadEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [thread]);
 
@@ -45,6 +48,13 @@ export const SupportManager: React.FC = () => {
       const data = await appBackend.getSupportTickets();
       setTickets(data);
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
+  };
+
+  const fetchTags = async () => {
+      try {
+          const data = await appBackend.getSupportTags();
+          setAllTags(data);
+      } catch (e) {}
   };
 
   const fetchThread = async (ticketId: string) => {
@@ -173,13 +183,19 @@ export const SupportManager: React.FC = () => {
       return Array.from(new Set(names)).sort();
   }, [tickets]);
 
+  const uniqueTagsForCurrentRole = useMemo(() => {
+      const tags = tickets.filter(t => roleFilter === 'all' || t.senderRole === roleFilter).map(t => t.tag).filter(Boolean) as string[];
+      return Array.from(new Set(tags)).sort();
+  }, [tickets, roleFilter]);
+
   const filtered = tickets.filter(t => {
     const matchesSearch = (t.senderName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (t.subject || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
     const matchesRole = roleFilter === 'all' || t.senderRole === roleFilter;
+    const matchesTag = tagFilter === 'all' || t.tag === tagFilter;
     const matchesResponder = responderFilter === 'all' || t.assignedName === responderFilter;
-    return matchesSearch && matchesStatus && matchesRole && matchesResponder;
+    return matchesSearch && matchesStatus && matchesRole && matchesResponder && matchesTag;
   });
 
   const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -208,7 +224,8 @@ export const SupportManager: React.FC = () => {
           <input type="text" placeholder="Buscar por assunto ou solicitante..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
         </div>
         <div className="flex flex-wrap gap-2">
-            <select value={roleFilter} onChange={e => setRoleFilter(e.target.value as any)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Origem: Todos</option><option value="student">Alunos</option><option value="instructor">Instrutores</option><option value="studio">Studios</option></select>
+            <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value as any); setTagFilter('all'); }} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Origem: Todos</option><option value="student">Alunos</option><option value="instructor">Instrutores</option><option value="studio">Studios</option></select>
+            <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Categoria: Todas</option>{uniqueTagsForCurrentRole.map(t => <option key={t} value={t}>{t}</option>)}</select>
             <select value={responderFilter} onChange={e => setResponderFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Atendente: Todos</option>{uniqueResponders.map(r => <option key={r} value={r}>{r}</option>)}</select>
             <button onClick={fetchTickets} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
         </div>
@@ -313,7 +330,7 @@ export const SupportManager: React.FC = () => {
                           </div>
                           <span className="text-[10px] font-black text-slate-400 bg-white px-2 py-0.5 rounded-full border">{filtered.filter(t => t.status === (col.id as any)).length}</span>
                       </div>
-                      <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+                      <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar min-h-[200px]">
                           {filtered.filter(t => t.status === (col.id as any)).map(t => (
                               <div 
                                 key={t.id} 
@@ -329,6 +346,9 @@ export const SupportManager: React.FC = () => {
                                         "text-teal-600 border-teal-100 bg-teal-50"
                                       )}>{t.senderRole}</span>
                                       <span className="text-[9px] text-slate-400">{new Date(t.createdAt).toLocaleDateString()}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mb-1.5">
+                                      <span className="bg-indigo-100 text-indigo-700 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full">{t.tag || 'Geral'}</span>
                                   </div>
                                   <h5 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2 leading-tight group-hover:text-indigo-600 transition-colors">{t.subject}</h5>
                                   <p className="text-[10px] text-slate-500 font-bold mb-3">{t.senderName}</p>
@@ -355,6 +375,7 @@ export const SupportManager: React.FC = () => {
                 <tr>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">Usuário / Origem</th>
+                  <th className="px-6 py-4">Categoria</th>
                   <th className="px-6 py-4">Assunto</th>
                   <th className="px-6 py-4">Responsável</th>
                   <th className="px-6 py-4 text-right">Ações</th>
@@ -362,9 +383,9 @@ export const SupportManager: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {isLoading && tickets.length === 0 ? (
-                  <tr><td colSpan={5} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-indigo-600" /></td></tr>
+                  <tr><td colSpan={6} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-indigo-600" /></td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={5} className="p-20 text-center text-slate-400 italic">Nenhum chamado localizado.</td></tr>
+                  <tr><td colSpan={6} className="p-20 text-center text-slate-400 italic">Nenhum chamado localizado.</td></tr>
                 ) : filtered.map(t => (
                   <tr key={t.id} className="hover:bg-slate-50 transition-colors group cursor-pointer" onClick={() => setSelectedTicket(t)}>
                     <td className="px-6 py-4">
@@ -372,6 +393,9 @@ export const SupportManager: React.FC = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col"><span className="font-bold text-slate-800">{t.senderName}</span><span className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{t.senderRole}</span></div>
+                    </td>
+                    <td className="px-6 py-4">
+                        <span className="bg-slate-100 text-slate-600 text-[9px] font-black uppercase px-2 py-1 rounded-full">{t.tag || 'Geral'}</span>
                     </td>
                     <td className="px-6 py-4 font-medium text-slate-600 truncate max-w-xs">{t.subject}</td>
                     <td className="px-6 py-4 text-xs text-slate-500 font-bold">{t.assignedName || '--'}</td>
@@ -392,7 +416,7 @@ export const SupportManager: React.FC = () => {
                 <div className="bg-indigo-100 p-2 rounded-lg text-indigo-700"><MessageSquare size={20}/></div>
                 <div>
                   <h3 className="text-xl font-bold text-slate-800">Atendimento ao Chamado</h3>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Protocolo: {selectedTicket.id.split('-')[0]}</p>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Protocolo: {selectedTicket.id.split('-')[0]} • {selectedTicket.tag || 'Geral'}</p>
                 </div>
               </div>
               <button onClick={() => setSelectedTicket(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors"><X size={24}/></button>
@@ -405,6 +429,12 @@ export const SupportManager: React.FC = () => {
                             <div className="w-10 h-10 rounded-full bg-slate-100 border flex items-center justify-center text-indigo-600 font-bold text-lg">{(selectedTicket.senderName || '?').charAt(0)}</div>
                             <div><p className="text-[10px] font-black text-slate-400 uppercase">Solicitante</p><p className="text-sm font-bold text-slate-800 truncate max-w-[140px]">{selectedTicket.senderName}</p><p className="text-[10px] text-slate-500">{selectedTicket.senderEmail}</p></div>
                         </div>
+                        
+                        <div className="p-4 bg-white rounded-2xl border shadow-sm">
+                            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Categoria</p>
+                            <span className="flex items-center gap-2 text-xs font-bold text-slate-700"><TagIcon size={14} className="text-indigo-500"/> {selectedTicket.tag || 'Geral'}</span>
+                        </div>
+
                         <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
                             <p className="text-[10px] font-black text-indigo-700 uppercase mb-3">Status e Fluxo</p>
                             <div className="flex flex-col gap-2">

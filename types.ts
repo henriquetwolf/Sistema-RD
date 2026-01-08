@@ -1,4 +1,44 @@
 
+export interface SupportTag {
+  id: string;
+  role: 'student' | 'instructor' | 'studio' | 'all';
+  name: string;
+  createdAt: string;
+}
+
+/**
+ * FIXED: Added missing properties assignedId and assignedName
+ * FIXED: Added 'waiting' to status type
+ * UPDATED: Added tag field
+ */
+export interface SupportTicket {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderEmail: string;
+  senderRole: 'student' | 'instructor' | 'studio' | 'admin';
+  subject: string;
+  message: string;
+  tag?: string;
+  status: 'open' | 'pending' | 'closed' | 'waiting';
+  response?: string;
+  assignedId?: string;
+  assignedName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupportMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: 'student' | 'instructor' | 'studio' | 'admin';
+  content: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  createdAt: string;
+}
 
 export interface BillingRecord {
   id: number;
@@ -450,41 +490,6 @@ export interface TeacherNews {
   title: string;
   content: string;
   imageUrl?: string;
-  createdAt: string;
-}
-
-/**
- * FIXED: Added missing properties assignedId and assignedName
- * FIXED: Added 'waiting' to status type
- */
-export interface SupportTicket {
-  id: string;
-  senderId: string;
-  senderName: string;
-  senderEmail: string;
-  senderRole: 'student' | 'instructor' | 'studio' | 'admin';
-  subject: string;
-  message: string;
-  status: 'open' | 'pending' | 'closed' | 'waiting';
-  response?: string;
-  assignedId?: string;
-  assignedName?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * FIXED: Added attachmentUrl and attachmentName to SupportMessage
- */
-export interface SupportMessage {
-  id: string;
-  ticketId: string;
-  senderId: string;
-  senderName: string;
-  senderRole: 'student' | 'instructor' | 'studio' | 'admin';
-  content: string;
-  attachmentUrl?: string;
-  attachmentName?: string;
   createdAt: string;
 }
 

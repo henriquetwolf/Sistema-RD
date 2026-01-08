@@ -235,7 +235,7 @@ export const CrmBoard: React.FC = () => {
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
                   /* Corrected property mapping to camelCase Deal interface */
                   email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
-                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
+                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, address_number: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
                   classMod1: d.class_mod_1, class_mod_2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
@@ -279,6 +279,36 @@ export const CrmBoard: React.FC = () => {
       }
   };
 
+  /**
+   * Função para disparar chamado automático para produtos digitais
+   */
+  const triggerDigitalSupportTicket = async (deal: any) => {
+      // Verifica se o estágio é fechamento (normalmente id 'closed') e o produto é digital
+      if (deal.product_type === 'Digital' && deal.stage === 'closed') {
+          try {
+              await appBackend.saveSupportTicket({
+                  senderId: 'crm_automation',
+                  senderName: 'Integração Comercial',
+                  senderEmail: 'crm@vollpilates.com.br',
+                  senderRole: 'admin',
+                  subject: `🔒 Criação de Login: ${deal.product_name || 'Produto Digital'}`,
+                  message: `Solicitação automática de criação de login para novo cliente digital.\n\n` +
+                           `Nº Negócio: #${deal.deal_number}\n` +
+                           `Cliente: ${deal.company_name || deal.contact_name}\n` +
+                           `E-mail: ${deal.email || 'Não informado'}\n` +
+                           `Telefone: ${deal.phone || 'Não informado'}\n` +
+                           `Produto: ${deal.product_name}\n\n` +
+                           `Favor providenciar os acessos e notificar o cliente.`,
+                  tag: 'Suporte Técnico',
+                  status: 'open'
+              });
+              console.log("Chamado automático de login criado com sucesso.");
+          } catch (err) {
+              console.error("Erro ao criar chamado automático de login:", err);
+          }
+      }
+  };
+
   const productOptions = useMemo(() => {
       if (dealFormData.productType === 'Digital') return (digitalProducts || []).map(p => p.name).sort();
       if (dealFormData.productType === 'Evento') return (eventsList || []).map(e => e.name).sort();
@@ -312,9 +342,11 @@ export const CrmBoard: React.FC = () => {
         const { data, error = null } = await appBackend.client.from('crm_deals').update(updates).eq('id', dealId).select().single();
         if (error) throw error;
 
-        // Disparo condicional de Webhook baseado no estágio destino
         if (data) {
+            // Gatilho do Connection Plug
             dispatchNegotiationWebhook(data);
+            // Gatilho do Suporte (Login Digital)
+            triggerDigitalSupportTicket(data);
         }
 
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal.title}" para a etapa: ${newStage}`, recordId: dealId });
@@ -326,6 +358,7 @@ export const CrmBoard: React.FC = () => {
     return { count: stageDeals.length, total: stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0) };
   };
 
+  // FIXED: Changed 'setDraggedTicketId' to 'setDraggedDealId'
   const handleDragStart = (e: React.DragEvent, dealId: string) => { setDraggedDealId(dealId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dealId); };
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
   
@@ -343,9 +376,11 @@ export const CrmBoard: React.FC = () => {
         const { data, error = null } = await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId).select().single();
         if (error) throw error;
 
-        // Disparo condicional de Webhook baseado no estágio destino
         if (data) {
+            // Gatilho do Connection Plug
             dispatchNegotiationWebhook(data);
+            // Gatilho do Suporte (Login Digital)
+            triggerDigitalSupportTicket(data);
         }
 
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para Funil: ${pipelineName}, Etapa: ${targetStage}`, recordId: draggedDealId });
@@ -567,18 +602,20 @@ export const CrmBoard: React.FC = () => {
               const { data, error = null } = await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId).select().single();
               if (error) throw error;
               
-              // Verifica gatilho ao atualizar por formulário
               if (data) {
+                  // Gatilhos
                   dispatchNegotiationWebhook(data);
+                  triggerDigitalSupportTicket(data);
               }
           } else {
               const dealNumber = generateDealNumber();
               const { data, error = null } = await appBackend.client.from('crm_deals').insert([{ ...payload, deal_number: dealNumber }]).select().single();
               if (error) throw error;
               
-              // Verifica gatilho na criação
               if (data) {
+                  // Gatilhos
                   dispatchNegotiationWebhook(data);
+                  triggerDigitalSupportTicket(data);
               }
           }
           await fetchData(); setShowDealModal(false);
@@ -681,7 +718,7 @@ export const CrmBoard: React.FC = () => {
                                                         <h4 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight">{deal.title}</h4>
                                                     </div>
                                                     <div className="opacity-0 group-hover:opacity-100 transition-opacity flex">
-                                                        <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'prev')}} className="p-1 hover:bg-slate-100 rounded text-slate-500"><ChevronRight size={14} className="rotate-180"/></button>
+                                                        <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'prev')}} className="p-1 hover:bg-slate-100 rounded text-slate-500"><ChevronRight size={14} className="rotate-180" /></button>
                                                         <button onClick={(e) => {e.stopPropagation(); moveDeal(deal.id, deal.stage, pipeline.name, 'next')}} className="p-1 hover:bg-green-50 rounded text-green-600"><ChevronRight size={14} /></button>
                                                     </div>
                                                 </div>
@@ -817,7 +854,7 @@ export const CrmBoard: React.FC = () => {
                   </div>
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                       <button onClick={() => setShowTeamModal(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
-                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all">
+                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all">
                           {isSavingTeam ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                           Salvar Equipe
                       </button>
@@ -895,7 +932,7 @@ export const CrmBoard: React.FC = () => {
                              </div>
                              <div>
                                 <label className="block text-[10px] font-bold text-slate-500 mb-1">Cidade Curso</label>
-                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.courseCity} onChange={e => setDealFormData({...dealFormData, courseCity: e.target.value, classMod1: '', classMod2: ''})} disabled={!dealFormData.courseState}>
+                                <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.courseCity} onChange={e => { setDealFormData({...dealFormData, courseCity: e.target.value, classMod1: '', classMod2: '' }); }} disabled={!dealFormData.courseState}>
                                     <option value="">--</option>{Array.from(new Set(registeredClasses.filter(c => c.state === dealFormData.courseState).map(c => c.city))).map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                              </div>

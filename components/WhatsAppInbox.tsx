@@ -174,9 +174,11 @@ export const WhatsAppInbox: React.FC = () => {
 
   // --- HELPERS PARA O WEBHOOK ---
   const supabaseUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
+  const supabaseKey = (appBackend.client as any).supabaseKey || 'SUA_ANON_KEY';
   const supabaseProjectRef = supabaseUrl.match(/https:\/\/(.*?)\.supabase\.co/)?.[1] || 'SEU-PROJETO';
   
-  const sqlRpcUrl = `${supabaseUrl}/rest/v1/rpc/handle_evolution_webhook?apikey=SUA_ANON_KEY`;
+  // URL JÁ COM A CHAVE EMBUTIDA PARA NÃO PRECISAR DE HEADERS NA EVOLUTION
+  const sqlRpcUrl = `${supabaseUrl}/rest/v1/rpc/handle_evolution_webhook?apikey=${supabaseKey}`;
   const edgeUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/whatsapp-webhook`;
 
   const sqlCode = `
@@ -188,9 +190,13 @@ DECLARE
   v_text text;
   v_contact_name text;
   v_chat_id uuid;
+  v_event_name text;
 BEGIN
+  v_event_name := lower(event);
+
   -- Filtra apenas mensagens recebidas (ignora as que você enviou)
-  IF (event = 'messages.upsert' AND NOT (data->'key'->>'fromMe')::boolean) THEN
+  -- Aceita 'messages.upsert' ou 'MESSAGES_UPSERT'
+  IF (v_event_name = 'messages.upsert' AND NOT (data->'key'->>'fromMe')::boolean) THEN
     
     v_wa_id := split_part(data->'key'->>'remoteJid', '@', 1);
     v_text := COALESCE(
@@ -222,18 +228,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 2. DAR PERMISSÃO PÚBLICA
+-- 2. DAR PERMISSÃO PÚBLICA PARA A FUNÇÃO E PARA AS TABELAS
 GRANT EXECUTE ON FUNCTION public.handle_evolution_webhook TO anon;
 GRANT EXECUTE ON FUNCTION public.handle_evolution_webhook TO service_role;
+GRANT ALL ON public.crm_whatsapp_chats TO anon, authenticated, service_role;
+GRANT ALL ON public.crm_whatsapp_messages TO anon, authenticated, service_role;
   `.trim();
 
   const edgeFunctionCode = `
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-/**
- * WEBHOOK PARA EVOLUTION API -> SUPABASE CLOUD (Versão CLI)
- * Instrução: supabase functions deploy whatsapp-webhook --no-verify-jwt
- */
 
 Deno.serve(async (req) => {
   const { method } = req;
@@ -271,19 +274,71 @@ Deno.serve(async (req) => {
                       <div className="flex items-center gap-3">
                           <div className="bg-teal-100 p-2 rounded-full text-teal-700"><Settings size={20} /></div>
                           <div>
-                              <h2 className="text-lg font-bold text-slate-800">Configurações de Conexão</h2>
-                              <p className="text-xs text-slate-500">Sincronize a Evolution API com seu Banco de Dados</p>
+                              <h2 className="text-lg font-bold text-slate-800">Configuração de Recebimento</h2>
+                              <p className="text-xs text-slate-500">Siga os passos para ativar o recebimento de mensagens</p>
                           </div>
                       </div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600"><X size={20} /></button>
                   </div>
 
                   <div className="p-6 space-y-6 bg-slate-50">
-                      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                          <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2 mb-2"><Smartphone size={16} className="text-teal-600" /> 1. Sua Instância Evolution</h3>
+                      {/* PASSO 1: SQL NO SUPABASE */}
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                          <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2 mb-2">
+                              <Database size={16} className="text-teal-600" /> Passo 1: Preparar o Banco (Supabase)
+                          </h3>
+                          <p className="text-xs text-slate-500 leading-relaxed">
+                              Vá no seu painel do Supabase, clique em <strong>SQL Editor</strong>, cole o código abaixo e clique em <strong>RUN</strong>. 
+                              Isso cria a porta de entrada para as mensagens e dá as permissões necessárias.
+                          </p>
+                          <div className="relative group">
+                              <pre className="text-[10px] bg-slate-900 text-teal-400 p-4 rounded-xl overflow-x-auto max-h-48 custom-scrollbar border border-slate-800 leading-relaxed font-mono">
+                                  {sqlCode}
+                              </pre>
+                              <button onClick={() => { navigator.clipboard.writeText(sqlCode); alert("SQL Copiado!"); }} className="absolute top-2 right-2 bg-slate-800 text-white px-3 py-1 rounded text-[10px] font-bold hover:bg-slate-700 transition-colors">Copiar SQL</button>
+                          </div>
+                      </div>
+
+                      {/* PASSO 2: CONFIGURAR EVOLUTION */}
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                          <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2 mb-2">
+                              <Zap size={16} className="text-amber-500" /> Passo 2: Configurar o Webhook (Evolution)
+                          </h3>
+                          <p className="text-xs text-slate-500 leading-relaxed">
+                              Agora vá no painel da sua **Evolution API**, entre na sua **Instância** e procure a aba **Webhook**. 
+                              Clique em editar/adicionar e cole a URL abaixo **EXATAMENTE** como ela está:
+                          </p>
+                          
+                          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+                              <div>
+                                  <label className="block text-[9px] font-black text-amber-700 uppercase mb-1">URL DO WEBHOOK (COPIE E COLE)</label>
+                                  <div className="flex gap-2">
+                                      <code className="flex-1 bg-white border border-amber-300 p-2 rounded-lg text-[11px] font-mono text-slate-700 break-all">{sqlRpcUrl}</code>
+                                      <button onClick={() => { navigator.clipboard.writeText(sqlRpcUrl); alert("URL Copiada!"); }} className="bg-amber-600 text-white p-2 rounded-lg hover:bg-amber-700 transition-colors shrink-0"><Copy size={16}/></button>
+                                  </div>
+                              </div>
+                              <div className="flex items-start gap-2 text-amber-800">
+                                  <Info size={16} className="shrink-0 mt-0.5" />
+                                  <p className="text-[10px] leading-relaxed">
+                                      <strong>Atenção:</strong> Como a chave <code>apikey=</code> já está no final da URL acima, você <strong>NÃO</strong> precisa preencher o campo "Headers" ou "Cabeçalhos" no painel da Evolution. Basta a URL!
+                                  </p>
+                              </div>
+                          </div>
+
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                              <h4 className="text-[10px] font-bold text-slate-600 uppercase mb-2">Eventos para Monitorar:</h4>
+                              <div className="flex gap-2 flex-wrap">
+                                  <span className="bg-white border border-slate-300 px-2 py-1 rounded text-[10px] font-mono text-slate-700">MESSAGES_UPSERT</span>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* CONEXÃO DA INSTÂNCIA (PARA ENVIAR) */}
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                          <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2 mb-2"><Smartphone size={16} className="text-blue-600" /> Configuração da Instância (Para Enviar Mensagens)</h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-slate-600 mb-1">URL Base da API (Ex: do Easypanel)</label>
+                                  <label className="block text-xs font-bold text-slate-600 mb-1">URL Base da API Evolution</label>
                                   <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-50 outline-none" placeholder="https://evolution.seusite.com" value={config.instanceUrl} onChange={e => setConfig({...config, instanceUrl: e.target.value})} />
                               </div>
                               <div>
@@ -296,91 +351,13 @@ Deno.serve(async (req) => {
                               </div>
                           </div>
                       </div>
-
-                      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                          <div className="flex justify-between items-center">
-                              <h3 className="font-bold text-slate-700 text-sm uppercase flex items-center gap-2"><Globe size={16} className="text-blue-600" /> 2. Recebimento de Mensagens</h3>
-                              <button onClick={() => setShowWebhookHelp(!showWebhookHelp)} className="text-xs text-blue-600 font-bold flex items-center gap-1 hover:underline">
-                                  {showWebhookHelp ? 'Ocultar Guia' : 'Como ativar?'}
-                                  <ChevronDown size={14} className={clsx(showWebhookHelp && "rotate-180")} />
-                              </button>
-                          </div>
-
-                          {showWebhookHelp && (
-                              <div className="animate-in slide-in-from-top-2 space-y-4">
-                                  <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
-                                      <button onClick={() => setHelpTab('sql')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", helpTab === 'sql' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500")}>
-                                          <Zap size={14}/> Método Sem Instalação (SQL)
-                                      </button>
-                                      <button onClick={() => setHelpTab('edge')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", helpTab === 'edge' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500")}>
-                                          <Terminal size={14}/> Método Terminal (CLI)
-                                      </button>
-                                  </div>
-
-                                  {helpTab === 'sql' ? (
-                                      <div className="p-5 bg-slate-900 rounded-2xl space-y-6">
-                                          <div className="bg-indigo-950/40 p-4 rounded-xl border border-indigo-500/30">
-                                              <p className="text-indigo-400 font-black text-xs uppercase mb-3 flex items-center gap-2"><Info size={14}/> Passo a Passo (Zero Instalação)</p>
-                                              <ol className="text-white text-[11px] space-y-3 list-decimal ml-4 leading-relaxed">
-                                                  <li>Vá no seu painel do Supabase e clique em <strong>SQL Editor</strong> (ícone &gt;_).</li>
-                                                  <li>Clique em "New Query", cole o código abaixo e clique em <strong>RUN</strong>.</li>
-                                                  <li>No painel da Evolution API, vá em <strong>Webhooks</strong> e clique em <strong>Criar/Editar</strong>.</li>
-                                                  <li>Copie a URL abaixo e cole no campo "URL do Webhook":</li>
-                                              </ol>
-                                              <div className="mt-4 p-3 bg-black/40 rounded-lg border border-white/5 space-y-3">
-                                                  <div>
-                                                      <span className="text-[9px] text-slate-500 uppercase font-black">URL do Webhook (CUIDADO: Troque 'SUA_ANON_KEY' pela sua chave do Supabase)</span>
-                                                      <div className="flex gap-2 items-center bg-black/40 p-2 rounded border border-slate-800 mt-1">
-                                                          <code className="text-xs text-teal-400 truncate flex-1">{sqlRpcUrl}</code>
-                                                          <button onClick={() => navigator.clipboard.writeText(sqlRpcUrl)} className="text-slate-500 hover:text-white"><Copy size={14}/></button>
-                                                      </div>
-                                                  </div>
-                                                  <div className="p-4 bg-teal-500/10 border border-teal-500/20 rounded-xl">
-                                                      <p className="text-teal-400 text-xs font-bold flex items-center gap-2"><CheckCircle2 size={14}/> Dica: Não precisa configurar Headers!</p>
-                                                      <p className="text-white text-[10px] mt-1 leading-relaxed">Ao usar o <strong>?apikey=</strong> no final da URL, você não precisa configurar nada mais no painel da Evolution. É só colar a URL e pronto!</p>
-                                                  </div>
-                                              </div>
-                                          </div>
-                                          <div className="relative">
-                                              <p className="text-white text-[10px] font-black uppercase mb-2 flex items-center gap-2"><Code size={14} className="text-amber-400"/> Código SQL para o Supabase:</p>
-                                              <pre className="text-[10px] bg-black text-slate-300 p-4 rounded-xl overflow-x-auto max-h-48 custom-scrollbar border border-slate-800 leading-relaxed font-mono">{sqlCode}</pre>
-                                              <button onClick={() => navigator.clipboard.writeText(sqlCode)} className="absolute top-8 right-2 bg-slate-800 text-white px-3 py-1 rounded text-[10px] font-bold">Copiar SQL</button>
-                                          </div>
-                                      </div>
-                                  ) : (
-                                      <div className="p-5 bg-slate-900 rounded-2xl space-y-6">
-                                          <div className="bg-teal-950/40 p-4 rounded-xl border border-teal-500/30">
-                                              <p className="text-teal-400 font-black text-xs uppercase mb-3 flex items-center gap-2"><Terminal size={14}/> Usando o Supabase CLI</p>
-                                              <ol className="text-white text-[11px] space-y-3 list-decimal ml-4 leading-relaxed">
-                                                  <li>No terminal do seu PC: <code className="bg-black/50 px-1 text-teal-300">supabase functions new whatsapp-webhook</code></li>
-                                                  <li>Cole o código abaixo no arquivo <code className="text-teal-300">index.ts</code> gerado.</li>
-                                                  <li>Faça o deploy: <code className="bg-black/50 px-1 text-teal-300">supabase functions deploy whatsapp-webhook --no-verify-jwt</code></li>
-                                              </ol>
-                                              <div className="mt-4">
-                                                  <span className="text-[9px] text-slate-500 uppercase font-black">URL do Webhook (CLI):</span>
-                                                  <div className="flex gap-2 items-center bg-black/40 p-2 rounded border border-slate-800 mt-1">
-                                                      <code className="text-xs text-teal-400 truncate flex-1">{edgeUrl}</code>
-                                                      <button onClick={() => navigator.clipboard.writeText(edgeUrl)} className="text-slate-500 hover:text-white"><Copy size={14}/></button>
-                                                  </div>
-                                              </div>
-                                          </div>
-                                          <div className="relative">
-                                              <p className="text-white text-[10px] font-black uppercase mb-2 flex items-center gap-2"><Code size={14} className="text-amber-400"/> Código da Função (Deno):</p>
-                                              <pre className="text-[10px] bg-black text-slate-300 p-4 rounded-xl overflow-x-auto max-h-48 custom-scrollbar border border-slate-800 leading-relaxed font-mono">{edgeFunctionCode}</pre>
-                                              <button onClick={() => navigator.clipboard.writeText(edgeFunctionCode)} className="absolute top-8 right-2 bg-slate-800 text-white px-3 py-1 rounded text-[10px] font-bold">Copiar Código</button>
-                                          </div>
-                                      </div>
-                                  )}
-                              </div>
-                          )}
-                      </div>
                   </div>
 
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                       <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
                       <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-green-600 hover:bg-green-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-green-600/20 flex items-center gap-2">
                           {isSavingConfig ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                          Salvar Configuração Evolution
+                          Salvar Configuração de Envio
                       </button>
                   </div>
               </div>
@@ -396,13 +373,13 @@ Deno.serve(async (req) => {
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><MessageCircle className="text-teal-600" /> Atendimento</h2>
             <div className="flex gap-2">
                 <button onClick={() => setShowNewChatModal(true)} className="p-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors" title="Nova Conversa"><Plus size={18} /></button>
-                <button onClick={() => setShowSettings(true)} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-slate-200 rounded-lg" title="Configurações Evolution"><Settings size={18} /></button>
+                <button onClick={() => setShowSettings(true)} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-slate-200 rounded-lg" title="Configurar Recebimento (Webhook)"><Settings size={18} /></button>
                 <button onClick={() => fetchConversations()} className="p-1.5 text-slate-400 hover:text-teal-600"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""} /></button>
             </div>
         </div>
         <div className="flex-1 overflow-y-auto bg-white">
             {isLoading && conversations.length === 0 ? (<div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-teal-600" /></div>) : 
-            conversations.length === 0 ? (<div className="p-8 text-center text-slate-400 text-sm">Nenhuma conversa encontrada via Evolution.</div>) : (
+            conversations.length === 0 ? (<div className="p-8 text-center text-slate-400 text-sm">Nenhuma conversa encontrada. Certifique-se de que o Webhook está configurado na Evolution.</div>) : (
                 conversations.map(conv => (
                     <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-4 border-b border-slate-50 cursor-pointer hover:bg-slate-50 transition-all border-l-4", selectedChatId === conv.id ? "bg-teal-50/30 border-l-teal-500" : "border-l-transparent")}>
                         <div className="flex justify-between items-start mb-1"><span className="font-bold text-sm text-slate-800">{conv.contact_name}</span><span className="text-[10px] text-slate-400">{new Date(conv.updated_at).toLocaleDateString()}</span></div>
@@ -449,7 +426,7 @@ Deno.serve(async (req) => {
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
                 <MessageCircle size={64} className="opacity-20 mb-4" />
                 <p className="text-lg font-bold">Selecione uma conversa</p>
-                <p className="text-sm">Clique em um contato na lista para iniciar o atendimento via Evolution.</p>
+                <p className="text-sm">As mensagens recebidas via Evolution aparecerão aqui automaticamente.</p>
             </div>
           )}
       </div>

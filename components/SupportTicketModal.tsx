@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { SupportTicket, SupportMessage, SupportTag } from '../types';
+import { Teacher } from './TeachersManager';
 import clsx from 'clsx';
 
 interface SupportTicketModalProps {
@@ -12,6 +13,7 @@ interface SupportTicketModalProps {
     senderName: string;
     senderEmail: string;
     senderRole: SupportTicket['senderRole'];
+    instructorProfile?: Teacher | null;
 }
 
 interface ExpenseEntry {
@@ -22,7 +24,7 @@ interface ExpenseEntry {
     attachment: { url: string, name: string } | null;
 }
 
-export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, onClose, senderId, senderName, senderEmail, senderRole }) => {
+export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, onClose, senderId, senderName, senderEmail, senderRole, instructorProfile }) => {
   const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
   const [subject, setSubject] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
@@ -68,6 +70,28 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
         if (senderRole === 'instructor') fetchClassesData();
     }
   }, [isOpen, activeTab, senderRole]);
+
+  // Efeito de preenchimento automático para Fechamento de Curso
+  useEffect(() => {
+      if (selectedTag === 'Fechamento de Curso' && instructorProfile && senderRole === 'instructor') {
+          setFcPhone(instructorProfile.phone || '');
+          setFcBank(instructorProfile.bank || '');
+          setFcAgency(instructorProfile.agency || '');
+          
+          const account = instructorProfile.accountNumber || '';
+          const digit = instructorProfile.accountDigit || '';
+          setFcAccount(digit ? `${account}-${digit}` : account);
+          
+          // Define PIX baseado se a conta é PJ ou PF
+          if (instructorProfile.hasPjAccount) {
+              setFcPix(instructorProfile.pixKeyPj || instructorProfile.cnpj || '');
+              setFcHolder(instructorProfile.companyName || instructorProfile.fullName);
+          } else {
+              setFcPix(instructorProfile.pixKeyPf || instructorProfile.cpf || '');
+              setFcHolder(instructorProfile.fullName);
+          }
+      }
+  }, [selectedTag, instructorProfile, senderRole]);
 
   useEffect(() => {
       if (selectedTicket) fetchThread(selectedTicket.id);
@@ -551,7 +575,7 @@ ${expensesText}
                             <div className="bg-white px-8 py-4 border-b flex justify-between items-center shrink-0">
                                 <button onClick={() => setSelectedTicket(null)} className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1 hover:underline"><ChevronRight size={14} className="rotate-180" /> Histórico</button>
                                 <div className="flex flex-col items-end">
-                                    <span className={clsx("text-[9px] font-black px-2 py-1 rounded border uppercase", selectedTicket.status === 'open' ? "bg-red-50 text-red-700 border-red-100" : selectedTicket.status === 'pending' ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-green-50 text-green-700 border-green-100")}>{selectedTicket.status}</span>
+                                    <span className={clsx("text-[9px] font-black px-2 py-1 rounded border uppercase", selectedTicket.status === 'open' ? "bg-red-50" : selectedTicket.status === 'pending' ? "bg-amber-400" : "bg-green-500")}>{selectedTicket.status}</span>
                                     {selectedTicket.assignedName && <span className="text-[8px] font-bold text-slate-400 mt-1">Atendente: {selectedTicket.assignedName}</span>}
                                 </div>
                             </div>

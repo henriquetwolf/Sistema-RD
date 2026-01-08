@@ -606,6 +606,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
           senderName={instructor.fullName}
           senderEmail={instructor.email}
           senderRole="instructor"
+          instructorProfile={instructor}
       />
 
       <footer className="py-12 text-center text-slate-400 bg-white/40 border-t border-slate-200 mt-12">

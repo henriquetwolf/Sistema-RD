@@ -176,7 +176,7 @@ export const WhatsAppInbox: React.FC = () => {
   const supabaseUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
   const supabaseProjectRef = supabaseUrl.match(/https:\/\/(.*?)\.supabase\.co/)?.[1] || 'SEU-PROJETO';
   
-  const sqlRpcUrl = `${supabaseUrl}/rest/v1/rpc/handle_evolution_webhook`;
+  const sqlRpcUrl = `${supabaseUrl}/rest/v1/rpc/handle_evolution_webhook?apikey=SUA_ANON_KEY`;
   const edgeUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/whatsapp-webhook`;
 
   const sqlCode = `
@@ -324,19 +324,20 @@ Deno.serve(async (req) => {
                                               <ol className="text-white text-[11px] space-y-3 list-decimal ml-4 leading-relaxed">
                                                   <li>Vá no seu painel do Supabase e clique em <strong>SQL Editor</strong> (ícone &gt;_).</li>
                                                   <li>Clique em "New Query", cole o código abaixo e clique em <strong>RUN</strong>.</li>
-                                                  <li>No painel da Evolution API, vá em Webhooks e use a URL abaixo:</li>
+                                                  <li>No painel da Evolution API, vá em <strong>Webhooks</strong> e clique em <strong>Criar/Editar</strong>.</li>
+                                                  <li>Copie a URL abaixo e cole no campo "URL do Webhook":</li>
                                               </ol>
                                               <div className="mt-4 p-3 bg-black/40 rounded-lg border border-white/5 space-y-3">
                                                   <div>
-                                                      <span className="text-[9px] text-slate-500 uppercase font-black">URL do Webhook (CUIDADO: mude na Evolution)</span>
+                                                      <span className="text-[9px] text-slate-500 uppercase font-black">URL do Webhook (CUIDADO: Troque 'SUA_ANON_KEY' pela sua chave do Supabase)</span>
                                                       <div className="flex gap-2 items-center bg-black/40 p-2 rounded border border-slate-800 mt-1">
                                                           <code className="text-xs text-teal-400 truncate flex-1">{sqlRpcUrl}</code>
                                                           <button onClick={() => navigator.clipboard.writeText(sqlRpcUrl)} className="text-slate-500 hover:text-white"><Copy size={14}/></button>
                                                       </div>
                                                   </div>
-                                                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                                                      <p className="text-amber-400 text-[10px] font-bold">⚠️ IMPORTANTE: No painel Evolution, você DEVE adicionar um Header (Cabeçalho):</p>
-                                                      <p className="text-white text-[10px] mt-1">Chave: <code className="text-teal-400">apikey</code> | Valor: <code className="text-teal-400">SUA-ANON-KEY-DO-SUPABASE</code></p>
+                                                  <div className="p-4 bg-teal-500/10 border border-teal-500/20 rounded-xl">
+                                                      <p className="text-teal-400 text-xs font-bold flex items-center gap-2"><CheckCircle2 size={14}/> Dica: Não precisa configurar Headers!</p>
+                                                      <p className="text-white text-[10px] mt-1 leading-relaxed">Ao usar o <strong>?apikey=</strong> no final da URL, você não precisa configurar nada mais no painel da Evolution. É só colar a URL e pronto!</p>
                                                   </div>
                                               </div>
                                           </div>
@@ -499,13 +500,3 @@ Deno.serve(async (req) => {
     </div>
   );
 };
-
-// Sub-componentes ícones que faltavam
-const Server = ({ size, className }: { size?: number, className?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size || 24} height={size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-        <rect width="20" height="8" x="2" y="2" rx="2" ry="2"/>
-        <rect width="20" height="8" x="2" y="14" rx="2" ry="2"/>
-        <line x1="6" x2="6.01" y1="6" y2="6"/>
-        <line x1="6" x2="6.01" y1="18" y2="18"/>
-    </svg>
-);

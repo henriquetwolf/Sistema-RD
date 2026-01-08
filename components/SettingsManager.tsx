@@ -88,7 +88,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       { id: 'crm', label: 'CRM Comercial' },
       { id: 'billing', label: 'Cobrança' },
       { id: 'inventory', label: 'Controle de Estoque' },
-      { id: 'suporte_interno', label: 'Suporte Interno' }, // NOVO
+      { id: 'suporte_interno', label: 'Suporte Interno' },
       { id: 'whatsapp', label: 'Atendimento' },
       { id: 'analysis', label: 'Análise de Vendas' },
       { id: 'forms', label: 'Formulários' },
@@ -237,8 +237,19 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V23)
--- Suporte a Tickets de Suporte Interno
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V24)
+
+-- Atualização da Tabela de Tickets para incluir atendentes
+ALTER TABLE IF EXISTS public.crm_support_tickets 
+ADD COLUMN IF NOT EXISTS assigned_id text,
+ADD COLUMN IF NOT EXISTS assigned_name text;
+
+-- Atualização da Tabela de Mensagens para incluir anexos
+ALTER TABLE IF EXISTS public.crm_support_messages
+ADD COLUMN IF NOT EXISTS attachment_url text,
+ADD COLUMN IF NOT EXISTS attachment_name text;
+
+-- Suporte a Tickets de Suporte Interno (Caso não exista)
 CREATE TABLE IF NOT EXISTS public.crm_support_tickets (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     sender_id text NOT NULL,
@@ -249,11 +260,13 @@ CREATE TABLE IF NOT EXISTS public.crm_support_tickets (
     message text NOT NULL,
     status text DEFAULT 'open',
     response text,
+    assigned_id text,
+    assigned_name text,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );
 
--- Suporte a Mensagens em Thread dos Chamados
+-- Suporte a Mensagens em Thread dos Chamados (Caso não exista)
 CREATE TABLE IF NOT EXISTS public.crm_support_messages (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     ticket_id uuid REFERENCES public.crm_support_tickets(id) ON DELETE CASCADE,
@@ -261,83 +274,14 @@ CREATE TABLE IF NOT EXISTS public.crm_support_messages (
     sender_name text NOT NULL,
     sender_role text NOT NULL,
     content text NOT NULL,
+    attachment_url text,
+    attachment_name text,
     created_at timestamptz DEFAULT now()
 );
 
--- Suporte a Central de Novidades para Professores
-CREATE TABLE IF NOT EXISTS public.crm_teacher_news (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    title text NOT NULL,
-    content text NOT NULL,
-    image_url text,
-    created_at timestamptz DEFAULT now()
-);
-
--- Suporte a pastas de formulários e Informações Globais de Cursos
-CREATE TABLE IF NOT EXISTS public.crm_form_folders (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    name text NOT NULL,
-    created_at timestamptz DEFAULT now()
-);
-
-ALTER TABLE IF EXISTS public.crm_forms 
-ADD COLUMN IF NOT EXISTS folder_id uuid REFERENCES public.crm_form_folders(id) ON DELETE SET NULL;
-
-ALTER TABLE IF EXISTS public.crm_companies 
-ADD COLUMN IF NOT EXISTS product_ids text[] DEFAULT '{}',
-ADD COLUMN IF NOT EXISTS webhook_url text;
-
-CREATE TABLE IF NOT EXISTS public.crm_webhook_triggers (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    pipeline_name text NOT NULL,
-    stage_id text NOT NULL,
-    payload_json text, 
-    created_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.crm_course_info (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    course_name text UNIQUE NOT NULL,
-    details text,
-    materials text,
-    requirements text,
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.crm_billing_negotiations (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    open_installments integer DEFAULT 0,
-    total_negotiated_value numeric DEFAULT 0,
-    total_installments integer DEFAULT 0,
-    due_date date,
-    responsible_agent text,
-    identifier_code text,
-    full_name text,
-    product_name text,
-    original_value numeric DEFAULT 0,
-    payment_method text,
-    observations text,
-    status text DEFAULT 'EDIÇÃO PENDENTE',
-    team text,
-    voucher_link_1 text,
-    test_date date,
-    voucher_link_2 text,
-    voucher_link_3 text,
-    boletos_link text,
-    negotiation_reference text,
-    attachments text,
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now()
-);
-
+-- Permissões
 GRANT ALL ON public.crm_support_tickets TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_support_messages TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_teacher_news TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_form_folders TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_webhook_triggers TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_billing_negotiations TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_course_info TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload config';
   `.trim();
@@ -976,9 +920,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V23)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Threads de Chamados, Tickets de Suporte, Central de Novidades, Pastas e Info Cursos).</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V23</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V24)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Anexos em Chamados e Responsáveis pelo atendimento).</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V24</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

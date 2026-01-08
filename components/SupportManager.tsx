@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { LifeBuoy, Search, Filter, Clock, CheckCircle, AlertTriangle, User, Mail, MessageSquare, Trash2, Loader2, RefreshCw, X, Send, ChevronRight, LayoutGrid, Kanban, BarChart3, TrendingUp, Download, Paperclip, FileText, Image as ImageIcon } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
@@ -53,9 +52,6 @@ export const SupportManager: React.FC = () => {
       } catch (e) { console.error(e); } finally { setIsLoadingThread(false); }
   };
 
-  /**
-   * FIXED: SupportTicket properties assignedId and assignedName
-   */
   const handleUpdateStatus = async (ticket: SupportTicket, newStatus: SupportTicket['status']) => {
     try {
       const updated: SupportTicket = { ...ticket, status: newStatus };
@@ -93,9 +89,7 @@ export const SupportManager: React.FC = () => {
           attachmentName: attachment?.name
       } as any);
 
-      /**
-       * FIXED: SupportTicket properties assignedId and assignedName
-       */
+      // Sempre atribui o chamado a quem respondeu se não estiver atribuído
       const updatedTicket: SupportTicket = { 
         ...selectedTicket, 
         status: 'pending' as const, 
@@ -112,7 +106,6 @@ export const SupportManager: React.FC = () => {
     } catch (e) { alert("Erro ao salvar."); } finally { setIsSavingResponse(false); }
   };
 
-  const handleDragStart = (id: string) => handleDragStart(id); // Recursion fixed below
   const handleDragStartActual = (id: string) => setDraggedTicketId(id);
   const handleDrop = async (newStatus: SupportTicket['status']) => {
       if (!draggedTicketId) return;
@@ -352,7 +345,7 @@ export const SupportManager: React.FC = () => {
                             <p className="text-[10px] font-black text-indigo-700 uppercase mb-3">Status e Fluxo</p>
                             <div className="flex flex-col gap-2">
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'open')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'open' ? "bg-red-600 text-white shadow-md" : "bg-white text-red-600 border border-red-100")}>Aberto</button>
-                                <button onClick={() => handleUpdateStatus(selectedTicket, 'pending')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'pending' ? "bg-amber-50 text-white shadow-md" : "bg-white text-amber-500 border border-amber-100")}>Em Análise</button>
+                                <button onClick={() => handleUpdateStatus(selectedTicket, 'pending')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'pending' ? "bg-amber-500 text-white shadow-md" : "bg-white text-amber-500 border border-amber-100")}>Em Análise</button>
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'waiting')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'waiting' ? "bg-blue-500 text-white shadow-md" : "bg-white text-blue-500 border border-blue-100")}>Aguardando Aluno</button>
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'closed')} className="w-full py-2 rounded-lg text-[10px] font-black uppercase bg-green-600 text-white hover:bg-green-700 transition-all shadow-md mt-2">Resolvido / Fechar</button>
                             </div>
@@ -365,8 +358,16 @@ export const SupportManager: React.FC = () => {
                         <div className="flex justify-start"><div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]"><span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem do Solicitante:</span><p className="text-sm text-slate-700 leading-relaxed font-medium italic">{selectedTicket.message}</p><span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span></div></div>
                         {thread.map(msg => (
                             <div key={msg.id} className={clsx("flex", msg.senderRole === 'admin' ? "justify-end" : "justify-start")}>
-                                <div className={clsx("p-5 rounded-2xl shadow-sm max-w-[85%] relative border", msg.senderRole === 'admin' ? "bg-indigo-600 text-white border-indigo-700 rounded-tr-none" : "bg-white border-slate-100 rounded-tl-none")}>
-                                    <span className={clsx("block text-[9px] font-black uppercase mb-2", msg.senderRole === 'admin' ? "text-indigo-100" : "text-slate-400")}>{msg.senderRole === 'admin' ? `Adm VOLL (${msg.senderName})` : 'Réplica do Usuário'}</span>
+                                <div className={clsx(
+                                    "p-5 rounded-2xl shadow-sm max-w-[85%] relative border",
+                                    msg.senderRole === 'admin' ? "bg-indigo-600 text-white border-indigo-700 rounded-tr-none" : "bg-white border-slate-100 rounded-tl-none"
+                                )}>
+                                    <span className={clsx(
+                                        "block text-[9px] font-black uppercase mb-2",
+                                        msg.senderRole === 'admin' ? "text-indigo-100" : "text-slate-400"
+                                    )}>
+                                        {msg.senderRole === 'admin' ? `Adm VOLL (${msg.senderName})` : 'Réplica do Usuário'}
+                                    </span>
                                     <p className="text-sm leading-relaxed font-medium">{msg.content}</p>
                                     {msg.attachmentUrl && (
                                         <div className="mt-3 p-2 bg-black/5 rounded-xl border border-white/20">
@@ -377,7 +378,10 @@ export const SupportManager: React.FC = () => {
                                             )}
                                         </div>
                                     )}
-                                    <span className={clsx("block text-right text-[9px] mt-2", msg.senderRole === 'admin' ? "text-indigo-200" : "text-slate-400")}>{new Date(msg.createdAt).toLocaleString()}</span>
+                                    <span className={clsx(
+                                        "block text-right text-[9px] mt-2",
+                                        msg.senderRole === 'admin' ? "text-indigo-200" : "text-slate-400"
+                                    )}>{new Date(msg.createdAt).toLocaleString()}</span>
                                 </div>
                             </div>
                         ))}

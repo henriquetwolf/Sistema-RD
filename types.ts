@@ -1,4 +1,5 @@
 
+
 export interface BillingRecord {
   id: number;
   "Identificador do cliente": string;
@@ -452,6 +453,10 @@ export interface TeacherNews {
   createdAt: string;
 }
 
+/**
+ * FIXED: Added missing properties assignedId and assignedName
+ * FIXED: Added 'waiting' to status type
+ */
 export interface SupportTicket {
   id: string;
   senderId: string;
@@ -460,12 +465,17 @@ export interface SupportTicket {
   senderRole: 'student' | 'instructor' | 'studio' | 'admin';
   subject: string;
   message: string;
-  status: 'open' | 'pending' | 'closed';
+  status: 'open' | 'pending' | 'closed' | 'waiting';
   response?: string;
+  assignedId?: string;
+  assignedName?: string;
   createdAt: string;
   updatedAt: string;
 }
 
+/**
+ * FIXED: Added attachmentUrl and attachmentName to SupportMessage
+ */
 export interface SupportMessage {
   id: string;
   ticketId: string;
@@ -473,5 +483,39 @@ export interface SupportMessage {
   senderName: string;
   senderRole: 'student' | 'instructor' | 'studio' | 'admin';
   content: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
   createdAt: string;
+}
+
+/**
+ * NEW TYPES FOR CRM AND PLUGINS
+ */
+export interface PipelineStage {
+    id: string;
+    title: string;
+    color?: string;
+}
+
+export interface Pipeline {
+    id: string;
+    name: string;
+    stages: PipelineStage[];
+}
+
+export interface WebhookTrigger {
+    id: string;
+    pipelineName: string;
+    stageId: string;
+    payloadJson?: string;
+    createdAt?: string;
+}
+
+export interface CompanySetting {
+    id: string;
+    legalName: string;
+    cnpj: string;
+    webhookUrl?: string;
+    productTypes: string[];
+    productIds: string[];
 }

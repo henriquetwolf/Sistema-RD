@@ -5,7 +5,9 @@ import {
   User, DollarSign, Phone, Mail, ArrowRight, CheckCircle2, 
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
-  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2, Palette, Settings as SettingsIcon, ChevronDown
+  MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2, Palette, Settings as SettingsIcon, ChevronDown, CheckCircle, Circle,
+  /* ADDED: Missing CheckSquare import */
+  CheckSquare
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend, CompanySetting, Pipeline, PipelineStage, WebhookTrigger } from '../services/appBackend';
@@ -163,6 +165,11 @@ export const CrmBoard: React.FC = () => {
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormData, setDealFormData] = useState<Partial<Deal>>(INITIAL_FORM_STATE);
   
+  // Tasks Form State
+  const [newTaskDesc, setNewTaskDesc] = useState('');
+  const [newTaskDate, setNewTaskDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newTaskType, setNewTaskType] = useState<DealTask['type']>('todo');
+
   // Team form
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [teamName, setTeamName] = useState('');
@@ -358,7 +365,7 @@ export const CrmBoard: React.FC = () => {
     return { count: stageDeals.length, total: stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0) };
   };
 
-  // FIXED: Changed 'setDraggedTicketId' to 'setDraggedDealId'
+  /* FIXED: Changed setDraggedTicketId to setDraggedDealId in handleDragStart */
   const handleDragStart = (e: React.DragEvent, dealId: string) => { setDraggedDealId(dealId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dealId); };
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
   
@@ -399,12 +406,13 @@ export const CrmBoard: React.FC = () => {
         ...INITIAL_FORM_STATE, 
         owner: firstComercial?.id || '', 
         pipeline: firstPipeline, 
-        stage: firstStage 
+        stage: firstStage,
+        tasks: []
     }); 
     setShowDealModal(true); 
   };
 
-  const openEditDealModal = (deal: Deal) => { setEditingDealId(deal.id); setDealFormData({ ...deal }); setShowDealModal(true); };
+  const openEditDealModal = (deal: Deal) => { setEditingDealId(deal.id); setDealFormData({ ...deal, tasks: deal.tasks || [] }); setShowDealModal(true); };
 
   const openNewTeamModal = () => { setEditingTeam(null); setTeamName(''); setSelectedMembers([]); setShowTeamModal(true); };
   const openEditTeamModal = (team: Team) => { setEditingTeam(team); setTeamName(team.name || ''); setSelectedMembers(team.members || []); setShowTeamModal(true); };
@@ -595,7 +603,7 @@ export const CrmBoard: React.FC = () => {
           zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber, registration_data: dealFormData.registrationData,
           observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
           class_mod_1: dealFormData.classMod1, class_mod_2: dealFormData.classMod2, pipeline: dealFormData.pipeline, 
-          tasks: dealFormData.tasks, billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName
+          tasks: dealFormData.tasks || [], billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName
       };
       try {
           if (editingDealId) {
@@ -629,6 +637,37 @@ export const CrmBoard: React.FC = () => {
             await fetchData(); setShowDealModal(false);
           } catch(e: any) { alert(`Erro ao excluir: ${e.message}`); }
       }
+  };
+
+  // --- Task Helpers ---
+  const addTaskToForm = () => {
+      if (!newTaskDesc.trim()) return;
+      const newTask: DealTask = {
+          id: crypto.randomUUID(),
+          description: newTaskDesc.trim(),
+          dueDate: newTaskDate,
+          type: newTaskType,
+          isDone: false
+      };
+      setDealFormData(prev => ({
+          ...prev,
+          tasks: [...(prev.tasks || []), newTask]
+      }));
+      setNewTaskDesc('');
+  };
+
+  const toggleTaskDone = (taskId: string) => {
+      setDealFormData(prev => ({
+          ...prev,
+          tasks: (prev.tasks || []).map(t => t.id === taskId ? { ...t, isDone: !t.isDone } : t)
+      }));
+  };
+
+  const removeTaskFromForm = (taskId: string) => {
+      setDealFormData(prev => ({
+          ...prev,
+          tasks: (prev.tasks || []).filter(t => t.id !== taskId)
+      }));
   };
 
   const filteredDeals = (deals || []).filter(d => 
@@ -789,7 +828,7 @@ export const CrmBoard: React.FC = () => {
                   <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1">
                       <div>
                           <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Nome do Funil</label>
-                          <input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500" placeholder="Ex: Funil Cursos, Funil Equipamentos..." value={pipelineName} onChange={e => setPipelineName(e.target.value)} />
+                          <input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-50" placeholder="Ex: Funil Cursos, Funil Equipamentos..." value={pipelineName} onChange={e => setPipelineName(e.target.value)} />
                       </div>
                       <div className="space-y-4">
                           <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-600 uppercase tracking-widest">Etapas</label><button onClick={() => setPipelineStages([...pipelineStages, { id: crypto.randomUUID().substring(0,8), title: 'Nova Etapa', color: 'border-slate-300' }])} className="text-xs font-bold text-teal-600 hover:underline">+ Adicionar Etapa</button></div>
@@ -909,7 +948,7 @@ export const CrmBoard: React.FC = () => {
                             </div>
                             <div className="lg:col-span-2">
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Produto / Curso</label>
-                                <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white disabled:bg-slate-50" value={dealFormData.productName} onChange={e => setDealFormData({...dealFormData, productName: e.target.value})} disabled={!dealFormData.productType}>
+                                <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white disabled:bg-slate-100" value={dealFormData.productName} onChange={e => setDealFormData({...dealFormData, productName: e.target.value})} disabled={!dealFormData.productType}>
                                     <option value="">Selecione o produto...</option>
                                     {productOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                 </select>
@@ -923,7 +962,7 @@ export const CrmBoard: React.FC = () => {
 
                     {dealFormData.productType === 'Presencial' && (
                         <div className="lg:col-span-3 bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-2">
-                             <div className="md:col-span-4 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Turmas Presenciais</div>
+                             <div className="md:col-span-4 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={12}/> Turmas Presenciais</div>
                              <div>
                                 <label className="block text-[10px] font-bold text-slate-500 mb-1">UF Curso</label>
                                 <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.courseState} onChange={e => setDealFormData({...dealFormData, courseState: e.target.value, courseCity: '', classMod1: '', classMod2: ''})}>
@@ -996,8 +1035,90 @@ export const CrmBoard: React.FC = () => {
 
                     <div className="lg:col-span-3 border-t pt-6">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><ListTodo size={14}/> Tarefas & Agendamentos</h4>
-                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 text-center">
-                             <div className="text-slate-400 text-sm italic">O módulo de gerenciamento individual de tarefas para este negócio será habilitado em breve.</div>
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
+                             {/* Form para adicionar tarefa */}
+                             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-white p-4 rounded-xl shadow-sm">
+                                 <div className="md:col-span-6">
+                                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">O que precisa ser feito?</label>
+                                     <input 
+                                        type="text" 
+                                        className="w-full px-3 py-1.5 border rounded-lg text-sm" 
+                                        placeholder="Ex: Ligar para confirmar pagamento" 
+                                        value={newTaskDesc}
+                                        onChange={e => setNewTaskDesc(e.target.value)}
+                                     />
+                                 </div>
+                                 <div className="md:col-span-2">
+                                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Data</label>
+                                     <input 
+                                        type="date" 
+                                        className="w-full px-3 py-1.5 border rounded-lg text-sm" 
+                                        value={newTaskDate}
+                                        onChange={e => setNewTaskDate(e.target.value)}
+                                     />
+                                 </div>
+                                 <div className="md:col-span-2">
+                                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Tipo</label>
+                                     <select 
+                                        className="w-full px-3 py-1.5 border rounded-lg text-sm bg-white" 
+                                        value={newTaskType}
+                                        onChange={e => setNewTaskType(e.target.value as any)}
+                                     >
+                                         <option value="todo">Geral</option>
+                                         <option value="call">Ligação</option>
+                                         <option value="email">E-mail</option>
+                                         <option value="meeting">Reunião</option>
+                                     </select>
+                                 </div>
+                                 <div className="md:col-span-2">
+                                     <button 
+                                        type="button" 
+                                        onClick={addTaskToForm}
+                                        disabled={!newTaskDesc.trim()}
+                                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg font-bold text-sm shadow-sm transition-all disabled:opacity-50"
+                                     >
+                                         Agendar
+                                     </button>
+                                 </div>
+                             </div>
+
+                             {/* Lista de tarefas agendadas */}
+                             <div className="space-y-2">
+                                 {(dealFormData.tasks || []).length === 0 ? (
+                                     <div className="text-center py-6 text-slate-400 text-xs italic">Nenhuma tarefa agendada para este negócio.</div>
+                                 ) : (
+                                     dealFormData.tasks?.map(task => (
+                                         <div key={task.id} className={clsx("flex items-center gap-4 p-3 rounded-xl border transition-all", task.isDone ? "bg-slate-100 border-slate-200 opacity-60" : "bg-white border-slate-200 hover:border-indigo-300 shadow-sm")}>
+                                             <button onClick={() => toggleTaskDone(task.id)} className={clsx("shrink-0 transition-colors", task.isDone ? "text-green-500" : "text-slate-300 hover:text-indigo-500")}>
+                                                 {task.isDone ? <CheckCircle size={20}/> : <Circle size={20}/>}
+                                             </button>
+                                             
+                                             <div className="flex-1 min-w-0">
+                                                 <div className="flex items-center gap-2 mb-0.5">
+                                                     <div className={clsx("p-1 rounded-md", 
+                                                        task.type === 'call' ? "bg-blue-50 text-blue-600" :
+                                                        task.type === 'email' ? "bg-purple-50 text-purple-600" :
+                                                        task.type === 'meeting' ? "bg-orange-50 text-orange-600" : "bg-slate-50 text-slate-600"
+                                                     )}>
+                                                         {task.type === 'call' && <Phone size={12}/>}
+                                                         {task.type === 'email' && <Mail size={12}/>}
+                                                         {task.type === 'meeting' && <Users size={12}/>}
+                                                         {task.type === 'todo' && <CheckSquare size={12}/>}
+                                                     </div>
+                                                     <span className={clsx("text-xs font-bold truncate", task.isDone ? "text-slate-500 line-through" : "text-slate-800")}>{task.description}</span>
+                                                 </div>
+                                                 <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase">
+                                                     <Calendar size={10}/> {new Date(task.dueDate).toLocaleDateString()}
+                                                 </div>
+                                             </div>
+
+                                             <button onClick={() => removeTaskFromForm(task.id)} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors">
+                                                 <Trash2 size={14}/>
+                                             </button>
+                                         </div>
+                                     ))
+                                 )}
+                             </div>
                         </div>
                     </div>
 

@@ -1,5 +1,4 @@
 
-
 export interface BillingRecord {
   id: number;
   "Identificador do cliente": string;
@@ -120,6 +119,13 @@ export type UploadStatus = 'idle' | 'parsing' | 'uploading' | 'success' | 'error
 
 export type EntityImportType = 'generic' | 'collaborators' | 'instructors' | 'students' | 'franchises' | 'studios';
 
+export interface SyncLog {
+  timestamp: Date;
+  status: 'success' | 'error';
+  message: string;
+  rowCount?: number;
+}
+
 export interface SyncJob {
   id: string;
   name: string;
@@ -182,36 +188,29 @@ export interface FormQuestion {
   systemMapping?: string; 
 }
 
-export interface FormAnswer {
-  questionId: string;
-  questionTitle: string;
-  value: string;
+export interface FormStyle {
+  backgroundType: 'color' | 'image' | 'texture' | 'none';
+  backgroundColor: string;
+  backgroundImage?: string;
+  backgroundTexture?: string;
+  cardTransparent?: boolean;
+  primaryColor?: string;
+  textColor?: string;
+  fontFamily?: 'sans' | 'serif' | 'modern';
+  titleAlignment?: 'left' | 'center';
+  borderRadius?: 'none' | 'small' | 'medium' | 'large' | 'full';
+  buttonText?: string;
+  logoUrl?: string;
+  shadowIntensity?: 'none' | 'soft' | 'strong';
+  successTitle?: string;
+  successMessage?: string;
+  successButtonText?: string;
 }
 
 export interface FormFolder {
   id: string;
   name: string;
   createdAt: string;
-}
-
-/* Added FormStyle interface */
-export interface FormStyle {
-  backgroundType: 'color' | 'image' | 'texture';
-  backgroundColor?: string;
-  backgroundImage?: string;
-  backgroundTexture?: string;
-  cardTransparent?: boolean;
-  primaryColor: string;
-  textColor: string;
-  fontFamily: 'sans' | 'serif' | 'modern';
-  titleAlignment: 'left' | 'center';
-  borderRadius: 'none' | 'small' | 'medium' | 'large' | 'full';
-  buttonText: string;
-  shadowIntensity: 'none' | 'soft' | 'strong';
-  logoUrl?: string;
-  successTitle?: string;
-  successMessage?: string;
-  successButtonText?: string;
 }
 
 export interface FormModel {
@@ -226,7 +225,6 @@ export interface FormModel {
   targetPipeline?: string; 
   targetStage?: string;    
   questions: FormQuestion[];
-  /* Updated to use FormStyle */
   style?: FormStyle; 
   createdAt: string;
   submissionsCount: number;
@@ -239,6 +237,12 @@ export interface SurveyModel extends FormModel {
     targetProductName?: string;
     onlyIfFinished: boolean;
     isActive: boolean;
+}
+
+export interface FormAnswer {
+  questionId: string;
+  questionTitle: string;
+  value: string;
 }
 
 export interface ContractSigner {
@@ -284,7 +288,6 @@ export interface PartnerStudioSession {
   cnpj: string;
 }
 
-/* Added TextStyle interface */
 export interface TextStyle {
   x: number;
   y: number;
@@ -296,12 +299,10 @@ export interface TextStyle {
   width: number;
 }
 
-/* Added CertificateLayout interface */
 export interface CertificateLayout {
   body: TextStyle;
   name: TextStyle;
   footer: TextStyle;
-  [key: string]: TextStyle;
 }
 
 export interface CertificateModel {
@@ -311,9 +312,16 @@ export interface CertificateModel {
   backBackgroundData?: string; 
   linkedProductId?: string;
   bodyText: string;
-  /* Updated to use CertificateLayout */
   layoutConfig: CertificateLayout;
   createdAt: string;
+}
+
+export interface StudentCertificate {
+  id: string;
+  studentDealId: string;
+  certificateTemplateId: string;
+  hash: string;
+  issuedAt: string;
 }
 
 export interface EventModel {
@@ -436,48 +444,11 @@ export interface Product {
   createdAt: string;
 }
 
+// Added TeacherNews interface to resolve module export error
 export interface TeacherNews {
   id: string;
   title: string;
   content: string;
   imageUrl?: string;
   createdAt: string;
-}
-
-export type SupportStatus = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
-export type SupportPriority = 'low' | 'medium' | 'high' | 'urgent';
-export type SupportCategory = 'Geral' | 'Financeiro' | 'Técnico' | 'Pedagógico' | 'Logística' | 'Outros';
-
-export interface SupportTicket {
-  id: string;
-  title: string;
-  description: string;
-  category: SupportCategory;
-  priority: SupportPriority;
-  status: SupportStatus;
-  senderId: string;
-  senderName: string;
-  senderType: 'student' | 'instructor' | 'studio' | 'admin';
-  assignedTo?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface SupportMessage {
-  id: string;
-  ticketId: string;
-  senderId: string;
-  senderName: string;
-  senderType: 'user' | 'admin';
-  content: string;
-  attachments?: string[];
-  createdAt: string;
-}
-
-/* Added WAConfig interface */
-export interface WAConfig {
-  accessToken: string;
-  phoneNumberId: string;
-  wabaId: string;
-  webhookVerifyToken: string;
 }

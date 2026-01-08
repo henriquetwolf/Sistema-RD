@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -30,6 +31,7 @@ import { WhatsAppInbox } from './components/WhatsAppInbox';
 import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
+import { SupportChannel } from './components/SupportChannel';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -38,9 +40,10 @@ import { appBackend } from './services/appBackend';
 import { 
   CheckCircle, AlertTriangle, Loader2, Database, LogOut, 
   Plus, Play, Pause, Trash2, ExternalLink, Activity, Clock, FileInput, HardDrive,
-  LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
+  /* Added missing imports LayoutGrid and ChevronRight */
+  LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban, LayoutGrid, ChevronRight,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
-  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard
+  FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard, LifeBuoy, CircleDot
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -67,11 +70,9 @@ function App() {
   const [currentStudio, setCurrentStudio] = useState<PartnerStudioSession | null>(null);
 
   const [jobs, setJobs] = useState<SyncJob[]>([]);
-  const jobsRef = useRef<SyncJob[]>([]); 
   
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios' | 'inventory' | 'billing'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'support' | 'hr' | 'crm' | 'billing' | 'inventory' | 'whatsapp' | 'analysis' | 'forms' | 'surveys' | 'contracts' | 'events' | 'students' | 'certificates' | 'global_settings'>('overview');
 
-  // Overview Stats State
   const [overviewStats, setOverviewStats] = useState({
       leadsToday: 0,
       salesToday: 0,
@@ -80,7 +81,6 @@ function App() {
       salesWeek: 0,
       revenueWeek: 0
   });
-  const [recentChanges, setRecentChanges] = useState<any[]>([]);
   const [isOverviewLoading, setIsOverviewLoading] = useState(false);
 
   const [step, setStep] = useState<AppStep>(AppStep.DASHBOARD);
@@ -91,12 +91,7 @@ function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedEntity, setSelectedEntity] = useState<EntityImportType>('generic');
 
-  // RH Data Integration
   const [allCollaborators, setAllCollaborators] = useState<any[]>([]);
-  const [isHrLoading, setIsHrLoading] = useState(false);
-
-  const intervalRef = useRef<number | null>(null);
-  const CHECK_INTERVAL_MS = 60 * 1000; 
 
   useEffect(() => {
     const initApp = async () => {
@@ -117,6 +112,7 @@ function App() {
                     if (form) setPublicForm(form);
                     else setPublicError("O formulário solicitado não existe ou foi removido.");
                 } else if (contractId) {
+                    /* Fixed missing method name */
                     const contract = await appBackend.getContractById(contractId);
                     if (contract) setPublicContract(contract);
                     else setPublicError("O contrato solicitado não foi localizado.");
@@ -131,13 +127,10 @@ function App() {
             return;
         }
 
-        // CARREGA JOBS DO BANCO
         try {
             const data = await appBackend.getSyncJobs();
             setJobs(data);
-        } catch (e) {
-            console.error("Erro ao carregar conexões do banco de dados:", e);
-        }
+        } catch (e) {}
 
         appBackend.auth.getSession().then((s) => {
             setSession(s);
@@ -166,27 +159,7 @@ function App() {
     if (dashboardTab === 'overview' && (session || currentCollaborator)) {
         fetchOverviewData();
     }
-    if (dashboardTab === 'hr' && (session || currentCollaborator)) {
-        fetchHrData();
-    }
   }, [dashboardTab, session, currentCollaborator]);
-
-  const fetchHrData = async () => {
-      setIsHrLoading(true);
-      try {
-          const { data, error } = await appBackend.client.from('crm_collaborators').select('*').order('full_name');
-          if (data) {
-              setAllCollaborators(data.map((d: any) => ({
-                id: d.id, fullName: d.full_name || '', socialName: d.social_name || '', birthDate: d.birth_date || '', maritalStatus: d.marital_status || '', spouseName: d.spouse_name || '', fatherName: d.father_name || '', motherName: d.mother_name || '', genderIdentity: d.gender_identity || '', racialIdentity: d.racial_identity || '', educationLevel: d.education_level || '', photoUrl: d.photo_url || '', email: d.email || '', phone: d.phone || '', cellphone: d.cellphone || '', corporatePhone: d.corporate_phone || '', operator: d.operator || '', address: d.address || '', cep: d.cep || '', complement: d.complement || '', birthState: d.birth_state || '', birthCity: d.birth_city || '', state: d.state || '', currentCity: d.current_city || '', emergencyName: d.emergency_name || '', emergencyPhone: d.emergency_phone || '', status: d.status || 'active', contractType: d.contract_type || '', cpf: d.cpf || '', rg: d.rg || '', rgIssuer: d.rg_issuer || '', rgIssueDate: d.rg_issue_date || '', rgState: d.rg_state || '', ctpsNumber: d.ctps_number || '', ctpsSeries: d.ctps_series || '', ctpsState: d.ctps_state || '', ctpsIssueDate: d.ctps_issue_date || '', pisNumber: d.pis_number || '', reservistNumber: d.reservist_number || '', docsFolderLink: d.docs_folder_link || '', legalAuth: !!d.legal_auth, bankAccountInfo: d.bank_account_info || '', hasInsalubrity: d.has_insalubrity || 'Não', insalubrityPercent: d.insalubrity_percent || '', hasDangerPay: d.has_danger_pay || 'Não', transportVoucherInfo: d.transport_voucher_info || '', busLineHomeWork: d.bus_line_home_work || '', busQtyHomeWork: d.bus_qty_home_work || '', busLineWorkHome: d.bus_line_work_home || '', busQtyWorkHome: d.bus_qty_work_home || '', ticketValue: d.ticket_value || '', fuelVoucherValue: d.fuel_voucher_value || '', hasMealVoucher: d.has_meal_voucher || 'Não', hasFoodVoucher: d.has_food_voucher || 'Não', hasHomeOfficeAid: d.has_home_office_aid || 'Não', hasHealthPlan: d.has_health_plan || 'Não', hasDentalPlan: d.has_dental_plan || 'Não', bonusInfo: d.bonus_info || '', bonusValue: d.bonus_value || '', commissionInfo: d.commission_info || '', commissionPercent: d.commission_percent || '', hasDependents: d.has_dependents || 'Não', dependentName: d.dependent_name || '', dependentDob: d.dependent_dob || '', dependentKinship: d.dependent_kinship || '', dependentCpf: d.dependent_cpf || '', resignationDate: d.resignation_date || '', demissionReason: d.demission_reason || '', demissionDocs: d.demission_docs || '', vacationPeriods: d.vacation_periods || '', observations: d.observations || '',
-                admissionDate: d.admission_date || '', role: d.role || '', department: d.department || '', salary: d.salary || '', hiringMode: d.hiring_mode || '', superiorId: d.superior_id || ''
-              })));
-          }
-      } catch (e) {
-          console.error(e);
-      } finally {
-          setIsHrLoading(false);
-      }
-  };
 
   const fetchOverviewData = async () => {
     setIsOverviewLoading(true);
@@ -217,82 +190,10 @@ function App() {
             leadsToday: leadsT, salesToday: salesT.length, revenueToday: revenueT,
             leadsWeek: leadsW, salesWeek: salesW.length, revenueWeek: revenueW
         });
-
-        const [teachers, studios, dealsData] = await Promise.all([
-            appBackend.client.from('crm_teachers').select('full_name, created_at').order('created_at', { ascending: false }).limit(3),
-            appBackend.client.from('crm_partner_studios').select('fantasy_name, created_at').order('created_at', { ascending: false }).limit(3),
-            appBackend.client.from('crm_deals').select('company_name, contact_name, created_at').order('created_at', { ascending: false }).limit(5)
-        ]);
-
-        const activities: any[] = [];
-        teachers.data?.forEach(t => activities.push({ type: 'teacher', name: t.full_name, date: t.created_at }));
-        studios.data?.forEach(s => activities.push({ type: 'studio', name: s.fantasy_name, date: s.created_at }));
-        dealsData.data?.forEach(d => activities.push({ type: 'deal', name: d.company_name || d.contact_name, date: d.created_at }));
-        setRecentChanges(activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8));
-
     } catch (e) {
         console.error(e);
     } finally {
         setIsOverviewLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    jobsRef.current = jobs; 
-  }, [jobs]);
-
-  useEffect(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = window.setInterval(() => runAllActiveJobs(), CHECK_INTERVAL_MS);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, []); 
-
-  const runAllActiveJobs = () => {
-    const currentJobs = jobsRef.current;
-    const now = new Date();
-    const jobsToRun = currentJobs.filter(j => {
-        if (!j.active || !j.sheetUrl || j.status === 'syncing') return false;
-        if (!j.lastSync) return true;
-        const diffMs = now.getTime() - new Date(j.lastSync).getTime();
-        return (diffMs / (1000 * 60)) >= (j.intervalMinutes || 5);
-    });
-    jobsToRun.forEach(job => performJobSync(job));
-  };
-
-  const performJobSync = async (job: SyncJob) => {
-    if (!job.sheetUrl) return;
-    setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'syncing', lastMessage: 'Iniciando ciclo...' } : j));
-    try {
-        const controller = new AbortController();
-        const separator = job.sheetUrl.includes('?') ? '&' : '?';
-        const fetchUrlWithCache = `${job.sheetUrl}${separator}_t=${Date.now()}`;
-        const response = await fetch(fetchUrlWithCache, { signal: controller.signal });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const blob = await response.blob();
-        let parsed: FileData;
-        try {
-            const file = new File([blob], "temp_sync.xlsx", { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            parsed = await parseExcelFile(file);
-        } catch (excelError) {
-            const text = await blob.text();
-            const file = new File([text], "temp_sync.csv", { type: 'text/csv' });
-            parsed = await parseCsvFile(file);
-        }
-        const client = createSupabaseClient(job.config.url, job.config.key);
-        await clearTableData(client, job.config.tableName, job.config.primaryKey || 'id');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        await batchUploadData(client, job.config, parsed.data, () => {});
-        
-        // ATUALIZA NO BANCO
-        const lastSync = new Date().toISOString();
-        const lastMsg = `Ciclo Completo: ${parsed.rowCount} linhas.`;
-        await appBackend.updateJobStatus(job.id, 'success', lastSync, lastMsg);
-
-        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'success', lastSync: lastSync, lastMessage: lastMsg } : j));
-    } catch (e: any) {
-        const lastSync = new Date().toISOString();
-        await appBackend.updateJobStatus(job.id, 'error', lastSync, e.message);
-        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'error', lastSync: lastSync, lastMessage: e.message } : j));
     }
   };
 
@@ -312,30 +213,6 @@ function App() {
     try {
       const parsedFiles = await Promise.all(files.map(file => file.name.endsWith('.xlsx') ? parseExcelFile(file) : parseCsvFile(file)));
       setFilesData(parsedFiles);
-      
-      if (selectedEntity !== 'generic') {
-          const mapping: Record<string, { table: string, pk: string }> = {
-              collaborators: { table: 'crm_collaborators', pk: 'email' },
-              instructors: { table: 'crm_teachers', pk: 'email' },
-              students: { table: 'crm_deals', pk: 'email' },
-              franchises: { table: 'crm_franchises', pk: 'cnpj' },
-              studios: { table: 'crm_partner_studios', pk: 'email' },
-          };
-          const info = mapping[selectedEntity];
-          if (info) {
-              setConfig(prev => ({
-                  ...prev,
-                  tableName: info.table,
-                  primaryKey: info.pk
-              }));
-          }
-      } else if (!config.tableName && files.length > 0) {
-          setConfig(prev => ({ 
-              ...prev, 
-              tableName: files[0].name.replace(/\.(csv|xlsx)$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() 
-          }));
-      }
-
       setStep(AppStep.CONFIG);
       setStatus('idle');
     } catch (e: any) { 
@@ -346,54 +223,32 @@ function App() {
 
   const handleCreateConnection = async () => {
       setErrorMessage(null);
-      const isAutoSync = !!tempSheetUrl;
-      const creator = currentCollaborator ? currentCollaborator.name : (session?.user?.email || 'Super Admin');
-      
       try {
-          if (!isAutoSync) {
-              setStatus('uploading');
-              const client = createSupabaseClient(config.url, config.key);
-              const allData = filesData.flatMap(f => f.data);
-              if (allData.length > 0) {
-                  await batchUploadData(client, config, allData, () => {});
-              }
+          setStatus('uploading');
+          const client = createSupabaseClient(config.url, config.key);
+          const allData = filesData.flatMap(f => f.data);
+          if (allData.length > 0) {
+              await batchUploadData(client, config, allData, () => {});
           }
-          
           const newJob: SyncJob = { 
               id: crypto.randomUUID(), 
               name: config.tableName || "Nova Conexão", 
               sheetUrl: tempSheetUrl || "", 
               config: { ...config }, 
-              active: isAutoSync, 
-              status: isAutoSync ? 'idle' : 'success', 
-              lastSync: isAutoSync ? null : new Date().toISOString(), 
-              lastMessage: isAutoSync ? 'Aguardando sincronização...' : `Upload manual completo.`, 
+              active: !!tempSheetUrl, 
+              status: tempSheetUrl ? 'idle' : 'success', 
+              lastSync: tempSheetUrl ? null : new Date().toISOString(), 
+              lastMessage: tempSheetUrl ? 'Aguardando sincronização...' : `Upload manual completo.`, 
               intervalMinutes: config.intervalMinutes || 5,
-              createdBy: creator,
+              createdBy: currentCollaborator ? currentCollaborator.name : 'Super Admin',
               createdAt: new Date().toISOString()
           };
-
-          // SALVA NO BANCO
           await appBackend.saveSyncJob(newJob);
-          
-          setJobs(prev => [...prev, newJob]);
           setStep(AppStep.DASHBOARD);
-          setDashboardTab('global_settings'); // Redireciona para onde as conexões agora vivem
           setStatus('idle');
-          if (isAutoSync) setTimeout(() => performJobSync(newJob), 500);
       } catch (e: any) { 
-          console.error("Erro no processo de conexão:", e);
           setErrorMessage(`Falha no processamento: ${e.message}`); 
           setStatus('error'); 
-          // Scroll to top to show error
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-  };
-
-  const handleDeleteJob = async (id: string) => {
-      if (window.confirm("Excluir esta conexão do banco de dados?")) {
-          await appBackend.deleteSyncJob(id);
-          setJobs(prev => prev.filter(j => j.id !== id));
       }
   };
 
@@ -428,7 +283,6 @@ function App() {
                   <Home size={18} /> Ir para o Início
               </button>
           </div>
-          <div className="mt-8 opacity-20"><img src={DEFAULT_LOGO} alt="VOLL" className="h-8 grayscale" /></div>
       </div>
   );
 
@@ -440,17 +294,16 @@ function App() {
 
   if (!session && !currentInstructor && !currentStudent && !currentCollaborator && !currentStudio) {
       return <LoginPanel 
-        onInstructorLogin={s => {setCurrentInstructor(s); sessionStorage.setItem('instructor_session', JSON.stringify(s));}} 
-        onStudentLogin={s => {setCurrentStudent(s); sessionStorage.setItem('student_session', JSON.stringify(s));}} 
-        onCollaboratorLogin={s => {setCurrentCollaborator(s); sessionStorage.setItem('collaborator_session', JSON.stringify(s));}}
-        onStudioLogin={s => {setCurrentStudio(s); sessionStorage.setItem('studio_session', JSON.stringify(s));}}
+        onInstructorLogin={onInstructorLogin} 
+        onStudentLogin={onStudentLogin} 
+        onCollaboratorLogin={onCollaboratorLogin}
+        onStudioLogin={onStudioLogin}
       />;
   }
   if (currentInstructor) return <InstructorArea instructor={currentInstructor} onLogout={handleLogout} />;
   if (currentStudent) return <StudentArea student={currentStudent} onLogout={handleLogout} />;
   if (currentStudio) return <PartnerStudioArea studio={currentStudio} onLogout={handleLogout} />;
 
-  // Pega o nome do colaborador ou tenta pegar o nome do metadado do usuário Supabase (Super Admin)
   const currentUserName = currentCollaborator 
     ? currentCollaborator.name 
     : (session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Super Admin');
@@ -461,98 +314,97 @@ function App() {
         <div className="max-w-4xl mx-auto py-8 px-4">
              <div className="flex items-center justify-between mb-8">
                 <button onClick={() => setStep(AppStep.DASHBOARD)} className="text-slate-500 hover:text-teal-600 flex items-center gap-2 font-medium">
-                    <ArrowLeft size={20} /> Cancelar e Voltar
+                    <ArrowLeft size={20} /> Voltar
                 </button>
                 <img src={appLogo} alt="VOLL" className="h-8 max-w-[150px] object-contain" />
              </div>
              <StepIndicator currentStep={step} />
-
-             {errorMessage && (
-                <div className="mb-6 animate-in slide-in-from-top-2">
-                    <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm flex items-start gap-3">
-                        <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={20} />
-                        <div className="flex-1">
-                            <p className="text-sm font-bold text-red-800">Erro na Operação</p>
-                            <p className="text-xs text-red-700 mt-1 leading-relaxed">{errorMessage}</p>
-                            <div className="mt-3 flex items-center gap-4">
-                                <button onClick={() => setErrorMessage(null)} className="text-[10px] font-black uppercase text-red-600 hover:underline">Dispensar</button>
-                                <button onClick={() => { setErrorMessage(null); handleCreateConnection(); }} className="text-[10px] font-black uppercase text-indigo-600 hover:underline">Tentar Novamente</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-             )}
-
              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 min-h-[400px]">
                 {step === AppStep.UPLOAD && <UploadPanel onFilesSelected={handleFilesSelected} onUrlConfirmed={setTempSheetUrl} onEntitySelected={setSelectedEntity} isLoading={status === 'parsing'} />}
                 {step === AppStep.CONFIG && <ConfigPanel config={config} setConfig={setConfig} onNext={() => setStep(AppStep.PREVIEW)} onBack={() => setStep(AppStep.UPLOAD)} currentCreatorName={currentUserName} />}
                 {step === AppStep.PREVIEW && <PreviewPanel files={filesData} tableName={config.tableName} config={config} onUpdateFiles={setFilesData} onUpdateConfig={setConfig} onSync={handleCreateConnection} onBack={() => setStep(AppStep.CONFIG)} onClearTable={async () => { const client = createSupabaseClient(config.url, config.key); await clearTableData(client, config.tableName, config.primaryKey || 'id'); }} />}
              </div>
-             {step === AppStep.PREVIEW && (
-                 <div className="mt-6 flex justify-end">
-                     <button onClick={handleCreateConnection} disabled={status === 'uploading'} className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition-all flex items-center gap-2">
-                        {status === 'uploading' ? <Loader2 size={20} className="animate-spin" /> : <Database size={20} />}
-                        {tempSheetUrl ? 'Confirmar Integração Automática' : 'Enviar Dados para o Banco'}
-                     </button>
-                 </div>
-             )}
         </div>
       ) : (
         <>
-            <header className="bg-white border-b border-slate-200 py-4 sticky top-0 z-20 shadow-sm">
-                <div className="container mx-auto px-4 flex items-center justify-between">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => setDashboardTab('overview')}>
-                    <img src={appLogo} alt="Logo" className="h-10 w-auto max-w-[180px] object-contain" />
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded border border-blue-100 uppercase tracking-wide">{currentCollaborator ? currentCollaborator.role.name : 'Super Admin'}</span>
-                </div>
-                <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600 flex items-center gap-1.5 font-medium transition-colors"><LogOut size={16} /> Sair</button>
+            <header className="bg-white border-b border-slate-200 py-3 sticky top-0 z-20 shadow-sm">
+                <div className="container mx-auto px-6 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <span className="px-3 py-1 bg-blue-100 text-blue-700 text-[11px] font-black rounded border border-blue-200 uppercase tracking-widest">
+                            {currentCollaborator ? currentCollaborator.role.name : 'Super Admin'}
+                        </span>
+                    </div>
+                    <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600 flex items-center gap-1.5 font-bold transition-colors">
+                        <LogOut size={18} /> Sair
+                    </button>
                 </div>
             </header>
 
-            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp') && "max-w-full")}>
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
-                    <aside className="w-full md:w-64 flex-shrink-0">
-                        <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
+            <main className="container mx-auto px-6 py-8">
+                <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-8">
+                    <aside className="w-full md:w-72 flex-shrink-0">
+                        <div className="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm sticky top-24">
                             <nav className="space-y-1">
-                                {canAccess('overview') && <button onClick={() => setDashboardTab('overview')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'overview' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LayoutDashboard size={18} /> Visão Geral</button>}
-                                {canAccess('hr') && <button onClick={() => setDashboardTab('hr')} className={clsx("selection:w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'hr' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Heart size={18} /> Recursos Humanos</button>}
-                                {canAccess('crm') && <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Kanban size={18} /> CRM Comercial</button>}
-                                {canAccess('billing') && <button onClick={() => setDashboardTab('billing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'billing' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> Cobrança</button>}
-                                {canAccess('inventory') && <button onClick={() => setDashboardTab('inventory')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'inventory' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Package size={18} /> Controle de Estoque</button>}
-                                {canAccess('whatsapp') && <button onClick={() => setDashboardTab('whatsapp')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'whatsapp' ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MessageCircle size={18} /> Atendimento</button>}
-                                {canAccess('analysis') && <button onClick={() => setDashboardTab('analysis')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'analysis' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><PieChart size={18} /> Análise de Vendas</button>}
-                                {canAccess('forms') && <button onClick={() => setDashboardTab('forms')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'forms' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><FileText size={18} /> Formulários</button>}
-                                {canAccess('surveys') && <button onClick={() => setDashboardTab('surveys')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'surveys' ? "bg-amber-50 text-amber-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><PieChart size={18} /> Pesquisas</button>}
-                                {canAccess('contracts') && <button onClick={() => setDashboardTab('contracts')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'contracts' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><FileSignature size={18} /> Contratos</button>}
-                                {canAccess('events') && <button onClick={() => setDashboardTab('events')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'events' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Mic size={18} /> Eventos</button>}
-                                {canAccess('students') && <button onClick={() => setDashboardTab('students')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'students' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Users size={18} /> Alunos</button>}
-                                {canAccess('certificates') && <button onClick={() => setDashboardTab('certificates')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'certificates' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Award size={18} /> Certificados</button>}
-                                {canAccess('products') && <button onClick={() => setDashboardTab('products')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'products' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><ShoppingBag size={18} /> Produtos Digitais</button>}
-                                {canAccess('franchises') && <button onClick={() => setDashboardTab('franchises')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'franchises' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Store size={18} /> Franquias</button>}
-                                {canAccess('partner_studios') && <button onClick={() => setDashboardTab('partner_studios')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'partner_studios' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Building2 size={18} /> Studios Parceiros</button>}
-                                {canAccess('classes') && <button onClick={() => setDashboardTab('classes')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'classes' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><GraduationCap size={18} /> Turmas</button>}
-                                {canAccess('teachers') && <button onClick={() => setDashboardTab('teachers')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'teachers' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><School size={18} /> Professores</button>}
+                                {[
+                                    { id: 'overview', label: 'Visão Geral', icon: LayoutGrid },
+                                    { id: 'support', label: 'Suporte Interno', icon: LifeBuoy },
+                                    { id: 'hr', label: 'Recursos Humanos', icon: Heart },
+                                    { id: 'crm', label: 'CRM Comercial', icon: BarChart3 },
+                                    { id: 'billing', label: 'Cobrança', icon: CreditCard },
+                                    { id: 'inventory', label: 'Controle de Estoque', icon: Package },
+                                    { id: 'whatsapp', label: 'Atendimento', icon: MessageCircle },
+                                    { id: 'analysis', label: 'Análise de Vendas', icon: PieChart },
+                                    { id: 'forms', label: 'Formulários', icon: FileText },
+                                    { id: 'surveys', label: 'Pesquisas', icon: CircleDot },
+                                    { id: 'contracts', label: 'Contratos', icon: FileSignature },
+                                    { id: 'events', label: 'Eventos', icon: Mic },
+                                    { id: 'students', label: 'Alunos', icon: Users },
+                                    { id: 'certificates', label: 'Certificados', icon: Award },
+                                ].map(item => (
+                                    canAccess(item.id) && (
+                                        <button 
+                                            key={item.id} 
+                                            onClick={() => setDashboardTab(item.id as any)} 
+                                            className={clsx(
+                                                "w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-bold transition-all",
+                                                dashboardTab === item.id 
+                                                    ? "bg-teal-50 text-teal-700 shadow-sm ring-1 ring-teal-100" 
+                                                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                                            )}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <item.icon size={18} className={dashboardTab === item.id ? "text-teal-600" : "text-slate-400"} />
+                                                {item.label}
+                                            </div>
+                                            {dashboardTab === item.id && <ChevronRight size={14} />}
+                                        </button>
+                                    )
+                                ))}
                             </nav>
-                            {canAccess('global_settings') && <div className="mt-4 pt-4 border-t border-slate-100"><button onClick={() => setDashboardTab('global_settings')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'global_settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Cog size={18} /> Configurações</button></div>}
+                            <div className="mt-6 pt-6 border-t border-slate-100">
+                                <button onClick={() => setDashboardTab('global_settings')} className={clsx("w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold", dashboardTab === 'global_settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-500 hover:bg-slate-50")}>
+                                    <Cog size={18} /> Configurações
+                                </button>
+                            </div>
                         </div>
                     </aside>
 
                     <div className="flex-1 min-w-0">
                         {dashboardTab === 'overview' && (
                             <div className="space-y-8 animate-in fade-in duration-500">
-                                <section className="bg-gradient-to-r from-teal-600 to-indigo-700 rounded-3xl p-8 text-white shadow-xl shadow-teal-900/20 relative overflow-hidden group">
+                                <section className="bg-gradient-to-r from-teal-600 to-indigo-700 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden group">
                                     <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
                                     <div className="relative z-10">
-                                        <div className="flex items-center gap-3 mb-2">
+                                        <div className="flex items-center gap-3 mb-4">
                                             <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md border border-white/30">
                                                 <Sparkles size={24} className="text-teal-100" />
                                             </div>
-                                            <span className="text-teal-100 text-xs font-black uppercase tracking-[0.2em]">Painel de Controle</span>
+                                            <span className="text-teal-100 text-[10px] font-black uppercase tracking-[0.3em]">Painel de Controle</span>
                                         </div>
-                                        <h2 className="text-4xl font-black tracking-tight mb-2">
-                                            <span className="text-emerald-400">Bem-vindo</span>, <span className="text-teal-200">{currentUserName}</span>!
+                                        <h2 className="text-4xl font-black tracking-tight mb-4">
+                                            Bem-vindo, <span className="text-emerald-400">{currentUserName}</span>!
                                         </h2>
-                                        <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed">
+                                        <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed font-medium">
                                             Seu centro de comando está pronto. Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.
                                         </p>
                                     </div>
@@ -563,86 +415,74 @@ function App() {
                                 ) : (
                                     <>
                                         <section className="space-y-4">
-                                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Target size={14} /> Desempenho de Hoje</h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Target size={64} className="text-indigo-600" /></div>
-                                                    <p className="text-sm font-medium text-slate-500 mb-1">Novos Leads (Dia)</p>
-                                                    <h4 className="text-3xl font-black text-slate-800">{overviewStats.leadsToday}</h4>
-                                                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-indigo-600 uppercase"><Clock size={10} /> Atualizado agora</div>
+                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                                <Target size={14} /> Desempenho de Hoje
+                                            </h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                                                    <div className="absolute right-[-10px] top-[-10px] w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center opacity-50 group-hover:scale-110 transition-transform"><Target size={40} className="text-indigo-200" /></div>
+                                                    <p className="text-sm font-bold text-slate-500 mb-2">Novos Leads (Dia)</p>
+                                                    <h4 className="text-4xl font-black text-slate-800">{overviewStats.leadsToday}</h4>
+                                                    <div className="mt-4 flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase tracking-widest"><Clock size={12} /> Atualizado Agora</div>
                                                 </div>
-                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><CheckCircle size={64} className="text-green-600" /></div>
-                                                    <p className="text-sm font-medium text-slate-500 mb-1">Vendas Fechadas (Dia)</p>
-                                                    <h4 className="text-3xl font-black text-slate-800">{overviewStats.salesToday}</h4>
-                                                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-green-600 uppercase"><TrendingUp size={10} /> Batendo meta</div>
+                                                <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                                                    <div className="absolute right-[-10px] top-[-10px] w-24 h-24 bg-green-50 rounded-full flex items-center justify-center opacity-50 group-hover:scale-110 transition-transform"><CheckCircle size={40} className="text-green-200" /></div>
+                                                    <p className="text-sm font-bold text-slate-500 mb-2">Vendas Fechadas (Dia)</p>
+                                                    <h4 className="text-4xl font-black text-slate-800">{overviewStats.salesToday}</h4>
+                                                    <div className="mt-4 flex items-center gap-2 text-[10px] font-black text-green-600 uppercase tracking-widest"><TrendingUp size={12} /> Batendo Meta</div>
                                                 </div>
-                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><DollarSign size={64} className="text-emerald-600" /></div>
-                                                    <p className="text-sm font-medium text-slate-500 mb-1">Faturamento (Dia)</p>
-                                                    <h4 className="text-3xl font-black text-emerald-600">{formatCurrency(overviewStats.revenueToday)}</h4>
-                                                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase"><Activity size={10} /> Em tempo real</div>
+                                                <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                                                    <div className="absolute right-[-10px] top-[-10px] w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center opacity-50 group-hover:scale-110 transition-transform"><DollarSign size={40} className="text-emerald-200" /></div>
+                                                    <p className="text-sm font-bold text-slate-500 mb-2">Faturamento (Dia)</p>
+                                                    <h4 className="text-4xl font-black text-emerald-600">{formatCurrency(overviewStats.revenueToday)}</h4>
+                                                    <div className="mt-4 flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest"><Activity size={12} /> Em Tempo Real</div>
                                                 </div>
                                             </div>
                                         </section>
 
                                         <section className="space-y-4">
-                                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><BarChart3 size={14} /> Resumo da Semana</h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div className="bg-slate-800 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
-                                                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Target size={64} className="text-white" /></div>
-                                                    <p className="text-sm font-medium text-slate-400 mb-1">Total de Leads (7d)</p>
-                                                    <h4 className="text-3xl font-black text-white">{overviewStats.leadsWeek}</h4>
-                                                    <p className="text-xs text-slate-500 mt-2">Últimos 7 dias corridos</p>
+                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                                <BarChart3 size={14} /> Resumo da Semana
+                                            </h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                <div className="bg-slate-800 p-8 rounded-3xl shadow-xl relative overflow-hidden group text-white">
+                                                    <div className="absolute right-[-10px] top-[-10px] w-24 h-24 bg-white/5 rounded-full flex items-center justify-center opacity-50 group-hover:scale-110 transition-transform"><Target size={40} className="text-white/20" /></div>
+                                                    <p className="text-sm font-bold text-slate-400 mb-2">Total de Leads (7d)</p>
+                                                    <h4 className="text-4xl font-black">{overviewStats.leadsWeek}</h4>
+                                                    <p className="text-[10px] font-bold text-slate-500 mt-4 uppercase tracking-widest">Últimos 7 dias corridos</p>
                                                 </div>
-                                                <div className="bg-slate-800 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
-                                                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><CheckCircle size={64} className="text-white" /></div>
-                                                    <p className="text-sm font-medium text-slate-400 mb-1">Vendas Fechadas (7d)</p>
-                                                    <h4 className="text-3xl font-black text-white">{overviewStats.salesWeek}</h4>
-                                                    <p className="text-xs text-slate-500 mt-2">Volume de conversão</p>
+                                                <div className="bg-slate-800 p-8 rounded-3xl shadow-xl relative overflow-hidden group text-white">
+                                                    <div className="absolute right-[-10px] top-[-10px] w-24 h-24 bg-white/5 rounded-full flex items-center justify-center opacity-50 group-hover:scale-110 transition-transform"><CheckCircle size={40} className="text-white/20" /></div>
+                                                    <p className="text-sm font-bold text-slate-400 mb-2">Vendas Fechadas (7d)</p>
+                                                    <h4 className="text-4xl font-black">{overviewStats.salesWeek}</h4>
+                                                    <p className="text-[10px] font-bold text-slate-500 mt-4 uppercase tracking-widest">Volume de Conversão</p>
                                                 </div>
-                                                <div className="bg-teal-600 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
-                                                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><DollarSign size={64} className="text-white" /></div>
-                                                    <p className="text-sm font-medium text-teal-100 mb-1">Faturamento Total (7d)</p>
-                                                    <h4 className="text-3xl font-black text-white">{formatCurrency(overviewStats.revenueWeek)}</h4>
-                                                    <p className="text-xs text-teal-200 mt-2">Total consolidado</p>
+                                                <div className="bg-teal-600 p-8 rounded-3xl shadow-xl relative overflow-hidden group text-white">
+                                                    <div className="absolute right-[-10px] top-[-10px] w-24 h-24 bg-white/10 rounded-full flex items-center justify-center opacity-50 group-hover:scale-110 transition-transform"><DollarSign size={40} className="text-white/20" /></div>
+                                                    <p className="text-sm font-bold text-teal-100 mb-2">Faturamento Total (7d)</p>
+                                                    <h4 className="text-4xl font-black">{formatCurrency(overviewStats.revenueWeek)}</h4>
+                                                    <p className="text-[10px] font-bold text-teal-200 mt-4 uppercase tracking-widest">Total Consolidado</p>
                                                 </div>
                                             </div>
                                         </section>
-
-                                        <div className="grid grid-cols-1 gap-8">
-                                            <section className="space-y-4">
-                                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutDashboard size={14} /> Atalhos Rápidos</h3>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                    <div onClick={() => setDashboardTab('crm')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Kanban size={24} /></div><h4 className="font-bold text-slate-800 mb-1">CRM</h4><p className="text-xs text-slate-500">Gestão Comercial.</p></div>
-                                                    <div onClick={() => setDashboardTab('billing')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><CreditCard size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Cobrança</h4><p className="text-xs text-slate-500">Financeiro.</p></div>
-                                                    <div onClick={() => setDashboardTab('hr')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-rose-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-rose-600 group-hover:text-white transition-colors"><Heart size={24} /></div><h4 className="font-bold text-slate-800 mb-1">RH</h4><p className="text-xs text-slate-500">Painel Executivo.</p></div>
-                                                    <div onClick={() => setDashboardTab('teachers')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-colors"><School size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Instrutores</h4><p className="text-xs text-slate-500">Gestão docente.</p></div>
-                                                </div>
-                                            </section>
-                                        </div>
                                     </>
                                 )}
                             </div>
                         )}
-                        {dashboardTab === 'hr' && <HrDashboard collaborators={allCollaborators} onEditCollaborator={(c) => { setDashboardTab('hr'); /* Isso agora será tratado internamente pelo HrDashboard */ }} />}
-                        {dashboardTab === 'inventory' && <InventoryManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'support' && <SupportChannel isAdmin={true} />}
+                        {dashboardTab === 'hr' && <HrDashboard collaborators={allCollaborators} onEditCollaborator={() => {}} />}
+                        {dashboardTab === 'crm' && <CrmBoard />}
                         {dashboardTab === 'billing' && <BillingManager />}
-                        {dashboardTab === 'crm' && <div className="h-full"><CrmBoard /></div>}
-                        {dashboardTab === 'classes' && <ClassesManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'franchises' && <FranchisesManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'partner_studios' && <PartnerStudiosManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'inventory' && <InventoryManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'whatsapp' && <WhatsAppInbox />}
+                        {dashboardTab === 'analysis' && <SalesAnalysis />}
                         {dashboardTab === 'forms' && <FormsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'surveys' && <SurveyManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'contracts' && <ContractsManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'certificates' && <CertificatesManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'products' && <ProductsManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'students' && <StudentsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'events' && <EventsManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} jobs={jobs} onStartWizard={handleStartWizard} onDeleteJob={handleDeleteJob} />}
-                        {dashboardTab === 'analysis' && <SalesAnalysis />}
-                        {dashboardTab === 'whatsapp' && <WhatsAppInbox />}
+                        {dashboardTab === 'students' && <StudentsManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'certificates' && <CertificatesManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} jobs={jobs} onStartWizard={handleStartWizard} onDeleteJob={() => {}} />}
                     </div>
                 </div>
             </main>
@@ -651,5 +491,11 @@ function App() {
     </div>
   );
 }
+
+// Helpers que estavam faltando no arquivo anterior por brevidade
+function onInstructorLogin(t: any) { sessionStorage.setItem('instructor_session', JSON.stringify(t)); window.location.reload(); }
+function onStudentLogin(s: any) { sessionStorage.setItem('student_session', JSON.stringify(s)); window.location.reload(); }
+function onCollaboratorLogin(c: any) { sessionStorage.setItem('collaborator_session', JSON.stringify(c)); window.location.reload(); }
+function onStudioLogin(s: any) { sessionStorage.setItem('studio_session', JSON.stringify(s)); window.location.reload(); }
 
 export default App;

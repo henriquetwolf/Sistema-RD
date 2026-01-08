@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LifeBuoy, Search, Filter, Clock, CheckCircle, AlertTriangle, User, Mail, MessageSquare, Trash2, Loader2, RefreshCw, X, Send, ChevronRight, LayoutGrid, Kanban, BarChart3, TrendingUp, Download, Paperclip, FileText, Image as ImageIcon } from 'lucide-react';
+// Added 'Users' to the import list from lucide-react
+import { LifeBuoy, Search, Filter, Clock, CheckCircle, AlertTriangle, User, Users, Mail, MessageSquare, Trash2, Loader2, RefreshCw, X, Send, ChevronRight, LayoutGrid, Kanban, BarChart3, TrendingUp, Download, Paperclip, FileText, Image as ImageIcon, Timer, BarChart } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { SupportTicket, SupportMessage, CollaboratorSession } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, Legend } from 'recharts';
 import clsx from 'clsx';
 
 export const SupportManager: React.FC = () => {
-  const [viewMode, setViewMode] = useState<'list' | 'board' | 'dashboard'>('board');
+  const [viewMode, setViewMode] = useState<'list' | 'board' | 'dashboard'>('dashboard');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,7 +27,6 @@ export const SupportManager: React.FC = () => {
   const threadEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Identificação do Administrador Logado
   const currentAdmin = useMemo(() => {
     const saved = sessionStorage.getItem('collaborator_session');
     return saved ? JSON.parse(saved) as CollaboratorSession : { name: 'Administrador', id: 'admin' };
@@ -54,8 +54,7 @@ export const SupportManager: React.FC = () => {
 
   const handleUpdateStatus = async (ticket: SupportTicket, newStatus: SupportTicket['status']) => {
     try {
-      const updated: SupportTicket = { ...ticket, status: newStatus };
-      // Se estava sem atendente e agora mudou status, atribui ao atual
+      const updated: SupportTicket = { ...ticket, status: newStatus, updatedAt: new Date().toISOString() };
       if (!ticket.assignedId) {
           updated.assignedId = currentAdmin.id;
           updated.assignedName = currentAdmin.name;
@@ -89,7 +88,6 @@ export const SupportManager: React.FC = () => {
           attachmentName: attachment?.name
       } as any);
 
-      // Sempre atribui o chamado a quem respondeu se não estiver atribuído
       const updatedTicket: SupportTicket = { 
         ...selectedTicket, 
         status: 'pending' as const, 
@@ -116,35 +114,62 @@ export const SupportManager: React.FC = () => {
       setDraggedTicketId(null);
   };
 
-  // --- ESTATÍSTICAS DASHBOARD ---
+  // --- ESTATÍSTICAS AVANÇADAS ---
   const dashStats = useMemo(() => {
       const now = new Date();
       const thisMonth = now.getMonth();
       const todayStr = now.toISOString().split('T')[0];
       
-      const monthly = tickets.filter(t => new Date(t.createdAt).getMonth() === thisMonth).length;
-      const today = tickets.filter(t => t.createdAt.split('T')[0] === todayStr).length;
-      const solved = tickets.filter(t => t.status === 'closed').length;
-      
-      // Gráfico de tendencia 7 dias
+      const ticketsInScope = tickets.filter(t => responderFilter === 'all' || t.assignedName === responderFilter);
+
+      const monthly = ticketsInScope.filter(t => new Date(t.createdAt).getMonth() === thisMonth).length;
+      const today = ticketsInScope.filter(t => t.createdAt.split('T')[0] === todayStr).length;
+      const solved = ticketsInScope.filter(t => t.status === 'closed').length;
+
+      // 1. Tempo Médio de Resposta (Minutos)
+      const respondedTickets = ticketsInScope.filter(t => t.status !== 'open' && t.createdAt !== t.updatedAt);
+      let totalMinutes = 0;
+      respondedTickets.forEach(t => {
+          const start = new Date(t.createdAt).getTime();
+          const end = new Date(t.updatedAt).getTime();
+          totalMinutes += Math.max(0, (end - start) / (1000 * 60));
+      });
+      const avgResponseMinutes = respondedTickets.length > 0 ? Math.round(totalMinutes / respondedTickets.length) : 0;
+
+      // 2. Chamados por Horário (Distribuição 00h - 23h)
+      const hourlyData = Array.from({ length: 24 }, (_, i) => ({
+          hour: `${String(i).padStart(2, '0')}:00`,
+          count: 0
+      }));
+      ticketsInScope.forEach(t => {
+          const hour = new Date(t.createdAt).getHours();
+          hourlyData[hour].count++;
+      });
+
+      // 3. Atendimentos por Dia por Responsável (Últimos 7 dias)
+      const responders = Array.from(new Set(tickets.map(t => t.assignedName).filter(Boolean))) as string[];
       const trendData: any[] = [];
       for (let i = 6; i >= 0; i--) {
           const d = new Date();
           d.setDate(d.getDate() - i);
           const dStr = d.toISOString().split('T')[0];
-          trendData.push({
-              date: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-              count: tickets.filter(t => t.createdAt.split('T')[0] === dStr).length
+          const dayLabel = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+          
+          const dayEntry: any = { date: dayLabel };
+          responders.forEach(r => {
+              // Conta quantos tickets foram atualizados (atendidos) por esse responsável nesse dia
+              dayEntry[r] = tickets.filter(t => t.assignedName === r && t.updatedAt.split('T')[0] === dStr).length;
           });
+          trendData.push(dayEntry);
       }
 
-      return { monthly, today, solved, trendData };
-  }, [tickets]);
+      return { monthly, today, solved, avgResponseMinutes, trendData, hourlyData, responders };
+  }, [tickets, responderFilter]);
 
   const uniqueResponders = useMemo(() => {
       const names = tickets.map(t => t.assignedName).filter(Boolean) as string[];
       return Array.from(new Set(names)).sort();
-  }, [tickets]);
+  }, [uniqueResponders]);
 
   const filtered = tickets.filter(t => {
     const matchesSearch = t.senderName.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -155,6 +180,8 @@ export const SupportManager: React.FC = () => {
     return matchesSearch && matchesStatus && matchesRole && matchesResponder;
   });
 
+  const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+
   return (
     <div className="animate-in fade-in duration-500 space-y-6 flex flex-col h-full">
       {/* Header */}
@@ -163,65 +190,107 @@ export const SupportManager: React.FC = () => {
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <LifeBuoy className="text-indigo-600" /> Suporte Interno
           </h2>
-          <p className="text-slate-500 text-sm">Gerencie o atendimento corporativo da VOLL.</p>
+          <p className="text-slate-500 text-sm">Painel Administrativo de Atendimento Corporativo.</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
+            <button onClick={() => setViewMode('dashboard')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", viewMode === 'dashboard' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><BarChart3 size={14}/> Dashboard</button>
             <button onClick={() => setViewMode('board')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", viewMode === 'board' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Kanban size={14}/> Quadro Kanban</button>
             <button onClick={() => setViewMode('list')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", viewMode === 'list' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutGrid size={14}/> Lista</button>
-            <button onClick={() => setViewMode('dashboard')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", viewMode === 'dashboard' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><BarChart3 size={14}/> Dashboard</button>
         </div>
       </div>
 
-      {/* Filters (Except on Dashboard) */}
-      {viewMode !== 'dashboard' && (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 shrink-0">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="text" placeholder="Buscar por assunto ou solicitante..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-            </div>
-            <div className="flex flex-wrap gap-2">
-                <select value={roleFilter} onChange={e => setRoleFilter(e.target.value as any)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Origem: Todos</option><option value="student">Alunos</option><option value="instructor">Instrutores</option><option value="studio">Studios</option></select>
-                <select value={responderFilter} onChange={e => setResponderFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Atendente: Todos</option>{uniqueResponders.map(r => <option key={r} value={r}>{r}</option>)}</select>
-                <button onClick={fetchTickets} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
-            </div>
-          </div>
-      )}
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 shrink-0">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input type="text" placeholder="Buscar por assunto ou solicitante..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+            <select value={roleFilter} onChange={e => setRoleFilter(e.target.value as any)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Origem: Todos</option><option value="student">Alunos</option><option value="instructor">Instrutores</option><option value="studio">Studios</option></select>
+            <select value={responderFilter} onChange={e => setResponderFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Atendente: Todos</option>{uniqueResponders.map(r => <option key={r} value={r}>{r}</option>)}</select>
+            <button onClick={fetchTickets} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
+        </div>
+      </div>
 
       {/* VIEW: DASHBOARD */}
       {viewMode === 'dashboard' && (
-          <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-6 animate-in fade-in duration-300 pb-10">
+              {/* KPIs de Topo */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-6 opacity-5 text-indigo-600"><TrendingUp size={80}/></div>
-                      <p className="text-xs font-black text-slate-400 uppercase mb-1">Chamados no Mês</p>
-                      <h3 className="text-4xl font-black text-slate-800">{dashStats.monthly}</h3>
-                      <p className="text-[10px] text-green-600 font-bold mt-2 flex items-center gap-1"><CheckCircle size={10}/> Total histórico resolvido: {dashStats.solved}</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Chamados no Mês</p>
+                      <h3 className="text-3xl font-black text-slate-800">{dashStats.monthly}</h3>
+                      <div className="absolute top-0 right-0 p-4 opacity-5 text-indigo-600"><TrendingUp size={64}/></div>
                   </div>
                   <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-6 opacity-5 text-teal-600"><Clock size={80}/></div>
-                      <p className="text-xs font-black text-slate-400 uppercase mb-1">Chamados Hoje</p>
-                      <h3 className="text-4xl font-black text-slate-800">{dashStats.today}</h3>
-                      <p className="text-[10px] text-teal-600 font-bold mt-2 uppercase tracking-widest">Atualizado em tempo real</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Chamados Hoje</p>
+                      <h3 className="text-3xl font-black text-slate-800">{dashStats.today}</h3>
+                      <div className="absolute top-0 right-0 p-4 opacity-5 text-teal-600"><Clock size={64}/></div>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">T. Médio Resposta</p>
+                      <h3 className="text-3xl font-black text-indigo-600">{dashStats.avgResponseMinutes} <span className="text-xs font-normal text-slate-400">min</span></h3>
+                      <div className="absolute top-0 right-0 p-4 opacity-5 text-indigo-600"><Timer size={64}/></div>
                   </div>
                   <div className="bg-indigo-600 p-6 rounded-3xl shadow-xl shadow-indigo-600/20 text-white relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-6 opacity-10"><LifeBuoy size={80}/></div>
-                      <p className="text-xs font-black text-indigo-200 uppercase mb-1">Média de Resposta</p>
-                      <h3 className="text-4xl font-black">~ 2.4h</h3>
-                      <p className="text-[10px] text-indigo-100 font-bold mt-2 uppercase tracking-widest">Meta Interna: 4 horas</p>
+                      <p className="text-[10px] font-black text-indigo-100 uppercase tracking-widest mb-1">Resolvidos Total</p>
+                      <h3 className="text-3xl font-black">{dashStats.solved}</h3>
+                      <div className="absolute top-0 right-0 p-4 opacity-10"><CheckCircle size={64}/></div>
                   </div>
               </div>
-              <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-                  <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-8">Tendência de Chamados (Últimos 7 dias)</h3>
-                  <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={dashStats.trendData}>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fontBold: true}} />
-                              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                              <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-                              <Bar dataKey="count" name="Chamados" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={40} />
-                          </BarChart>
-                      </ResponsiveContainer>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Gráfico de Atendimentos por Responsável */}
+                  <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+                      <div className="flex items-center justify-between mb-8">
+                          <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                              {/* Corrected: Users icon is now imported and available */}
+                              <Users size={16} className="text-indigo-500" /> Atendimentos por Responsável (7 dias)
+                          </h3>
+                      </div>
+                      <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                              <ReBarChart data={dashStats.trendData}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
+                                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                                  <Tooltip 
+                                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}}
+                                    cursor={{fill: '#f8fafc'}}
+                                  />
+                                  <Legend iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 'bold', paddingTop: '10px'}} />
+                                  {dashStats.responders.map((r, i) => (
+                                      <Bar key={r} dataKey={r} stackId="a" fill={COLORS[i % COLORS.length]} radius={i === dashStats.responders.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
+                                  ))}
+                              </ReBarChart>
+                          </ResponsiveContainer>
+                      </div>
+                  </div>
+
+                  {/* Gráfico de Distribuição por Horário */}
+                  <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+                      <div className="flex items-center justify-between mb-8">
+                          <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                              <Clock size={16} className="text-teal-500" /> Volume de Chamados por Horário
+                          </h3>
+                      </div>
+                      <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={dashStats.hourlyData}>
+                                  <defs>
+                                      <linearGradient id="colorHour" x1="0" y1="0" x2="0" y2="1">
+                                          <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3}/>
+                                          <stop offset="95%" stopColor="#14b8a6" stopOpacity={0}/>
+                                      </linearGradient>
+                                  </defs>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                  <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{fontSize: 9}} interval={3} />
+                                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                                  <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+                                  <Area type="monotone" dataKey="count" name="Chamados" stroke="#14b8a6" fillOpacity={1} fill="url(#colorHour)" strokeWidth={3} />
+                              </AreaChart>
+                          </ResponsiveContainer>
+                      </div>
                   </div>
               </div>
           </div>

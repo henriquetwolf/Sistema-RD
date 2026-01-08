@@ -97,17 +97,69 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
         }
 
         // 4. TENTAR INSTRUTOR
-        const { data: instructor } = await appBackend.client
+        const { data: instr } = await appBackend.client
             .from('crm_teachers')
             .select('*')
             .eq('email', cleanEmail)
             .eq('password', cleanPassword)
             .maybeSingle();
 
-        if (instructor && instructor.is_active) {
+        if (instr && instr.is_active) {
+            // MAPEAR TODOS OS CAMPOS DO BANCO PARA O OBJETO TEACHER
             const teacher: Teacher = {
-                id: instructor.id, fullName: instructor.full_name, email: instructor.email, phone: instructor.phone, photoUrl: instructor.photo_url,
-                rg: '', cpf: '', birthDate: '', maritalStatus: '', motherName: '', address: '', district: '', city: '', state: '', cep: '', emergencyContactName: '', emergencyContactPhone: '', profession: '', councilNumber: '', isCouncilActive: true, cnpj: '', companyName: '', hasCnpjActive: true, academicFormation: '', otherFormation: '', courseType: '', teacherLevel: '', levelHonorarium: Number(instructor.level_honorarium || 0), isActive: true, bank: '', agency: '', accountNumber: '', accountDigit: '', hasPjAccount: true, pixKeyPj: '', pixKeyPf: '', regionAvailability: '', weekAvailability: '', shirtSize: '', hasNotebook: true, hasVehicle: true, hasStudio: false, studioAddress: '', additional1: '', valueAdditional1: '', dateAdditional1: '', additional2: '', valueAdditional2: '', dateAdditional2: '', additional3: '', valueAdditional3: '', dateAdditional3: ''
+                id: instr.id, 
+                fullName: instr.full_name, 
+                email: instr.email, 
+                phone: instr.phone, 
+                photoUrl: instr.photo_url,
+                rg: instr.rg || '', 
+                cpf: instr.cpf || '', 
+                birthDate: instr.birth_date || '', 
+                maritalStatus: instr.marital_status || '', 
+                motherName: instr.mother_name || '', 
+                address: instr.address || '', 
+                district: instr.district || '', 
+                city: instr.city || '', 
+                state: instr.state || '', 
+                cep: instr.cep || '', 
+                emergencyContactName: instr.emergency_contact_name || '', 
+                emergencyContactPhone: instr.emergency_contact_phone || '', 
+                profession: instr.profession || '', 
+                councilNumber: instr.council_number || '', 
+                isCouncilActive: !!instr.is_council_active, 
+                cnpj: instr.cnpj || '', 
+                companyName: instr.company_name || '', 
+                hasCnpjActive: !!instr.has_cnpj_active, 
+                academicFormation: instr.academic_formation || '', 
+                otherFormation: instr.other_formation || '', 
+                courseType: instr.course_type || '', 
+                teacherLevel: instr.teacher_level || '', 
+                levelHonorarium: Number(instr.level_honorarium || 0), 
+                isActive: !!instr.is_active, 
+                bank: instr.bank || '', 
+                agency: instr.agency || '', 
+                accountNumber: instr.account_number || '', 
+                accountDigit: instr.account_digit || '', 
+                hasPjAccount: !!instr.has_pj_account, 
+                pixKeyPj: instr.pix_key_pj || '', 
+                pixKeyPf: instr.pix_key_pf || '', 
+                regionAvailability: instr.region_availability || '', 
+                weekAvailability: instr.week_availability || '', 
+                shirtSize: instr.shirt_size || '', 
+                hasNotebook: !!instr.has_notebook, 
+                hasVehicle: !!instr.has_vehicle, 
+                hasStudio: !!instr.has_studio, 
+                studioAddress: instr.studio_address || '', 
+                additional1: instr.additional_1 || '', 
+                valueAdditional1: instr.value_additional_1 || '', 
+                dateAdditional1: instr.date_additional_1 || '', 
+                additional2: instr.additional_2 || '', 
+                valueAdditional2: instr.value_additional_2 || '', 
+                dateAdditional2: instr.date_additional_2 || '', 
+                additional3: instr.additional_3 || '', 
+                valueAdditional3: instr.value_additional_3 || '', 
+                dateAdditional3: instr.date_additional_3 || '',
+                password: instr.password
             };
             if (onInstructorLogin) onInstructorLogin(teacher);
             return;

@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
@@ -218,24 +217,35 @@ ${expensesText}
     setIsSubmitting(true);
     try {
       const ticketId = crypto.randomUUID();
-      await appBackend.saveSupportTicket({
-        id: ticketId, senderId, senderName, senderEmail, senderRole,
-        subject: finalSubject.trim(), message: finalMessage.trim(), tag: selectedTag, status: 'open'
-      });
+      
+      // PASSO 1: Salvar o Ticket principal (Pai)
+      try {
+          await appBackend.saveSupportTicket({
+            id: ticketId, senderId, senderName, senderEmail, senderRole,
+            subject: finalSubject.trim(), message: finalMessage.trim(), tag: selectedTag, status: 'open'
+          });
+      } catch (err: any) {
+          throw new Error(`Falha ao criar o chamado principal: ${err.message}`);
+      }
 
-      // Se for fechamento, anexa todos os documentos das despesas como mensagens
+      // PASSO 2: Salvar anexos/mensagens (Filhos)
       if (selectedTag === 'Fechamento de Curso') {
           for (const exp of fcExpenses) {
               if (exp.attachment) {
-                  await appBackend.addSupportMessage({
-                      ticketId: ticketId,
-                      senderId: senderId,
-                      senderName: senderName,
-                      senderRole: senderRole,
-                      content: `Comprovante: ${exp.category} - Valor: R$ ${exp.value}`,
-                      attachmentUrl: exp.attachment.url,
-                      attachmentName: exp.attachment.name
-                  } as any);
+                  try {
+                      await appBackend.addSupportMessage({
+                          ticketId: ticketId,
+                          senderId: senderId,
+                          senderName: senderName,
+                          senderRole: senderRole,
+                          content: `Comprovante: ${exp.category} - Valor: R$ ${exp.value}`,
+                          attachmentUrl: exp.attachment.url,
+                          attachmentName: exp.attachment.name
+                      } as any);
+                  } catch (err: any) {
+                      console.error("Erro ao anexar documento:", err);
+                      // Não barramos o sucesso total se um anexo falhar, mas avisamos no console
+                  }
               }
           }
       } else if (attachment) {
@@ -261,7 +271,11 @@ ${expensesText}
           setActiveTab('history'); 
           fetchHistory();
       }, 2500);
-    } catch (e) { alert("Erro ao enviar chamado."); } finally { setIsSubmitting(false); }
+    } catch (e: any) { 
+        alert(`Erro ao enviar chamado: ${e.message}`); 
+    } finally { 
+        setIsSubmitting(false); 
+    }
   };
 
   // Listas filtradas para o formulário de fechamento
@@ -491,15 +505,15 @@ ${expensesText}
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Agência</label>
-                                            <input type="text" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcAgency} onChange={e => setFcAgency(e.target.value)} />
+                                            <input type="text" className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcAgency} onChange={e => setFcAgency(e.target.value)} />
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Conta</label>
-                                            <input type="text" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcAccount} onChange={e => setFcAccount(e.target.value)} />
+                                            <input type="text" className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcAccount} onChange={e => setFcAccount(e.target.value)} />
                                         </div>
                                         <div className="md:col-span-2">
                                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome do Titular (Caso seja conjunta)</label>
-                                            <input type="text" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcHolder} onChange={e => setFcHolder(e.target.value)} />
+                                            <input type="text" className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none focus:border-teal-500 transition-all" value={fcHolder} onChange={e => setFcHolder(e.target.value)} />
                                         </div>
                                     </div>
                                 </div>

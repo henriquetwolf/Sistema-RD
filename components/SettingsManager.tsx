@@ -266,7 +266,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V26)
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V27)
 
 -- Suporte a Tags de Chamado
 CREATE TABLE IF NOT EXISTS public.crm_support_tags (
@@ -307,19 +307,14 @@ CREATE TABLE IF NOT EXISTS public.crm_support_messages (
     created_at timestamptz DEFAULT now()
 );
 
--- Inclusão da coluna tag no ticket caso já existisse
-ALTER TABLE IF EXISTS public.crm_support_tickets 
-ADD COLUMN IF NOT EXISTS tag text;
+-- GARANTINDO COLUNAS CASO JÁ EXISTISSEM
+ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS tag text;
+ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS assigned_id text;
+ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS assigned_name text;
+ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 
--- Atualização da Tabela de Tickets para incluir atendentes caso já existisse
-ALTER TABLE IF EXISTS public.crm_support_tickets 
-ADD COLUMN IF NOT EXISTS assigned_id text,
-ADD COLUMN IF NOT EXISTS assigned_name text;
-
--- Atualização da Tabela de Mensagens para incluir anexos caso já existisse
-ALTER TABLE IF EXISTS public.crm_support_messages
-ADD COLUMN IF NOT EXISTS attachment_url text,
-ADD COLUMN IF NOT EXISTS attachment_name text;
+ALTER TABLE IF EXISTS public.crm_support_messages ADD COLUMN IF NOT EXISTS attachment_url text;
+ALTER TABLE IF EXISTS public.crm_support_messages ADD COLUMN IF NOT EXISTS attachment_name text;
 
 -- Permissões
 GRANT ALL ON public.crm_support_tickets TO anon, authenticated, service_role;
@@ -688,7 +683,7 @@ NOTIFY pgrst, 'reload config';
                                 <textarea className="w-full h-32 p-4 border rounded-xl bg-white text-sm outline-none focus:ring-2 focus:ring-teal-500 resize-none" value={editingCourseInfo.materials || ''} onChange={e => setEditingCourseInfo({...editingCourseInfo, materials: e.target.value})} placeholder="Ex: Apostila colorida, Sacochila, Lápis..." />
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2"><ListTodo size={14} className="text-teal-600"/> Requisitos / Orientações</label>
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2"><ListTodo size={14} className="text-teal-600"/> Orientações Importantes</label>
                                 <textarea className="w-full h-32 p-4 border rounded-xl bg-white text-sm outline-none focus:ring-2 focus:ring-teal-500 resize-none" value={editingCourseInfo.requirements || ''} onChange={e => setEditingCourseInfo({...editingCourseInfo, requirements: e.target.value})} placeholder="Ex: Traje esportivo, chegar 15min antes..." />
                             </div>
                         </div>
@@ -951,7 +946,7 @@ NOTIFY pgrst, 'reload config';
                                 </label>
                             ))}
                         </div>
-                        <div className="flex justify-end gap-2 pt-4"><button type="button" onClick={() => setEditingRole(null)} className="px-3 py-1 text-sm">Cancelar</button><button type="submit" className="bg-indigo-600 text-white px-4 py-1.5 rounded font-bold text-sm">Salvar Perfil</button></div>
+                        <div className="flex justify-end gap-2 pt-4"><button type="button" onClick={() => setEditingRole(null)} className="px-3 py-1.5 text-sm">Cancelar</button><button type="submit" className="bg-indigo-600 text-white px-4 py-1.5 rounded font-bold text-sm">Salvar Perfil</button></div>
                     </form>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{roles.map(r => <div key={r.id} className="p-3 border rounded-xl flex justify-between items-center bg-white hover:border-indigo-200 transition-all"><span className="font-bold text-sm text-slate-700">{r.name}</span><div className="flex gap-2"><button onClick={() => setEditingRole(r)} className="text-slate-400 hover:text-indigo-600"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteRole(r.id).then(fetchRoles)} className="text-slate-400 hover:text-red-500"><Trash2 size={16}/></button></div></div>)}</div>
@@ -1050,9 +1045,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V26)</h3></div>
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V27)</h3></div>
                 <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Categorias de Suporte e Anexos).</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V26</button> : (
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V27</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

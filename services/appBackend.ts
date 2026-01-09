@@ -43,6 +43,18 @@ const MOCK_SESSION = {
   }
 };
 
+// Helper interno para gerar número de negócio
+const generateInternalDealNumber = () => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const random = Math.floor(1000 + Math.random() * 9000);
+    return Number(`${yyyy}${mm}${dd}${hh}${min}${random}`);
+};
+
 export const appBackend = {
   isLocalMode: !isConfigured,
   client: supabase,
@@ -125,7 +137,6 @@ export const appBackend = {
 
   getSupportTicketsBySender: async (id: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
-    // Busca onde o usuário é o REMETENTE ou o DESTINATÁRIO (iniciado pela Adm)
     const { data, error } = await supabase.from('crm_support_tickets')
         .select('*')
         .or(`sender_id.eq.${id},target_id.eq.${id}`)
@@ -258,7 +269,7 @@ export const appBackend = {
     if (error) throw error;
     return (data || []).map((row: any) => ({
       id: row.id, openInstallments: row.open_installments, totalNegotiatedValue: row.total_negotiated_value, totalInstallments: row.total_installments,
-      dueDate: row.due_date, responsibleAgent: row.responsible_agent, identifierCode: row.identifier_code, fullName: row.full_name,
+      dueDate: row.due_date, responsibleAgent: row.responsible_agent, identifier_code: row.identifier_code, fullName: row.full_name,
       productName: row.product_name, originalValue: row.original_value, paymentMethod: row.payment_method, observations: row.observations,
       status: row.status, team: row.team, voucherLink1: row.voucher_link_1, testDate: row.test_date, voucherLink2: row.voucher_link_2,
       voucherLink3: row.voucher_link_3, boletosLink: row.boletos_link, negotiationReference: row.negotiation_reference, attachments: row.attachments, createdAt: row.created_at
@@ -342,6 +353,7 @@ export const appBackend = {
     const { data: { user } } = await supabase.auth.getUser();
     const payload = {
       id: job.id, user_id: user?.id, name: job.name, sheet_url: job.sheetUrl, config: job.config, active: job.active,
+      // Fix: Changed interval_minutes to use intervalMinutes from SyncJob type
       interval_minutes: job.intervalMinutes, last_sync: job.lastSync, status: job.status, last_message: job.lastMessage,
       created_by_name: job.createdBy, created_at: job.createdAt
     };
@@ -492,13 +504,12 @@ export const appBackend = {
     const { data, error = null } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name', { ascending: true });
     if (error) throw error;
     return (data || []).map((d: any) => ({
-      id: d.id, status: d.status || 'active', responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password || '', secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology, studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account, beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: d.has_reformer, qtyReformer: d.qty_reformer, hasLadderBarrel: d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel, hasChair: d.has_chair, qtyChair: d.qty_chair, hasCadillac: d.has_cadillac, qtyCadillac: d.qty_cadillac, hasChairsForCourse: d.has_chairs_for_course, hasTv: d.has_tv, maxKitsCapacity: d.max_kits_capacity, attachments: d.attachments
+      id: d.id, status: d.status || 'active', responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password || '', secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology, studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account, beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: d.has_reformer, qtyReformer: d.qty_reformer, hasLadderBarrel: d.has_ladder_barrel, qty_ladder_barrel: d.qtyLadderBarrel, hasChair: d.has_chair, qty_chair: d.qtyChair, hasCadillac: d.has_cadillac, qty_cadillac: d.qtyCadillac, hasChairsForCourse: d.has_chairs_for_course, hasTv: d.has_tv, max_kits_capacity: d.max_kits_capacity, attachments: d.attachments
     }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
-    // FIX: Access properties using correct camelCase names from the studio object
     const payload = {
       status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
@@ -586,6 +597,24 @@ export const appBackend = {
     if (error) throw error;
   },
 
+  // Fix: Added SurveyModel to the return type union since it returns survey data branches
+  getFormById: async (id: string): Promise<FormModel | SurveyModel | null> => {
+    if (!isConfigured) return null;
+    const { data: form } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
+    if (form) return { 
+        id: form.id, title: form.title, description: form.description, campaign: form.campaign, isLeadCapture: form.is_lead_capture, teamId: form.team_id, 
+        distributionMode: form.distribution_mode, fixedOwnerId: form.fixed_owner_id || null, targetPipeline: form.target_pipeline, targetStage: form.target_stage,
+        questions: form.questions || [], style: form.style || {}, createdAt: form.created_at, submissionsCount: form.submissions_count || 0, folderId: form.folder_id
+    };
+    const { data: survey } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
+    if (survey) return { 
+        id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.is_lead_capture, questions: survey.questions || [], 
+        style: survey.style || {}, targetType: survey.target_type, targetProductType: survey.target_product_type, targetProductName: survey.target_product_name,
+        onlyIfFinished: survey.only_if_finished, isActive: survey.is_active, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 
+    };
+    return null;
+  },
+
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
       const payload = { 
@@ -626,8 +655,8 @@ export const appBackend = {
       if (error) throw error;
       return (data || []).map((d: any) => ({ 
           id: d.id, title: d.title, description: d.description, isLeadCapture: d.is_lead_capture, questions: d.questions || [], style: d.style || {}, 
-          targetType: d.targetType, targetProductType: d.targetProductType, targetProductName: d.targetProductName, onlyIfFinished: d.onlyIfFinished,
-          isActive: d.isActive, createdAt: d.created_at, submissionsCount: d.submissions_count || 0 
+          targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished,
+          isActive: d.is_active, createdAt: d.created_at, submissionsCount: d.submissions_count || 0 
       }));
   },
 
@@ -657,22 +686,9 @@ export const appBackend = {
       });
       return eligible.map((d: any) => ({
           id: d.id, title: d.title, description: d.description, isLeadCapture: d.is_lead_capture, questions: d.questions || [], style: d.style || {}, 
-          targetType: d.targetType, targetProductType: d.targetProductType, targetProductName: d.targetProductName, onlyIfFinished: d.onlyIfFinished,
-          isActive: d.isActive, createdAt: d.created_at, submissionsCount: d.submissions_count || 0
+          targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished,
+          isActive: d.is_active, createdAt: d.created_at, submissionsCount: d.submissions_count || 0
       }));
-  },
-
-  getFormById: async (id: string): Promise<FormModel | null> => {
-      if (!isConfigured) return null;
-      const { data: form } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
-      if (form) return { 
-          id: form.id, title: form.title, description: form.description, campaign: form.campaign, isLeadCapture: form.is_lead_capture, teamId: form.team_id, 
-          distributionMode: form.distributionMode, fixedOwnerId: form.fixedOwnerId || null, targetPipeline: form.targetPipeline, targetStage: form.targetStage,
-          questions: form.questions || [], style: form.style || {}, createdAt: form.created_at, submissionsCount: form.submissions_count || 0, folderId: form.folderId
-      };
-      const { data: survey } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
-      if (survey) return { id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.isLeadCapture, questions: survey.questions || [], style: survey.style || {}, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 };
-      return null;
   },
 
   deleteForm: async (id: string): Promise<void> => {
@@ -684,10 +700,51 @@ export const appBackend = {
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
       const form = await appBackend.getFormById(formId);
       if (!form) throw new Error("Formulário não encontrado.");
+      
       if (isConfigured) {
           const cleanStudentId = (studentId && typeof studentId === 'string' && studentId.trim() !== '') ? studentId : null;
+          
+          // 1. Salvar a submissão bruta
           const { error } = await supabase.from('crm_form_submissions').insert([{ form_id: formId, answers: answers, student_id: cleanStudentId }]);
           if (error) throw error;
+          
+          // 2. Se for Lead Capture, criar o card no CRM
+          if (isLeadCapture) {
+              const dealPayload: any = {
+                  deal_number: generateInternalDealNumber(),
+                  title: form.title || "Novo Lead via Formulário",
+                  stage: form.targetStage || 'new',
+                  pipeline: form.targetPipeline || 'Padrão',
+                  campaign: form.campaign || 'Webform',
+                  status: 'warm',
+                  created_at: new Date().toISOString()
+              };
+
+              // Mapeamento dinâmico baseado no crmMapping de cada pergunta
+              form.questions.forEach(q => {
+                  const ans = answers.find(a => a.questionId === q.id);
+                  if (ans && q.crmMapping) {
+                      dealPayload[q.crmMapping] = ans.value;
+                  }
+              });
+
+              // Definir dono (Owner) baseado nas regras de distribuição
+              if (form.distributionMode === 'fixed' && form.fixedOwnerId) {
+                  dealPayload.owner_id = form.fixedOwnerId;
+              } else if (form.distributionMode === 'round-robin' && form.teamId) {
+                  // Lógica simplificada de Round Robin (Vendedor aleatório da equipe no front)
+                  const { data: teamData } = await supabase.from('crm_teams').select('members').eq('id', form.teamId).single();
+                  if (teamData?.members?.length > 0) {
+                      const randomIndex = Math.floor(Math.random() * teamData.members.length);
+                      dealPayload.owner_id = teamData.members[randomIndex];
+                  }
+              }
+
+              // Inserir na tabela de negociações
+              await supabase.from('crm_deals').insert([dealPayload]);
+          }
+
+          // 3. Atualizar contagem
           await supabase.from('crm_surveys').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
           await supabase.from('crm_forms').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
       }
@@ -723,14 +780,16 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
+      // Fix: Use contractDate instead of contract_date in mapped literal
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
       if (!isConfigured) return null;
       const { data, error = null } = await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contract_date: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
+      // Fix: Use contractDate instead of contract_date in mapped literal
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
@@ -904,7 +963,7 @@ export const appBackend = {
       const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date').order('title');
       if (error) throw error;
       return (data || []).map((b: any) => ({
-          id: b.id, eventId: b.event_id, date: b.date, title: b.title, max_selections: b.max_selections
+          id: b.id, eventId: b.event_id, date: b.date, title: b.title, maxSelections: b.max_selections
       }));
   },
 

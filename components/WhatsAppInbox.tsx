@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   MessageCircle, Search, MoreVertical, Paperclip, Send, 
   CheckCheck, User, X, Plus, Settings, Save, Smartphone, 
   Copy, Loader2, RefreshCw, Zap, ShieldAlert, Code, Terminal, 
   Database, QrCode, Wifi, WifiOff, CheckCircle2, ChevronRight, ShieldCheck,
   Cpu, Link2, AlertTriangle, Info, Check, Bug, ShieldX, HelpCircle, ArrowUpRight,
-  Cloud, Globe, Lock, Server, Activity
+  Cloud, Globe, Lock, Server, Activity, AlertCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -79,6 +79,12 @@ export const WhatsAppInbox: React.FC = () => {
       isConnected: false
   });
 
+  // FIX: Define edgeFunctionUrl variable needed by the JSX
+  const edgeFunctionUrl = useMemo(() => {
+    const baseUrl = (import.meta as any).env?.VITE_APP_SUPABASE_URL || 'https://your-project.supabase.co';
+    return `${baseUrl.replace(/\/$/, "")}/functions/v1/${config.edgeFunctionName}`;
+  }, [config.edgeFunctionName]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedChat = conversations.find(c => c.id === selectedChatId);
 
@@ -102,8 +108,12 @@ export const WhatsAppInbox: React.FC = () => {
   }, [selectedChatId, showSettings]);
 
   useEffect(() => {
-      if (selectedChatId) fetchMessages(selectedChatId);
-      else setMessages([]);
+      if (selectedChatId) {
+          fetchMessages(selectedChatId);
+          clearUnreadCount(selectedChatId);
+      } else {
+          setMessages([]);
+      }
   }, [selectedChatId]);
 
   const addLog = (msg: string) => setConnLogs(prev => [msg, ...prev].slice(0, 5));
@@ -111,6 +121,17 @@ export const WhatsAppInbox: React.FC = () => {
   const loadConfig = async () => {
       const c = await appBackend.getWhatsAppConfig();
       if (c) setConfig(prev => ({ ...prev, ...c }));
+  };
+
+  const clearUnreadCount = async (chatId: string) => {
+      try {
+          await appBackend.client
+              .from('crm_whatsapp_chats')
+              .update({ unread_count: 0 })
+              .eq('id', chatId);
+          
+          setConversations(prev => prev.map(c => i === chatId ? { ...c, unread_count: 0 } : c));
+      } catch (e) {}
   };
 
   const fetchConversations = async (showLoading = true) => {
@@ -176,7 +197,6 @@ export const WhatsAppInbox: React.FC = () => {
 
       try {
           const response = await fetch(baseUrl.replace(/\/$/, ""), { method: 'HEAD', mode: 'no-cors' });
-          // No-cors won't give status but if it doesn't throw, it reached the server
           setConnStatus('online');
           addLog(`[OK] Servidor Cloud em ${baseUrl} está respondendo.`);
       } catch (err) {
@@ -256,11 +276,6 @@ export const WhatsAppInbox: React.FC = () => {
           setNewChatName('');
       } catch (e: any) { alert(`Erro ao criar conversa: ${e.message}`); } finally { setIsCreatingChat(false); }
   };
-
-  const formatTime = (isoString: string) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const supabaseProjectUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
-  const edgeFunctionUrl = `${supabaseProjectUrl}/functions/v1/${config.edgeFunctionName}`;
 
   if (showSettings) {
       return (
@@ -362,7 +377,7 @@ export const WhatsAppInbox: React.FC = () => {
                                             "Informe o endpoint HTTPS do seu servidor na nuvem",
                                             "Clique no botão 'Testar Conexão' para validar o SSL",
                                             "Gere o QR Code e escaneie com seu WhatsApp",
-                                            "Copie o Webhook abaixo para seu servidor"
+                                            "Ajuste os eventos do Webhook no painel da Evolution"
                                         ].map((step, i) => (
                                             <li key={i} className="flex items-center gap-3 text-xs text-slate-600 font-medium group">
                                                 <span className="w-6 h-6 bg-teal-50 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black border border-teal-100 shrink-0 group-hover:bg-teal-600 group-hover:text-white transition-colors">{i+1}</span>
@@ -444,6 +459,15 @@ export const WhatsAppInbox: React.FC = () => {
                                     <p className="text-[9px] text-indigo-400 leading-relaxed italic"><Info size={10} className="inline mr-1"/> O modo Hosted requer que seu servidor Cloud suporte requisições CORS e possua certificado SSL válido.</p>
                                 </div>
                             )}
+
+                            <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex gap-4 animate-in slide-in-from-bottom-2">
+                                {/* FIX: Use correctly imported AlertCircle icon */}
+                                <AlertCircle className="text-amber-600 shrink-0" size={20} />
+                                <div className="space-y-1">
+                                    <p className="text-xs font-black text-amber-900 uppercase">Recebimento de Mensagens (Webhook)</p>
+                                    <p className="text-[10px] text-amber-800 leading-relaxed">Para receber mensagens, você deve ativar o evento <b>MESSAGES_UPSERT</b> nas configurações de Webhook do seu painel Evolution. Sem isso, o sistema só conseguirá enviar mensagens.</p>
+                                </div>
+                            </div>
                       </div>
 
                       {/* WEBHOOK HELPERS */}
@@ -455,6 +479,7 @@ export const WhatsAppInbox: React.FC = () => {
                           <p className="text-xs text-slate-500 leading-relaxed">Para receber mensagens em tempo real, cadastre esta URL no painel do seu servidor Cloud (Evolution ou Gateway):</p>
                           <div className="p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl relative group">
                               <div className="flex gap-4">
+                                  {/* FIX: Use defined edgeFunctionUrl variable */}
                                   <code className="flex-1 bg-transparent p-1 rounded-xl text-[10px] font-mono text-slate-700 break-all leading-relaxed">{edgeFunctionUrl}</code>
                                   <button onClick={() => { navigator.clipboard.writeText(edgeFunctionUrl); alert("URL Copiada!"); }} className="bg-white border border-slate-200 text-slate-400 hover:text-teal-600 p-3 rounded-2xl active:scale-95 transition-all shadow-sm"><Copy size={20}/></button>
                               </div>
@@ -464,7 +489,7 @@ export const WhatsAppInbox: React.FC = () => {
 
                   <div className="px-8 py-6 bg-white border-t border-slate-100 flex justify-end gap-3 shrink-0">
                       <button onClick={() => setShowSettings(false)} className="px-6 py-3 text-slate-500 font-bold text-sm hover:text-slate-700 transition-colors">Cancelar</button>
-                      <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-3 rounded-2xl font-black text-sm shadow-xl shadow-teal-600/30 flex items-center gap-2 transition-all active:scale-95">
+                      <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-3 rounded-2xl font-black text-sm shadow-xl shadow-teal-600/30 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50">
                           {isSavingConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                           Salvar Configuração Cloud
                       </button>

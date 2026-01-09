@@ -170,7 +170,9 @@ export const WhatsAppInbox: React.FC = () => {
           let token = "";
           if (config.mode === 'direct') {
               // Requisição real ao seu Gateway VOLL
-              const response = await fetch(`${config.gatewayUrl.replace(/\/$/, "")}/get-qr`);
+              const response = await fetch(`${config.gatewayUrl.replace(/\/$/, "")}/get-qr`).catch(() => {
+                  throw new Error("Gateway Offline. Verifique a URL do servidor.");
+              });
               const data = await response.json();
               if (!response.ok) throw new Error(data.message || "Erro ao obter QR do Gateway");
               token = data.qr;
@@ -178,6 +180,8 @@ export const WhatsAppInbox: React.FC = () => {
               // Requisição real à Evolution API
               const response = await fetch(`${config.instanceUrl.replace(/\/$/, "")}/instance/connect/${config.instanceName}`, {
                   headers: { 'apikey': config.apiKey }
+              }).catch(() => {
+                  throw new Error("Servidor Evolution Offline ou URL Inválida.");
               });
               const data = await response.json();
               if (!response.ok) throw new Error(data.message || "Erro ao obter QR da Evolution");
@@ -281,27 +285,44 @@ export const WhatsAppInbox: React.FC = () => {
                                             <button onClick={handleGenerateQr} className="text-[9px] font-bold underline mt-2">Tentar Novamente</button>
                                         </div>
                                     ) : qrCode ? (
-                                        <img 
-                                            src={qrCode} 
-                                            alt="WhatsApp QR Code" 
-                                            className="w-full h-full object-contain animate-in zoom-in-95" 
-                                        />
+                                        <div className="w-full h-full p-2 bg-white rounded-xl">
+                                            <img 
+                                                src={qrCode} 
+                                                alt="WhatsApp QR Code" 
+                                                className="w-full h-full object-contain animate-in zoom-in-95" 
+                                                onError={() => setQrError("Erro ao carregar imagem do QR Code.")}
+                                            />
+                                        </div>
                                     ) : config.isConnected ? (
                                         <div className="flex flex-col items-center animate-bounce">
                                             <CheckCircle2 size={64} className="text-teal-500 mb-2" />
                                             <p className="text-xs font-black text-teal-600 uppercase">Conectado!</p>
                                         </div>
                                     ) : (
-                                        <>
+                                        <div className="flex flex-col items-center">
                                             <QrCode size={48} className="text-slate-300 mb-3" />
                                             <p className="text-[10px] font-black text-slate-400 uppercase leading-tight">Configure a URL abaixo e gere o QR</p>
-                                        </>
+                                        </div>
                                     )}
                                 </div>
                                 <div className="flex-1 space-y-4">
-                                    <h4 className="text-lg font-black text-slate-800">Console de Conexão:</h4>
-                                    <div className="bg-slate-900 rounded-xl p-4 h-32 font-mono text-[10px] text-teal-400 overflow-y-auto custom-scrollbar leading-relaxed shadow-inner">
-                                        {connLogs.length === 0 ? "> Aguardando configuração..." : connLogs.map((log, i) => (
+                                    <h4 className="text-lg font-black text-slate-800">Passo a Passo:</h4>
+                                    <ul className="space-y-2 mb-4">
+                                        <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                                            <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">1</span>
+                                            Configure a URL do seu Gateway abaixo
+                                        </li>
+                                        <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                                            <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">2</span>
+                                            Clique em "Gerar QR Code"
+                                        </li>
+                                        <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                                            <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">3</span>
+                                            Escaneie com seu celular no WhatsApp
+                                        </li>
+                                    </ul>
+                                    <div className="bg-slate-900 rounded-xl p-4 h-24 font-mono text-[9px] text-teal-400 overflow-y-auto custom-scrollbar leading-relaxed shadow-inner">
+                                        {connLogs.length === 0 ? "> Aguardando início..." : connLogs.map((log, i) => (
                                             <div key={i} className="mb-1">{log}</div>
                                         ))}
                                     </div>
@@ -338,7 +359,7 @@ export const WhatsAppInbox: React.FC = () => {
                                         onChange={e => setConfig({...config, gatewayUrl: e.target.value})}
                                         placeholder="https://seu-gateway-real.com"
                                     />
-                                    <p className="text-[9px] text-indigo-400 mt-2 italic">* O modo Direct requer que o servidor do Gateway esteja acessível para o frontend.</p>
+                                    <p className="text-[9px] text-indigo-400 mt-2 italic">* O modo Direct requer que o servidor do Gateway esteja online para o frontend buscar o QR.</p>
                                 </div>
                             ) : (
                                 <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100 animate-in slide-in-from-bottom-2 space-y-4">
@@ -490,7 +511,7 @@ export const WhatsAppInbox: React.FC = () => {
                             <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 transition-colors"><Paperclip size={20}/></button>
                         </div>
                         <button type="submit" disabled={isSending || !inputText.trim()} className="bg-teal-600 text-white p-4 rounded-2xl hover:bg-teal-700 disabled:opacity-50 transition-all shadow-xl shadow-teal-600/20 active:scale-95 shrink-0 flex items-center justify-center">
-                            {isSending ? <Loader2 className="animate-spin" size={24} /> : <Send size={24} />}
+                            {isSending ? <Loader2 size={24} className="animate-spin" /> : <Send size={24} />}
                         </button>
                     </form>
                 </div>

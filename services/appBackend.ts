@@ -125,7 +125,7 @@ export const appBackend = {
 
   getSupportTicketsBySender: async (id: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
-    // Busca onde o usuário é o REMETENTE ou o DESTINATÁRIO
+    // Busca onde o usuário é o REMETENTE ou o DESTINATÁRIO (iniciado pela Adm)
     const { data, error } = await supabase.from('crm_support_tickets')
         .select('*')
         .or(`sender_id.eq.${id},target_id.eq.${id}`)
@@ -251,7 +251,116 @@ export const appBackend = {
     if (error) throw error;
   },
 
-  // --- PRESETS E GLOBAL SETTINGS ---
+  // --- OUTROS MÉTODOS CRM ---
+  getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
+    if (!isConfigured) return [];
+    const { data, error = null } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((row: any) => ({
+      id: row.id, openInstallments: row.open_installments, totalNegotiatedValue: row.total_negotiated_value, totalInstallments: row.total_installments,
+      dueDate: row.due_date, responsibleAgent: row.responsible_agent, identifierCode: row.identifier_code, fullName: row.full_name,
+      productName: row.product_name, originalValue: row.original_value, paymentMethod: row.payment_method, observations: row.observations,
+      status: row.status, team: row.team, voucherLink1: row.voucher_link_1, testDate: row.test_date, voucherLink2: row.voucher_link_2,
+      voucherLink3: row.voucher_link_3, boletosLink: row.boletos_link, negotiationReference: row.negotiation_reference, attachments: row.attachments, createdAt: row.created_at
+    }));
+  },
+
+  saveBillingNegotiation: async (negotiation: Partial<BillingNegotiation>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      open_installments: negotiation.openInstallments, total_negotiated_value: negotiation.totalNegotiatedValue, total_installments: negotiation.totalInstallments,
+      due_date: negotiation.dueDate, responsible_agent: negotiation.responsibleAgent, identifier_code: negotiation.identifierCode,
+      full_name: negotiation.fullName, product_name: negotiation.productName, original_value: negotiation.originalValue,
+      payment_method: negotiation.paymentMethod, observations: negotiation.observations, status: negotiation.status, team: negotiation.team,
+      voucher_link_1: negotiation.voucherLink1, test_date: negotiation.testDate, voucher_link_2: negotiation.voucherLink2,
+      voucher_link_3: negotiation.voucherLink3, boletos_link: negotiation.boletosLink, negotiation_reference: negotiation.negotiationReference, attachments: negotiation.attachments
+    };
+    if (negotiation.id) {
+        const { error } = await supabase.from('crm_billing_negotiations').update(payload).eq('id', negotiation.id);
+        if (error) throw error;
+    } else {
+        const { error } = await supabase.from('crm_billing_negotiations').insert([{ ...payload, id: crypto.randomUUID() }]);
+        if (error) throw error;
+    }
+  },
+
+  deleteBillingNegotiation: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_billing_negotiations').delete().eq('id', id);
+      if (error) throw error;
+  },
+
+  getPipelines: async (): Promise<Pipeline[]> => {
+    if (!isConfigured) return [];
+    const { data, error = null } = await supabase.from('crm_pipelines').select('*').order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data || []).map((p: any) => ({ id: p.id, name: p.name, stages: p.stages || [] }));
+  },
+
+  savePipeline: async (pipeline: Pipeline): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_pipelines').upsert({ id: pipeline.id || undefined, name: pipeline.name, stages: pipeline.stages });
+    if (error) throw error;
+  },
+
+  deletePipeline: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_pipelines').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
+      if (!isConfigured) return [];
+      const { data, error = null } = await supabase.from('crm_webhook_triggers').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((t: any) => ({ id: t.id, pipelineName: t.pipeline_name, stageId: t.stage_id, payloadJson: t.payload_json, createdAt: t.created_at }));
+  },
+
+  saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || undefined, pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson });
+      if (error) throw error;
+  },
+
+  deleteWebhookTrigger: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_webhook_triggers').delete().eq('id', id);
+      if (error) throw error;
+  },
+
+  getSyncJobs: async (): Promise<SyncJob[]> => {
+    if (!isConfigured) return [];
+    const { data, error = null } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((row: any) => ({
+      id: row.id, name: row.name, sheetUrl: row.sheet_url, config: row.config, lastSync: row.last_sync, status: row.status, lastMessage: row.last_message, active: row.active, intervalMinutes: row.interval_minutes, createdBy: row.created_by_name, createdAt: row.created_at
+    }));
+  },
+
+  saveSyncJob: async (job: SyncJob): Promise<void> => {
+    if (!isConfigured) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    const payload = {
+      id: job.id, user_id: user?.id, name: job.name, sheet_url: job.sheetUrl, config: job.config, active: job.active,
+      interval_minutes: job.intervalMinutes, last_sync: job.lastSync, status: job.status, last_message: job.lastMessage,
+      created_by_name: job.createdBy, created_at: job.createdAt
+    };
+    const { error } = await supabase.from('crm_sync_jobs').upsert(payload);
+    if (error) throw error;
+  },
+
+  updateJobStatus: async (jobId: string, status: string, lastSync: string | null, message: string | null): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_sync_jobs').update({ status, last_sync: lastSync, last_message: message }).eq('id', jobId);
+    if (error) throw error;
+  },
+
+  deleteSyncJob: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_sync_jobs').delete().eq('id', id);
+    if (error) throw error;
+  },
+
   getPresets: async (): Promise<any[]> => {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from(TABLE_NAME).select('*').order('created_at', { ascending: false });
@@ -300,7 +409,6 @@ export const appBackend = {
   getWhatsAppConfig: async (): Promise<any | null> => await appBackend.getAppSetting('whatsapp_config'),
   saveWhatsAppConfig: async (config: any) => await appBackend.saveAppSetting('whatsapp_config', config),
 
-  // --- CRM COMPONENT METHODS ---
   getCompanies: async (): Promise<CompanySetting[]> => {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('crm_companies').select('*').order('created_at', { ascending: true });
@@ -384,12 +492,13 @@ export const appBackend = {
     const { data, error = null } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name', { ascending: true });
     if (error) throw error;
     return (data || []).map((d: any) => ({
-      id: d.id, status: d.status || 'active', responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password || '', secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2, student_capacity: d.student_capacity, rent_value: d.rent_value, methodology: d.methodology, studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account, beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: d.has_reformer, qtyReformer: d.qty_reformer, hasLadderBarrel: d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel, hasChair: d.has_chair, qtyChair: d.qty_chair, hasCadillac: d.has_cadillac, qtyCadillac: d.qty_cadillac, hasChairsForCourse: d.has_chairs_for_course, hasTv: d.has_tv, maxKitsCapacity: d.max_kits_capacity, attachments: d.attachments
+      id: d.id, status: d.status || 'active', responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password || '', secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology, studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account, beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: d.has_reformer, qtyReformer: d.qty_reformer, hasLadderBarrel: d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel, hasChair: d.has_chair, qtyChair: d.qty_chair, hasCadillac: d.has_cadillac, qtyCadillac: d.qty_cadillac, hasChairsForCourse: d.has_chairs_for_course, hasTv: d.has_tv, maxKitsCapacity: d.max_kits_capacity, attachments: d.attachments
     }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
+    // FIX: Access properties using correct camelCase names from the studio object
     const payload = {
       status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
@@ -458,6 +567,25 @@ export const appBackend = {
     if (error) throw error;
   },
 
+  getFormFolders: async (): Promise<FormFolder[]> => {
+    if (!isConfigured) return [];
+    const { data, error = null } = await supabase.from('crm_form_folders').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
+  },
+
+  saveFormFolder: async (folder: FormFolder): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_form_folders').upsert({ id: folder.id, name: folder.name });
+    if (error) throw error;
+  },
+
+  deleteFormFolder: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_form_folders').delete().eq('id', id);
+    if (error) throw error;
+  },
+
   saveForm: async (form: FormModel): Promise<void> => {
       if (!isConfigured) return;
       const payload = { 
@@ -481,25 +609,6 @@ export const appBackend = {
       }));
   },
 
-  getFormFolders: async (): Promise<FormFolder[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_form_folders').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
-  },
-
-  saveFormFolder: async (folder: FormFolder): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_form_folders').upsert({ id: folder.id, name: folder.name });
-    if (error) throw error;
-  },
-
-  deleteFormFolder: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_form_folders').delete().eq('id', id);
-    if (error) throw error;
-  },
-
   saveSurvey: async (survey: SurveyModel): Promise<void> => {
       if (!isConfigured) return;
       const payload = { 
@@ -517,7 +626,7 @@ export const appBackend = {
       if (error) throw error;
       return (data || []).map((d: any) => ({ 
           id: d.id, title: d.title, description: d.description, isLeadCapture: d.is_lead_capture, questions: d.questions || [], style: d.style || {}, 
-          targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.targetProductName, onlyIfFinished: d.onlyIfFinished,
+          targetType: d.targetType, targetProductType: d.targetProductType, targetProductName: d.targetProductName, onlyIfFinished: d.onlyIfFinished,
           isActive: d.isActive, createdAt: d.created_at, submissionsCount: d.submissions_count || 0 
       }));
   },
@@ -614,14 +723,14 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
+      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
       if (!isConfigured) return null;
       const { data, error = null } = await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle();
       if (error || !data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
+      return { id: data.id, title: data.title, content: data.content, city: data.city, contract_date: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
@@ -658,8 +767,8 @@ export const appBackend = {
       backgroundData: d.background_base_64, 
       backBackgroundData: d.back_background_base_64, 
       linkedProductId: d.linked_product_id, 
-      body_text: d.body_text, 
-      layout_config: d.layout_config, 
+      bodyText: d.body_text, 
+      layoutConfig: d.layout_config, 
       createdAt: d.created_at 
     }));
   },
@@ -877,181 +986,5 @@ export const appBackend = {
       if (!isConfigured) return;
       const { error } = await supabase.from('crm_inventory').delete().eq('id', id);
       if (error) throw error;
-  },
-
-  /**
-   * FIX: Added missing methods for SyncJobs
-   */
-  getSyncJobs: async (): Promise<SyncJob[]> => {
-    if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        sheetUrl: row.sheet_url,
-        config: row.config,
-        lastSync: row.last_sync,
-        status: row.status,
-        lastMessage: row.last_message,
-        active: row.active,
-        intervalMinutes: row.interval_minutes,
-        createdBy: row.created_by,
-        createdAt: row.created_at
-    }));
-  },
-
-  saveSyncJob: async (job: SyncJob): Promise<void> => {
-    if (!isConfigured) return;
-    const payload = {
-        id: job.id,
-        name: job.name,
-        sheet_url: job.sheetUrl,
-        config: job.config,
-        last_sync: job.lastSync,
-        status: job.status,
-        last_message: job.lastMessage,
-        active: job.active,
-        interval_minutes: job.intervalMinutes,
-        created_by: job.createdBy,
-        created_at: job.createdAt
-    };
-    const { error } = await supabase.from('crm_sync_jobs').upsert(payload);
-    if (error) throw error;
-  },
-
-  updateJobStatus: async (id: string, status: string, lastSync: string, lastMessage: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_sync_jobs').update({
-        status,
-        last_sync: lastSync,
-        last_message: lastMessage
-    }).eq('id', id);
-    if (error) throw error;
-  },
-
-  deleteSyncJob: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_sync_jobs').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  /**
-   * FIX: Added missing methods for Pipelines
-   */
-  getPipelines: async (): Promise<Pipeline[]> => {
-    if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_pipelines').select('*').order('name', { ascending: true });
-    if (error) throw error;
-    return (data || []).map((p: any) => ({ id: p.id, name: p.name, stages: p.stages || [] }));
-  },
-
-  savePipeline: async (pipeline: Pipeline): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_pipelines').upsert({ id: pipeline.id, name: pipeline.name, stages: pipeline.stages });
-    if (error) throw error;
-  },
-
-  deletePipeline: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_pipelines').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  /**
-   * FIX: Added missing methods for Webhook Triggers
-   */
-  getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
-    if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_webhook_triggers').select('*');
-    if (error) throw error;
-    return (data || []).map((t: any) => ({ id: t.id, pipelineName: t.pipeline_name, stageId: t.stage_id, payloadJson: t.payload_json, createdAt: t.created_at }));
-  },
-
-  saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
-      if (!isConfigured) return;
-      const payload = {
-          id: trigger.id || crypto.randomUUID(),
-          pipeline_name: trigger.pipelineName,
-          stage_id: trigger.stageId,
-          payload_json: trigger.payloadJson
-      };
-      const { error } = await supabase.from('crm_webhook_triggers').upsert(payload);
-      if (error) throw error;
-  },
-
-  deleteWebhookTrigger: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_webhook_triggers').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  /**
-   * FIX: Added missing methods for Billing Negotiations
-   */
-  getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
-    if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((n: any) => ({
-        id: n.id,
-        openInstallments: n.open_installments,
-        totalNegotiatedValue: n.total_negotiated_value,
-        totalInstallments: n.total_installments,
-        dueDate: n.due_date,
-        responsibleAgent: n.responsible_agent,
-        identifierCode: n.identifier_code,
-        fullName: n.full_name,
-        productName: n.product_name,
-        originalValue: n.original_value,
-        paymentMethod: n.payment_method,
-        observations: n.observations,
-        status: n.status,
-        team: n.team,
-        voucherLink1: n.voucher_link_1,
-        testDate: n.test_date,
-        voucherLink2: n.voucher_link_2,
-        voucherLink3: n.voucher_link_3,
-        boletosLink: n.boletos_link,
-        negotiationReference: n.negotiation_reference,
-        attachments: n.attachments,
-        createdAt: n.created_at
-    }));
-  },
-
-  saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
-    if (!isConfigured) return;
-    const payload = {
-        id: neg.id || crypto.randomUUID(),
-        open_installments: neg.openInstallments,
-        total_negotiated_value: neg.totalNegotiatedValue,
-        total_installments: neg.totalInstallments,
-        due_date: neg.dueDate,
-        responsible_agent: neg.responsibleAgent,
-        identifier_code: neg.identifierCode,
-        full_name: neg.fullName,
-        product_name: neg.productName,
-        original_value: neg.originalValue,
-        payment_method: neg.paymentMethod,
-        observations: neg.observations,
-        status: neg.status,
-        team: neg.team,
-        voucher_link_1: neg.voucherLink1,
-        test_date: neg.testDate,
-        voucher_link_2: neg.voucherLink2,
-        voucher_link_3: neg.voucherLink3,
-        boletos_link: neg.boletosLink,
-        negotiation_reference: neg.negotiationReference,
-        attachments: neg.attachments,
-        created_at: neg.createdAt || new Date().toISOString()
-    };
-    const { error } = await supabase.from('crm_billing_negotiations').upsert(payload);
-    if (error) throw error;
-  },
-
-  deleteBillingNegotiation: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_billing_negotiations').delete().eq('id', id);
-    if (error) throw error;
-  },
+  }
 };

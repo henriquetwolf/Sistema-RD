@@ -6,17 +6,17 @@ export interface SupportTag {
   createdAt: string;
 }
 
-/**
- * FIXED: Added missing properties assignedId and assignedName
- * FIXED: Added 'waiting' to status type
- * UPDATED: Added tag field
- */
 export interface SupportTicket {
   id: string;
   senderId: string;
   senderName: string;
   senderEmail: string;
   senderRole: 'student' | 'instructor' | 'studio' | 'admin';
+  // Novos campos para chamados iniciados pelo Admin
+  targetId?: string;
+  targetName?: string;
+  targetEmail?: string;
+  targetRole?: 'student' | 'instructor' | 'studio';
   subject: string;
   message: string;
   tag?: string;

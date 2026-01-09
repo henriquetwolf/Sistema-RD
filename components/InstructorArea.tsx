@@ -10,7 +10,7 @@ import {
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
 import { Teacher } from './TeachersManager';
-import { Banner, TeacherNews, Contract } from '../types';
+import { Banner, TeacherNews, Contract, SupportTicket } from '../types';
 import { SupportTicketModal } from './SupportTicketModal';
 import clsx from 'clsx';
 
@@ -32,12 +32,14 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const [selectedNews, setSelectedNews] = useState<TeacherNews | null>(null);
   const [viewingContract, setViewingContract] = useState<Contract | null>(null);
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
 
   useEffect(() => {
     fetchMyClasses();
     fetchBanners();
     fetchNews();
     fetchMyContracts();
+    fetchSupportNotifications();
     
     const saved = localStorage.getItem(`seen_news_${instructor.id}`);
     if (saved) {
@@ -48,6 +50,16 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
         }
     }
   }, [instructor]);
+
+  const fetchSupportNotifications = async () => {
+      try {
+          const tickets = await appBackend.getSupportTicketsBySender(instructor.id);
+          // Chamados pendentes são aqueles onde o status é 'pending' (foi respondido pelo admin)
+          // ou são novos chamados criados pelo admin (senderRole === 'admin' e status 'pending')
+          const pending = tickets.filter(t => t.status === 'pending').length;
+          setPendingTicketsCount(pending);
+      } catch (e) {}
+  };
 
   const fetchNews = async () => {
       try {
@@ -136,10 +148,15 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
           </div>
           <div className="flex items-center gap-2">
             <button 
-                onClick={() => setShowSupportModal(true)}
-                className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all active:scale-95 flex items-center gap-2 font-bold text-xs"
+                onClick={() => { setShowSupportModal(true); setPendingTicketsCount(0); }}
+                className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all active:scale-95 flex items-center gap-2 font-bold text-xs relative"
             >
                 <LifeBuoy size={20} /> Suporte
+                {pendingTicketsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-lg animate-bounce">
+                        {pendingTicketsCount}
+                    </span>
+                )}
             </button>
             <div className="w-px h-6 bg-slate-200 mx-2"></div>
             <button 
@@ -601,7 +618,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
 
       <SupportTicketModal 
           isOpen={showSupportModal} 
-          onClose={() => setShowSupportModal(false)}
+          onClose={() => { setShowSupportModal(false); fetchSupportNotifications(); }}
           senderId={instructor.id}
           senderName={instructor.fullName}
           senderEmail={instructor.email}

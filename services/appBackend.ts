@@ -117,17 +117,23 @@ export const appBackend = {
     if (error) throw error;
     return (data || []).map((t: any) => ({
       id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role,
+      targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role,
       subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, createdAt: t.created_at, updatedAt: t.updated_at,
       assignedId: t.assigned_id, assignedName: t.assigned_name
     }));
   },
 
-  getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
+  getSupportTicketsBySender: async (id: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_support_tickets').select('*').eq('sender_id', senderId).order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('crm_support_tickets')
+        .select('*')
+        .or(`sender_id.eq.${id},target_id.eq.${id}`)
+        .order('created_at', { ascending: false });
+    
     if (error) throw error;
     return (data || []).map((t: any) => ({
       id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role,
+      targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role,
       subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, createdAt: t.created_at, updatedAt: t.updated_at,
       assignedId: t.assigned_id, assignedName: t.assigned_name
     }));
@@ -150,6 +156,10 @@ export const appBackend = {
       sender_name: ticket.senderName,
       sender_email: ticket.senderEmail,
       sender_role: ticket.senderRole,
+      target_id: ticket.targetId,
+      target_name: ticket.targetName,
+      target_email: ticket.targetEmail,
+      target_role: ticket.targetRole,
       subject: ticket.subject,
       message: ticket.message,
       tag: ticket.tag,
@@ -160,7 +170,6 @@ export const appBackend = {
       updated_at: new Date().toISOString()
     };
 
-    // Usamos UPSERT para garantir que, se um ID for passado (novo chamado forçado ou edição), ele funcione.
     if (ticket.id) {
         payload.id = ticket.id;
         const { error } = await supabase.from('crm_support_tickets').upsert(payload);
@@ -191,7 +200,9 @@ export const appBackend = {
       if (error) throw error;
 
       const updates: any = { updated_at: new Date().toISOString() };
-      if (msg.senderRole !== 'admin') updates.status = 'open';
+      if (msg.senderRole === 'admin') updates.status = 'pending';
+      else updates.status = 'open';
+      
       await supabase.from('crm_support_tickets').update(updates).eq('id', (msg as any).ticketId);
   },
 
@@ -361,7 +372,7 @@ export const appBackend = {
   savePreset: async (preset: Omit<any, 'id'>): Promise<any> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
-    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.intervalMinutes || 5, created_by_name: preset.createdByName || null };
+    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.createdByName || null };
     const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
     if (error) throw error;
     return {
@@ -477,7 +488,7 @@ export const appBackend = {
 
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name', { ascending: true });
+    const { data, error = null } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name', { ascending: true });
     if (error) throw error;
     return (data || []).map((d: any) => ({
       id: d.id, status: d.status || 'active', responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password || '', secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology, studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account, beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: d.has_reformer, qtyReformer: d.qty_reformer, hasLadderBarrel: d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel, hasChair: d.has_chair, qtyChair: d.qty_chair, hasCadillac: d.has_cadillac, qtyCadillac: d.qty_cadillac, hasChairsForCourse: d.has_chairs_for_course, hasTv: d.has_tv, maxKitsCapacity: d.max_kits_capacity, attachments: d.attachments
@@ -613,8 +624,8 @@ export const appBackend = {
       if (error) throw error;
       return (data || []).map((d: any) => ({ 
           id: d.id, title: d.title, description: d.description, isLeadCapture: d.is_lead_capture, questions: d.questions || [], style: d.style || {}, 
-          targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished,
-          isActive: d.is_active, createdAt: d.created_at, submissionsCount: d.submissions_count || 0 
+          targetType: d.targetType, targetProductType: d.targetProductType, targetProductName: d.targetProductName, onlyIfFinished: d.onlyIfFinished,
+          isActive: d.isActive, createdAt: d.created_at, submissionsCount: d.submissionsCount || 0 
       }));
   },
 
@@ -643,9 +654,9 @@ export const appBackend = {
           return true;
       });
       return eligible.map((d: any) => ({
-          id: d.id, title: d.title, description: d.description, isLeadCapture: d.is_lead_capture, questions: d.questions || [], style: d.style || {}, 
-          targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished,
-          isActive: d.is_active, createdAt: d.created_at, submissionsCount: d.submissions_count || 0
+          id: d.id, title: d.title, description: d.description, isLeadCapture: d.isLeadCapture, questions: d.questions || [], style: d.style || {}, 
+          targetType: d.targetType, targetProductType: d.targetProductType, targetProductName: d.targetProductName, onlyIfFinished: d.onlyIfFinished,
+          isActive: d.isActive, createdAt: d.created_at, submissionsCount: d.submissionsCount || 0
       }));
   },
 
@@ -658,7 +669,7 @@ export const appBackend = {
           questions: form.questions || [], style: form.style || {}, createdAt: form.created_at, submissionsCount: form.submissions_count || 0, folderId: form.folder_id
       };
       const { data: survey } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
-      if (survey) return { id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.isLeadCapture, questions: survey.questions || [], style: survey.style || {}, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 };
+      if (survey) return { id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.is_lead_capture, questions: survey.questions || [], style: survey.style || {}, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 };
       return null;
   },
 
@@ -891,7 +902,7 @@ export const appBackend = {
       const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date').order('title');
       if (error) throw error;
       return (data || []).map((b: any) => ({
-          id: b.id, eventId: b.event_id, date: b.date, title: b.title, maxSelections: b.max_selections
+          id: b.id, eventId: b.event_id, date: b.date, title: b.title, max_selections: b.max_selections
       }));
   },
 

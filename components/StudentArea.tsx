@@ -40,12 +40,25 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [selectedCourseInfo, setSelectedCourseInfo] = useState<CourseInfo | null>(null);
     const [selectedStudioDetails, setSelectedStudioDetails] = useState<PartnerStudio | null>(null);
     const [showSupportModal, setShowSupportModal] = useState(false);
+    const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
 
     useEffect(() => {
         loadStudentData();
         loadBanners();
         loadSurveys();
+        fetchSupportNotifications();
     }, [student]);
+
+    const fetchSupportNotifications = async () => {
+        try {
+            const mainDealId = student.deals[0]?.id;
+            if (mainDealId) {
+                const tickets = await appBackend.getSupportTicketsBySender(mainDealId);
+                const pending = tickets.filter(t => t.status === 'pending').length;
+                setPendingTicketsCount(pending);
+            }
+        } catch (e) {}
+    };
 
     useEffect(() => {
         if (activeTab === 'events') {
@@ -262,10 +275,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     </div>
                     <div className="flex items-center gap-4">
                         <button 
-                            onClick={() => setShowSupportModal(true)}
-                            className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all active:scale-95 flex items-center gap-2 font-bold text-xs"
+                            onClick={() => { setShowSupportModal(true); setPendingTicketsCount(0); }}
+                            className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all active:scale-95 flex items-center gap-2 font-bold text-xs relative"
                         >
                             <LifeBuoy size={20} /> <span className="hidden sm:inline">Suporte</span>
+                            {pendingTicketsCount > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-lg animate-bounce">
+                                    {pendingTicketsCount}
+                                </span>
+                            )}
                         </button>
                         <div className="flex flex-col items-end text-right">
                             <span className="text-sm font-black text-slate-800 leading-none">{student.name}</span>
@@ -629,7 +647,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             <SupportTicketModal 
                 isOpen={showSupportModal} 
-                onClose={() => setShowSupportModal(false)}
+                onClose={() => { setShowSupportModal(false); fetchSupportNotifications(); }}
                 senderId={student.deals[0]?.id || 'guest'}
                 senderName={student.name}
                 senderEmail={student.email}

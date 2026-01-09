@@ -4,7 +4,7 @@ import {
   LifeBuoy, Search, Filter, Clock, CheckCircle, AlertTriangle, User, Users, 
   Mail, MessageSquare, Trash2, Loader2, RefreshCw, X, Send, ChevronRight, 
   LayoutGrid, Kanban, BarChart3, TrendingUp, Download, Paperclip, FileText, 
-  Image as ImageIcon, Timer, BarChart, Tag as TagIcon
+  Image as ImageIcon, Timer, BarChart, Tag as TagIcon, Plus
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { SupportTicket, SupportMessage, CollaboratorSession, SupportTag } from '../types';
@@ -18,7 +18,7 @@ export const SupportManager: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'pending' | 'closed' | 'waiting'>('all');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'instructor' | 'studio'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'instructor' | 'studio' | 'admin'>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [responderFilter, setResponderFilter] = useState<string>('all');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
@@ -29,6 +29,15 @@ export const SupportManager: React.FC = () => {
   const [response, setResponse] = useState('');
   const [isSavingResponse, setIsSavingResponse] = useState(false);
   const [attachment, setAttachment] = useState<{ url: string, name: string } | null>(null);
+
+  // New Ticket (Admin -> User)
+  const [showNewTicketModal, setShowNewTicketModal] = useState(false);
+  const [isSearchingTarget, setIsSearchingTarget] = useState(false);
+  const [targetSearchResults, setTargetSearchResults] = useState<any[]>([]);
+  const [selectedTarget, setSelectedTarget] = useState<any | null>(null);
+  const [newTicketSubject, setNewTicketSubject] = useState('');
+  const [newTicketTag, setNewTicketTag] = useState('');
+  const [newTicketMessage, setNewTicketMessage] = useState('');
 
   const threadEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,6 +72,65 @@ export const SupportManager: React.FC = () => {
           const data = await appBackend.getSupportTicketMessages(ticketId);
           setThread(data);
       } catch (e) { console.error(e); } finally { setIsLoadingThread(false); }
+  };
+
+  const handleSearchTarget = async (query: string) => {
+      if (query.length < 3) { setTargetSearchResults([]); return; }
+      setIsSearchingTarget(true);
+      try {
+          const [students, instructors, studios] = await Promise.all([
+              appBackend.client.from('crm_deals').select('id, company_name, contact_name, email').ilike('company_name', `%${query}%`),
+              appBackend.client.from('crm_teachers').select('id, full_name, email').ilike('full_name', `%${query}%`),
+              appBackend.client.from('crm_partner_studios').select('id, fantasy_name, email').ilike('fantasy_name', `%${query}%`)
+          ]);
+
+          const results: any[] = [];
+          (students.data || []).forEach(s => results.push({ id: s.id, name: s.company_name || s.contact_name, email: s.email, role: 'student' }));
+          (instructors.data || []).forEach(i => results.push({ id: i.id, name: i.full_name, email: i.email, role: 'instructor' }));
+          (studios.data || []).forEach(st => results.push({ id: st.id, name: st.fantasy_name, email: st.email, role: 'studio' }));
+          
+          setTargetSearchResults(results);
+      } catch (e) { console.error(e); } finally { setIsSearchingTarget(false); }
+  };
+
+  const handleCreateTicketAdmin = async () => {
+      if (!selectedTarget || !newTicketSubject || !newTicketMessage || !newTicketTag) {
+          alert("Preencha todos os campos e selecione um destinatário.");
+          return;
+      }
+      setIsSavingResponse(true);
+      try {
+          const ticketId = crypto.randomUUID();
+          await appBackend.saveSupportTicket({
+              id: ticketId,
+              senderId: currentAdmin.id,
+              senderName: currentAdmin.name,
+              senderEmail: (currentAdmin as any).email || 'admin@voll.com',
+              senderRole: 'admin',
+              targetId: selectedTarget.id,
+              targetName: selectedTarget.name,
+              targetEmail: selectedTarget.email,
+              targetRole: selectedTarget.role,
+              subject: newTicketSubject,
+              message: newTicketMessage,
+              tag: newTicketTag,
+              status: 'pending', // Iniciado pelo admin, fica pendente para o usuário
+              assignedId: currentAdmin.id,
+              assignedName: currentAdmin.name
+          });
+
+          await fetchTickets();
+          setShowNewTicketModal(false);
+          setSelectedTarget(null);
+          setNewTicketSubject('');
+          setNewTicketMessage('');
+          setNewTicketTag('');
+          alert("Chamado iniciado com sucesso!");
+      } catch (e: any) {
+          alert(`Erro ao criar chamado: ${e.message}`);
+      } finally {
+          setIsSavingResponse(false);
+      }
   };
 
   const handleUpdateStatus = async (ticket: SupportTicket, newStatus: SupportTicket['status']) => {
@@ -190,9 +258,10 @@ export const SupportManager: React.FC = () => {
 
   const filtered = tickets.filter(t => {
     const matchesSearch = (t.senderName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (t.targetName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (t.subject || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
-    const matchesRole = roleFilter === 'all' || t.senderRole === roleFilter;
+    const matchesRole = roleFilter === 'all' || t.senderRole === roleFilter || t.targetRole === roleFilter;
     const matchesTag = tagFilter === 'all' || t.tag === tagFilter;
     const matchesResponder = responderFilter === 'all' || t.assignedName === responderFilter;
     return matchesSearch && matchesStatus && matchesRole && matchesResponder && matchesTag;
@@ -210,10 +279,13 @@ export const SupportManager: React.FC = () => {
           </h2>
           <p className="text-slate-500 text-sm">Painel Administrativo de Atendimento Corporativo.</p>
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
-            <button onClick={() => setViewMode('dashboard')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", viewMode === 'dashboard' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><BarChart3 size={14}/> Dashboard</button>
-            <button onClick={() => setViewMode('board')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", viewMode === 'board' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Kanban size={14}/> Quadro Kanban</button>
-            <button onClick={() => setViewMode('list')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", viewMode === 'list' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutGrid size={14}/> Lista</button>
+        <div className="flex items-center gap-3">
+            <button onClick={() => setShowNewTicketModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95"><Plus size={18}/> Iniciar Chamado</button>
+            <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
+                <button onClick={() => setViewMode('dashboard')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", viewMode === 'dashboard' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><BarChart3 size={14}/> Dashboard</button>
+                <button onClick={() => setViewMode('board')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", viewMode === 'board' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Kanban size={14}/> Quadro Kanban</button>
+                <button onClick={() => setViewMode('list')} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", viewMode === 'list' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutGrid size={14}/> Lista</button>
+            </div>
         </div>
       </div>
 
@@ -221,10 +293,10 @@ export const SupportManager: React.FC = () => {
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 shrink-0">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input type="text" placeholder="Buscar por assunto ou solicitante..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+          <input type="text" placeholder="Buscar por assunto, remetente ou destinatário..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
         </div>
         <div className="flex flex-wrap gap-2">
-            <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value as any); setTagFilter('all'); }} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Origem: Todos</option><option value="student">Alunos</option><option value="instructor">Instrutores</option><option value="studio">Studios</option></select>
+            <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value as any); setTagFilter('all'); }} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Público: Todos</option><option value="student">Alunos</option><option value="instructor">Instrutores</option><option value="studio">Studios</option></select>
             <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Categoria: Todas</option>{uniqueTagsForCurrentRole.map(t => <option key={t} value={t}>{t}</option>)}</select>
             <select value={responderFilter} onChange={e => setResponderFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Atendente: Todos</option>{uniqueResponders.map(r => <option key={r} value={r}>{r}</option>)}</select>
             <button onClick={fetchTickets} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
@@ -341,17 +413,17 @@ export const SupportManager: React.FC = () => {
                               >
                                   <div className="flex justify-between items-start mb-2">
                                       <span className={clsx("text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded border", 
-                                        t.senderRole === 'student' ? "text-purple-600 border-purple-100 bg-purple-50" :
-                                        t.senderRole === 'instructor' ? "text-orange-600 border-orange-100 bg-orange-50" :
+                                        (t.senderRole === 'admin' ? t.targetRole : t.senderRole) === 'student' ? "text-purple-600 border-purple-100 bg-purple-50" :
+                                        (t.senderRole === 'admin' ? t.targetRole : t.senderRole) === 'instructor' ? "text-orange-600 border-orange-100 bg-orange-50" :
                                         "text-teal-600 border-teal-100 bg-teal-50"
-                                      )}>{t.senderRole}</span>
+                                      )}>{t.senderRole === 'admin' ? `À: ${t.targetRole}` : `DE: ${t.senderRole}`}</span>
                                       <span className="text-[9px] text-slate-400">{new Date(t.createdAt).toLocaleDateString()}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5 mb-1.5">
                                       <span className="bg-indigo-100 text-indigo-700 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full">{t.tag || 'Geral'}</span>
                                   </div>
                                   <h5 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2 leading-tight group-hover:text-indigo-600 transition-colors">{t.subject}</h5>
-                                  <p className="text-[10px] text-slate-500 font-bold mb-3">{t.senderName}</p>
+                                  <p className="text-[10px] text-slate-500 font-bold mb-3">{t.senderRole === 'admin' ? t.targetName : t.senderName}</p>
                                   <div className="flex items-center justify-between pt-3 border-t border-slate-50">
                                       <div className="flex items-center gap-1.5">
                                           <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[8px] font-black text-slate-400 border">{t.assignedName ? t.assignedName.charAt(0) : '?'}</div>
@@ -386,24 +458,121 @@ export const SupportManager: React.FC = () => {
                   <tr><td colSpan={6} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-indigo-600" /></td></tr>
                 ) : filtered.length === 0 ? (
                   <tr><td colSpan={6} className="p-20 text-center text-slate-400 italic">Nenhum chamado localizado.</td></tr>
-                ) : filtered.map(t => (
-                  <tr key={t.id} className="hover:bg-slate-50 transition-colors group cursor-pointer" onClick={() => setSelectedTicket(t)}>
-                    <td className="px-6 py-4">
-                      <span className={clsx("text-[9px] font-black px-2 py-1 rounded border uppercase", t.status === 'open' ? "bg-red-50 text-red-700 border-red-100" : t.status === 'pending' ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-green-50 text-green-700 border-green-100")}>{t.status}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col"><span className="font-bold text-slate-800">{t.senderName}</span><span className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{t.senderRole}</span></div>
-                    </td>
-                    <td className="px-6 py-4">
-                        <span className="bg-slate-100 text-slate-600 text-[9px] font-black uppercase px-2 py-1 rounded-full">{t.tag || 'Geral'}</span>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-slate-600 truncate max-w-xs">{t.subject}</td>
-                    <td className="px-6 py-4 text-xs text-slate-500 font-bold">{t.assignedName || '--'}</td>
-                    <td className="px-6 py-4 text-right"><ChevronRight size={18} className="text-slate-200 group-hover:text-indigo-600 ml-auto transition-colors" /></td>
-                  </tr>
-                ))}
+                ) : filtered.map(t => {
+                    const uName = t.senderRole === 'admin' ? t.targetName : t.senderName;
+                    const uRole = t.senderRole === 'admin' ? t.targetRole : t.senderRole;
+                    return (
+                        <tr key={t.id} className="hover:bg-slate-50 transition-colors group cursor-pointer" onClick={() => setSelectedTicket(t)}>
+                            <td className="px-6 py-4">
+                            <span className={clsx("text-[9px] font-black px-2 py-1 rounded border uppercase", t.status === 'open' ? "bg-red-50 text-red-700 border-red-100" : t.status === 'pending' ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-green-50 text-green-700 border-green-200")}>{t.status}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                            <div className="flex flex-col"><span className="font-bold text-slate-800">{uName}</span><span className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">{uRole} {t.senderRole === 'admin' && ' (Recebido)'}</span></div>
+                            </td>
+                            <td className="px-6 py-4">
+                                <span className="bg-slate-100 text-slate-600 text-[9px] font-black uppercase px-2 py-1 rounded-full">{t.tag || 'Geral'}</span>
+                            </td>
+                            <td className="px-6 py-4 font-medium text-slate-600 truncate max-w-xs">{t.subject}</td>
+                            <td className="px-6 py-4 text-xs text-slate-500 font-bold">{t.assignedName || '--'}</td>
+                            <td className="px-6 py-4 text-right"><ChevronRight size={18} className="text-slate-200 group-hover:text-indigo-600 ml-auto transition-colors" /></td>
+                        </tr>
+                    );
+                })}
               </tbody>
             </table>
+          </div>
+      )}
+
+      {/* NEW TICKET MODAL (Admin -> User) */}
+      {showNewTicketModal && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
+                      <div className="flex items-center gap-3">
+                          <div className="bg-indigo-100 p-2 rounded-xl text-indigo-700"><Plus size={24}/></div>
+                          <div>
+                              <h3 className="text-lg font-black text-slate-800">Iniciar Novo Chamado</h3>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Enviar mensagem direta para um usuário</p>
+                          </div>
+                      </div>
+                      <button onClick={() => setShowNewTicketModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
+                  </div>
+
+                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 flex-1">
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">1. Buscar Destinatário (Aluno, Instrutor ou Studio)</label>
+                          <div className="relative">
+                              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                              <input 
+                                type="text" 
+                                className="w-full pl-12 pr-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm focus:bg-white focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                                placeholder="Digite o nome ou parte do nome..."
+                                onChange={e => handleSearchTarget(e.target.value)}
+                              />
+                              {isSearchingTarget && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-indigo-600" size={18}/>}
+                          </div>
+
+                          {targetSearchResults.length > 0 && !selectedTarget && (
+                              <div className="mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                  {targetSearchResults.map(res => (
+                                      <button 
+                                        key={res.id} 
+                                        onClick={() => setSelectedTarget(res)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-indigo-50 border-b last:border-0 transition-colors group"
+                                      >
+                                          <div className="flex items-center gap-3">
+                                              <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all font-bold text-xs">{res.name.charAt(0)}</div>
+                                              <div className="text-left">
+                                                  <p className="text-sm font-bold text-slate-800">{res.name}</p>
+                                                  <p className="text-[10px] text-slate-400">{res.email}</p>
+                                              </div>
+                                          </div>
+                                          <span className="text-[8px] font-black bg-slate-100 px-1.5 py-0.5 rounded-full uppercase text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600">{res.role}</span>
+                                      </button>
+                                  ))}
+                              </div>
+                          )}
+                      </div>
+
+                      {selectedTarget && (
+                          <div className="animate-in fade-in slide-in-from-left-2 space-y-6">
+                              <div className="p-4 bg-indigo-50 border-2 border-indigo-100 rounded-2xl flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 rounded-full bg-white border-2 border-indigo-200 flex items-center justify-center text-indigo-600 font-black">{selectedTarget.name.charAt(0)}</div>
+                                      <div><p className="text-[10px] font-black text-indigo-400 uppercase">Enviando para:</p><p className="text-sm font-black text-indigo-900">{selectedTarget.name}</p></div>
+                                  </div>
+                                  <button onClick={() => setSelectedTarget(null)} className="p-1 hover:bg-indigo-200 rounded-lg text-indigo-400 transition-colors"><X size={20}/></button>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Categoria</label>
+                                      <select className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold bg-white" value={newTicketTag} onChange={e => setNewTicketTag(e.target.value)}>
+                                          <option value="">Selecione...</option>
+                                          {allTags.filter(t => t.role === selectedTarget.role || t.role === 'all').map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                      </select>
+                                  </div>
+                                  <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Assunto</label>
+                                      <input type="text" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold" value={newTicketSubject} onChange={e => setNewTicketSubject(e.target.value)} placeholder="Ex: Pendência Documental" />
+                                  </div>
+                              </div>
+
+                              <div>
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Mensagem Inicial</label>
+                                  <textarea className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm h-32 resize-none leading-relaxed" value={newTicketMessage} onChange={e => setNewTicketMessage(e.target.value)} placeholder="Explique o motivo do contato..." />
+                              </div>
+
+                              <div className="flex justify-end pt-4 border-t">
+                                  <button onClick={handleCreateTicketAdmin} disabled={isSavingResponse} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-3 rounded-2xl font-black text-sm shadow-xl shadow-indigo-600/20 transition-all flex items-center gap-2">
+                                      {isSavingResponse ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>}
+                                      Enviar Chamado ao Usuário
+                                  </button>
+                              </div>
+                          </div>
+                      )}
+                  </div>
+              </div>
           </div>
       )}
 
@@ -426,8 +595,8 @@ export const SupportManager: React.FC = () => {
                 <aside className="w-80 border-r border-slate-100 p-8 space-y-6 hidden lg:block overflow-y-auto custom-scrollbar bg-slate-50/50">
                     <div className="space-y-4">
                         <div className="flex items-center gap-3 p-4 bg-white rounded-2xl border shadow-sm">
-                            <div className="w-10 h-10 rounded-full bg-slate-100 border flex items-center justify-center text-indigo-600 font-bold text-lg">{(selectedTicket.senderName || '?').charAt(0)}</div>
-                            <div><p className="text-[10px] font-black text-slate-400 uppercase">Solicitante</p><p className="text-sm font-bold text-slate-800 truncate max-w-[140px]">{selectedTicket.senderName}</p><p className="text-[10px] text-slate-500">{selectedTicket.senderEmail}</p></div>
+                            <div className="w-10 h-10 rounded-full bg-slate-100 border flex items-center justify-center text-indigo-600 font-bold text-lg">{( (selectedTicket.senderRole === 'admin' ? selectedTicket.targetName : selectedTicket.senderName) || '?').charAt(0)}</div>
+                            <div><p className="text-[10px] font-black text-slate-400 uppercase">Usuário</p><p className="text-sm font-bold text-slate-800 truncate max-w-[140px]">{selectedTicket.senderRole === 'admin' ? selectedTicket.targetName : selectedTicket.senderName}</p><p className="text-[10px] text-slate-500">{selectedTicket.senderRole === 'admin' ? selectedTicket.targetEmail : selectedTicket.senderEmail}</p></div>
                         </div>
                         
                         <div className="p-4 bg-white rounded-2xl border shadow-sm">
@@ -440,7 +609,7 @@ export const SupportManager: React.FC = () => {
                             <div className="flex flex-col gap-2">
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'open')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'open' ? "bg-red-600 text-white shadow-md" : "bg-white text-red-600 border border-red-100")}>Aberto</button>
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'pending')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'pending' ? "bg-amber-500 text-white shadow-md" : "bg-white text-amber-500 border border-amber-100")}>Em Análise</button>
-                                <button onClick={() => handleUpdateStatus(selectedTicket, 'waiting')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'waiting' ? "bg-blue-500 text-white shadow-md" : "bg-white text-blue-500 border border-blue-100")}>Aguardando Aluno</button>
+                                <button onClick={() => handleUpdateStatus(selectedTicket, 'waiting')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'waiting' ? "bg-blue-500 text-white shadow-md" : "bg-white text-blue-500 border border-blue-100")}>Aguardando Usuário</button>
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'closed')} className="w-full py-2 rounded-lg text-[10px] font-black uppercase bg-green-600 text-white hover:bg-green-700 transition-all shadow-md mt-2">Resolvido / Fechar</button>
                             </div>
                         </div>
@@ -449,7 +618,13 @@ export const SupportManager: React.FC = () => {
 
                 <main className="flex-1 flex flex-col bg-white overflow-hidden">
                     <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar bg-slate-50/20">
-                        <div className="flex justify-start"><div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]"><span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem do Solicitante:</span><p className="text-sm text-slate-700 leading-relaxed font-medium italic">{selectedTicket.message}</p><span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span></div></div>
+                        <div className="flex justify-start">
+                            <div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]">
+                                <span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem do {selectedTicket.senderRole === 'admin' ? 'Administrador' : 'Solicitante'}:</span>
+                                <p className="text-sm text-slate-700 leading-relaxed font-medium italic whitespace-pre-wrap">{selectedTicket.message}</p>
+                                <span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span>
+                            </div>
+                        </div>
                         {thread.map(msg => (
                             <div key={msg.id} className={clsx("flex", msg.senderRole === 'admin' ? "justify-end" : "justify-start")}>
                                 <div className={clsx(

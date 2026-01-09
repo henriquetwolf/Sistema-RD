@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2, Lock, Landmark } from 'lucide-react';
+import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2, Lock, Landmark, Bell } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { SupportTicket, SupportMessage, SupportTag } from '../types';
 import { Teacher } from './TeachersManager';
@@ -75,12 +75,10 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
     }
   }, [isOpen, activeTab, senderRole]);
 
-  // Determina se os campos de fechamento devem ser bloqueados (apenas para instrutores logados)
   const isFcAutoFilled = useMemo(() => {
       return selectedTag === 'Fechamento de Curso' && senderRole === 'instructor';
   }, [selectedTag, senderRole]);
 
-  // Efeito de preenchimento automático para Fechamento de Curso - BUSCA EM TEMPO REAL NO BANCO
   useEffect(() => {
       const loadFreshInstructorData = async () => {
           if (selectedTag === 'Fechamento de Curso' && senderRole === 'instructor') {
@@ -269,34 +267,23 @@ ${expensesText}
     setIsSubmitting(true);
     try {
       const ticketId = crypto.randomUUID();
-      
-      // PASSO 1: Salvar o Ticket principal (Pai)
-      try {
-          await appBackend.saveSupportTicket({
-            id: ticketId, senderId, senderName, senderEmail, senderRole,
-            subject: finalSubject.trim(), message: finalMessage.trim(), tag: selectedTag, status: 'open'
-          });
-      } catch (err: any) {
-          throw new Error(`Falha ao criar o chamado principal: ${err.message}`);
-      }
+      await appBackend.saveSupportTicket({
+        id: ticketId, senderId, senderName, senderEmail, senderRole,
+        subject: finalSubject.trim(), message: finalMessage.trim(), tag: selectedTag, status: 'open'
+      });
 
-      // PASSO 2: Salvar anexos/mensagens (Filhos)
       if (selectedTag === 'Fechamento de Curso') {
           for (const exp of fcExpenses) {
               if (exp.attachment) {
-                  try {
-                      await appBackend.addSupportMessage({
-                          ticketId: ticketId,
-                          senderId: senderId,
-                          senderName: senderName,
-                          senderRole: senderRole,
-                          content: `Comprovante: ${exp.category} - Valor: R$ ${exp.value}`,
-                          attachmentUrl: exp.attachment.url,
-                          attachmentName: exp.attachment.name
-                      } as any);
-                  } catch (err: any) {
-                      console.error("Erro ao anexar documento:", err);
-                  }
+                  await appBackend.addSupportMessage({
+                      ticketId: ticketId,
+                      senderId: senderId,
+                      senderName: senderName,
+                      senderRole: senderRole,
+                      content: `Comprovante: ${exp.category} - Valor: R$ ${exp.value}`,
+                      attachmentUrl: exp.attachment.url,
+                      attachmentName: exp.attachment.name
+                  } as any);
               }
           }
       } else if (attachment) {
@@ -329,7 +316,6 @@ ${expensesText}
     }
   };
 
-  // Listas filtradas para o formulário de fechamento
   const fcStates = Array.from(new Set(availableClasses.map(c => c.state))).sort();
   const fcCities = Array.from(new Set(availableClasses.filter(c => c.state === fcState).map(c => c.city))).sort();
   const fcClasses = availableClasses.filter(c => c.city === fcCity && c.state === fcState);
@@ -386,7 +372,6 @@ ${expensesText}
 
                         {selectedTag === 'Fechamento de Curso' ? (
                             <div className="space-y-6 animate-in slide-in-from-top-4 duration-500">
-                                {/* DADOS PESSOAIS */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="md:col-span-2">
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Completo</label>
@@ -411,7 +396,6 @@ ${expensesText}
                                     </div>
                                 </div>
 
-                                {/* LOCALIZAÇÃO E TURMA */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                     <div className="md:col-span-3 text-[10px] font-black text-indigo-600 uppercase mb-1 flex items-center gap-2"><MapPin size={12}/> Localização do Curso</div>
                                     <div>
@@ -437,7 +421,6 @@ ${expensesText}
                                     </div>
                                 </div>
 
-                                {/* LISTAGEM DE CUSTOS DINÂMICA */}
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between px-1">
                                         <div className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-2"><DollarSign size={12}/> Custos Referentes ao Curso</div>
@@ -548,7 +531,6 @@ ${expensesText}
                                     </div>
                                 </div>
 
-                                {/* DADOS BANCÁRIOS IDENTICOS AO CADASTRO */}
                                 <div className="p-6 bg-slate-900 rounded-[2rem] text-white space-y-6 shadow-xl relative min-h-[100px]">
                                     {isLoadingProfile && (
                                         <div className="absolute inset-0 z-10 bg-slate-900/80 rounded-[2rem] flex flex-col items-center justify-center gap-2">
@@ -566,109 +548,28 @@ ${expensesText}
                                         <h4 className="text-sm font-black uppercase tracking-widest">Dados Bancários para Reembolso</h4>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Banco</label>
-                                            <div className="relative">
-                                                <input 
-                                                    type="text" 
-                                                    className={clsx("w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm outline-none transition-all", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
-                                                    value={fcBank} 
-                                                    onChange={e => !isFcAutoFilled && setFcBank(e.target.value)} 
-                                                    readOnly={isFcAutoFilled}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Agência</label>
-                                            <input 
-                                                type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
-                                                value={fcAgency} 
-                                                onChange={e => !isFcAutoFilled && setFcAgency(e.target.value)} 
-                                                readOnly={isFcAutoFilled}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nº Conta</label>
-                                            <input 
-                                                type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
-                                                value={fcAccountNumber} 
-                                                onChange={e => !isFcAutoFilled && setFcAccountNumber(e.target.value)} 
-                                                readOnly={isFcAutoFilled}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Dígito</label>
-                                            <input 
-                                                type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
-                                                value={fcAccountDigit} 
-                                                onChange={e => !isFcAutoFilled && setFcAccountDigit(e.target.value)} 
-                                                readOnly={isFcAutoFilled}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Chave PIX PJ</label>
-                                            <input 
-                                                type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
-                                                value={fcPixPj} 
-                                                onChange={e => !isFcAutoFilled && setFcPixPj(e.target.value)} 
-                                                readOnly={isFcAutoFilled}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Chave PIX PF</label>
-                                            <input 
-                                                type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
-                                                value={fcPixPf} 
-                                                onChange={e => !isFcAutoFilled && setFcPixPf(e.target.value)} 
-                                                readOnly={isFcAutoFilled}
-                                            />
-                                        </div>
-                                        <div className="md:col-span-2">
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome do Titular</label>
-                                            <input 
-                                                type="text" 
-                                                className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} 
-                                                value={fcHolder} 
-                                                onChange={e => !isFcAutoFilled && setFcHolder(e.target.value)} 
-                                                readOnly={isFcAutoFilled}
-                                            />
-                                        </div>
+                                        <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Banco</label><input type="text" className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} value={fcBank} onChange={e => !isFcAutoFilled && setFcBank(e.target.value)} readOnly={isFcAutoFilled}/></div>
+                                        <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Agência</label><input type="text" className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} value={fcAgency} onChange={e => !isFcAutoFilled && setFcAgency(e.target.value)} readOnly={isFcAutoFilled}/></div>
+                                        <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nº Conta</label><input type="text" className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} value={fcAccountNumber} onChange={e => !isFcAutoFilled && setFcAccountNumber(e.target.value)} readOnly={isFcAutoFilled}/></div>
+                                        <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Dígito</label><input type="text" className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} value={fcAccountDigit} onChange={e => !isFcAutoFilled && setFcAccountDigit(e.target.value)} readOnly={isFcAutoFilled}/></div>
+                                        <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Chave PIX PJ</label><input type="text" className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} value={fcPixPj} onChange={e => !isFcAutoFilled && setFcPixPj(e.target.value)} readOnly={isFcAutoFilled}/></div>
+                                        <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Chave PIX PF</label><input type="text" className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} value={fcPixPf} onChange={e => !isFcAutoFilled && setFcPixPf(e.target.value)} readOnly={isFcAutoFilled}/></div>
+                                        <div className="md:col-span-2"><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome do Titular</label><input type="text" className={clsx("w-full px-3 py-2 border border-white/10 rounded-lg text-sm outline-none transition-all bg-white/5", isFcAutoFilled ? "text-teal-400 cursor-not-allowed font-bold" : "text-white")} value={fcHolder} onChange={e => !isFcAutoFilled && setFcHolder(e.target.value)} readOnly={isFcAutoFilled}/></div>
                                     </div>
-                                    {isFcAutoFilled && (
-                                        <p className="text-[9px] text-teal-400/60 font-bold italic text-center">
-                                            * Dados extraídos do seu perfil. Para alterar, acesse suas configurações de instrutor.
-                                        </p>
-                                    )}
                                 </div>
                             </div>
                         ) : (
                             <div className="space-y-6">
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Assunto</label>
-                                    <input type="text" required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold" placeholder="Assunto do chamado..." value={subject} onChange={e => setSubject(e.target.value)} />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Mensagem Detalhada</label>
-                                    <textarea required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all h-32 resize-none leading-relaxed" placeholder="Explique o que está acontecendo..." value={message} onChange={e => setMessage(e.target.value)} />
-                                </div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Assunto</label><input type="text" required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold" placeholder="Assunto do chamado..." value={subject} onChange={e => setSubject(e.target.value)} /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Mensagem Detalhada</label><textarea required className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all h-32 resize-none leading-relaxed" placeholder="Explique o que está acontecendo..." value={message} onChange={e => setMessage(e.target.value)} /></div>
                                 <div className="border-t pt-4">
                                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Anexar Arquivo (Opcional)</label>
-                                    <div onClick={() => fileInputRef.current?.click()} className={clsx("w-full py-4 border-2 border-dashed rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition-all", attachment ? "bg-green-50 border-green-300 text-green-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-white hover:border-indigo-300")}>
-                                        {attachment ? <><CheckCircle2 size={16}/> {attachment.name}</> : <><Paperclip size={18}/> Clique para anexar</>}
-                                        <input type="file" ref={fileInputRef} className="hidden" onChange={e => handleFileUpload(e)} />
-                                    </div>
+                                    <div onClick={() => fileInputRef.current?.click()} className={clsx("w-full py-4 border-2 border-dashed rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition-all", attachment ? "bg-green-50 border-green-300 text-green-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-white hover:border-indigo-300")}><ImageIcon size={18}/> {attachment ? attachment.name : 'Clique para anexar'}<input type="file" ref={fileInputRef} className="hidden" onChange={e => handleFileUpload(e)} /></div>
                                 </div>
                             </div>
                         )}
                         
-                        <button type="submit" disabled={isSubmitting || isLoadingProfile} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 mt-4">
-                            {isSubmitting ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} Enviar {selectedTag === 'Fechamento de Curso' ? 'Fechamento' : 'Chamado'}
-                        </button>
+                        <button type="submit" disabled={isSubmitting || isLoadingProfile} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 mt-4">{isSubmitting ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} Enviar {selectedTag === 'Fechamento de Curso' ? 'Fechamento' : 'Chamado'}</button>
                     </form>
                 )}
                 </div>
@@ -679,7 +580,7 @@ ${expensesText}
                             <div className="bg-white px-8 py-4 border-b flex justify-between items-center shrink-0">
                                 <button onClick={() => setSelectedTicket(null)} className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1 hover:underline"><ChevronRight size={14} className="rotate-180" /> Histórico</button>
                                 <div className="flex flex-col items-end">
-                                    <span className={clsx("text-[9px] font-black px-2 py-1 rounded border uppercase", selectedTicket.status === 'open' ? "bg-red-50" : selectedTicket.status === 'pending' ? "bg-amber-400" : "bg-green-50 text-green-700 border-green-100")}>{selectedTicket.status}</span>
+                                    <span className={clsx("text-[9px] font-black px-2 py-1 rounded border uppercase", selectedTicket.status === 'open' ? "bg-red-50 text-red-700 border-red-100" : selectedTicket.status === 'pending' ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-green-50 text-green-700 border-green-100")}>{selectedTicket.status === 'pending' ? 'Resposta da VOLL' : selectedTicket.status}</span>
                                     {selectedTicket.assignedName && <span className="text-[8px] font-bold text-slate-400 mt-1">Atendente: {selectedTicket.assignedName}</span>}
                                 </div>
                             </div>
@@ -687,14 +588,15 @@ ${expensesText}
                             <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="bg-indigo-100 text-indigo-700 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">{selectedTicket.tag || 'Geral'}</span>
+                                    {selectedTicket.senderRole === 'admin' && <span className="bg-amber-100 text-amber-700 text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1"><Bell size={10}/> Recebido da VOLL</span>}
                                 </div>
                                 <h4 className="text-xl font-black text-slate-800">{selectedTicket.subject}</h4>
                                 <div className="space-y-4">
-                                    <div className="flex justify-start"><div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]"><span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem Inicial:</span><p className="text-sm text-slate-600 leading-relaxed italic whitespace-pre-wrap">{selectedTicket.message}</p><span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span></div></div>
+                                    <div className="flex justify-start"><div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]"><span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem {selectedTicket.senderRole === 'admin' ? 'da VOLL' : 'Inicial'}:</span><p className="text-sm text-slate-600 leading-relaxed italic whitespace-pre-wrap">{selectedTicket.message}</p><span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span></div></div>
                                     {thread.map(msg => (
                                         <div key={msg.id} className={clsx("flex", msg.senderRole === 'admin' ? "justify-start" : "justify-end")}>
                                             <div className={clsx("p-4 rounded-2xl shadow-sm max-w-[85%] relative border", msg.senderRole === 'admin' ? "bg-indigo-50 border-indigo-100 rounded-tl-none" : "bg-white border-slate-100 rounded-tr-none")}>
-                                                <span className={clsx("block text-[10px] font-black uppercase mb-2", msg.senderRole === 'admin' ? "text-indigo-600" : "text-slate-400")}>{msg.senderRole === 'admin' ? <span className="flex items-center gap-1"><MessageCircle size={12}/> Adm VOLL ({msg.senderName})</span> : 'Réplica'}</span>
+                                                <span className={clsx("block text-[10px] font-black uppercase mb-2", msg.senderRole === 'admin' ? "text-indigo-600" : "text-slate-400")}>{msg.senderRole === 'admin' ? <span className="flex items-center gap-1"><MessageCircle size={12}/> Adm VOLL ({msg.senderName})</span> : 'Sua Resposta'}</span>
                                                 <p className="text-sm text-slate-700 leading-relaxed font-medium">{msg.content}</p>
                                                 {msg.attachmentUrl && (
                                                     <div className="mt-3 p-2 bg-white/50 rounded-xl border border-slate-200/50">
@@ -724,7 +626,7 @@ ${expensesText}
                                 <form onSubmit={handleSendReply} className="flex gap-2">
                                     <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all"><Paperclip size={20}/></button>
                                     <input type="file" ref={fileInputRef} className="hidden" onChange={e => handleFileUpload(e)} />
-                                    <textarea className="flex-1 px-4 py-2 bg-slate-50 border rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-12 transition-all" placeholder="Continuar conversa..." value={replyText} onChange={e => setReplyText(e.target.value)} />
+                                    <textarea className="flex-1 px-4 py-2 bg-slate-50 border rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-12 transition-all" placeholder="Escreva uma resposta..." value={replyText} onChange={e => setReplyText(e.target.value)} />
                                     <button type="submit" disabled={isSendingReply || (!replyText.trim() && !attachment)} className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-indigo-600/20">{isSendingReply ? <Loader2 size={20} className="animate-spin" /> : <Send size={20}/>}</button>
                                 </form>
                             </div>
@@ -738,7 +640,16 @@ ${expensesText}
                                 <div className="space-y-3">
                                     {myTickets.map(t => (
                                         <div key={t.id} onClick={() => setSelectedTicket(t)} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer flex items-center justify-between group">
-                                            <div className="flex items-center gap-4"><div className={clsx("w-3 h-3 rounded-full shrink-0", t.status === 'open' ? "bg-red-50" : t.status === 'pending' ? "bg-amber-400" : "bg-green-500")}></div><div><h4 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{t.subject}</h4><p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{t.tag || 'Geral'} • {new Date(t.createdAt).toLocaleDateString()} • {t.status}</p></div></div>
+                                            <div className="flex items-center gap-4">
+                                                <div className={clsx("w-3 h-3 rounded-full shrink-0", t.status === 'open' ? "bg-red-500" : t.status === 'pending' ? "bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]" : "bg-green-500")}></div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{t.subject}</h4>
+                                                        {t.senderRole === 'admin' && <span className="bg-amber-50 text-amber-700 text-[8px] font-black uppercase px-1.5 py-0.5 rounded border border-amber-100">Recebido da VOLL</span>}
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{t.tag || 'Geral'} • {new Date(t.createdAt).toLocaleDateString()} • {t.status === 'pending' ? 'AGUARDANDO SUA RESPOSTA' : t.status.toUpperCase()}</p>
+                                                </div>
+                                            </div>
                                             <ChevronRight size={18} className="text-slate-300 group-hover:translate-x-1 transition-all" />
                                         </div>
                                     ))}

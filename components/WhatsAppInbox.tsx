@@ -5,7 +5,8 @@ import {
   CheckCheck, User, X, Plus, Settings, Save, Smartphone, 
   Copy, Loader2, RefreshCw, Zap, ShieldAlert, Code, Terminal, 
   Database, QrCode, Wifi, WifiOff, CheckCircle2, ChevronRight, ShieldCheck,
-  Cpu, Link2, AlertTriangle, Info, Check, Bug, ShieldX, HelpCircle, ArrowUpRight
+  Cpu, Link2, AlertTriangle, Info, Check, Bug, ShieldX, HelpCircle, ArrowUpRight,
+  Cloud, Globe, Lock, Server, Activity
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -60,19 +61,21 @@ export const WhatsAppInbox: React.FC = () => {
   const [newChatName, setNewChatName] = useState('');
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
-  // States para o QR Code Real
+  // States para o QR Code e Diagnóstico
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
+  const [isTestingConn, setIsTestingConn] = useState(false);
+  const [connStatus, setConnStatus] = useState<'idle' | 'online' | 'offline' | 'error'>('idle');
   const [qrError, setQrError] = useState<{message: string, type: 'connection' | 'security' | 'api'} | null>(null);
   const [connLogs, setConnLogs] = useState<string[]>([]);
 
   const [config, setConfig] = useState<WAConfig>({
-      mode: 'direct',
+      mode: 'evolution',
       instanceUrl: '',
       instanceName: '',
       apiKey: '',
       edgeFunctionName: 'whatsapp-webhook',
-      gatewayUrl: 'http://localhost:3000',
+      gatewayUrl: '',
       isConnected: false
   });
 
@@ -94,7 +97,7 @@ export const WhatsAppInbox: React.FC = () => {
             fetchConversations(false);
             if (selectedChatId) fetchMessages(selectedChatId, false);
           }
-      }, 4000); 
+      }, 5000); 
       return () => clearInterval(timer);
   }, [selectedChatId, showSettings]);
 
@@ -156,8 +159,32 @@ export const WhatsAppInbox: React.FC = () => {
       try {
           await appBackend.saveWhatsAppConfig(config);
           setShowSettings(false);
-          alert("Configurações salvas!");
+          alert("Configurações de Nuvem salvas!");
       } catch (e: any) { alert(`Erro ao salvar: ${e.message}`); } finally { setIsSavingConfig(false); }
+  };
+
+  const testCloudConnection = async () => {
+      setIsTestingConn(true);
+      setConnStatus('idle');
+      const baseUrl = config.mode === 'direct' ? config.gatewayUrl : config.instanceUrl;
+      
+      if (!baseUrl) {
+          alert("Informe a URL do seu servidor na nuvem.");
+          setIsTestingConn(false);
+          return;
+      }
+
+      try {
+          const response = await fetch(baseUrl.replace(/\/$/, ""), { method: 'HEAD', mode: 'no-cors' });
+          // No-cors won't give status but if it doesn't throw, it reached the server
+          setConnStatus('online');
+          addLog(`[OK] Servidor Cloud em ${baseUrl} está respondendo.`);
+      } catch (err) {
+          setConnStatus('offline');
+          addLog(`[ERRO] Não foi possível alcançar o servidor em ${baseUrl}`);
+      } finally {
+          setIsTestingConn(false);
+      }
   };
 
   const handleGenerateQr = async () => {
@@ -170,18 +197,16 @@ export const WhatsAppInbox: React.FC = () => {
       const targetUrl = `${baseUrl.replace(/\/$/, "")}${endpoint}`;
 
       setConnLogs([
-          `[SISTEMA] Iniciando requisição de pareamento...`,
+          `[CLOUD] Iniciando pareamento remoto...`,
           `[API] Destino: ${targetUrl}`,
-          `[API] Aguardando resposta do servidor...`
+          `[API] Aguardando resposta do gateway...`
       ]);
       
-      // Checagem de segurança (HTTPS -> HTTP)
       if (window.location.protocol === 'https:' && baseUrl.startsWith('http:')) {
           setQrError({
               type: 'security',
-              message: "O navegador bloqueou a conexão pois o seu Gateway não utiliza HTTPS (SSL). Para corrigir, use uma URL com HTTPS ou acesse o sistema via HTTP."
+              message: "Erro de Segurança (HTTPS): Seu servidor Cloud precisa ter SSL (https://) para este app conseguir falar com ele."
           });
-          addLog("[ERRO] Bloqueio de Mixed Content (HTTPS -> HTTP)");
           setIsGeneratingQr(false);
           return;
       }
@@ -189,31 +214,27 @@ export const WhatsAppInbox: React.FC = () => {
       try {
           let token = "";
           if (config.mode === 'direct') {
-              const response = await fetch(targetUrl).catch(() => {
-                  throw new Error("Não foi possível conectar ao servidor. Verifique se o seu Gateway está online.");
-              });
+              const response = await fetch(targetUrl);
               const data = await response.json();
-              if (!response.ok) throw new Error(data.message || "Erro retornado pela API");
+              if (!response.ok) throw new Error(data.message || "Servidor Cloud retornou erro.");
               token = data.qr;
           } else {
               const response = await fetch(targetUrl, {
                   headers: { 'apikey': config.apiKey }
-              }).catch(() => {
-                  throw new Error("Servidor Evolution Offline ou inacessível.");
               });
               const data = await response.json();
-              if (!response.ok) throw new Error(data.message || "Erro na Evolution API");
+              if (!response.ok) throw new Error(data.message || "Erro na Evolution API.");
               token = data.base64 || data.code;
           }
 
-          if (!token) throw new Error("Token de pareamento não recebido.");
+          if (!token) throw new Error("API Cloud não retornou token de pareamento.");
 
           const qrUrl = token.startsWith('data:image') 
               ? token 
               : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(token)}`;
           
           setQrCode(qrUrl);
-          addLog("[OK] QR Code recebido com sucesso.");
+          addLog("[OK] QR Code gerado. Escaneie no celular.");
       } catch (err: any) {
           setQrError({ type: 'connection', message: err.message });
           addLog(`[ERRO] ${err.message}`);
@@ -247,10 +268,10 @@ export const WhatsAppInbox: React.FC = () => {
               <div className="max-w-4xl w-full bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden flex flex-col mb-10">
                   <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                       <div className="flex items-center gap-3">
-                          <div className="bg-teal-100 p-2 rounded-xl text-teal-700"><Settings size={24} /></div>
+                          <div className="bg-teal-100 p-2 rounded-xl text-teal-700"><Cloud size={24} /></div>
                           <div>
-                              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Conectar WhatsApp</h2>
-                              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Escolha seu método de conexão</p>
+                              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight leading-tight">Configuração Cloud</h2>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Conexão com Provedores de Mensageria</p>
                           </div>
                       </div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"><X size={24} /></button>
@@ -258,32 +279,32 @@ export const WhatsAppInbox: React.FC = () => {
 
                   <div className="p-8 space-y-8 bg-slate-50">
                       
-                      {/* SELETOR DE MODO */}
+                      {/* SELETOR DE MODO PROFISSIONAL */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <button 
-                            onClick={() => setConfig({...config, mode: 'direct'})}
-                            className={clsx(
-                                "p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4",
-                                config.mode === 'direct' ? "bg-white border-teal-500 shadow-lg shadow-teal-500/10" : "bg-white border-slate-100 opacity-60 hover:opacity-100"
-                            )}
-                        >
-                            <div className={clsx("p-3 rounded-2xl", config.mode === 'direct' ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-400")}><Cpu size={24}/></div>
-                            <div>
-                                <h4 className="font-black text-slate-800 text-sm uppercase">VOLL Direct Connect</h4>
-                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Conexão nativa via QR Code. Mais simples, sem depender de APIs externas.</p>
-                            </div>
-                        </button>
                         <button 
                             onClick={() => setConfig({...config, mode: 'evolution'})}
                             className={clsx(
                                 "p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4",
-                                config.mode === 'evolution' ? "bg-white border-blue-500 shadow-lg shadow-blue-500/10" : "bg-white border-slate-100 opacity-60 hover:opacity-100"
+                                config.mode === 'evolution' ? "bg-white border-teal-500 shadow-lg shadow-teal-500/10" : "bg-white border-slate-100 opacity-60 hover:opacity-100"
                             )}
                         >
-                            <div className={clsx("p-3 rounded-2xl", config.mode === 'evolution' ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400")}><Link2 size={24}/></div>
+                            <div className={clsx("p-3 rounded-2xl", config.mode === 'evolution' ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-400")}><Link2 size={24}/></div>
                             <div>
-                                <h4 className="font-black text-slate-800 text-sm uppercase">Evolution API</h4>
-                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Utiliza um servidor Evolution externo. Recomendado para alto volume.</p>
+                                <h4 className="font-black text-slate-800 text-sm uppercase">Evolution API (Recomendado)</h4>
+                                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">Padrão de mercado para servidores Cloud. Alta performance e estabilidade.</p>
+                            </div>
+                        </button>
+                        <button 
+                            onClick={() => setConfig({...config, mode: 'direct'})}
+                            className={clsx(
+                                "p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4",
+                                config.mode === 'direct' ? "bg-white border-indigo-500 shadow-lg shadow-indigo-500/10" : "bg-white border-slate-100 opacity-60 hover:opacity-100"
+                            )}
+                        >
+                            <div className={clsx("p-3 rounded-2xl", config.mode === 'direct' ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400")}><Server size={24}/></div>
+                            <div>
+                                <h4 className="font-black text-slate-800 text-sm uppercase">Hosted Private Gateway</h4>
+                                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">Conexão com seu próprio gateway rodando em um servidor Linux/VPS.</p>
                             </div>
                         </button>
                       </div>
@@ -297,53 +318,51 @@ export const WhatsAppInbox: React.FC = () => {
                                                 <Loader2 size={48} className="animate-spin text-teal-600" />
                                                 <QrCode size={24} className="absolute inset-0 m-auto text-teal-200" />
                                             </div>
-                                            <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">Gerando Sessão...</p>
+                                            <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">Sincronizando Cloud...</p>
                                         </div>
                                     ) : qrError ? (
                                         <div className="flex flex-col items-center gap-3 text-red-500 p-4 animate-in zoom-in-95">
                                             <div className="bg-red-50 p-4 rounded-full">
                                                 {qrError.type === 'security' ? <ShieldX size={40} /> : <AlertTriangle size={40} />}
                                             </div>
-                                            <p className="text-[10px] font-black uppercase leading-tight">Falha na API: {qrError.type === 'security' ? 'Bloqueio de Segurança' : 'Gateway Offline'}</p>
+                                            <p className="text-[10px] font-black uppercase leading-tight">Falha na API Cloud</p>
                                             <p className="text-[9px] font-medium leading-relaxed opacity-80">{qrError.message}</p>
                                             <button onClick={handleGenerateQr} className="bg-red-600 text-white px-4 py-1.5 rounded-lg text-[9px] font-black uppercase mt-2 hover:bg-red-700 transition-colors">Tentar Novamente</button>
                                         </div>
                                     ) : qrCode ? (
                                         <div className="w-full h-full p-4 bg-white rounded-3xl shadow-inner animate-in zoom-in-95 border-2 border-teal-50">
-                                            <img 
-                                                src={qrCode} 
-                                                alt="WhatsApp QR Code" 
-                                                className="w-full h-full object-contain" 
-                                                onError={() => setQrError({ type: 'api', message: "Não foi possível carregar a imagem do código. Gere um novo." })}
-                                            />
+                                            <img src={qrCode} alt="WhatsApp QR Code" className="w-full h-full object-contain" />
                                         </div>
                                     ) : config.isConnected ? (
                                         <div className="flex flex-col items-center animate-bounce">
                                             <CheckCircle2 size={72} className="text-teal-500 mb-2" />
-                                            <p className="text-xs font-black text-teal-600 uppercase tracking-widest">WhatsApp Online!</p>
+                                            <p className="text-xs font-black text-teal-600 uppercase tracking-widest">Servidor Online!</p>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center group">
                                             <div className="bg-white p-6 rounded-full shadow-sm mb-4 border border-slate-100 group-hover:scale-110 transition-transform">
-                                                <QrCode size={48} className="text-slate-200 group-hover:text-teal-400 transition-colors" />
+                                                <Cloud size={48} className="text-slate-200 group-hover:text-teal-400 transition-colors" />
                                             </div>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase leading-tight">Configurar URL e Parear</p>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase leading-tight">Informe a URL abaixo para parear</p>
                                         </div>
                                     )}
                                 </div>
                                 <div className="flex-1 space-y-5">
                                     <div className="flex items-center justify-between">
-                                        <h4 className="text-lg font-black text-slate-800">Passo a Passo:</h4>
-                                        <div className="flex items-center gap-1.5 bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[9px] font-black uppercase">
-                                            <HelpCircle size={12}/> Ajuda
+                                        <h4 className="text-lg font-black text-slate-800">Passo a Passo Cloud:</h4>
+                                        <div className={clsx(
+                                            "flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all",
+                                            connStatus === 'online' ? "bg-green-50 text-green-600" : connStatus === 'offline' ? "bg-red-50 text-red-600" : "bg-slate-50 text-slate-400"
+                                        )}>
+                                            <Activity size={12}/> {connStatus === 'online' ? 'Online' : connStatus === 'offline' ? 'Offline' : 'Diagnóstico'}
                                         </div>
                                     </div>
                                     <ul className="space-y-3">
                                         {[
-                                            "Informe a URL do seu Gateway abaixo e clique em Salvar",
-                                            "Clique no botão abaixo para gerar o código",
-                                            "Abra o WhatsApp no seu celular (Aparelhos Conectados)",
-                                            "Aponte a câmera para o QR Code ao lado"
+                                            "Informe o endpoint HTTPS do seu servidor na nuvem",
+                                            "Clique no botão 'Testar Conexão' para validar o SSL",
+                                            "Gere o QR Code e escaneie com seu WhatsApp",
+                                            "Copie o Webhook abaixo para seu servidor"
                                         ].map((step, i) => (
                                             <li key={i} className="flex items-center gap-3 text-xs text-slate-600 font-medium group">
                                                 <span className="w-6 h-6 bg-teal-50 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black border border-teal-100 shrink-0 group-hover:bg-teal-600 group-hover:text-white transition-colors">{i+1}</span>
@@ -353,40 +372,60 @@ export const WhatsAppInbox: React.FC = () => {
                                     </ul>
 
                                     <div className="bg-slate-900 rounded-2xl p-4 h-24 font-mono text-[9px] text-teal-400 overflow-y-auto custom-scrollbar leading-relaxed shadow-inner border border-slate-800">
-                                        {connLogs.length === 0 ? "> Aguardando configuração..." : connLogs.map((log, i) => (
+                                        {connLogs.length === 0 ? "> Aguardando dados da nuvem..." : connLogs.map((log, i) => (
                                             <div key={i} className="mb-1">{log}</div>
                                         ))}
                                     </div>
                                     
                                     <div className="pt-2 flex gap-3">
-                                        {!config.isConnected ? (
-                                            <button 
-                                                onClick={handleGenerateQr}
-                                                disabled={isGeneratingQr}
-                                                className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-teal-600/30 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
-                                            >
-                                                {isGeneratingQr ? <Loader2 size={16} className="animate-spin"/> : <QrCode size={16}/>}
-                                                {qrCode ? 'Atualizar Token' : 'Gerar QR Code'}
-                                            </button>
-                                        ) : (
-                                            <button 
-                                                onClick={() => setConfig({...config, isConnected: false})}
-                                                className="bg-red-50 text-red-600 px-6 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest border border-red-100 hover:bg-red-100 transition-all shadow-sm"
-                                            >
-                                                Desconectar Instância
-                                            </button>
-                                        )}
+                                        <button 
+                                            onClick={testCloudConnection}
+                                            disabled={isTestingConn}
+                                            className="bg-white border border-slate-200 text-slate-600 px-6 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                                        >
+                                            {isTestingConn ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16}/>}
+                                            Testar Conexão
+                                        </button>
+                                        <button 
+                                            onClick={handleGenerateQr}
+                                            disabled={isGeneratingQr}
+                                            className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-teal-600/30 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                                        >
+                                            {isGeneratingQr ? <Loader2 size={16} className="animate-spin"/> : <QrCode size={16}/>}
+                                            {qrCode ? 'Atualizar QR' : 'Gerar QR Code'}
+                                        </button>
                                     </div>
                                 </div>
                             </div>
                             
-                            {config.mode === 'direct' ? (
-                                <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 animate-in slide-in-from-bottom-2">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h5 className="text-[10px] font-black text-indigo-700 uppercase flex items-center gap-2 tracking-widest"><Terminal size={14}/> URL do Gateway VOLL (Direct)</h5>
-                                        {config.gatewayUrl.startsWith('http:') && window.location.protocol === 'https:' && (
+                            {config.mode === 'evolution' ? (
+                                <div className="bg-teal-50 p-6 rounded-[2rem] border border-teal-100 animate-in slide-in-from-bottom-2 space-y-4">
+                                    <h5 className="text-[10px] font-black text-teal-700 uppercase flex items-center gap-2 mb-1 tracking-widest"><Globe size={14}/> Dados da Instância Evolution API</h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="md:col-span-2">
+                                            <label className="block text-[9px] font-black text-teal-400 uppercase mb-1.5 ml-1">URL Base do Servidor (Cloud)</label>
+                                            <input type="text" className="w-full px-4 py-3 border border-teal-200 rounded-xl text-sm font-bold bg-white outline-none focus:ring-4 focus:ring-teal-500/10" value={config.instanceUrl} onChange={e => setConfig({...config, instanceUrl: e.target.value})} placeholder="https://api-whatsapp.seudominio.com" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[9px] font-black text-teal-400 uppercase mb-1.5 ml-1">Nome da Instância</label>
+                                            <input type="text" className="w-full px-4 py-3 border border-teal-200 rounded-xl text-sm font-bold bg-white outline-none focus:ring-4 focus:ring-teal-500/10" value={config.instanceName} onChange={e => setConfig({...config, instanceName: e.target.value})} placeholder="ex: principal" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[9px] font-black text-teal-400 uppercase mb-1.5 ml-1">Chave de API Global</label>
+                                            <div className="relative">
+                                                <input type="password" title="Key" className="w-full px-4 py-3 border border-teal-200 rounded-xl text-sm font-bold bg-white outline-none focus:ring-4 focus:ring-teal-500/10" value={config.apiKey} onChange={e => setConfig({...config, apiKey: e.target.value})} />
+                                                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-teal-200" size={16}/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 animate-in slide-in-from-bottom-2 space-y-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h5 className="text-[10px] font-black text-indigo-700 uppercase flex items-center gap-2 tracking-widest"><Terminal size={14}/> URL do Gateway VOLL (Hosted)</h5>
+                                        {config.gatewayUrl && !config.gatewayUrl.startsWith('https:') && (
                                             <div className="flex items-center gap-1.5 text-red-600 text-[10px] font-black animate-pulse">
-                                                <ShieldX size={14}/> Site Seguro vs Gateway Inseguro
+                                                <ShieldX size={14}/> Exige HTTPS na nuvem
                                             </div>
                                         )}
                                     </div>
@@ -396,37 +435,13 @@ export const WhatsAppInbox: React.FC = () => {
                                             className="w-full px-5 py-4 bg-white border border-indigo-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all" 
                                             value={config.gatewayUrl} 
                                             onChange={e => setConfig({...config, gatewayUrl: e.target.value})}
-                                            placeholder="Ex: https://gateway.seuservidor.com"
+                                            placeholder="https://seu-servidor-whatsapp.com"
                                         />
                                         <div className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-200 group-focus-within:text-indigo-400">
                                             <ArrowUpRight size={20}/>
                                         </div>
                                     </div>
-                                    <div className="flex items-start gap-2 mt-3">
-                                        <Info size={12} className="text-indigo-400 shrink-0 mt-0.5" />
-                                        <p className="text-[9px] text-indigo-400 leading-relaxed">* O modo Direct requer que o servidor do Gateway esteja online para o sistema buscar o QR. Certifique-se de configurar as permissões de CORS.</p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="bg-blue-50 p-6 rounded-[2rem] border border-blue-100 animate-in slide-in-from-bottom-2 space-y-4">
-                                    <h5 className="text-[10px] font-black text-blue-700 uppercase flex items-center gap-2 mb-1 tracking-widest"><Smartphone size={14}/> Dados Evolution API</h5>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="md:col-span-2">
-                                            <label className="block text-[9px] font-black text-blue-400 uppercase mb-1.5 ml-1">URL da API</label>
-                                            <input type="text" className="w-full px-4 py-3 border border-blue-200 rounded-xl text-sm font-bold bg-white outline-none focus:ring-4 focus:ring-blue-500/10" value={config.instanceUrl} onChange={e => setConfig({...config, instanceUrl: e.target.value})} placeholder="https://api.evolution.com" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[9px] font-black text-blue-400 uppercase mb-1.5 ml-1">Instância</label>
-                                            <input type="text" className="w-full px-4 py-3 border border-blue-200 rounded-xl text-sm font-bold bg-white outline-none focus:ring-4 focus:ring-blue-500/10" value={config.instanceName} onChange={e => setConfig({...config, instanceName: e.target.value})} placeholder="principal" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[9px] font-black text-blue-400 uppercase mb-1.5 ml-1">API Key</label>
-                                            <div className="relative">
-                                                <input type="password" title="Key" className="w-full px-4 py-3 border border-blue-200 rounded-xl text-sm font-bold bg-white outline-none focus:ring-4 focus:ring-blue-500/10" value={config.apiKey} onChange={e => setConfig({...config, apiKey: e.target.value})} />
-                                                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-200" size={16}/>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <p className="text-[9px] text-indigo-400 leading-relaxed italic"><Info size={10} className="inline mr-1"/> O modo Hosted requer que seu servidor Cloud suporte requisições CORS e possua certificado SSL válido.</p>
                                 </div>
                             )}
                       </div>
@@ -434,10 +449,10 @@ export const WhatsAppInbox: React.FC = () => {
                       {/* WEBHOOK HELPERS */}
                       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-4">
                           <div className="flex items-center justify-between">
-                              <h3 className="font-black text-slate-700 text-[10px] uppercase tracking-widest flex items-center gap-2"><Database size={18} className="text-teal-600" /> Configuração de Recebimento</h3>
-                              <span className="text-[9px] font-black text-slate-400 uppercase">Webhook do Supabase</span>
+                              <h3 className="font-black text-slate-700 text-[10px] uppercase tracking-widest flex items-center gap-2"><Database size={18} className="text-teal-600" /> Webhook Cloud</h3>
+                              <span className="text-[9px] font-black text-slate-400 uppercase">Supabase Cloud Function</span>
                           </div>
-                          <p className="text-xs text-slate-500 leading-relaxed">No modo Direct, o recebimento de mensagens exige que esta URL de Webhook esteja cadastrada no seu serviço de WhatsApp:</p>
+                          <p className="text-xs text-slate-500 leading-relaxed">Para receber mensagens em tempo real, cadastre esta URL no painel do seu servidor Cloud (Evolution ou Gateway):</p>
                           <div className="p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl relative group">
                               <div className="flex gap-4">
                                   <code className="flex-1 bg-transparent p-1 rounded-xl text-[10px] font-mono text-slate-700 break-all leading-relaxed">{edgeFunctionUrl}</code>
@@ -451,7 +466,7 @@ export const WhatsAppInbox: React.FC = () => {
                       <button onClick={() => setShowSettings(false)} className="px-6 py-3 text-slate-500 font-bold text-sm hover:text-slate-700 transition-colors">Cancelar</button>
                       <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-3 rounded-2xl font-black text-sm shadow-xl shadow-teal-600/30 flex items-center gap-2 transition-all active:scale-95">
                           {isSavingConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                          Salvar Configurações
+                          Salvar Configuração Cloud
                       </button>
                   </div>
               </div>
@@ -480,7 +495,7 @@ export const WhatsAppInbox: React.FC = () => {
                 <div className="flex items-center gap-2">
                     <div className={clsx("w-2 h-2 rounded-full", config.isConnected ? "bg-teal-500 animate-pulse" : "bg-red-500")}></div>
                     <span className={clsx("text-[10px] font-black uppercase tracking-widest", config.isConnected ? "text-teal-700" : "text-red-700")}>
-                        {config.isConnected ? "WhatsApp Online" : "Desconectado"}
+                        {config.isConnected ? "Cloud Online" : "Cloud Offline"}
                     </span>
                 </div>
                 {config.isConnected ? <Wifi size={14} className="text-teal-400" /> : <WifiOff size={14} className="text-red-400" />}
@@ -488,7 +503,7 @@ export const WhatsAppInbox: React.FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {isLoading && conversations.length === 0 ? (<div className="p-20 text-center flex flex-col items-center"><Loader2 className="animate-spin text-teal-600 mb-2" size={32} /><span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Sincronizando...</span></div>) : 
+            {isLoading && conversations.length === 0 ? (<div className="p-20 text-center flex flex-col items-center"><Loader2 className="animate-spin text-teal-600 mb-2" size={32} /><span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Conectando Nuvem...</span></div>) : 
             conversations.length === 0 ? (
                 <div className="p-12 text-center text-slate-400 space-y-4">
                     <MessageCircle size={48} className="mx-auto opacity-10" />
@@ -571,10 +586,10 @@ export const WhatsAppInbox: React.FC = () => {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-white/50 backdrop-blur-sm">
                 <div className="w-24 h-24 bg-white rounded-[2.5rem] shadow-xl flex items-center justify-center mb-6 animate-bounce duration-[3000ms]">
-                    <MessageCircle size={48} className="text-teal-500 opacity-40" />
+                    <Cloud size={48} className="text-teal-500 opacity-40" />
                 </div>
-                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Atendimento Centralizado</h3>
-                <p className="text-sm font-medium max-w-xs text-center mt-2 leading-relaxed">Selecione uma conversa na lista à esquerda para começar a responder.</p>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Atendimento Centralizado (Cloud)</h3>
+                <p className="text-sm font-medium max-w-xs text-center mt-2 leading-relaxed">Conecte sua API na nuvem pelas configurações para começar a atender seus clientes.</p>
             </div>
           )}
       </div>

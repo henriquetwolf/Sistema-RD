@@ -83,7 +83,7 @@ export const WhatsAppInbox: React.FC = () => {
             fetchConversations(false);
             if (selectedChatId) fetchMessages(selectedChatId, false);
           }
-      }, 5000); // Frequência aumentada para 5s para parecer tempo real
+      }, 5000); 
       return () => clearInterval(timer);
   }, [selectedChatId, showSettings]);
 
@@ -150,7 +150,7 @@ export const WhatsAppInbox: React.FC = () => {
           await appBackend.saveWhatsAppConfig(cleanConfig);
           setConfig(cleanConfig);
           setShowSettings(false);
-          alert("Configurações salvas! Agora verifique se o SQL foi rodado no Supabase.");
+          alert("Configurações salvas!");
       } catch (e: any) { alert(`Erro ao salvar: ${e.message}`); } finally { setIsSavingConfig(false); }
   };
 
@@ -170,14 +170,12 @@ export const WhatsAppInbox: React.FC = () => {
 
   const formatTime = (isoString: string) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // --- HELPERS PARA O WEBHOOK ---
-  const supabaseUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
-  const supabaseKey = (appBackend.client as any).supabaseKey || 'SUA_ANON_KEY';
-  
-  const sqlRpcUrl = `${supabaseUrl}/rest/v1/rpc/handle_evolution_webhook?apikey=${supabaseKey}`;
+  // URL da Edge Function (assumindo que o usuário criou a função whatsapp-webhook)
+  const supabaseProjectUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
+  const edgeFunctionUrl = `${supabaseProjectUrl}/functions/v1/whatsapp-webhook`;
 
-  const sqlFullScript = `
--- 1. CRIAÇÃO DAS TABELAS (Caso não existam)
+  const sqlTablesScript = `
+-- 1. TABELAS DE WHATSAPP
 CREATE TABLE IF NOT EXISTS public.crm_whatsapp_chats (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     wa_id text UNIQUE NOT NULL,
@@ -201,70 +199,80 @@ CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
     created_at timestamptz DEFAULT now()
 );
 
--- 2. FUNÇÃO DE PROCESSAMENTO DO WEBHOOK
-CREATE OR REPLACE FUNCTION public.handle_evolution_webhook(event text, data jsonb)
-RETURNS json AS $$
-DECLARE
-  v_wa_id text;
-  v_text text;
-  v_contact_name text;
-  v_chat_id uuid;
-  v_event_name text;
-BEGIN
-  v_event_name := lower(event);
-
-  -- Processa apenas mensagens recebidas (ignora o que você envia pelo celular)
-  IF (v_event_name = 'messages.upsert' AND NOT (data->'key'->>'fromMe')::boolean) THEN
-    
-    -- Extrai o número (remove @s.whatsapp.net se houver)
-    v_wa_id := split_part(data->'key'->>'remoteJid', '@', 1);
-    
-    -- Extrai o texto de diferentes formatos possíveis da Evolution
-    v_text := COALESCE(
-      data->'message'->>'conversation',
-      data->'message'->'extendedTextMessage'->>'text',
-      data->'message'->'imageMessage'->>'caption',
-      data->'message'->'videoMessage'->>'caption',
-      '(Mídia ou Mensagem sem texto)'
-    );
-
-    v_contact_name := COALESCE(data->>'pushName', v_wa_id);
-
-    -- Busca o chat ou cria se for novo contato
-    INSERT INTO public.crm_whatsapp_chats (wa_id, contact_name, contact_phone, last_message, updated_at)
-    VALUES (v_wa_id, v_contact_name, v_wa_id, v_text, now())
-    ON CONFLICT (wa_id) DO UPDATE 
-    SET last_message = EXCLUDED.last_message, updated_at = now()
-    RETURNING id INTO v_chat_id;
-
-    -- Salva a mensagem recebida (evita duplicados pelo wa_message_id)
-    INSERT INTO public.crm_whatsapp_messages (chat_id, text, sender_type, status, wa_message_id, created_at)
-    VALUES (v_chat_id, v_text, 'user', 'received', data->'key'->>'id', now())
-    ON CONFLICT (wa_message_id) DO NOTHING;
-
-  END IF;
-
-  RETURN json_build_object('status', 'success');
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 3. PERMISSÕES TOTAIS (Para garantir que o webhook funcione)
+-- Permissões básicas
 ALTER TABLE public.crm_whatsapp_chats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_whatsapp_messages ENABLE ROW LEVEL SECURITY;
 
--- Remove políticas antigas se existirem e cria novas liberando tudo
-DROP POLICY IF EXISTS "Webhook Full Access Chats" ON public.crm_whatsapp_chats;
-CREATE POLICY "Webhook Full Access Chats" ON public.crm_whatsapp_chats FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Public access to chats" ON public.crm_whatsapp_chats;
+CREATE POLICY "Public access to chats" ON public.crm_whatsapp_chats FOR ALL USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Webhook Full Access Msgs" ON public.crm_whatsapp_messages;
-CREATE POLICY "Webhook Full Access Msgs" ON public.crm_whatsapp_messages FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Public access to messages" ON public.crm_whatsapp_messages;
+CREATE POLICY "Public access to messages" ON public.crm_whatsapp_messages FOR ALL USING (true) WITH CHECK (true);
 
-GRANT EXECUTE ON FUNCTION public.handle_evolution_webhook TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_whatsapp_chats TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_whatsapp_messages TO anon, authenticated, service_role;
+  `.trim();
 
--- Recarrega configurações
-NOTIFY pgrst, 'reload config';
+  const edgeFunctionCode = `
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  try {
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+
+    const payload = await req.json()
+    const { event, data } = payload
+
+    if (event === 'MESSAGES_UPSERT' && !data.key.fromMe) {
+      const waId = data.key.remoteJid.split('@')[0]
+      const contactName = data.pushName || waId
+      const text = data.message?.conversation || 
+                   data.message?.extendedTextMessage?.text || 
+                   data.message?.imageMessage?.caption || 
+                   data.message?.videoMessage?.caption || 
+                   "(Mídia)"
+
+      const { data: chat } = await supabaseClient
+        .from('crm_whatsapp_chats')
+        .upsert({
+          wa_id: waId,
+          contact_name: contactName,
+          contact_phone: waId,
+          last_message: text,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'wa_id' })
+        .select()
+        .single()
+
+      await supabaseClient
+        .from('crm_whatsapp_messages')
+        .insert({
+          chat_id: chat.id,
+          text: text,
+          sender_type: 'user',
+          status: 'received',
+          wa_message_id: data.key.id
+        })
+    }
+
+    return new Response(JSON.stringify({ status: 'success' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    })
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 400 })
+  }
+})
   `.trim();
 
   if (showSettings) {
@@ -276,7 +284,7 @@ NOTIFY pgrst, 'reload config';
                           <div className="bg-teal-100 p-2 rounded-xl text-teal-700"><Settings size={24} /></div>
                           <div>
                               <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Ativar Recebimento</h2>
-                              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Sincronização Evolution & Supabase</p>
+                              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Sincronização via Edge Function</p>
                           </div>
                       </div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"><X size={24} /></button>
@@ -286,43 +294,45 @@ NOTIFY pgrst, 'reload config';
                       {/* PASSO 1: SQL NO SUPABASE */}
                       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                           <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2">
-                              <Database size={18} className="text-teal-600" /> Passo 1: Rodar o Script no Supabase
+                              <Database size={18} className="text-teal-600" /> Passo 1: Criar Tabelas no Supabase
                           </h3>
-                          <p className="text-xs text-slate-500 leading-relaxed">
-                              Este script cria as tabelas e remove as travas de segurança para que as mensagens entrem no banco.
-                              Vá no <strong>SQL Editor</strong> do seu Supabase, cole tudo e clique em <strong>RUN</strong>.
-                          </p>
                           <div className="relative group">
-                              <pre className="text-[10px] bg-slate-900 text-teal-400 p-5 rounded-2xl overflow-x-auto max-h-60 custom-scrollbar border border-slate-800 leading-relaxed font-mono">
-                                  {sqlFullScript}
+                              <pre className="text-[10px] bg-slate-900 text-teal-400 p-5 rounded-2xl overflow-x-auto max-h-40 custom-scrollbar border border-slate-800 leading-relaxed font-mono">
+                                  {sqlTablesScript}
                               </pre>
-                              <button onClick={() => { navigator.clipboard.writeText(sqlFullScript); alert("Script Copiado!"); }} className="absolute top-3 right-3 bg-teal-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-teal-700 shadow-lg">Copiar Script Completo</button>
+                              <button onClick={() => { navigator.clipboard.writeText(sqlTablesScript); alert("Tabelas copiadas!"); }} className="absolute top-3 right-3 bg-teal-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase">Copiar SQL</button>
                           </div>
                       </div>
 
-                      {/* PASSO 2: CONFIGURAR EVOLUTION */}
+                      {/* PASSO 2: EDGE FUNCTION */}
                       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                           <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2">
-                              <Zap size={18} className="text-amber-500" /> Passo 2: Configurar o Webhook na Evolution
+                              <Terminal size={18} className="text-blue-600" /> Passo 2: Criar Edge Function
                           </h3>
                           <p className="text-xs text-slate-500 leading-relaxed">
-                              No painel da <strong>Evolution API</strong>, entre na sua <strong>Instância</strong> {'>'} <strong>Webhook</strong>. 
-                              Clique em <strong>Editar</strong> e cole a URL abaixo:
+                              No seu terminal local, use o comando <code>supabase functions new whatsapp-webhook</code> e cole o código abaixo. Depois dê o deploy. Ou crie diretamente no painel do Supabase se disponível.
                           </p>
-                          
-                          <div className="p-5 bg-amber-50 border-2 border-amber-200 rounded-2xl space-y-3">
-                              <div>
-                                  <label className="block text-[10px] font-black text-amber-700 uppercase mb-1">URL DO WEBHOOK</label>
-                                  <div className="flex gap-2">
-                                      <code className="flex-1 bg-white border border-amber-300 p-3 rounded-xl text-xs font-mono text-slate-700 break-all leading-relaxed shadow-inner">{sqlRpcUrl}</code>
-                                      <button onClick={() => { navigator.clipboard.writeText(sqlRpcUrl); alert("URL Copiada!"); }} className="bg-amber-600 text-white p-3 rounded-xl hover:bg-amber-700 transition-all shrink-0 shadow-lg shadow-amber-600/20 active:scale-95"><Copy size={20}/></button>
-                                  </div>
-                              </div>
-                              <div className="flex items-start gap-3 text-amber-800 bg-white/50 p-3 rounded-xl border border-amber-200">
-                                  <Info size={20} className="shrink-0 text-amber-600" />
-                                  <p className="text-[11px] leading-relaxed font-medium">
-                                      <strong>Importante:</strong> Na Evolution, certifique-se de selecionar o evento <strong>MESSAGES_UPSERT</strong>. O campo "Headers" pode ficar vazio, pois a chave já está no link.
-                                  </p>
+                          <div className="relative group">
+                              <pre className="text-[10px] bg-slate-900 text-blue-300 p-5 rounded-2xl overflow-x-auto max-h-40 custom-scrollbar border border-slate-800 leading-relaxed font-mono">
+                                  {edgeFunctionCode}
+                              </pre>
+                              <button onClick={() => { navigator.clipboard.writeText(edgeFunctionCode); alert("Código da Função copiado!"); }} className="absolute top-3 right-3 bg-blue-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase">Copiar Código</button>
+                          </div>
+                      </div>
+
+                      {/* PASSO 3: WEBHOOK EVOLUTION */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                          <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2">
+                              <Zap size={18} className="text-amber-500" /> Passo 3: Webhook na Evolution
+                          </h3>
+                          <p className="text-xs text-slate-500 leading-relaxed">
+                              Copie a URL da sua Edge Function e cole na configuração de Webhook da sua instância na Evolution API. Selecione o evento <strong>MESSAGES_UPSERT</strong>.
+                          </p>
+                          <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl">
+                              <label className="block text-[10px] font-black text-amber-700 uppercase mb-1">URL DO WEBHOOK</label>
+                              <div className="flex gap-2">
+                                  <code className="flex-1 bg-white border border-amber-300 p-3 rounded-xl text-xs font-mono text-slate-700 break-all leading-relaxed">{edgeFunctionUrl}</code>
+                                  <button onClick={() => { navigator.clipboard.writeText(edgeFunctionUrl); alert("URL Copiada!"); }} className="bg-amber-600 text-white p-3 rounded-xl active:scale-95 transition-all"><Copy size={20}/></button>
                               </div>
                           </div>
                       </div>
@@ -367,7 +377,7 @@ NOTIFY pgrst, 'reload config';
             <h2 className="text-xl font-black text-slate-800 flex items-center gap-3"><MessageCircle className="text-teal-600" /> Atendimento</h2>
             <div className="flex gap-2">
                 <button onClick={() => setShowNewChatModal(true)} className="p-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-all shadow-lg shadow-teal-600/20 active:scale-95" title="Nova Conversa"><Plus size={20} /></button>
-                <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-slate-100 rounded-xl transition-all" title="Configurar Webhook"><Settings size={20} /></button>
+                <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-slate-100 rounded-xl transition-all" title="Configurar"><Settings size={20} /></button>
                 <button onClick={() => fetchConversations()} className="p-2 text-slate-400 hover:text-teal-600 transition-all"><RefreshCw size={20} className={isLoading ? "animate-spin" : ""} /></button>
             </div>
         </div>
@@ -377,7 +387,6 @@ NOTIFY pgrst, 'reload config';
                 <div className="p-12 text-center text-slate-400 space-y-4">
                     <MessageCircle size={48} className="mx-auto opacity-10" />
                     <p className="text-sm font-medium">Nenhuma conversa encontrada.</p>
-                    <button onClick={() => setShowSettings(true)} className="text-[10px] font-black uppercase text-teal-600 bg-teal-50 px-3 py-1.5 rounded-lg hover:bg-teal-100 transition-all">Configurar Webhook</button>
                 </div>
             ) : (
                 <div className="divide-y divide-slate-100">
@@ -415,9 +424,7 @@ NOTIFY pgrst, 'reload config';
                 
                 <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")' }}>
                     {isLoadingMessages ? (
-                        <div className="flex justify-center py-10"><div className="bg-white/80 backdrop-blur-md px-4 py-2 rounded-full shadow-sm text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Loader2 className="animate-spin" size={14}/> Carregando conversa...</div></div>
-                    ) : messages.length === 0 ? (
-                        <div className="flex justify-center py-10"><div className="bg-white/80 backdrop-blur-md px-6 py-3 rounded-2xl shadow-sm text-xs font-bold text-slate-500">Inicie uma conversa agora ou aguarde o recebimento.</div></div>
+                        <div className="flex justify-center py-10"><div className="bg-white/80 backdrop-blur-md px-4 py-2 rounded-full shadow-sm text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Loader2 className="animate-spin" size={14}/> Carregando...</div></div>
                     ) : (
                         messages.map(msg => (
                             <div key={msg.id} className={clsx("flex animate-in fade-in slide-in-from-bottom-2", msg.sender_type === 'agent' ? "justify-end" : "justify-start")}>
@@ -462,10 +469,6 @@ NOTIFY pgrst, 'reload config';
                 </div>
                 <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Atendimento Centralizado</h3>
                 <p className="text-sm font-medium max-w-xs text-center mt-2 leading-relaxed">Selecione uma conversa na lista à esquerda para começar a responder.</p>
-                <div className="mt-8 flex gap-3">
-                    <div className="px-3 py-1 bg-teal-50 text-teal-600 rounded-full text-[10px] font-black uppercase tracking-widest">Sincronizado</div>
-                    <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest">Criptografado</div>
-                </div>
             </div>
           )}
       </div>
@@ -479,7 +482,6 @@ NOTIFY pgrst, 'reload config';
                       <button onClick={() => setShowNewChatModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={24}/></button>
                   </div>
                   <form onSubmit={handleStartNewChat} className="p-8 space-y-6">
-                      <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-[11px] text-blue-800 font-medium leading-relaxed italic">Inicie conversas com novos contatos diretamente por aqui sem precisar salvar no seu celular.</div>
                       <div>
                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">WhatsApp (DDD + Número)</label>
                           <input 

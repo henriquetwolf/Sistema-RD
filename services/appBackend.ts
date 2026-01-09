@@ -477,7 +477,7 @@ export const appBackend = {
     if (audience) query = query.eq('target_audience', audience);
     const { data, error } = await query;
     if (error) throw error;
-    return (data || []).map((b: any) => ({ id: b.id, title: b.title, imageUrl: b.image_url, linkUrl: b.link_url, targetAudience: b.target_audience, active: b.active }));
+    return (data || []).map((b: any) => ({ id: b.id, title: b.title, imageUrl: b.image_url, link_url: b.link_url, targetAudience: b.target_audience, active: b.active }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -664,8 +664,12 @@ export const appBackend = {
       if (!isConfigured) return;
       const payload = { 
           id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, 
-          questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distribution_mode || 'fixed', 
-          fixed_owner_id: form.fixed_owner_id || null, target_pipeline: form.targetPipeline || 'Padrão', target_stage: form.target_stage || 'new',
+          questions: form.questions, style: form.style, team_id: form.teamId || null, 
+          // FIX: Accessing FormModel properties using camelCase
+          distribution_mode: form.distributionMode || 'fixed', 
+          fixed_owner_id: form.fixedOwnerId || null, 
+          target_pipeline: form.targetPipeline || 'Padrão', 
+          target_stage: form.targetStage || 'new',
           submissions_count: form.submissionsCount || 0, folder_id: form.folderId || null
       };
       const { error } = await supabase.from('crm_forms').upsert(payload);

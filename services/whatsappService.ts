@@ -6,7 +6,7 @@ export const whatsappService = {
      * Retorna as configurações atuais do WhatsApp
      */
     getConfig: async () => {
-        return await appBackend.getWhatsAppConfig() || { mode: 'evolution' };
+        return await appBackend.getWhatsAppConfig() || { mode: 'evolution', isConnected: false };
     },
 
     /**
@@ -17,11 +17,27 @@ export const whatsappService = {
         
         if (!config) throw new Error("WhatsApp não configurado.");
 
+        // Modo Simulação (Para testes rápidos de UI e CRM)
+        if (config.isSimulation) {
+            console.log("SIMULAÇÃO: Mensagem enviada para", to);
+            return { key: { id: 'sim_' + Date.now() }, status: 'sent' };
+        }
+
         if (config.mode === 'direct') {
-            // No modo Direct, aqui o app dispararia para o seu serviço interno bailey/wppconnect
-            // Por enquanto, simulamos o sucesso da operação local
-            console.log("Enviando via VOLL Direct para:", to);
-            return { key: { id: 'direct_' + Date.now() }, status: 'sent' };
+            if (!config.gatewayUrl) {
+                throw new Error("URL do Gateway VOLL não configurada no modo Direct.");
+            }
+            
+            try {
+                const response = await fetch(`${config.gatewayUrl}/send-message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ number: to.replace(/\D/g, ''), text })
+                });
+                return await response.json();
+            } catch (e) {
+                throw new Error("Não foi possível conectar ao seu Gateway Local. Certifique-se que o serviço está rodando.");
+            }
         }
 
         // Modo Evolution (Original)

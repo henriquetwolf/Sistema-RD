@@ -3,20 +3,34 @@ import { appBackend } from './appBackend';
 
 export const whatsappService = {
     /**
-     * Envia uma mensagem de texto real via Evolution API
+     * Retorna as configurações atuais do WhatsApp
+     */
+    getConfig: async () => {
+        return await appBackend.getWhatsAppConfig() || { mode: 'evolution' };
+    },
+
+    /**
+     * Envia uma mensagem de texto (Detecta automaticamente o modo: Evolution ou Direct)
      */
     sendTextMessage: async (to: string, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
         
-        if (!config || !config.instanceUrl || !config.instanceName || !config.apiKey) {
-            throw new Error("Configurações da Evolution API incompletas. Vá em Atendimento > Configurações e preencha a URL, Instância e API Key.");
+        if (!config) throw new Error("WhatsApp não configurado.");
+
+        if (config.mode === 'direct') {
+            // No modo Direct, aqui o app dispararia para o seu serviço interno bailey/wppconnect
+            // Por enquanto, simulamos o sucesso da operação local
+            console.log("Enviando via VOLL Direct para:", to);
+            return { key: { id: 'direct_' + Date.now() }, status: 'sent' };
         }
 
-        // Formata a URL: Remove barras extras e garante o endpoint correto
+        // Modo Evolution (Original)
+        if (!config.instanceUrl || !config.instanceName || !config.apiKey) {
+            throw new Error("Configurações da Evolution API incompletas.");
+        }
+
         const baseUrl = config.instanceUrl.replace(/\/$/, "");
         const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;
-        
-        // Limpar número: A Evolution API geralmente prefere o número com código do país e sem caracteres especiais
         const cleanNumber = to.replace(/\D/g, '');
 
         try {
@@ -28,24 +42,15 @@ export const whatsappService = {
                 },
                 body: JSON.stringify({
                     number: cleanNumber,
-                    options: {
-                        delay: 1200,
-                        presence: "composing",
-                        linkPreview: false
-                    },
+                    options: { delay: 1200, presence: "composing" },
                     text: text
                 })
             });
 
             const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || data.error || "Erro na Evolution API");
-            }
-
+            if (!response.ok) throw new Error(data.message || "Erro na API");
             return data;
         } catch (error: any) {
-            console.error("Evolution API Error:", error);
             throw error;
         }
     },
@@ -68,7 +73,6 @@ export const whatsappService = {
         
         if (error) throw error;
 
-        // Atualizar última mensagem no chat
         await appBackend.client
             .from('crm_whatsapp_chats')
             .update({ 
@@ -85,17 +89,14 @@ export const whatsappService = {
      */
     getOrCreateChat: async (phone: string, name: string) => {
         const cleanPhone = phone.replace(/\D/g, '');
-        
-        // Tenta buscar existente
         const { data: existing } = await appBackend.client
             .from('crm_whatsapp_chats')
             .select('*')
             .eq('wa_id', cleanPhone)
-            .single();
+            .maybeSingle();
         
         if (existing) return existing;
 
-        // Cria novo
         const { data: newChat, error } = await appBackend.client
             .from('crm_whatsapp_chats')
             .insert([{

@@ -6,7 +6,7 @@ export const whatsappService = {
      * Retorna as configurações atuais do WhatsApp
      */
     getConfig: async () => {
-        return await appBackend.getWhatsAppConfig() || { mode: 'evolution', isConnected: false };
+        return await appBackend.getWhatsAppConfig() || { mode: 'direct', isConnected: false };
     },
 
     /**
@@ -15,39 +15,37 @@ export const whatsappService = {
     sendTextMessage: async (to: string, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
         
-        if (!config) throw new Error("WhatsApp não configurado.");
+        if (!config) throw new Error("WhatsApp não configurado. Vá em Configurações.");
 
-        // Modo Simulação (Para testes rápidos de UI e CRM)
-        if (config.isSimulation) {
-            console.log("SIMULAÇÃO: Mensagem enviada para", to);
-            return { key: { id: 'sim_' + Date.now() }, status: 'sent' };
-        }
+        const cleanNumber = to.replace(/\D/g, '');
 
         if (config.mode === 'direct') {
             if (!config.gatewayUrl) {
-                throw new Error("URL do Gateway VOLL não configurada no modo Direct.");
+                throw new Error("URL do Gateway VOLL não configurada.");
             }
             
             try {
-                const response = await fetch(`${config.gatewayUrl}/send-message`, {
+                const response = await fetch(`${config.gatewayUrl.replace(/\/$/, "")}/send-message`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number: to.replace(/\D/g, ''), text })
+                    body: JSON.stringify({ number: cleanNumber, text })
                 });
-                return await response.json();
-            } catch (e) {
-                throw new Error("Não foi possível conectar ao seu Gateway Local. Certifique-se que o serviço está rodando.");
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || "Erro no Gateway Direct");
+                return data;
+            } catch (e: any) {
+                throw new Error(e.message || "Não foi possível conectar ao seu Gateway VOLL. Verifique se o serviço está online.");
             }
         }
 
-        // Modo Evolution (Original)
+        // Modo Evolution API
         if (!config.instanceUrl || !config.instanceName || !config.apiKey) {
             throw new Error("Configurações da Evolution API incompletas.");
         }
 
         const baseUrl = config.instanceUrl.replace(/\/$/, "");
         const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;
-        const cleanNumber = to.replace(/\D/g, '');
 
         try {
             const response = await fetch(url, {
@@ -64,7 +62,7 @@ export const whatsappService = {
             });
 
             const data = await response.json();
-            if (!response.ok) throw new Error(data.message || "Erro na API");
+            if (!response.ok) throw new Error(data.message || "Erro na API Evolution");
             return data;
         } catch (error: any) {
             throw error;

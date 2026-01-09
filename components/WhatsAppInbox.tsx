@@ -5,9 +5,7 @@ import {
   CheckCheck, User, X, Plus, Settings, Save, Smartphone, 
   Copy, Loader2, RefreshCw, Zap, ShieldAlert, Code, Terminal, 
   Database, QrCode, Wifi, WifiOff, CheckCircle2, ChevronRight, ShieldCheck,
-  Cpu, Link2, AlertTriangle, ToggleLeft, ToggleRight, Info, Bug,
-  // Added missing Check icon import
-  Check
+  Cpu, Link2, AlertTriangle, Info, Check, Bug
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -41,9 +39,8 @@ interface WAConfig {
   instanceName: string;
   apiKey: string;
   edgeFunctionName: string;
-  gatewayUrl: string; // Para o Direct Connect Real
+  gatewayUrl: string; 
   isConnected: boolean;
-  isSimulation: boolean; // NOVO: Permite usar o chat sem um servidor real
 }
 
 export const WhatsAppInbox: React.FC = () => {
@@ -63,10 +60,10 @@ export const WhatsAppInbox: React.FC = () => {
   const [newChatName, setNewChatName] = useState('');
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
-  // States para o novo modo Direct
+  // States para o QR Code Real
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
-  const [qrError, setQrError] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
   const [connLogs, setConnLogs] = useState<string[]>([]);
 
   const [config, setConfig] = useState<WAConfig>({
@@ -76,8 +73,7 @@ export const WhatsAppInbox: React.FC = () => {
       apiKey: '',
       edgeFunctionName: 'whatsapp-webhook',
       gatewayUrl: 'http://localhost:3000',
-      isConnected: false,
-      isSimulation: true // Padrão agora é simulação para evitar erro de QR
+      isConnected: false
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -164,31 +160,44 @@ export const WhatsAppInbox: React.FC = () => {
       } catch (e: any) { alert(`Erro ao salvar: ${e.message}`); } finally { setIsSavingConfig(false); }
   };
 
-  const handleGenerateQr = () => {
-      if (config.isSimulation) {
-          setIsGeneratingQr(true);
-          setConnLogs(["[SISTEMA] Iniciando driver de simulação...", "[SISTEMA] Gerando par de chaves virtuais..."]);
-          setTimeout(() => {
-              addLog("[SISTEMA] Conectado ao dispositivo virtual!");
-              setConfig(prev => ({ ...prev, isConnected: true }));
-              setIsGeneratingQr(false);
-              setQrCode(null);
-          }, 2000);
-          return;
-      }
-
+  const handleGenerateQr = async () => {
       setIsGeneratingQr(true);
       setQrCode(null);
-      setQrError(false);
-      setConnLogs(["[GATEWAY] Tentando contato com servidor de sinalização...", "[GATEWAY] Aguardando socket..."]);
+      setQrError(null);
+      setConnLogs(["[SISTEMA] Iniciando requisição de pareamento...", "[API] Aguardando resposta do servidor..."]);
       
-      setTimeout(() => {
-          const mockToken = "VOLL-CONNECT-" + Math.random().toString(36).substring(7).toUpperCase();
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(mockToken)}`;
+      try {
+          let token = "";
+          if (config.mode === 'direct') {
+              // Requisição real ao seu Gateway VOLL
+              const response = await fetch(`${config.gatewayUrl.replace(/\/$/, "")}/get-qr`);
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.message || "Erro ao obter QR do Gateway");
+              token = data.qr;
+          } else {
+              // Requisição real à Evolution API
+              const response = await fetch(`${config.instanceUrl.replace(/\/$/, "")}/instance/connect/${config.instanceName}`, {
+                  headers: { 'apikey': config.apiKey }
+              });
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.message || "Erro ao obter QR da Evolution");
+              token = data.base64 || data.code;
+          }
+
+          if (!token) throw new Error("Token de QR Code não retornado pela API.");
+
+          const qrUrl = token.startsWith('data:image') 
+              ? token 
+              : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(token)}`;
+          
           setQrCode(qrUrl);
+          addLog("[OK] QR Code recebido. Escaneie agora.");
+      } catch (err: any) {
+          setQrError(err.message);
+          addLog(`[ERRO] ${err.message}`);
+      } finally {
           setIsGeneratingQr(false);
-          addLog("[QR] Código gerado. Aguardando leitura do celular...");
-      }, 1500);
+      }
   };
 
   const handleStartNewChat = async (e: React.FormEvent) => {
@@ -219,7 +228,7 @@ export const WhatsAppInbox: React.FC = () => {
                           <div className="bg-teal-100 p-2 rounded-xl text-teal-700"><Settings size={24} /></div>
                           <div>
                               <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Conectar WhatsApp</h2>
-                              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Configuração do VOLL Direct Connect</p>
+                              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Configuração de API e Pareamento</p>
                           </div>
                       </div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"><X size={24} /></button>
@@ -227,57 +236,35 @@ export const WhatsAppInbox: React.FC = () => {
 
                   <div className="p-8 space-y-8 bg-slate-50">
                       
-                      {/* SIMULATION TOGGLE */}
-                      <div className="bg-indigo-600 rounded-[2rem] p-6 text-white shadow-xl shadow-indigo-600/20 relative overflow-hidden group">
-                          <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:rotate-12 transition-transform"><Bug size={80}/></div>
-                          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                              <div className="max-w-md">
-                                  <h4 className="text-lg font-black uppercase tracking-tight">Modo de Simulação</h4>
-                                  <p className="text-xs text-indigo-100 mt-1 leading-relaxed font-medium">Ative esta opção para utilizar o Atendimento sem precisar de um servidor real. Ideal para validar o CRM e fluxos internos.</p>
-                              </div>
-                              <button 
-                                onClick={() => setConfig({...config, isSimulation: !config.isSimulation, isConnected: false})}
-                                className={clsx(
-                                    "flex items-center gap-3 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95",
-                                    config.isSimulation ? "bg-white text-indigo-700 shadow-lg" : "bg-indigo-500/50 text-indigo-200 border border-indigo-400"
-                                )}
-                              >
-                                  {config.isSimulation ? <><Check size={18}/> Simulação Ativa</> : <><X size={18}/> Usar Conexão Real</>}
-                              </button>
-                          </div>
+                      {/* SELETOR DE MODO */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <button 
+                            onClick={() => setConfig({...config, mode: 'direct'})}
+                            className={clsx(
+                                "p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4",
+                                config.mode === 'direct' ? "bg-white border-teal-500 shadow-lg shadow-teal-500/10" : "bg-white border-slate-100 opacity-60 hover:opacity-100"
+                            )}
+                        >
+                            <div className={clsx("p-3 rounded-2xl", config.mode === 'direct' ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-400")}><Cpu size={24}/></div>
+                            <div>
+                                <h4 className="font-black text-slate-800 text-sm uppercase">VOLL Direct</h4>
+                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Conexão via Gateway Nativo (Baileys/WPPConnect).</p>
+                            </div>
+                        </button>
+                        <button 
+                            onClick={() => setConfig({...config, mode: 'evolution'})}
+                            className={clsx(
+                                "p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4",
+                                config.mode === 'evolution' ? "bg-white border-blue-500 shadow-lg shadow-blue-500/10" : "bg-white border-slate-100 opacity-60 hover:opacity-100"
+                            )}
+                        >
+                            <div className={clsx("p-3 rounded-2xl", config.mode === 'evolution' ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400")}><Link2 size={24}/></div>
+                            <div>
+                                <h4 className="font-black text-slate-800 text-sm uppercase">Evolution API</h4>
+                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Utiliza um servidor Evolution externo dedicado.</p>
+                            </div>
+                        </button>
                       </div>
-
-                      {/* SELETOR DE MODO (Se não for simulação) */}
-                      {!config.isSimulation && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-4">
-                            <button 
-                                onClick={() => setConfig({...config, mode: 'direct'})}
-                                className={clsx(
-                                    "p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4",
-                                    config.mode === 'direct' ? "bg-white border-teal-500 shadow-lg shadow-teal-500/10" : "bg-white border-slate-100 opacity-60 hover:opacity-100"
-                                )}
-                            >
-                                <div className={clsx("p-3 rounded-2xl", config.mode === 'direct' ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-400")}><Cpu size={24}/></div>
-                                <div>
-                                    <h4 className="font-black text-slate-800 text-sm uppercase">VOLL Direct</h4>
-                                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">Conexão via Gateway Local ou VPS.</p>
-                                </div>
-                            </button>
-                            <button 
-                                onClick={() => setConfig({...config, mode: 'evolution'})}
-                                className={clsx(
-                                    "p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4",
-                                    config.mode === 'evolution' ? "bg-white border-blue-500 shadow-lg shadow-blue-500/10" : "bg-white border-slate-100 opacity-60 hover:opacity-100"
-                                )}
-                            >
-                                <div className={clsx("p-3 rounded-2xl", config.mode === 'evolution' ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400")}><Link2 size={24}/></div>
-                                <div>
-                                    <h4 className="font-black text-slate-800 text-sm uppercase">Evolution API</h4>
-                                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">Utiliza um servidor Evolution externo.</p>
-                                </div>
-                            </button>
-                          </div>
-                      )}
 
                       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8 animate-in slide-in-from-top-4">
                             <div className="flex flex-col md:flex-row items-center gap-10">
@@ -285,37 +272,36 @@ export const WhatsAppInbox: React.FC = () => {
                                     {isGeneratingQr ? (
                                         <div className="flex flex-col items-center gap-2">
                                             <Loader2 size={32} className="animate-spin text-teal-600" />
-                                            <p className="text-[10px] font-black text-teal-600 uppercase">Gerando Sessão...</p>
+                                            <p className="text-[10px] font-black text-teal-600 uppercase">Buscando QR...</p>
                                         </div>
                                     ) : qrError ? (
-                                        <div className="flex flex-col items-center gap-2 text-red-500">
+                                        <div className="flex flex-col items-center gap-2 text-red-500 p-4">
                                             <AlertTriangle size={32} />
-                                            <p className="text-[10px] font-black uppercase">Erro de Sinalização</p>
-                                            <button onClick={handleGenerateQr} className="text-[9px] font-bold underline">Tentar de novo</button>
+                                            <p className="text-[9px] font-black uppercase text-center leading-tight">Falha na API: {qrError}</p>
+                                            <button onClick={handleGenerateQr} className="text-[9px] font-bold underline mt-2">Tentar Novamente</button>
                                         </div>
                                     ) : qrCode ? (
                                         <img 
                                             src={qrCode} 
                                             alt="WhatsApp QR Code" 
                                             className="w-full h-full object-contain animate-in zoom-in-95" 
-                                            onError={() => setQrError(true)}
                                         />
                                     ) : config.isConnected ? (
                                         <div className="flex flex-col items-center animate-bounce">
                                             <CheckCircle2 size={64} className="text-teal-500 mb-2" />
-                                            <p className="text-xs font-black text-teal-600 uppercase">{config.isSimulation ? 'Simulação Ativa' : 'Conectado!'}</p>
+                                            <p className="text-xs font-black text-teal-600 uppercase">Conectado!</p>
                                         </div>
                                     ) : (
                                         <>
                                             <QrCode size={48} className="text-slate-300 mb-3" />
-                                            <p className="text-[10px] font-black text-slate-400 uppercase leading-tight">Clique abaixo para iniciar</p>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase leading-tight">Configure a URL abaixo e gere o QR</p>
                                         </>
                                     )}
                                 </div>
                                 <div className="flex-1 space-y-4">
-                                    <h4 className="text-lg font-black text-slate-800">Status da Conexão:</h4>
-                                    <div className="bg-slate-900 rounded-xl p-4 h-32 font-mono text-[10px] text-teal-400 overflow-y-auto custom-scrollbar leading-relaxed">
-                                        {connLogs.length === 0 ? "> Pronto para iniciar..." : connLogs.map((log, i) => (
+                                    <h4 className="text-lg font-black text-slate-800">Console de Conexão:</h4>
+                                    <div className="bg-slate-900 rounded-xl p-4 h-32 font-mono text-[10px] text-teal-400 overflow-y-auto custom-scrollbar leading-relaxed shadow-inner">
+                                        {connLogs.length === 0 ? "> Aguardando configuração..." : connLogs.map((log, i) => (
                                             <div key={i} className="mb-1">{log}</div>
                                         ))}
                                     </div>
@@ -328,7 +314,7 @@ export const WhatsAppInbox: React.FC = () => {
                                                 className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
                                             >
                                                 {isGeneratingQr ? <Loader2 size={16} className="animate-spin"/> : <QrCode size={16}/>}
-                                                {config.isSimulation ? 'Iniciar Simulação' : (qrCode ? 'Atualizar Token' : 'Gerar Novo QR')}
+                                                {qrCode ? 'Atualizar Token' : 'Gerar QR Code'}
                                             </button>
                                         ) : (
                                             <button 
@@ -342,17 +328,35 @@ export const WhatsAppInbox: React.FC = () => {
                                 </div>
                             </div>
                             
-                            {!config.isSimulation && config.mode === 'direct' && (
+                            {config.mode === 'direct' ? (
                                 <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 animate-in slide-in-from-bottom-2">
-                                    <h5 className="text-[10px] font-black text-indigo-700 uppercase flex items-center gap-2 mb-3"><Terminal size={14}/> URL do Gateway VOLL</h5>
+                                    <h5 className="text-[10px] font-black text-indigo-700 uppercase flex items-center gap-2 mb-3"><Terminal size={14}/> URL do Gateway VOLL (Direct)</h5>
                                     <input 
                                         type="text" 
                                         className="w-full px-4 py-3 bg-white border border-indigo-200 rounded-2xl text-xs font-mono focus:ring-4 focus:ring-indigo-500/10 outline-none" 
                                         value={config.gatewayUrl} 
                                         onChange={e => setConfig({...config, gatewayUrl: e.target.value})}
-                                        placeholder="http://localhost:3000"
+                                        placeholder="https://seu-gateway-real.com"
                                     />
-                                    <p className="text-[9px] text-indigo-400 mt-2 italic">* O modo Direct requer que você rode o VOLL-BRIDGE no seu servidor ou máquina local.</p>
+                                    <p className="text-[9px] text-indigo-400 mt-2 italic">* O modo Direct requer que o servidor do Gateway esteja acessível para o frontend.</p>
+                                </div>
+                            ) : (
+                                <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100 animate-in slide-in-from-bottom-2 space-y-4">
+                                    <h5 className="text-[10px] font-black text-blue-700 uppercase flex items-center gap-2 mb-1"><Smartphone size={14}/> Dados Evolution API</h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="md:col-span-2">
+                                            <label className="block text-[9px] font-black text-blue-400 uppercase mb-1">URL da API</label>
+                                            <input type="text" className="w-full px-3 py-2 border rounded-xl text-xs font-mono" value={config.instanceUrl} onChange={e => setConfig({...config, instanceUrl: e.target.value})} placeholder="https://api.evolution.com" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[9px] font-black text-blue-400 uppercase mb-1">Instância</label>
+                                            <input type="text" className="w-full px-3 py-2 border rounded-xl text-xs font-mono" value={config.instanceName} onChange={e => setConfig({...config, instanceName: e.target.value})} placeholder="principal" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[9px] font-black text-blue-400 uppercase mb-1">API Key</label>
+                                            <input type="password" title="Key" className="w-full px-3 py-2 border rounded-xl text-xs font-mono" value={config.apiKey} onChange={e => setConfig({...config, apiKey: e.target.value})} />
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                       </div>
@@ -360,7 +364,7 @@ export const WhatsAppInbox: React.FC = () => {
                       {/* WEBHOOK HELPERS */}
                       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-4">
                           <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2"><Database size={18} className="text-teal-600" /> Webhook de Recebimento</h3>
-                          <p className="text-xs text-slate-500 leading-relaxed">Para que o Atendimento receba as mensagens dos clientes, cadastre esta URL no seu Gateway ou Instância Evolution:</p>
+                          <p className="text-xs text-slate-500 leading-relaxed">Cadastre esta URL no seu Gateway ou Instância Evolution para receber mensagens em tempo real no app:</p>
                           <div className="p-4 bg-teal-50 border-2 border-teal-200 rounded-2xl">
                               <div className="flex gap-2">
                                   <code className="flex-1 bg-white border border-teal-300 p-3 rounded-xl text-[10px] font-mono text-slate-700 break-all leading-relaxed">{edgeFunctionUrl}</code>
@@ -403,7 +407,7 @@ export const WhatsAppInbox: React.FC = () => {
                 <div className="flex items-center gap-2">
                     <div className={clsx("w-2 h-2 rounded-full", config.isConnected ? "bg-teal-500 animate-pulse" : "bg-red-500")}></div>
                     <span className={clsx("text-[10px] font-black uppercase tracking-widest", config.isConnected ? "text-teal-700" : "text-red-700")}>
-                        {config.isConnected ? (config.isSimulation ? "Atendimento Simulado" : "WhatsApp Online") : "Desconectado"}
+                        {config.isConnected ? "WhatsApp Online" : "Desconectado"}
                     </span>
                 </div>
                 {config.isConnected ? <Wifi size={14} className="text-teal-400" /> : <WifiOff size={14} className="text-red-400" />}
@@ -486,7 +490,7 @@ export const WhatsAppInbox: React.FC = () => {
                             <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 transition-colors"><Paperclip size={20}/></button>
                         </div>
                         <button type="submit" disabled={isSending || !inputText.trim()} className="bg-teal-600 text-white p-4 rounded-2xl hover:bg-teal-700 disabled:opacity-50 transition-all shadow-xl shadow-teal-600/20 active:scale-95 shrink-0 flex items-center justify-center">
-                            {isSending ? <Loader2 size={24} className="animate-spin" /> : <Send size={24} />}
+                            {isSending ? <Loader2 className="animate-spin" size={24} /> : <Send size={24} />}
                         </button>
                     </form>
                 </div>

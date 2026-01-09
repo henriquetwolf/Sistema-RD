@@ -5,7 +5,7 @@ import {
   Check, CheckCheck, User, Phone, Mail, Tag, Clock, ChevronRight, 
   MoreHorizontal, Smile, Archive, AlertCircle, RefreshCw, Briefcase,
   X, Plus, Lock, Settings, Save, Smartphone, Globe, ShieldCheck, Copy, ExternalLink, Loader2,
-  LayoutGrid, List, Palette, Trash2, GripHorizontal, HelpCircle, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Code, Terminal, Info, Database, Zap
+  LayoutGrid, List, Palette, Trash2, GripHorizontal, HelpCircle, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Code, Terminal, Info, Database, Zap, ShieldAlert, Key
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -39,6 +39,7 @@ interface WAConfig {
   instanceName: string;
   apiKey: string;
   webhookVerifyToken: string;
+  edgeFunctionName?: string; // NOVO
 }
 
 export const WhatsAppInbox: React.FC = () => {
@@ -62,7 +63,8 @@ export const WhatsAppInbox: React.FC = () => {
       instanceUrl: '',
       instanceName: '',
       apiKey: '',
-      webhookVerifyToken: ''
+      webhookVerifyToken: '',
+      edgeFunctionName: 'rapid-service' // Valor padrão baseado na sua imagem
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -94,7 +96,7 @@ export const WhatsAppInbox: React.FC = () => {
 
   const loadConfig = async () => {
       const c = await appBackend.getWhatsAppConfig();
-      if (c) setConfig(c);
+      if (c) setConfig(prev => ({ ...prev, ...c }));
   };
 
   const fetchConversations = async (showLoading = true) => {
@@ -145,7 +147,8 @@ export const WhatsAppInbox: React.FC = () => {
               instanceUrl: config.instanceUrl.trim(),
               instanceName: config.instanceName.trim(),
               apiKey: config.apiKey.trim(),
-              webhookVerifyToken: config.webhookVerifyToken.trim()
+              webhookVerifyToken: config.webhookVerifyToken.trim(),
+              edgeFunctionName: (config.edgeFunctionName || 'rapid-service').trim()
           };
           await appBackend.saveWhatsAppConfig(cleanConfig);
           setConfig(cleanConfig);
@@ -170,12 +173,12 @@ export const WhatsAppInbox: React.FC = () => {
 
   const formatTime = (isoString: string) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // URL da Edge Function (assumindo que o usuário criou a função whatsapp-webhook)
+  // URL da Edge Function baseada na configuração atual
   const supabaseProjectUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
-  const edgeFunctionUrl = `${supabaseProjectUrl}/functions/v1/whatsapp-webhook`;
+  const edgeFunctionUrl = `${supabaseProjectUrl}/functions/v1/${config.edgeFunctionName || 'rapid-service'}`;
 
   const sqlTablesScript = `
--- 1. TABELAS DE WHATSAPP
+-- TABELAS DE WHATSAPP
 CREATE TABLE IF NOT EXISTS public.crm_whatsapp_chats (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     wa_id text UNIQUE NOT NULL,
@@ -193,7 +196,7 @@ CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     chat_id uuid REFERENCES public.crm_whatsapp_chats(id) ON DELETE CASCADE,
     text text,
-    sender_type text, -- 'user' ou 'agent'
+    sender_type text, 
     status text,
     wa_message_id text UNIQUE,
     created_at timestamptz DEFAULT now()
@@ -203,10 +206,7 @@ CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
 ALTER TABLE public.crm_whatsapp_chats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_whatsapp_messages ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Public access to chats" ON public.crm_whatsapp_chats;
 CREATE POLICY "Public access to chats" ON public.crm_whatsapp_chats FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Public access to messages" ON public.crm_whatsapp_messages;
 CREATE POLICY "Public access to messages" ON public.crm_whatsapp_messages FOR ALL USING (true) WITH CHECK (true);
 
 GRANT ALL ON public.crm_whatsapp_chats TO anon, authenticated, service_role;
@@ -283,19 +283,33 @@ Deno.serve(async (req) => {
                       <div className="flex items-center gap-3">
                           <div className="bg-teal-100 p-2 rounded-xl text-teal-700"><Settings size={24} /></div>
                           <div>
-                              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Ativar Recebimento</h2>
-                              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Sincronização via Edge Function</p>
+                              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Configurar WhatsApp</h2>
+                              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Sincronização em Tempo Real</p>
                           </div>
                       </div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"><X size={24} /></button>
                   </div>
 
                   <div className="p-8 space-y-8 bg-slate-50">
+                      
+                      {/* ALERTA CRÍTICO: JWT */}
+                      <div className="bg-red-50 border-2 border-red-200 p-6 rounded-3xl flex items-start gap-5 animate-pulse">
+                          <div className="bg-red-600 text-white p-3 rounded-2xl shadow-lg shadow-red-600/20"><ShieldAlert size={28}/></div>
+                          <div>
+                              <h4 className="text-red-800 font-black uppercase text-sm mb-1">Atenção ao "Verify JWT"</h4>
+                              <p className="text-red-700 text-xs leading-relaxed font-medium">
+                                  No painel do Supabase (onde você tirou o print), o botão <strong>"Verify JWT" DEVE ESTAR DESATIVADO (Cinza)</strong>. 
+                                  Se estiver ligado (Verde), a Evolution API nunca conseguirá te enviar mensagens.
+                              </p>
+                          </div>
+                      </div>
+
                       {/* PASSO 1: SQL NO SUPABASE */}
                       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                           <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2">
-                              <Database size={18} className="text-teal-600" /> Passo 1: Criar Tabelas no Supabase
+                              <Database size={18} className="text-teal-600" /> Passo 1: Estrutura do Banco
                           </h3>
+                          <p className="text-xs text-slate-500">Rode este script no SQL Editor do Supabase se ainda não tiver as tabelas.</p>
                           <div className="relative group">
                               <pre className="text-[10px] bg-slate-900 text-teal-400 p-5 rounded-2xl overflow-x-auto max-h-40 custom-scrollbar border border-slate-800 leading-relaxed font-mono">
                                   {sqlTablesScript}
@@ -307,16 +321,20 @@ Deno.serve(async (req) => {
                       {/* PASSO 2: EDGE FUNCTION */}
                       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                           <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2">
-                              <Terminal size={18} className="text-blue-600" /> Passo 2: Criar Edge Function
+                              <Terminal size={18} className="text-blue-600" /> Passo 2: Nome da sua Edge Function
                           </h3>
-                          <p className="text-xs text-slate-500 leading-relaxed">
-                              No seu terminal local, use o comando <code>supabase functions new whatsapp-webhook</code> e cole o código abaixo. Depois dê o deploy. Ou crie diretamente no painel do Supabase se disponível.
-                          </p>
-                          <div className="relative group">
-                              <pre className="text-[10px] bg-slate-900 text-blue-300 p-5 rounded-2xl overflow-x-auto max-h-40 custom-scrollbar border border-slate-800 leading-relaxed font-mono">
-                                  {edgeFunctionCode}
-                              </pre>
-                              <button onClick={() => { navigator.clipboard.writeText(edgeFunctionCode); alert("Código da Função copiado!"); }} className="absolute top-3 right-3 bg-blue-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase">Copiar Código</button>
+                          <p className="text-xs text-slate-500">Informe abaixo o nome (Slug) que você deu para a função no Supabase.</p>
+                          <div className="flex gap-2">
+                              <div className="relative flex-1">
+                                  <Code className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                  <input 
+                                    type="text" 
+                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-2xl text-sm font-mono focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                                    value={config.edgeFunctionName} 
+                                    onChange={e => setConfig({...config, edgeFunctionName: e.target.value})}
+                                    placeholder="Ex: rapid-service"
+                                  />
+                              </div>
                           </div>
                       </div>
 
@@ -326,7 +344,8 @@ Deno.serve(async (req) => {
                               <Zap size={18} className="text-amber-500" /> Passo 3: Webhook na Evolution
                           </h3>
                           <p className="text-xs text-slate-500 leading-relaxed">
-                              Copie a URL da sua Edge Function e cole na configuração de Webhook da sua instância na Evolution API. Selecione o evento <strong>MESSAGES_UPSERT</strong>.
+                              Copie a URL abaixo e cole na Evolution API. 
+                              <strong>Importante:</strong> Use o evento <code>MESSAGES_UPSERT</code>.
                           </p>
                           <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl">
                               <label className="block text-[10px] font-black text-amber-700 uppercase mb-1">URL DO WEBHOOK</label>
@@ -339,7 +358,7 @@ Deno.serve(async (req) => {
 
                       {/* CONFIGURAÇÃO DE ENVIO */}
                       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                          <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2"><Smartphone size={18} className="text-blue-600" /> Configuração para Enviar Mensagens</h3>
+                          <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2"><smartphone size={18} className="text-blue-600" /> API de Envio (Evolution)</h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <div className="md:col-span-2">
                                   <label className="block text-xs font-black text-slate-400 uppercase mb-1.5 ml-1">URL Base da API Evolution</label>

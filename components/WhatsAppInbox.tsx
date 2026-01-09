@@ -5,7 +5,7 @@ import {
   CheckCheck, User, X, Plus, Settings, Save, Smartphone, 
   Copy, Loader2, RefreshCw, Zap, ShieldAlert, Code, Terminal, 
   Database, QrCode, Wifi, WifiOff, CheckCircle2, ChevronRight, ShieldCheck,
-  Cpu, Link2
+  Cpu, Link2, AlertTriangle
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -62,6 +62,7 @@ export const WhatsAppInbox: React.FC = () => {
   // States para o novo modo Direct
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
+  const [qrError, setQrError] = useState(false);
 
   const [config, setConfig] = useState<WAConfig>({
       mode: 'evolution',
@@ -157,21 +158,24 @@ export const WhatsAppInbox: React.FC = () => {
   const handleGenerateQr = () => {
       setIsGeneratingQr(true);
       setQrCode(null);
+      setQrError(false);
+      
       // Simulação de geração de token de pareamento real
       setTimeout(() => {
           const mockToken = "VOLL-CONNECT-" + Math.random().toString(36).substring(7).toUpperCase();
-          const qrUrl = `https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=${encodeURIComponent(mockToken)}`;
+          // Novo Provedor: QRServer (Mais estável que o Google Charts legado)
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(mockToken)}`;
           setQrCode(qrUrl);
           setIsGeneratingQr(false);
           
           // Simulando que o usuário escaneou após 15 segundos
           setTimeout(() => {
-             if (qrCode) {
+             if (qrCode && !qrError) {
                  setConfig(prev => ({ ...prev, isConnected: true }));
                  setQrCode(null);
              }
           }, 15000);
-      }, 2000);
+      }, 1500);
   };
 
   const handleStartNewChat = async (e: React.FormEvent) => {
@@ -243,9 +247,25 @@ export const WhatsAppInbox: React.FC = () => {
                       {config.mode === 'direct' ? (
                           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8 animate-in slide-in-from-top-4">
                                 <div className="flex flex-col md:flex-row items-center gap-10">
-                                    <div className="w-full md:w-64 aspect-square bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-6 text-center">
-                                        {qrCode ? (
-                                            <img src={qrCode} alt="WhatsApp QR Code" className="w-full h-full object-contain animate-in zoom-in-95" />
+                                    <div className="w-full md:w-64 aspect-square bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-6 text-center overflow-hidden relative">
+                                        {isGeneratingQr ? (
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Loader2 size={32} className="animate-spin text-teal-600" />
+                                                <p className="text-[10px] font-black text-teal-600 uppercase">Gerando...</p>
+                                            </div>
+                                        ) : qrError ? (
+                                            <div className="flex flex-col items-center gap-2 text-red-500">
+                                                <AlertTriangle size={32} />
+                                                <p className="text-[10px] font-black uppercase">Erro ao carregar</p>
+                                                <button onClick={handleGenerateQr} className="text-[9px] font-bold underline">Tentar de novo</button>
+                                            </div>
+                                        ) : qrCode ? (
+                                            <img 
+                                                src={qrCode} 
+                                                alt="WhatsApp QR Code" 
+                                                className="w-full h-full object-contain animate-in zoom-in-95" 
+                                                onError={() => setQrError(true)}
+                                            />
                                         ) : config.isConnected ? (
                                             <div className="flex flex-col items-center animate-bounce">
                                                 <CheckCircle2 size={64} className="text-teal-500 mb-2" />
@@ -454,7 +474,7 @@ export const WhatsAppInbox: React.FC = () => {
                             <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 transition-colors"><Paperclip size={20}/></button>
                         </div>
                         <button type="submit" disabled={isSending || !inputText.trim()} className="bg-teal-600 text-white p-4 rounded-2xl hover:bg-teal-700 disabled:opacity-50 transition-all shadow-xl shadow-teal-600/20 active:scale-95 shrink-0 flex items-center justify-center">
-                            {isSending ? <Loader2 className="animate-spin" size={24} /> : <Send size={24} />}
+                            {isSending ? <Loader2 size={24} className="animate-spin" /> : <Send size={24} />}
                         </button>
                     </form>
                 </div>

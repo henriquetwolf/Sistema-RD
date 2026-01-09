@@ -267,8 +267,31 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V28)
--- Adição de campos de destinatário para chamados iniciados pela Adm.
+-- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V29)
+-- Inclusão de tabelas para Atendimento WhatsApp e suporte.
+
+-- Tabelas WhatsApp
+CREATE TABLE IF NOT EXISTS public.crm_whatsapp_chats (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    wa_id text UNIQUE NOT NULL,
+    contact_name text,
+    contact_phone text,
+    last_message text,
+    unread_count int DEFAULT 0,
+    status text DEFAULT 'open',
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    chat_id uuid REFERENCES public.crm_whatsapp_chats(id) ON DELETE CASCADE,
+    text text,
+    sender_type text, -- 'user', 'agent', 'system'
+    wa_message_id text,
+    status text DEFAULT 'received',
+    created_at timestamptz DEFAULT now()
+);
 
 -- Suporte a Tags de Chamado
 CREATE TABLE IF NOT EXISTS public.crm_support_tags (
@@ -278,7 +301,7 @@ CREATE TABLE IF NOT EXISTS public.crm_support_tags (
     created_at timestamptz DEFAULT now()
 );
 
--- Suporte a Tickets de Suporte Interno
+-- Suporte a Tickets
 CREATE TABLE IF NOT EXISTS public.crm_support_tickets (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     sender_id text NOT NULL,
@@ -300,7 +323,7 @@ CREATE TABLE IF NOT EXISTS public.crm_support_tickets (
     updated_at timestamptz DEFAULT now()
 );
 
--- Suporte a Mensagens em Thread dos Chamados
+-- Mensagens de Suporte
 CREATE TABLE IF NOT EXISTS public.crm_support_messages (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     ticket_id uuid REFERENCES public.crm_support_tickets(id) ON DELETE CASCADE,
@@ -313,20 +336,9 @@ CREATE TABLE IF NOT EXISTS public.crm_support_messages (
     created_at timestamptz DEFAULT now()
 );
 
--- GARANTINDO COLUNAS CASO JÁ EXISTISSEM
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS target_id text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS target_name text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS target_email text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS target_role text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS tag text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS assigned_id text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS assigned_name text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
-
-ALTER TABLE IF EXISTS public.crm_support_messages ADD COLUMN IF NOT EXISTS attachment_url text;
-ALTER TABLE IF EXISTS public.crm_support_messages ADD COLUMN IF NOT EXISTS attachment_name text;
-
 -- Permissões
+GRANT ALL ON public.crm_whatsapp_chats TO anon, authenticated, service_role;
+GRANT ALL ON public.crm_whatsapp_messages TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_support_tickets TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_support_messages TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_support_tags TO anon, authenticated, service_role;
@@ -334,16 +346,31 @@ GRANT ALL ON public.crm_support_tags TO anon, authenticated, service_role;
 NOTIFY pgrst, 'reload config';
   `.trim();
 
-  const generateWebhookCode = () => `
-// CÓDIGO PARA SUPABASE EDGE FUNCTION (index.ts)
-// Este código processa mensagens recebidas da Evolution API
+  const generateWebhookCode = () => {
+    const supabaseUrl = (import.meta as any).env?.VITE_APP_SUPABASE_URL || 'https://sua-url.supabase.co';
+    
+    return `
+/**
+ * CÓDIGO PARA SUPABASE EDGE FUNCTION (index.ts)
+ * Local: rapid-service
+ */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 serve(async (req) => {
+  // 1. Trata preflight CORS (Evolution API às vezes envia)
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   const supabase = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_URL') ?? '${supabaseUrl}',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   )
 
@@ -351,25 +378,23 @@ serve(async (req) => {
     const payload = await req.json()
     console.log("Evento Evolution Recebido:", payload.event)
 
-    // 1. FILTRAGEM: Processa apenas o evento de nova mensagem
+    // Processa apenas mensagens recebidas
     if (payload.event === 'messages.upsert') {
       const data = payload.data
       const remoteJid = data.key.remoteJid
       const fromMe = data.key.fromMe
 
-      // Ignora mensagens enviadas pela própria instância para evitar loop
-      if (fromMe) return new Response("Ignored: Sent by instance", { status: 200 })
+      // Ignora mensagens enviadas pelo próprio sistema
+      if (fromMe) return new Response("Ignored: fromMe", { status: 200, headers: corsHeaders })
 
-      // 2. EXTRAÇÃO: Limpa o JID para obter o número puro (wa_id)
+      // Limpa o JID para obter o número (ID único)
       const waId = remoteJid.split('@')[0].replace(/\\D/g, '')
-      
-      // Captura o texto de diferentes formatos possíveis da Evolution API
       const text = data.message?.conversation || 
                    data.message?.extendedTextMessage?.text || 
                    data.message?.imageMessage?.caption ||
-                   "Mensagem de mídia / sem texto"
+                   "Mensagem de mídia"
 
-      // 3. DATABASE: Busca ou Cria a conversa no CRM
+      // A. Busca ou cria conversa
       let { data: chat } = await supabase
         .from('crm_whatsapp_chats')
         .select('id, unread_count')
@@ -377,7 +402,7 @@ serve(async (req) => {
         .maybeSingle()
 
       if (!chat) {
-        const { data: newChat } = await supabase
+        const { data: newChat, error: errC } = await supabase
           .from('crm_whatsapp_chats')
           .insert([{ 
             wa_id: waId, 
@@ -389,9 +414,9 @@ serve(async (req) => {
           }])
           .select()
           .single()
+        if (errC) throw errC
         chat = newChat
       } else {
-        // Atualiza chat existente com a última mensagem e incrementa não lidas
         await supabase
           .from('crm_whatsapp_chats')
           .update({ 
@@ -402,8 +427,8 @@ serve(async (req) => {
           .eq('id', chat.id)
       }
 
-      // 4. DATABASE: Insere a mensagem na thread
-      await supabase
+      // B. Grava a mensagem na thread
+      const { error: errM } = await supabase
         .from('crm_whatsapp_messages')
         .insert([{
           chat_id: chat.id,
@@ -412,18 +437,23 @@ serve(async (req) => {
           status: 'received',
           wa_message_id: data.key.id
         }])
+      if (errM) throw errM
 
-      return new Response("Webhook Processado com Sucesso", { status: 200 })
+      return new Response("OK", { status: 200, headers: corsHeaders })
     }
 
-    return new Response("Evento ignorado pelo CRM", { status: 200 })
+    return new Response("Event not handled", { status: 200, headers: corsHeaders })
 
   } catch (error) {
-    console.error("Erro no Webhook:", error.message)
-    return new Response(error.message, { status: 500 })
+    console.error("ERRO WEBHOOK:", error.message)
+    return new Response(JSON.stringify({ error: error.message }), { 
+      status: 500, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    })
   }
 })
-  `.trim();
+    `.trim();
+  };
 
   const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
   const copyWebhook = () => { navigator.clipboard.writeText(generateWebhookCode()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
@@ -613,7 +643,7 @@ serve(async (req) => {
 
                     <div className="space-y-6">
                         <h4 className="font-bold text-slate-700 flex items-center gap-2"><Code className="text-indigo-500" size={18}/> Passo 2: Supabase Edge Function</h4>
-                        <p className="text-xs text-slate-500 leading-relaxed">Copie o código abaixo e cole no arquivo <b>index.ts</b> da sua função <code>rapid-service</code> no Supabase.</p>
+                        <p className="text-xs text-slate-500 leading-relaxed">Copie o código abaixo e cole no arquivo <b>index.ts</b> da sua função <code>rapid-service</code> no Supabase. <b>Não esqueça de rodar o SQL de reparo (V29) na aba Banco de Dados primeiro!</b></p>
                         
                         <div className="relative group">
                             <div className="bg-slate-900 rounded-2xl p-4 max-h-48 overflow-y-auto custom-scrollbar border border-slate-800">
@@ -644,9 +674,9 @@ serve(async (req) => {
         {/* ... (restante dos tabs originais mantidos) ... */}
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V28)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Destinatário em Chamados de Suporte).</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V28</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V29)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (WhatsApp, Atendimento e Suporte).</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V29</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

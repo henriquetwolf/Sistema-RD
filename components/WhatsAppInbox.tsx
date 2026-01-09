@@ -130,7 +130,8 @@ export const WhatsAppInbox: React.FC = () => {
               .update({ unread_count: 0 })
               .eq('id', chatId);
           
-          setConversations(prev => prev.map(c => i === chatId ? { ...c, unread_count: 0 } : c));
+          // FIX: Changed undefined 'i' to 'c.id' to correctly identify the chat in the list
+          setConversations(prev => prev.map(c => c.id === chatId ? { ...c, unread_count: 0 } : c));
       } catch (e) {}
   };
 
@@ -461,7 +462,6 @@ export const WhatsAppInbox: React.FC = () => {
                             )}
 
                             <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex gap-4 animate-in slide-in-from-bottom-2">
-                                {/* FIX: Use correctly imported AlertCircle icon */}
                                 <AlertCircle className="text-amber-600 shrink-0" size={20} />
                                 <div className="space-y-1">
                                     <p className="text-xs font-black text-amber-900 uppercase">Recebimento de Mensagens (Webhook)</p>
@@ -479,7 +479,6 @@ export const WhatsAppInbox: React.FC = () => {
                           <p className="text-xs text-slate-500 leading-relaxed">Para receber mensagens em tempo real, cadastre esta URL no painel do seu servidor Cloud (Evolution ou Gateway):</p>
                           <div className="p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl relative group">
                               <div className="flex gap-4">
-                                  {/* FIX: Use defined edgeFunctionUrl variable */}
                                   <code className="flex-1 bg-transparent p-1 rounded-xl text-[10px] font-mono text-slate-700 break-all leading-relaxed">{edgeFunctionUrl}</code>
                                   <button onClick={() => { navigator.clipboard.writeText(edgeFunctionUrl); alert("URL Copiada!"); }} className="bg-white border border-slate-200 text-slate-400 hover:text-teal-600 p-3 rounded-2xl active:scale-95 transition-all shadow-sm"><Copy size={20}/></button>
                               </div>

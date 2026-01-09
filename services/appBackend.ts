@@ -157,7 +157,7 @@ export const appBackend = {
       if (error) throw error;
       return (data || []).map((m: any) => ({
           id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role,
-          content: m.content, createdAt: m.created_at, attachmentUrl: m.attachment_url, attachmentName: m.attachment_name
+          content: m.content, createdAt: m.created_at, attachment_url: m.attachment_url, attachment_name: m.attachment_name
       }));
   },
 
@@ -384,7 +384,7 @@ export const appBackend = {
   savePreset: async (preset: Omit<any, 'id'>): Promise<any> => {
     if (!isConfigured) throw new Error("Backend not configured.");
     const { data: { user } } = await supabase.auth.getUser();
-    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.createdByName || null };
+    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.created_by_name || null };
     const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
     if (error) throw error;
     return {
@@ -1029,7 +1029,8 @@ export const appBackend = {
       const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date').order('title');
       if (error) throw error;
       return (data || []).map((b: any) => ({
-          id: b.id, eventId: b.event_id, date: b.date, title: b.title, max_selections: b.max_selections
+          // FIX: Changed 'max_selections' to 'maxSelections' to match the EventBlock interface
+          id: b.id, eventId: b.event_id, date: b.date, title: b.title, maxSelections: b.max_selections
       }));
   },
 

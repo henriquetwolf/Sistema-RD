@@ -344,7 +344,7 @@ export const appBackend = {
     const { data, error = null } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((row: any) => ({
-      id: row.id, name: row.name, sheetUrl: row.sheet_url, config: row.config, lastSync: row.last_sync, status: row.status, lastMessage: row.last_message, active: row.active, intervalMinutes: row.interval_minutes, createdBy: row.created_by_name, createdAt: row.created_at
+      id: row.id, name: row.name, sheetUrl: row.sheet_url, config: row.config, lastSync: row.last_sync, status: row.status, lastMessage: row.last_message, active: row.active, interval_minutes: row.interval_minutes, createdBy: row.created_by_name, createdAt: row.created_at
     }));
   },
 
@@ -353,7 +353,6 @@ export const appBackend = {
     const { data: { user } } = await supabase.auth.getUser();
     const payload = {
       id: job.id, user_id: user?.id, name: job.name, sheet_url: job.sheetUrl, config: job.config, active: job.active,
-      // Fix: Changed interval_minutes to use intervalMinutes from SyncJob type
       interval_minutes: job.intervalMinutes, last_sync: job.lastSync, status: job.status, last_message: job.lastMessage,
       created_by_name: job.createdBy, created_at: job.createdAt
     };
@@ -504,14 +503,61 @@ export const appBackend = {
     const { data, error = null } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name', { ascending: true });
     if (error) throw error;
     return (data || []).map((d: any) => ({
-      id: d.id, status: d.status || 'active', responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password || '', secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology, studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account, beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: d.has_reformer, qtyReformer: d.qty_reformer, hasLadderBarrel: d.has_ladder_barrel, qty_ladder_barrel: d.qtyLadderBarrel, hasChair: d.has_chair, qty_chair: d.qtyChair, hasCadillac: d.has_cadillac, qty_cadillac: d.qtyCadillac, hasChairsForCourse: d.has_chairs_for_course, hasTv: d.has_tv, max_kits_capacity: d.max_kits_capacity, attachments: d.attachments
+      id: d.id, 
+      status: d.status || 'active', 
+      responsibleName: d.responsible_name, 
+      cpf: d.cpf, 
+      phone: d.phone, 
+      email: d.email, 
+      password: d.password || '', 
+      secondContactName: d.second_contact_name, 
+      secondContactPhone: d.second_contact_phone, 
+      fantasyName: d.fantasy_name, 
+      legalName: d.legal_name, 
+      cnpj: d.cnpj, 
+      studioPhone: d.studio_phone, 
+      address: d.address, 
+      city: d.city, 
+      state: d.state, 
+      country: d.country, 
+      sizeM2: d.size_m2, 
+      studentCapacity: d.student_capacity, 
+      rentValue: d.rent_value, 
+      methodology: d.methodology, 
+      studioType: d.studio_type, 
+      nameOnSite: d.name_on_site, 
+      bank: d.bank, 
+      agency: d.agency, 
+      account: d.account, 
+      beneficiary: d.beneficiary, 
+      pixKey: d.pix_key, 
+      hasReformer: d.has_reformer, 
+      qtyReformer: d.qty_reformer, 
+      /* FIXED: Corrected mapping of quantity fields from database (snake_case) to interface (camelCase) */
+      hasLadderBarrel: d.has_ladder_barrel, 
+      qtyLadderBarrel: d.qty_ladder_barrel, 
+      hasChair: d.has_chair, 
+      qtyChair: d.qty_chair, 
+      hasCadillac: d.has_cadillac, 
+      qtyCadillac: d.qty_cadillac, 
+      hasChairsForCourse: d.has_chairs_for_course, 
+      hasTv: d.has_tv, 
+      maxKitsCapacity: d.max_kits_capacity, 
+      attachments: d.attachments
     }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
+      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, 
+      /* FIXED: Corrected reference to property names on studio object (camelCase) for payload mapping */
+      qty_ladder_barrel: studio.qtyLadderBarrel, 
+      has_chair: studio.hasChair, 
+      qty_chair: studio.qtyChair, 
+      has_cadillac: studio.hasCadillac, 
+      qty_cadillac: studio.qtyCadillac, 
+      has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
     if (studio.id) {
         const { error } = await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
@@ -597,7 +643,6 @@ export const appBackend = {
     if (error) throw error;
   },
 
-  // Fix: Added SurveyModel to the return type union since it returns survey data branches
   getFormById: async (id: string): Promise<FormModel | SurveyModel | null> => {
     if (!isConfigured) return null;
     const { data: form } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
@@ -619,8 +664,8 @@ export const appBackend = {
       if (!isConfigured) return;
       const payload = { 
           id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, 
-          questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distributionMode || 'fixed', 
-          fixed_owner_id: form.fixedOwnerId || null, target_pipeline: form.targetPipeline || 'Padrão', target_stage: form.targetStage || 'new',
+          questions: form.questions, style: form.style, team_id: form.teamId || null, distribution_mode: form.distribution_mode || 'fixed', 
+          fixed_owner_id: form.fixed_owner_id || null, target_pipeline: form.targetPipeline || 'Padrão', target_stage: form.target_stage || 'new',
           submissions_count: form.submissionsCount || 0, folder_id: form.folderId || null
       };
       const { error } = await supabase.from('crm_forms').upsert(payload);
@@ -698,9 +743,11 @@ export const appBackend = {
   },
 
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
-      const form = await appBackend.getFormById(formId);
-      if (!form) throw new Error("Formulário não encontrado.");
+      const formResource = await appBackend.getFormById(formId);
+      if (!formResource) throw new Error("Formulário não encontrado.");
       
+      const form = formResource as FormModel;
+
       if (isConfigured) {
           const cleanStudentId = (studentId && typeof studentId === 'string' && studentId.trim() !== '') ? studentId : null;
           
@@ -724,7 +771,25 @@ export const appBackend = {
               form.questions.forEach(q => {
                   const ans = answers.find(a => a.questionId === q.id);
                   if (ans && q.crmMapping) {
-                      dealPayload[q.crmMapping] = ans.value;
+                      const value = ans.value;
+                      
+                      // Tratamento especial para o campo 'value' (moeda/número)
+                      if (q.crmMapping === 'value') {
+                          dealPayload[q.crmMapping] = parseFloat(value.replace(/[^\d.-]/g, '')) || 0;
+                      } else {
+                          dealPayload[q.crmMapping] = value;
+                      }
+
+                      // Melhoria de UX: Se mapeou 'contact_name', usa no Título do card e 'company_name' para consistência visual
+                      if (q.crmMapping === 'contact_name') {
+                          dealPayload.title = value;
+                          if (!dealPayload.company_name) dealPayload.company_name = value;
+                      }
+                      
+                      // Melhoria de UX: Se mapeou 'company_name', e não tem título, usa
+                      if (q.crmMapping === 'company_name' && dealPayload.title === form.title) {
+                          dealPayload.title = value;
+                      }
                   }
               });
 
@@ -732,7 +797,6 @@ export const appBackend = {
               if (form.distributionMode === 'fixed' && form.fixedOwnerId) {
                   dealPayload.owner_id = form.fixedOwnerId;
               } else if (form.distributionMode === 'round-robin' && form.teamId) {
-                  // Lógica simplificada de Round Robin (Vendedor aleatório da equipe no front)
                   const { data: teamData } = await supabase.from('crm_teams').select('members').eq('id', form.teamId).single();
                   if (teamData?.members?.length > 0) {
                       const randomIndex = Math.floor(Math.random() * teamData.members.length);
@@ -780,7 +844,6 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      // Fix: Use contractDate instead of contract_date in mapped literal
       return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
@@ -788,7 +851,6 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data, error = null } = await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle();
       if (error || !data) return null;
-      // Fix: Use contractDate instead of contract_date in mapped literal
       return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
@@ -876,7 +938,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date, attachments: d.attachments, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conference_date: d.conference_date, attachments: d.attachments, createdAt: d.created_at }));
   },
 
   getCourseInfos: async (): Promise<CourseInfo[]> => {
@@ -963,7 +1025,7 @@ export const appBackend = {
       const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date').order('title');
       if (error) throw error;
       return (data || []).map((b: any) => ({
-          id: b.id, eventId: b.event_id, date: b.date, title: b.title, maxSelections: b.max_selections
+          id: b.id, eventId: b.event_id, date: b.date, title: b.title, max_selections: b.max_selections
       }));
   },
 

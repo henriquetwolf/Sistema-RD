@@ -79,7 +79,6 @@ export const WhatsAppInbox: React.FC = () => {
       isConnected: false
   });
 
-  // FIX: Define edgeFunctionUrl variable needed by the JSX
   const edgeFunctionUrl = useMemo(() => {
     const baseUrl = (import.meta as any).env?.VITE_APP_SUPABASE_URL || 'https://your-project.supabase.co';
     return `${baseUrl.replace(/\/$/, "")}/functions/v1/${config.edgeFunctionName}`;
@@ -120,7 +119,24 @@ export const WhatsAppInbox: React.FC = () => {
 
   const loadConfig = async () => {
       const c = await appBackend.getWhatsAppConfig();
-      if (c) setConfig(prev => ({ ...prev, ...c }));
+      if (c) {
+          setConfig(prev => ({ ...prev, ...c }));
+          // Auto-test connection to update status label
+          if (c.instanceUrl || c.gatewayUrl) {
+              setTimeout(() => checkConnectionSilently(c), 500);
+          }
+      }
+  };
+
+  const checkConnectionSilently = async (c: WAConfig) => {
+    const baseUrl = c.mode === 'direct' ? c.gatewayUrl : c.instanceUrl;
+    if (!baseUrl) return;
+    try {
+        await fetch(baseUrl.replace(/\/$/, ""), { method: 'HEAD', mode: 'no-cors' });
+        setConfig(prev => ({ ...prev, isConnected: true }));
+    } catch (err) {
+        setConfig(prev => ({ ...prev, isConnected: false }));
+    }
   };
 
   const clearUnreadCount = async (chatId: string) => {
@@ -130,7 +146,6 @@ export const WhatsAppInbox: React.FC = () => {
               .update({ unread_count: 0 })
               .eq('id', chatId);
           
-          // FIX: Changed undefined 'i' to 'c.id' to correctly identify the chat in the list
           setConversations(prev => prev.map(c => c.id === chatId ? { ...c, unread_count: 0 } : c));
       } catch (e) {}
   };
@@ -199,9 +214,11 @@ export const WhatsAppInbox: React.FC = () => {
       try {
           const response = await fetch(baseUrl.replace(/\/$/, ""), { method: 'HEAD', mode: 'no-cors' });
           setConnStatus('online');
+          setConfig(prev => ({ ...prev, isConnected: true }));
           addLog(`[OK] Servidor Cloud em ${baseUrl} está respondendo.`);
       } catch (err) {
           setConnStatus('offline');
+          setConfig(prev => ({ ...prev, isConnected: false }));
           addLog(`[ERRO] Não foi possível alcançar o servidor em ${baseUrl}`);
       } finally {
           setIsTestingConn(false);
@@ -368,9 +385,9 @@ export const WhatsAppInbox: React.FC = () => {
                                         <h4 className="text-lg font-black text-slate-800">Passo a Passo Cloud:</h4>
                                         <div className={clsx(
                                             "flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all",
-                                            connStatus === 'online' ? "bg-green-50 text-green-600" : connStatus === 'offline' ? "bg-red-50 text-red-600" : "bg-slate-50 text-slate-400"
+                                            config.isConnected ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
                                         )}>
-                                            <Activity size={12}/> {connStatus === 'online' ? 'Online' : connStatus === 'offline' ? 'Offline' : 'Diagnóstico'}
+                                            <Activity size={12}/> {config.isConnected ? 'Online' : 'Offline'}
                                         </div>
                                     </div>
                                     <ul className="space-y-3">
@@ -488,7 +505,7 @@ export const WhatsAppInbox: React.FC = () => {
 
                   <div className="px-8 py-6 bg-white border-t border-slate-100 flex justify-end gap-3 shrink-0">
                       <button onClick={() => setShowSettings(false)} className="px-6 py-3 text-slate-500 font-bold text-sm hover:text-slate-700 transition-colors">Cancelar</button>
-                      <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-3 rounded-2xl font-black text-sm shadow-xl shadow-teal-600/30 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50">
+                      <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-3 rounded-2xl font-black text-sm shadow-xl shadow-teal-600/30 flex items-center gap-2 transition-all active:scale-95">
                           {isSavingConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                           Salvar Configuração Cloud
                       </button>

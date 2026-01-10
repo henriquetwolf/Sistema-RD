@@ -8,7 +8,6 @@ export const whatsappService = {
     isLid: (id: string) => {
         if (!id) return false;
         const clean = id.split('@')[0].split(':')[0].replace(/\D/g, '');
-        // LIDs técnicos geralmente têm mais de 15 dígitos
         return clean.length > 13;
     },
 
@@ -19,8 +18,6 @@ export const whatsappService = {
         if (!raw) return null;
         const partBeforeAt = raw.split('@')[0];
         const cleanNumber = partBeforeAt.split(':')[0].replace(/\D/g, '');
-        
-        // Se for um número de telefone brasileiro válido (12 ou 13 dígitos)
         if (cleanNumber.length >= 10 && cleanNumber.length <= 13) {
             return cleanNumber;
         }
@@ -28,7 +25,31 @@ export const whatsappService = {
     },
 
     /**
-     * Busca informações do contato no CRM de forma exaustiva (Número ou Nome)
+     * Zera o contador de mensagens não lidas de um chat
+     */
+    markAsRead: async (chatId: string) => {
+        const { error } = await appBackend.client
+            .from('crm_whatsapp_chats')
+            .update({ unread_count: 0 })
+            .eq('id', chatId);
+        if (error) console.error("Erro ao limpar notificações:", error);
+        return !error;
+    },
+
+    /**
+     * Atualiza a etapa (status) do atendimento
+     */
+    updateChatStatus: async (chatId: string, status: 'open' | 'pending' | 'waiting' | 'closed') => {
+        const { error } = await appBackend.client
+            .from('crm_whatsapp_chats')
+            .update({ status, updated_at: new Date().toISOString() })
+            .eq('id', chatId);
+        if (error) throw error;
+        return true;
+    },
+
+    /**
+     * Busca informações do contato no CRM
      */
     findContactInCrm: async (identifier: string, pushName?: string) => {
         const actualNum = whatsappService.extractActualNumber(identifier);
@@ -66,7 +87,6 @@ export const whatsappService = {
                 dealId: contactByName.id
             };
         }
-
         return null;
     },
 
@@ -93,7 +113,6 @@ export const whatsappService = {
      */
     getOrCreateChat: async (waId: string, pushName: string) => {
         const cleanId = waId.split('@')[0];
-        
         const { data: existingChat } = await appBackend.client
             .from('crm_whatsapp_chats')
             .select('*')
@@ -109,7 +128,6 @@ export const whatsappService = {
                         contact_phone: cleanPhone,
                         contact_name: contact.name 
                     }).eq('id', existingChat.id);
-                    
                     existingChat.contact_phone = cleanPhone;
                     existingChat.contact_name = contact.name;
                 }
@@ -139,25 +157,16 @@ export const whatsappService = {
     sendTextMessage: async (chat: any, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
         if (!config) throw new Error("WhatsApp não configurado.");
-
         const target = chat.contact_phone && !whatsappService.isLid(chat.contact_phone) 
             ? chat.contact_phone 
             : chat.wa_id;
 
         const baseUrl = config.instanceUrl.replace(/\/$/, "");
         const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;
-
         const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'apikey': config.apiKey.trim(),
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                number: target,
-                options: { delay: 1200, presence: "composing" },
-                text: text
-            })
+            headers: { 'apikey': config.apiKey.trim(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ number: target, options: { delay: 1200, presence: "composing" }, text: text })
         });
 
         const data = await response.json();
@@ -168,23 +177,14 @@ export const whatsappService = {
     syncMessage: async (chatId: string, text: string, senderType: 'user' | 'agent' | 'system', waMessageId?: string) => {
         const { data, error } = await appBackend.client
             .from('crm_whatsapp_messages')
-            .insert([{
-                chat_id: chatId,
-                text,
-                sender_type: senderType,
-                wa_message_id: waMessageId,
-                status: 'sent'
-            }])
-            .select()
-            .single();
-        
+            .insert([{ chat_id: chatId, text, sender_type: senderType, wa_message_id: waMessageId, status: 'sent' }])
+            .select().single();
         if (error) throw error;
 
         await appBackend.client
             .from('crm_whatsapp_chats')
             .update({ last_message: text, updated_at: new Date().toISOString() })
             .eq('id', chatId);
-
         return data;
     }
 };

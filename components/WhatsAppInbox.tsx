@@ -4,13 +4,15 @@ import {
   MessageCircle, Send, CheckCheck, User, X, Plus, 
   Settings, Save, Smartphone, Loader2, Wifi, 
   WifiOff, ChevronRight, RefreshCw, UserCheck, Search, Link2,
-  AlertCircle, ShieldCheck, UserPlus
+  AlertCircle, ShieldCheck, UserPlus, Kanban, List, MoveRight,
+  Clock, CheckCircle, Circle, MessageSquare
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { whatsappService } from '../services/whatsappService';
 
 // --- TYPES ---
+type ChatStatus = 'open' | 'pending' | 'waiting' | 'closed';
 
 interface WAConversation {
   id: string;
@@ -19,7 +21,7 @@ interface WAConversation {
   contact_phone: string;
   last_message: string;
   unread_count: number;
-  status: 'open' | 'pending' | 'closed';
+  status: ChatStatus;
   updated_at: string;
 }
 
@@ -42,7 +44,15 @@ interface WAConfig {
   isConnected: boolean;
 }
 
+const ATTENDANCE_STAGES: { id: ChatStatus; label: string; color: string; bg: string }[] = [
+    { id: 'open', label: 'Novos / Sem Resposta', color: 'text-red-600', bg: 'bg-red-50' },
+    { id: 'pending', label: 'Em Atendimento', color: 'text-amber-600', bg: 'bg-amber-50' },
+    { id: 'waiting', label: 'Aguardando Cliente', color: 'text-blue-600', bg: 'bg-blue-50' },
+    { id: 'closed', label: 'Finalizados', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+];
+
 export const WhatsAppInbox: React.FC = () => {
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [conversations, setConversations] = useState<WAConversation[]>([]);
   const [messages, setMessages] = useState<WAMessage[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
@@ -109,11 +119,29 @@ export const WhatsAppInbox: React.FC = () => {
       if (selectedChatId) {
           fetchMessages(selectedChatId);
           loadCrmDetails();
+          handleMarkAsRead(selectedChatId);
       } else {
           setMessages([]);
           setCrmInfo(null);
       }
   }, [selectedChatId]);
+
+  const handleMarkAsRead = async (chatId: string) => {
+      const chat = conversations.find(c => c.id === chatId);
+      if (chat && chat.unread_count > 0) {
+          await whatsappService.markAsRead(chatId);
+          setConversations(prev => prev.map(c => c.id === chatId ? { ...c, unread_count: 0 } : c));
+      }
+  };
+
+  const handleUpdateStage = async (chatId: string, status: ChatStatus) => {
+      try {
+          await whatsappService.updateChatStatus(chatId, status);
+          setConversations(prev => prev.map(c => c.id === chatId ? { ...c, status } : c));
+      } catch (e) {
+          alert("Erro ao mudar etapa do atendimento.");
+      }
+  };
 
   const loadCrmDetails = async () => {
       if (!selectedChat) return;
@@ -183,6 +211,12 @@ export const WhatsAppInbox: React.FC = () => {
         const result = await whatsappService.sendTextMessage(selectedChat, messageText);
         const waId = result.key?.id || result.messageId; 
         await whatsappService.syncMessage(selectedChatId, messageText, 'agent', waId);
+        
+        // Ao responder, movemos o chat para "Aguardando Cliente" se estiver em "Novo" ou "Atendimento"
+        if (selectedChat.status === 'open' || selectedChat.status === 'pending') {
+            await handleUpdateStage(selectedChatId, 'waiting');
+        }
+
         await fetchMessages(selectedChatId, false);
         await fetchConversations(false);
     } catch (err: any) {
@@ -272,9 +306,7 @@ export const WhatsAppInbox: React.FC = () => {
       const number = contactPhone || id;
       if (!number) return '';
       const cleaned = number.replace(/\D/g, '');
-      
       if (cleaned.length > 13 && !contactPhone) return `ID Técnico: ${number.substring(0, 8)}...`;
-      
       if (cleaned.startsWith('55') && cleaned.length >= 12) {
           const ddd = cleaned.slice(2, 4);
           const rest = cleaned.slice(4);
@@ -284,14 +316,18 @@ export const WhatsAppInbox: React.FC = () => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-140px)] bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative">
+    <div className="flex h-[calc(100vh-140px)] bg-slate-50 rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative">
       
-      {/* SIDEBAR */}
-      <div className={clsx("flex flex-col border-r border-slate-100 w-full md:w-80 lg:w-96 shrink-0 bg-slate-50/50", selectedChatId ? "hidden md:flex" : "flex")}>
-        <div className="p-6 border-b border-slate-100 bg-white space-y-4">
+      {/* SIDEBAR (Lista ou Kanban) */}
+      <div className={clsx("flex flex-col border-r border-slate-100 w-full md:w-80 lg:w-96 shrink-0 bg-white", selectedChatId && viewMode === 'list' ? "hidden md:flex" : "flex")}>
+        <div className="p-6 border-b border-slate-100 space-y-4">
             <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black text-slate-800 flex items-center gap-3"><MessageCircle className="text-teal-600" /> Atendimento</h2>
+                <h2 className="text-xl font-black text-slate-800 flex items-center gap-3"><MessageCircle className="text-teal-600" /> Conversas</h2>
                 <div className="flex gap-1">
+                    <div className="bg-slate-100 p-1 rounded-lg flex mr-2">
+                        <button onClick={() => setViewMode('list')} className={clsx("p-1.5 rounded-md transition-all", viewMode === 'list' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Vista Lista"><List size={16}/></button>
+                        <button onClick={() => setViewMode('kanban')} className={clsx("p-1.5 rounded-md transition-all", viewMode === 'kanban' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Vista Kanban"><Kanban size={16}/></button>
+                    </div>
                     <button onClick={() => fetchConversations()} className="p-2 text-slate-400 hover:text-teal-600 rounded-xl transition-all"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""} /></button>
                     <button onClick={() => setShowNewChatModal(true)} className="p-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 shadow-lg active:scale-95"><Plus size={18} /></button>
                     <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-teal-600 rounded-xl transition-all"><Settings size={18} /></button>
@@ -305,73 +341,86 @@ export const WhatsAppInbox: React.FC = () => {
                 {config.isConnected ? <Wifi size={14} className="text-teal-400" /> : <WifiOff size={14} className="text-red-400" />}
             </div>
         </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50/30">
             {isLoading && conversations.length === 0 ? (<div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-teal-600" /></div>) : 
-            conversations.map(conv => {
-                const isTechnical = whatsappService.isLid(conv.wa_id) && !conv.contact_phone;
-                return (
-                    <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-5 cursor-pointer transition-all hover:bg-white border-l-4 group relative", selectedChatId === conv.id ? "bg-white border-l-teal-500 shadow-sm" : "border-l-transparent")}>
+            viewMode === 'list' ? (
+                conversations.map(conv => (
+                    <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-5 cursor-pointer transition-all hover:bg-white border-l-4 group relative", selectedChatId === conv.id ? "bg-white border-l-teal-500 shadow-sm" : "border-l-transparent border-b border-slate-50")}>
                         <div className="flex justify-between items-start mb-1">
                             <div className="flex flex-col">
-                                <span className={clsx("font-black text-sm", isTechnical ? "text-slate-400 italic" : "text-slate-800")}>{conv.contact_name}</span>
-                                <div className="flex items-center gap-1">
-                                    <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter">
-                                        {formatPhoneDisplay(conv.wa_id, conv.contact_phone)}
-                                    </span>
-                                    {conv.contact_phone && !whatsappService.isLid(conv.contact_phone) && (
-                                        <ShieldCheck size={10} className="text-teal-500" title="Vínculo Real Confirmado" />
-                                    )}
-                                </div>
+                                <span className={clsx("font-black text-sm", conv.unread_count > 0 ? "text-slate-900" : "text-slate-600")}>{conv.contact_name}</span>
+                                <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter">{formatPhoneDisplay(conv.wa_id, conv.contact_phone)}</span>
                             </div>
                             <span className="text-[9px] font-black text-slate-300 uppercase">{formatTime(conv.updated_at)}</span>
                         </div>
-                        <p className="text-xs text-slate-500 truncate pr-6 mt-1">{conv.last_message}</p>
-                        {conv.unread_count > 0 && <span className="absolute right-5 bottom-5 w-5 h-5 bg-teal-600 text-white text-[10px] font-black flex items-center justify-center rounded-full">{conv.unread_count}</span>}
+                        <p className={clsx("text-xs truncate pr-6 mt-1", conv.unread_count > 0 ? "font-bold text-slate-800" : "text-slate-500")}>{conv.last_message}</p>
+                        {conv.unread_count > 0 && <span className="absolute right-5 bottom-5 w-5 h-5 bg-red-500 text-white text-[10px] font-black flex items-center justify-center rounded-full animate-bounce shadow-lg">{conv.unread_count}</span>}
                     </div>
-                );
-            })}
+                ))
+            ) : (
+                /* Kanban Sidebar / Minimal List for Kanban selection */
+                <div className="p-4 space-y-2">
+                    {ATTENDANCE_STAGES.map(stage => {
+                        const count = conversations.filter(c => c.status === stage.id).length;
+                        if (count === 0) return null;
+                        return (
+                            <div key={stage.id} className="space-y-1">
+                                <h4 className={clsx("text-[10px] font-black uppercase tracking-widest mb-2 px-2", stage.color)}>{stage.label} ({count})</h4>
+                                {conversations.filter(c => c.status === stage.id).map(c => (
+                                    <div key={c.id} onClick={() => setSelectedChatId(c.id)} className={clsx("p-3 rounded-xl cursor-pointer transition-all border", selectedChatId === c.id ? "bg-teal-50 border-teal-200 shadow-sm" : "bg-white hover:bg-slate-50 border-slate-100")}>
+                                        <p className="text-xs font-bold text-slate-800 truncate">{c.contact_name}</p>
+                                        <p className="text-[9px] text-slate-400 truncate">{c.last_message}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
       </div>
 
-      {/* CHAT AREA */}
+      {/* ÁREA DE CONVERSA (CRM STYLE) */}
       <div className="flex-1 flex flex-col bg-[#efeae2] relative min-w-0">
           {selectedChat ? (
               <>
-                <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shadow-sm z-10 shrink-0">
+                <div className="bg-white px-6 py-4 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center shadow-sm z-10 shrink-0 gap-4">
                     <div className="flex items-center gap-4">
                         <button className="md:hidden text-slate-500" onClick={() => setSelectedChatId(null)}><ChevronRight size={24} className="rotate-180" /></button>
                         <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 font-bold border border-slate-200 shadow-inner"><User size={28} /></div>
                         <div>
                             <h3 className="font-black text-slate-800 text-base leading-tight">{selectedChat.contact_name}</h3>
                             <div className="flex items-center gap-2">
-                                <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">
-                                    {formatPhoneDisplay(selectedChat.wa_id, selectedChat.contact_phone)}
-                                </p>
-                                {crmInfo ? (
-                                    <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-indigo-100">
-                                        <UserCheck size={10}/> {crmInfo.role} (Vinculado)
-                                    </span>
-                                ) : whatsappService.isLid(selectedChat.wa_id) && !selectedChat.contact_phone ? (
-                                    <button 
-                                        onClick={() => setShowIdentifyModal(true)}
-                                        className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-amber-200 hover:bg-amber-200 transition-colors"
-                                    >
-                                        <UserPlus size={10}/> Identificar Contato
-                                    </button>
-                                ) : (
-                                    <span className="bg-slate-50 text-slate-400 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-slate-100">
-                                        Visitante Externo
-                                    </span>
-                                )}
+                                <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">{formatPhoneDisplay(selectedChat.wa_id, selectedChat.contact_phone)}</p>
+                                {crmInfo ? <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-indigo-100"><UserCheck size={10}/> {crmInfo.role}</span> : (whatsappService.isLid(selectedChat.wa_id) && !selectedChat.contact_phone && <button onClick={() => setShowIdentifyModal(true)} className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-amber-200 hover:bg-amber-200 transition-colors"><UserPlus size={10}/> Identificar</button>)}
                             </div>
                         </div>
                     </div>
+
+                    {/* SELECTOR DE ETAPA DO ATENDIMENTO (ESTILO CRM) */}
+                    <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner w-full md:w-auto">
+                        {ATTENDANCE_STAGES.map(stage => (
+                            <button 
+                                key={stage.id} 
+                                onClick={() => handleUpdateStage(selectedChat.id, stage.id)}
+                                className={clsx(
+                                    "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tighter flex items-center gap-1.5 transition-all flex-1 md:flex-none justify-center",
+                                    selectedChat.status === stage.id ? "bg-white text-indigo-700 shadow-md ring-1 ring-slate-200" : "text-slate-400 hover:text-slate-600"
+                                )}
+                            >
+                                {selectedChat.status === stage.id ? <CheckCircle size={10}/> : <Circle size={10}/>}
+                                {stage.label.split(' ')[0]}
+                            </button>
+                        ))}
+                    </div>
                 </div>
+                
                 <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")' }}>
                     {messages.map(msg => (
                         <div key={msg.id} className={clsx("flex animate-in fade-in slide-in-from-bottom-2", msg.sender_type === 'agent' ? "justify-end" : "justify-start")}>
                             <div className={clsx("max-w-[75%] rounded-2xl px-4 py-3 shadow-md relative text-sm font-medium", msg.sender_type === 'agent' ? "bg-teal-100 text-teal-900 rounded-tr-none" : "bg-white text-slate-800 rounded-tl-none")}>
-                                <p className="whitespace-pre-wrap">{msg.text}</p>
+                                <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                                 <div className="flex items-center justify-end gap-1.5 mt-1.5">
                                     <span className="text-[9px] font-black text-slate-400 opacity-60 uppercase">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                     {msg.sender_type === 'agent' && <CheckCheck size={14} className="text-teal-600" />}
@@ -381,6 +430,7 @@ export const WhatsAppInbox: React.FC = () => {
                     ))}
                     <div ref={messagesEndRef} />
                 </div>
+
                 <div className="bg-white/95 backdrop-blur-md p-5 border-t border-slate-200">
                     <form onSubmit={handleSendMessage} className="flex gap-3 max-w-5xl mx-auto">
                         <input type="text" className="flex-1 px-6 py-4 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none focus:bg-white focus:ring-4 focus:ring-teal-500/10 text-sm font-medium transition-all" placeholder="Escreva aqui..." value={inputText} onChange={e => setInputText(e.target.value)} />
@@ -392,14 +442,14 @@ export const WhatsAppInbox: React.FC = () => {
               </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-white/50 backdrop-blur-sm">
-                <div className="w-24 h-24 bg-white rounded-[2.5rem] shadow-xl flex items-center justify-center mb-6 animate-bounce"><MessageCircle size={48} className="text-teal-500 opacity-40" /></div>
+                <div className="w-24 h-24 bg-white rounded-[2.5rem] shadow-xl flex items-center justify-center mb-6 animate-bounce"><MessageSquare size={48} className="text-teal-500 opacity-40" /></div>
                 <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Atendimento WhatsApp</h3>
-                <p className="text-sm font-medium text-center mt-2 max-w-xs">Selecione uma conversa para iniciar.</p>
+                <p className="text-sm font-medium text-center mt-2 max-w-xs px-6">Selecione uma conversa ao lado para visualizar a ficha completa do atendimento.</p>
             </div>
           )}
       </div>
 
-      {/* MODAL IDENTIFY (Manually link LID to Phone) */}
+      {/* MODAL IDENTIFY */}
       {showIdentifyModal && (
           <div className="fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md animate-in zoom-in-95 overflow-hidden">
@@ -408,47 +458,18 @@ export const WhatsAppInbox: React.FC = () => {
                       <button onClick={() => setShowIdentifyModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                   </div>
                   <form onSubmit={handleIdentifySubmit} className="p-8 space-y-6">
-                      <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3 text-xs text-amber-800 mb-2">
-                        <AlertCircle size={16} className="shrink-0" />
-                        <p>Vincule este ID técnico ao número real para que o sistema o reconheça no futuro.</p>
-                      </div>
+                      <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3 text-xs text-amber-800 mb-2"><AlertCircle size={16} className="shrink-0" /><p>Vincule este ID técnico ao número real para que o sistema o reconheça no futuro.</p></div>
                       <div className="space-y-4">
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Número de Telefone (Real)</label>
-                            <div className="relative">
-                                <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
-                                <input 
-                                    type="text" 
-                                    required 
-                                    className="w-full pl-12 pr-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm focus:bg-white outline-none font-bold" 
-                                    value={identifyPhone} 
-                                    onChange={e => setIdentifyPhone(e.target.value.replace(/\D/g, ''))} 
-                                    placeholder="5551999999999" 
-                                />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nome de Identificação</label>
-                            <input 
-                                type="text" 
-                                required
-                                className="w-full px-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm outline-none font-bold" 
-                                value={identifyName} 
-                                onChange={e => setIdentifyName(e.target.value)} 
-                                placeholder="Nome do cliente" 
-                            />
-                          </div>
+                          <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Número de Telefone (Real)</label><div className="relative"><Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/><input type="text" required className="w-full pl-12 pr-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm focus:bg-white outline-none font-bold" value={identifyPhone} onChange={e => setIdentifyPhone(e.target.value.replace(/\D/g, ''))} placeholder="5551999999999" /></div></div>
+                          <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nome de Identificação</label><input type="text" required className="w-full px-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm outline-none font-bold" value={identifyName} onChange={e => setIdentifyName(e.target.value)} placeholder="Nome do cliente" /></div>
                       </div>
-                      <button type="submit" disabled={isSavingIdentity} className="w-full py-4 bg-amber-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-amber-600/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
-                          {isSavingIdentity ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} 
-                          Salvar Identificação
-                      </button>
+                      <button type="submit" disabled={isSavingIdentity} className="w-full py-4 bg-amber-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-amber-600/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">{isSavingIdentity ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Identificação</button>
                   </form>
               </div>
           </div>
       )}
 
-      {/* MODAL SETTINGS (Evolution API) */}
+      {/* MODAL SETTINGS */}
       {showSettings && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
@@ -471,9 +492,7 @@ export const WhatsAppInbox: React.FC = () => {
                         <div className="space-y-1">{connLogs.map((log, i) => (<p key={i} className="text-[10px] font-mono text-teal-400">{log}</p>))}</div>
                       </div>
                   </div>
-                  <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-[2rem]">
-                      <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl active:scale-95 transition-all flex items-center gap-2">{isSavingConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Configurações</button>
-                  </div>
+                  <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-[2rem]"><button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl active:scale-95 transition-all flex items-center gap-2">{isSavingConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Configurações</button></div>
               </div>
           </div>
       )}
@@ -482,10 +501,7 @@ export const WhatsAppInbox: React.FC = () => {
       {showNewChatModal && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md animate-in zoom-in-95 overflow-hidden">
-                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
-                      <div className="flex items-center gap-3"><Plus className="text-teal-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Nova Conversa</h3></div>
-                      <button onClick={() => setShowNewChatModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
-                  </div>
+                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50"><div className="flex items-center gap-3"><Plus className="text-teal-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Nova Conversa</h3></div><button onClick={() => setShowNewChatModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button></div>
                   <form onSubmit={handleStartNewChat} className="p-8 space-y-6">
                       <div className="space-y-4">
                           <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Celular do Destinatário</label><div className="relative"><Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/><input type="text" required className="w-full pl-12 pr-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm focus:bg-white outline-none font-bold" value={newChatPhone} onChange={e => setNewChatPhone(e.target.value.replace(/\D/g, ''))} placeholder="5551999999999" /></div></div>

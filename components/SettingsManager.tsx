@@ -174,7 +174,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const fetchBanners = async () => {
       setIsLoadingBanners(true);
-      try { const data = await appBackend.getBanners(); setBanners(data); } catch (e) { console.error(e); } finally { setIsLoadingBanners(false); }
+      try { const data = await appBackend.getBanners('instructor'); setBanners(data); } catch (e) { console.error(e); } finally { setIsLoadingBanners(false); }
   };
 
   const fetchCompanies = async () => {
@@ -266,18 +266,45 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO DEFINITIVO VOLL CRM (V28)
--- Adição de campos de destinatário para chamados iniciados pela Adm.
+-- SCRIPT DE REPARO E SUPORTE WHATSAPP VOLL CRM (V30)
+-- Este script garante que o sistema de mensagens consiga vincular LIDs e Telefones.
 
--- Suporte a Tags de Chamado
+-- 1. Tabela de Chats de WhatsApp
+CREATE TABLE IF NOT EXISTS public.crm_whatsapp_chats (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    wa_id text UNIQUE NOT NULL, -- Pode ser LID ou Telefone
+    contact_name text,
+    contact_phone text, -- Telefone Real (MSISDN) para envios estáveis
+    last_message text,
+    unread_count integer DEFAULT 0,
+    status text DEFAULT 'open',
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- Garante coluna contact_phone caso não exista
+ALTER TABLE IF EXISTS public.crm_whatsapp_chats ADD COLUMN IF NOT EXISTS contact_phone text;
+
+-- 2. Tabela de Mensagens de WhatsApp
+CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    chat_id uuid REFERENCES public.crm_whatsapp_chats(id) ON DELETE CASCADE,
+    text text NOT NULL,
+    sender_type text NOT NULL, -- 'user', 'agent', 'system'
+    wa_message_id text,
+    status text DEFAULT 'sent',
+    created_at timestamptz DEFAULT now()
+);
+
+-- 3. Suporte a Tags de Chamado (Reparo Anterior)
 CREATE TABLE IF NOT EXISTS public.crm_support_tags (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    role text NOT NULL, -- 'student', 'instructor', 'studio', 'all'
+    role text NOT NULL,
     name text NOT NULL,
     created_at timestamptz DEFAULT now()
 );
 
--- Suporte a Tickets de Suporte Interno
+-- 4. Tickets de Suporte Interno (Reparo Anterior)
 CREATE TABLE IF NOT EXISTS public.crm_support_tickets (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     sender_id text NOT NULL,
@@ -299,7 +326,7 @@ CREATE TABLE IF NOT EXISTS public.crm_support_tickets (
     updated_at timestamptz DEFAULT now()
 );
 
--- Suporte a Mensagens em Thread dos Chamados
+-- 5. Mensagens do Suporte
 CREATE TABLE IF NOT EXISTS public.crm_support_messages (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     ticket_id uuid REFERENCES public.crm_support_tickets(id) ON DELETE CASCADE,
@@ -312,20 +339,9 @@ CREATE TABLE IF NOT EXISTS public.crm_support_messages (
     created_at timestamptz DEFAULT now()
 );
 
--- GARANTINDO COLUNAS CASO JÁ EXISTISSEM
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS target_id text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS target_name text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS target_email text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS target_role text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS tag text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS assigned_id text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS assigned_name text;
-ALTER TABLE IF EXISTS public.crm_support_tickets ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
-
-ALTER TABLE IF EXISTS public.crm_support_messages ADD COLUMN IF NOT EXISTS attachment_url text;
-ALTER TABLE IF EXISTS public.crm_support_messages ADD COLUMN IF NOT EXISTS attachment_name text;
-
 -- Permissões
+GRANT ALL ON public.crm_whatsapp_chats TO anon, authenticated, service_role;
+GRANT ALL ON public.crm_whatsapp_messages TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_support_tickets TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_support_messages TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_support_tags TO anon, authenticated, service_role;
@@ -972,9 +988,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V28)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos (Destinatário em Chamados de Suporte).</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V28</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V30)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos de WhatsApp e unificação de LIDs.</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V30</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

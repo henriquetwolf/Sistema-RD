@@ -4,7 +4,7 @@ import {
   MessageCircle, Paperclip, Send, CheckCheck, User, X, Plus, 
   Settings, Save, Smartphone, Copy, Loader2, QrCode, Wifi, 
   WifiOff, CheckCircle2, ChevronRight, ShieldCheck, Link2, 
-  AlertTriangle, Cloud, Hash, Database
+  AlertTriangle, Cloud, Hash, Database, RefreshCw
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -63,7 +63,6 @@ export const WhatsAppInbox: React.FC = () => {
   const [newChatName, setNewChatName] = useState('');
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
-  // States renomeados para evitar conflito com nomes de componentes
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [pairingCodeValue, setPairingCodeValue] = useState<string | null>(null);
   const [isGeneratingConnection, setIsGeneratingConnection] = useState(false);
@@ -124,8 +123,23 @@ export const WhatsAppInbox: React.FC = () => {
           const { data } = await appBackend.client
               .from('crm_whatsapp_chats')
               .select('*')
-              .order('updated_at', { ascending: false }); // Garante que as conversas recentes fiquem no topo
-          if (data) setConversations(data);
+              .order('updated_at', { ascending: false });
+          
+          if (data) {
+              // Tenta resolver nomes de contatos que só tem número
+              const resolvedData = await Promise.all(data.map(async (conv) => {
+                  if (!conv.contact_name || conv.contact_name === conv.wa_id) {
+                      const name = await whatsappService.resolveContactName(conv.wa_id);
+                      if (name) {
+                          // Atualiza o nome no banco para as próximas vezes
+                          await appBackend.client.from('crm_whatsapp_chats').update({ contact_name: name }).eq('id', conv.id);
+                          return { ...conv, contact_name: name };
+                      }
+                  }
+                  return conv;
+              }));
+              setConversations(resolvedData);
+          }
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
@@ -148,7 +162,7 @@ export const WhatsAppInbox: React.FC = () => {
     const messageText = inputText;
     setInputText('');
     try {
-        const result = await whatsappService.sendTextMessage(selectedChat.contact_phone, messageText);
+        const result = await whatsappService.sendTextMessage(selectedChat.wa_id, messageText);
         const waId = result.key?.id || result.sid || result.messageId; 
         await whatsappService.syncMessage(selectedChatId, messageText, 'agent', waId);
         await fetchMessages(selectedChatId, false);
@@ -253,14 +267,16 @@ export const WhatsAppInbox: React.FC = () => {
       return date.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
   };
 
-  const formatPhoneDisplay = (phone: string) => {
-      const cleaned = phone.replace(/\D/g, '');
+  const formatPhoneDisplay = (id: string) => {
+      if (!id) return '';
+      const cleaned = id.replace(/\D/g, '');
+      if (cleaned.length > 13) return id; // Provável LID ou ID de Grupo
       if (cleaned.startsWith('55') && cleaned.length >= 12) {
           const ddd = cleaned.slice(2, 4);
           const rest = cleaned.slice(4);
           return `(${ddd}) ${rest.length === 9 ? rest.slice(0, 5) + '-' + rest.slice(5) : rest.slice(0, 4) + '-' + rest.slice(4)}`;
       }
-      return phone;
+      return id;
   };
 
   const supabaseProjectUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
@@ -348,6 +364,7 @@ export const WhatsAppInbox: React.FC = () => {
             <div className="flex items-center justify-between">
                 <h2 className="text-xl font-black text-slate-800 flex items-center gap-3"><MessageCircle className="text-teal-600" /> Atendimento</h2>
                 <div className="flex gap-1">
+                    <button onClick={() => fetchConversations()} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-slate-100 rounded-xl transition-all" title="Sincronizar Contatos"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""} /></button>
                     <button onClick={() => setShowNewChatModal(true)} className="p-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 shadow-lg active:scale-95"><Plus size={18} /></button>
                     <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-slate-100 rounded-xl transition-all"><Settings size={18} /></button>
                 </div>
@@ -370,8 +387,8 @@ export const WhatsAppInbox: React.FC = () => {
                         <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-5 cursor-pointer transition-all hover:bg-white border-l-4 group relative", selectedChatId === conv.id ? "bg-white border-l-teal-500 shadow-sm" : "border-l-transparent")}>
                             <div className="flex justify-between items-start mb-1">
                                 <div className="flex flex-col">
-                                    <span className="font-black text-sm text-slate-800">{conv.contact_name}</span>
-                                    <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter">{formatPhoneDisplay(conv.wa_id)}</span>
+                                    <span className="font-black text-sm text-slate-800">{conv.contact_name || formatPhoneDisplay(conv.wa_id)}</span>
+                                    <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter opacity-70">ID: {conv.wa_id}</span>
                                 </div>
                                 <span className="text-[9px] font-black text-slate-400 uppercase">{formatTime(conv.updated_at)}</span>
                             </div>
@@ -434,10 +451,9 @@ export const WhatsAppInbox: React.FC = () => {
           )}
       </div>
 
-      {/* OVERLAY DE CONFIGURAÇÕES (REVISADO) */}
+      {/* OVERLAY DE CONFIGURAÇÕES */}
       {showSettings && (
           <div className="absolute inset-0 z-[60] bg-slate-50 flex flex-col animate-in slide-in-from-right-4 overflow-hidden">
-              {/* Header Fixo */}
               <div className="px-8 py-6 border-b border-slate-200 flex justify-between items-center bg-white shrink-0 z-10 shadow-sm">
                   <div className="flex items-center gap-3">
                       <div className="bg-teal-100 p-2 rounded-xl text-teal-700"><Settings size={24} /></div>
@@ -449,10 +465,8 @@ export const WhatsAppInbox: React.FC = () => {
                   <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"><X size={24} /></button>
               </div>
 
-              {/* Corpo com Scroll Independente */}
               <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-10 space-y-8 bg-slate-50">
                   <div className="max-w-4xl mx-auto space-y-8">
-                      {/* Seleção de Modo */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <button onClick={() => setConfig({...config, mode: 'twilio'})} className={clsx("p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4", config.mode === 'twilio' ? "bg-white border-red-500 shadow-lg" : "bg-white border-slate-100 opacity-60")}>
                               <div className={clsx("p-3 rounded-2xl", config.mode === 'twilio' ? "bg-red-600 text-white" : "bg-slate-100 text-slate-400")}><Cloud size={24}/></div>
@@ -464,7 +478,6 @@ export const WhatsAppInbox: React.FC = () => {
                           </button>
                       </div>
 
-                      {/* Painel de Status */}
                       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
                           <div className="flex flex-col lg:flex-row items-start lg:items-center gap-8 lg:gap-12">
                               <div className="w-full lg:w-64 aspect-square bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-6 overflow-hidden shrink-0">
@@ -485,7 +498,6 @@ export const WhatsAppInbox: React.FC = () => {
                               </div>
                           </div>
                           
-                          {/* Configurações do Provedor */}
                           <div className="pt-4 border-t border-slate-100">
                               {config.mode === 'twilio' ? (
                                   <div className="bg-red-50 p-6 rounded-3xl border border-red-100 space-y-6">
@@ -512,7 +524,6 @@ export const WhatsAppInbox: React.FC = () => {
                           </div>
                       </div>
 
-                      {/* Webhook Info */}
                       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-4">
                           <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2"><Database size={18} className="text-teal-600" /> Webhook de Recebimento</h3>
                           <div className="p-4 bg-teal-50 border-2 border-teal-200 rounded-2xl flex flex-col md:flex-row gap-4 items-center">
@@ -523,7 +534,6 @@ export const WhatsAppInbox: React.FC = () => {
                   </div>
               </div>
 
-              {/* Footer Fixo */}
               <div className="px-8 py-6 bg-white border-t border-slate-200 flex flex-col md:flex-row justify-end gap-3 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
                   <button onClick={() => setShowSettings(false)} className="px-8 py-3 text-slate-500 font-bold text-sm hover:bg-slate-50 rounded-xl transition-all">Cancelar</button>
                   <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-12 py-3 rounded-2xl font-black text-sm shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50">

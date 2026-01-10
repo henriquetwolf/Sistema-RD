@@ -125,7 +125,21 @@ export const WhatsAppInbox: React.FC = () => {
               .select('*')
               .order('updated_at', { ascending: false });
           
-          if (data) setConversations(data);
+          if (data) {
+              // Tenta resolver nomes para conversas que ainda estão com o ID técnico
+              const resolvedData = await Promise.all(data.map(async (conv) => {
+                  if (conv.contact_name === conv.wa_id) {
+                      const crmContact = await whatsappService.findContactInCrm(conv.wa_id);
+                      if (crmContact) {
+                          // Opcional: Atualiza no banco para as próximas vezes
+                          await appBackend.client.from('crm_whatsapp_chats').update({ contact_name: crmContact.name }).eq('id', conv.id);
+                          return { ...conv, contact_name: crmContact.name };
+                      }
+                  }
+                  return conv;
+              }));
+              setConversations(resolvedData);
+          }
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
@@ -257,12 +271,12 @@ export const WhatsAppInbox: React.FC = () => {
       if (!id) return '';
       const cleaned = id.replace(/\D/g, '');
       
-      // Se for um ID técnico (LID) muito longo, formata de forma reduzida
+      // Se for um LID longo, formata de forma compacta
       if (cleaned.length > 13) {
-          return `ID: ${id.substring(0, 10)}...`;
+          return `ID: ${id.substring(0, 8)}...`;
       }
       
-      // Formatação brasileira
+      // Formatação brasileira padrão
       if (cleaned.startsWith('55') && cleaned.length >= 12) {
           const ddd = cleaned.slice(2, 4);
           const rest = cleaned.slice(4);

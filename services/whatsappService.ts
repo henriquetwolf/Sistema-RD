@@ -7,7 +7,7 @@ export const whatsappService = {
      */
     normalizeNumber: (phone: string) => {
         if (!phone) return '';
-        // Remove sufixos comuns de JID e caracteres não numéricos
+        // Remove sufixos de JID (@s.whatsapp.net, @g.us) e caracteres não numéricos
         let clean = phone.split('@')[0].replace(/\D/g, '');
         
         // Se for um número de telefone brasileiro padrão (10 ou 11 dígitos sem DDI)
@@ -25,15 +25,17 @@ export const whatsappService = {
         const normalized = whatsappService.normalizeNumber(phone);
         const variations = [normalized];
 
-        // Só aplica lógica de 9º dígito se parecer um número de telefone (tamanho 12 ou 13)
-        // IDs técnicos (LIDs) geralmente são maiores e não começam com 55 ou seguem o padrão MSISDN
+        // Só aplica lógica de 9º dígito se parecer um número de telefone (DDI 55 + tamanho 12 ou 13)
+        // LIDs (IDs técnicos como 508...) costumam ser maiores e não seguem este padrão
         if (normalized.startsWith('55') && (normalized.length === 12 || normalized.length === 13)) {
             const ddd = normalized.slice(2, 4);
             const rest = normalized.slice(4);
 
             if (normalized.length === 13 && rest.startsWith('9')) {
+                // Tem o 9, gera a versão sem o 9
                 variations.push('55' + ddd + rest.slice(1));
             } else if (normalized.length === 12) {
+                // Não tem o 9, gera a versão com o 9
                 variations.push('55' + ddd + '9' + rest);
             }
         }
@@ -44,10 +46,9 @@ export const whatsappService = {
      * Tenta encontrar um contato no CRM por qualquer identificador (ID, Telefone, Email).
      */
     findContactInCrm: async (identifier: string) => {
-        // Se for um ID técnico (LID), ele não terá variações de 9º dígito
         const variations = whatsappService.getPhoneVariations(identifier);
         
-        // 1. Busca em Alunos/Leads (crm_deals)
+        // 1. Busca em Alunos/Deals (crm_deals)
         const { data: deal } = await appBackend.client
             .from('crm_deals')
             .select('id, company_name, contact_name, phone')
@@ -70,12 +71,12 @@ export const whatsappService = {
 
     /**
      * Busca ou cria um chat, garantindo que LIDs e Números de Telefone sejam unificados.
-     * Esta é a função chave para resolver o erro do número "estranho".
+     * Resolve o problema de receber respostas com IDs técnicos diferentes do número enviado.
      */
     getOrCreateChat: async (waId: string, pushName: string) => {
         const cleanId = waId.split('@')[0];
 
-        // 1. Tenta buscar o chat pelo ID exato que veio da API (LID ou Telefone)
+        // 1. Tenta buscar o chat pelo ID exato que veio (LID ou Telefone)
         const { data: existingChatById } = await appBackend.client
             .from('crm_whatsapp_chats')
             .select('*')
@@ -84,12 +85,11 @@ export const whatsappService = {
 
         if (existingChatById) return existingChatById;
 
-        // 2. Se não achou pelo ID, vamos tentar resolver quem é essa pessoa pelo CRM
+        // 2. Se não achou pelo ID, tenta descobrir quem é a pessoa via CRM
         const contact = await whatsappService.findContactInCrm(cleanId);
         
         if (contact) {
-            // Se encontramos o contato no CRM (ex: Henrique), 
-            // verificamos se já existe um chat aberto com o TELEFONE real dele
+            // Verificamos se já existe um chat aberto com o TELEFONE real deste contato
             const phoneVariations = whatsappService.getPhoneVariations(contact.phone || '');
             const { data: existingChatByPhone } = await appBackend.client
                 .from('crm_whatsapp_chats')
@@ -99,14 +99,13 @@ export const whatsappService = {
 
             if (existingChatByPhone) {
                 // UNIFICAÇÃO: Se já existe um chat pelo telefone, mas agora ele respondeu com um LID,
-                // atualizamos o chat existente para usar o novo ID técnico (wa_id).
-                // Isso mantém o histórico na mesma tela e evita duplicidade.
+                // atualizamos o chat antigo para o novo wa_id técnico.
                 const { data: mergedChat } = await appBackend.client
                     .from('crm_whatsapp_chats')
                     .update({ 
                         wa_id: cleanId, 
                         contact_name: contact.name,
-                        last_message: 'ID Atualizado pelo sistema'
+                        last_message: 'Identidade unificada pelo sistema'
                     })
                     .eq('id', existingChatByPhone.id)
                     .select()
@@ -116,7 +115,7 @@ export const whatsappService = {
             }
         }
 
-        // 3. Se realmente for um contato novo sem chat prévio, cria um novo
+        // 3. Se for um contato novo sem histórico nenhum, cria o chat
         const finalName = contact?.name || pushName || cleanId;
         const { data: newChat, error } = await appBackend.client
             .from('crm_whatsapp_chats')
@@ -139,11 +138,9 @@ export const whatsappService = {
      */
     sendTextMessage: async (to: string, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
-        if (!config) throw new Error("WhatsApp não configurado. Vá em Configurações.");
+        if (!config) throw new Error("WhatsApp não configurado.");
 
-        // target pode ser um ID técnico (5083...) ou um número (5551...)
         const target = to.includes('@') ? to.split('@')[0] : to;
-
         const baseUrl = config.instanceUrl.replace(/\/$/, "");
         const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;
 
@@ -170,7 +167,7 @@ export const whatsappService = {
     },
 
     /**
-     * Sincroniza uma mensagem enviada/recebida no banco de dados local.
+     * Sincroniza mensagem no banco de dados.
      */
     syncMessage: async (chatId: string, text: string, senderType: 'user' | 'agent' | 'system', waMessageId?: string) => {
         const { data, error } = await appBackend.client
@@ -189,10 +186,7 @@ export const whatsappService = {
 
         await appBackend.client
             .from('crm_whatsapp_chats')
-            .update({ 
-                last_message: text, 
-                updated_at: new Date().toISOString() 
-            })
+            .update({ last_message: text, updated_at: new Date().toISOString() })
             .eq('id', chatId);
 
         return data;

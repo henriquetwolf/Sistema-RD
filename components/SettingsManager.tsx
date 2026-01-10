@@ -266,51 +266,32 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE MANUTENÇÃO VOLL CRM (V38)
--- Reabertura Automática de Chats e Motor de Busca Global Robusto
+-- SCRIPT DE MANUTENÇÃO VOLL CRM (V40)
+-- Categorização por Tags no Atendimento WhatsApp
 
--- 1. Garante colunas de identificação robustas nos Chats
+-- 1. Cria tabela de Tags de Atendimento
+CREATE TABLE IF NOT EXISTS public.crm_attendance_tags (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    name text NOT NULL,
+    color text DEFAULT 'bg-slate-100 text-slate-600 border-slate-200',
+    created_at timestamp with time zone DEFAULT now()
+);
+
+-- 2. Insere Tags Iniciais
+INSERT INTO public.crm_attendance_tags (name, color)
+VALUES 
+('Dúvida Comercial', 'bg-blue-50 text-blue-700 border-blue-200'),
+('Financeiro / Cobrança', 'bg-red-50 text-red-700 border-red-200'),
+('Dúvida de Aluno', 'bg-purple-50 text-purple-700 border-purple-200'),
+('Suporte Técnico', 'bg-amber-50 text-amber-700 border-amber-200')
+ON CONFLICT DO NOTHING;
+
+-- 3. Garante coluna de Tag no Chat
 ALTER TABLE public.crm_whatsapp_chats 
-ADD COLUMN IF NOT EXISTS contact_phone text,
-ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}';
+ADD COLUMN IF NOT EXISTS tag text;
 
--- 2. Cria índices para busca ultra-rápida em todas as tabelas
-CREATE INDEX IF NOT EXISTS idx_chats_wa_id ON public.crm_whatsapp_chats(wa_id);
-CREATE INDEX IF NOT EXISTS idx_deals_phone ON public.crm_deals(phone);
-CREATE INDEX IF NOT EXISTS idx_teachers_phone ON public.crm_teachers(phone);
-CREATE INDEX IF NOT EXISTS idx_studios_phone ON public.crm_partner_studios(phone);
-CREATE INDEX IF NOT EXISTS idx_franchises_phone ON public.crm_franchises(phone);
-CREATE INDEX IF NOT EXISTS idx_collaborators_cell ON public.crm_collaborators(cellphone);
-
--- 3. TRIGGER para REABRIR chat quando o usuário responde (Otimizado V38)
-CREATE OR REPLACE FUNCTION public.trg_reopen_chat_on_message() 
-RETURNS trigger AS $$
-BEGIN
-    -- Se a mensagem vier do usuário (user) e o chat estiver fechado (closed)
-    IF NEW.sender_type = 'user' THEN
-        UPDATE public.crm_whatsapp_chats
-        SET status = 'open', 
-            updated_at = NOW(),
-            unread_count = unread_count + 1
-        WHERE id = NEW.chat_id AND status = 'closed';
-        
-        -- Garante que o contador de mensagens suba se o chat estiver aberto mas não selecionado
-        UPDATE public.crm_whatsapp_chats
-        SET unread_count = unread_count + 1,
-            updated_at = NOW()
-        WHERE id = NEW.chat_id AND status != 'closed';
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS t_reopen_chat ON public.crm_whatsapp_messages;
-CREATE TRIGGER t_reopen_chat 
-AFTER INSERT ON public.crm_whatsapp_messages 
-FOR EACH ROW EXECUTE FUNCTION public.trg_reopen_chat_on_message();
-
-GRANT ALL ON public.crm_whatsapp_chats TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_whatsapp_messages TO anon, authenticated, service_role;
+-- 4. Permissões
+GRANT ALL ON public.crm_attendance_tags TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload config';
   `.trim();
@@ -713,7 +694,7 @@ NOTIFY pgrst, 'reload config';
                             </div>
                         </div>
                         <div className="flex justify-end gap-2 pt-4 border-t">
-                            <button type="button" onClick={() => setEditingCompany(null)} className="px-3 py-1 text-sm">Cancelar</button>
+                            <button type="button" onClick={() => setEditingCompany(null)} className="px-3 py-1.5 text-sm">Cancelar</button>
                             <button type="submit" disabled={isSavingCompany} className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-lg font-bold text-sm">{isSavingCompany ? <Loader2 size={16} className="animate-spin" /> : 'Salvar Empresa'}</button>
                         </div>
                     </form>
@@ -954,9 +935,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V38)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos de identificação global e reabertura de chamados.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V38</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V40)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos de tags no atendimento.</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V40</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

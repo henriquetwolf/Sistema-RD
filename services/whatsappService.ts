@@ -1,6 +1,6 @@
 
 import { appBackend } from './appBackend';
-import { AttendanceFunnel } from '../types';
+import { AttendanceTag } from '../types';
 
 export const whatsappService = {
     /**
@@ -38,42 +38,44 @@ export const whatsappService = {
     },
 
     /**
-     * Busca funis de atendimento
+     * Busca tags de atendimento
      */
-    getFunnels: async (): Promise<AttendanceFunnel[]> => {
+    getTags: async (): Promise<AttendanceTag[]> => {
         const { data, error } = await appBackend.client
-            .from('crm_attendance_funnels')
+            .from('crm_attendance_tags')
             .select('*')
             .order('name');
         if (error) throw error;
-        return (data || []).map((f: any) => ({
-            id: f.id,
-            name: f.name,
-            stages: f.stages || []
+        return (data || []).map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            color: t.color,
+            createdAt: t.created_at
         }));
     },
 
     /**
-     * Salva ou atualiza um funil de atendimento
+     * Salva ou atualiza uma tag
      */
-    saveFunnel: async (funnel: AttendanceFunnel) => {
-        const { error } = await appBackend.client
-            .from('crm_attendance_funnels')
-            .upsert({
-                id: funnel.id || undefined,
-                name: funnel.name,
-                stages: funnel.stages
-            });
+    saveTag: async (tag: Partial<AttendanceTag>) => {
+        const payload = {
+            name: tag.name,
+            color: tag.color
+        };
+        const { error } = tag.id 
+            ? await appBackend.client.from('crm_attendance_tags').update(payload).eq('id', tag.id)
+            : await appBackend.client.from('crm_attendance_tags').insert([payload]);
+        
         if (error) throw error;
         return true;
     },
 
     /**
-     * Exclui um funil
+     * Exclui uma tag
      */
-    deleteFunnel: async (id: string) => {
+    deleteTag: async (id: string) => {
         const { error } = await appBackend.client
-            .from('crm_attendance_funnels')
+            .from('crm_attendance_tags')
             .delete()
             .eq('id', id);
         if (error) throw error;
@@ -84,8 +86,6 @@ export const whatsappService = {
      * Exclui um chat/atendimento permanentemente
      */
     deleteChat: async (chatId: string) => {
-        // As mensagens costumam ter FK com ON DELETE CASCADE, 
-        // mas garantimos a limpeza se necessário ou apenas deletamos o chat.
         const { error } = await appBackend.client
             .from('crm_whatsapp_chats')
             .delete()
@@ -95,14 +95,13 @@ export const whatsappService = {
     },
 
     /**
-     * Atualiza o funil e etapa de um chat
+     * Atualiza a tag de um chat
      */
-    moveChat: async (chatId: string, funnelId: string, stageId: string) => {
+    updateChatTag: async (chatId: string, tag: string | null) => {
         const { error } = await appBackend.client
             .from('crm_whatsapp_chats')
             .update({ 
-                funnel_id: funnelId, 
-                stage_id: stageId,
+                tag: tag, 
                 updated_at: new Date().toISOString()
             })
             .eq('id', chatId);
@@ -131,7 +130,6 @@ export const whatsappService = {
 
         const last8 = actualNum.slice(-8);
 
-        // 1. Prioridade RH: Buscar em Colaboradores
         const { data: collab } = await appBackend.client
             .from('crm_collaborators')
             .select('id, full_name, email, phone, cellphone')
@@ -146,7 +144,6 @@ export const whatsappService = {
             tab: 'hr'
         };
 
-        // 2. Buscar em Franqueados
         const { data: franchise } = await appBackend.client
             .from('crm_franchises')
             .select('id, franchisee_name, phone')
@@ -161,7 +158,6 @@ export const whatsappService = {
             tab: 'franchises'
         };
 
-        // 3. Buscar em Alunos / Leads
         const { data: deal } = await appBackend.client
             .from('crm_deals')
             .select('id, contact_name, company_name, phone, stage')
@@ -176,7 +172,6 @@ export const whatsappService = {
             tab: 'students'
         };
 
-        // 4. Buscar em Professores
         const { data: teacher } = await appBackend.client
             .from('crm_teachers')
             .select('id, full_name, phone')
@@ -191,7 +186,6 @@ export const whatsappService = {
             tab: 'teachers'
         };
 
-        // 5. Buscar em Studios Parceiros
         const { data: studio } = await appBackend.client
             .from('crm_partner_studios')
             .select('id, fantasy_name, phone')
@@ -209,9 +203,6 @@ export const whatsappService = {
         return null;
     },
 
-    /**
-     * Associa manualmente um wa_id (LID) a um telefone real e nome
-     */
     associateLidWithPhone: async (chatId: string, phone: string, name: string) => {
         const cleanPhone = phone.replace(/\D/g, '');
         const { error } = await appBackend.client
@@ -227,9 +218,6 @@ export const whatsappService = {
         return true;
     },
 
-    /**
-     * Cria ou recupera um chat unificado
-     */
     getOrCreateChat: async (waId: string, pushName: string) => {
         const cleanId = waId.split('@')[0];
         const { data: existingChat } = await appBackend.client

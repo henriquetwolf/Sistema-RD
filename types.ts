@@ -6,13 +6,19 @@ export interface SupportTag {
   createdAt: string;
 }
 
+export interface AttendanceTag {
+  id: string;
+  name: string;
+  color: string;
+  createdAt: string;
+}
+
 export interface SupportTicket {
   id: string;
   senderId: string;
   senderName: string;
   senderEmail: string;
   senderRole: 'student' | 'instructor' | 'studio' | 'admin';
-  // Novos campos para chamados iniciados pelo Admin
   targetId?: string;
   targetName?: string;
   targetEmail?: string;
@@ -525,7 +531,6 @@ export interface CompanySetting {
     productIds: string[];
 }
 
-// FIX: Added missing AttendanceStage and AttendanceFunnel interfaces
 export interface AttendanceStage {
     id: string;
     title: string;

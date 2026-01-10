@@ -266,29 +266,50 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE MANUTENÇÃO VOLL CRM (V33)
--- Melhoria na identificação de LIDs e unificação de contatos.
+-- SCRIPT DE MANUTENÇÃO VOLL CRM (V34)
+-- Foco em Identificação de Número Real em LIDs do WhatsApp.
 
 -- 1. Garante colunas de identificação robustas nos Chats
 ALTER TABLE public.crm_whatsapp_chats 
 ADD COLUMN IF NOT EXISTS contact_phone text,
 ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}';
 
--- 2. Cria índices para busca ultra-rápida (inclusive fuzzy match para números)
+-- 2. Cria índices para busca ultra-rápida
 CREATE INDEX IF NOT EXISTS idx_chats_wa_id ON public.crm_whatsapp_chats(wa_id);
 CREATE INDEX IF NOT EXISTS idx_chats_contact_phone ON public.crm_whatsapp_chats(contact_phone);
 
--- 3. Índice GIN para busca no CRM (Melhora match de Nome e Empresa)
-CREATE INDEX IF NOT EXISTS idx_deals_name_search ON public.crm_deals USING gin (contact_name gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_deals_company_search ON public.crm_deals USING gin (company_name gin_trgm_ops);
-
--- 4. Função auxiliar para limpar números (Útil para triggers se necessário)
-CREATE OR REPLACE FUNCTION public.clean_phone_number(phone text) 
+-- 3. Função Inteligente de Identificação
+-- Busca no CRM um telefone baseado no Nome de Perfil (pushName)
+CREATE OR REPLACE FUNCTION public.identify_wa_number(p_push_name text) 
 RETURNS text AS $$
+DECLARE
+    v_phone text;
 BEGIN
-    RETURN regexp_replace(phone, '[^0-9]', '', 'g');
+    SELECT phone INTO v_phone 
+    FROM public.crm_deals 
+    WHERE contact_name ILIKE '%' || p_push_name || '%' 
+       OR company_name ILIKE '%' || p_push_name || '%'
+    LIMIT 1;
+    
+    RETURN v_phone;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 4. TRIGGER para auto-vincular chats novos (Opcional, mas recomendado)
+CREATE OR REPLACE FUNCTION public.trg_auto_identify_chat() 
+RETURNS trigger AS $$
+BEGIN
+    IF NEW.contact_phone IS NULL OR length(NEW.contact_phone) > 15 THEN
+        NEW.contact_phone := public.identify_wa_number(NEW.contact_name);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS t_auto_identify_chat ON public.crm_whatsapp_chats;
+CREATE TRIGGER t_auto_identify_chat 
+BEFORE INSERT ON public.crm_whatsapp_chats 
+FOR EACH ROW EXECUTE FUNCTION public.trg_auto_identify_chat();
 
 -- 5. Garante permissões
 GRANT ALL ON public.crm_whatsapp_chats TO anon, authenticated, service_role;
@@ -936,9 +957,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V33)</h3></div>
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V34)</h3></div>
                 <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos de identificação e unificação de contatos.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V33</button> : (
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V34</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

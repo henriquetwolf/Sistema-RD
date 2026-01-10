@@ -5,7 +5,7 @@ import {
   CheckCheck, User, X, Plus, Settings, Save, Smartphone, 
   Copy, Loader2, RefreshCw, Zap, ShieldAlert, Code, Terminal, 
   Database, QrCode, Wifi, WifiOff, CheckCircle2, ChevronRight, ShieldCheck,
-  Cpu, Link2, AlertTriangle, Info, Check, Bug, Cloud, Hash, Smartphone as PhoneIcon
+  Cpu, Link2, AlertTriangle, Info, Check, Bug, Cloud, Hash
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -348,7 +348,7 @@ export const WhatsAppInbox: React.FC = () => {
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center">
-                                            {config.mode === 'twilio' ? <Cloud size={48} className="text-red-300 mb-3" /> : (config.evolutionMethod === 'code' ? <PhoneIcon size={48} className="text-blue-300 mb-3" /> : <QrCode size={48} className="text-slate-300 mb-3" />)}
+                                            {config.mode === 'twilio' ? <Cloud size={48} className="text-red-300 mb-3" /> : (config.evolutionMethod === 'code' ? <Smartphone size={48} className="text-blue-300 mb-3" /> : <QrCode size={48} className="text-slate-300 mb-3" />)}
                                             <p className="text-[10px] font-black text-slate-400 uppercase leading-tight">
                                                 {config.mode === 'twilio' ? 'Preencha os dados e valide a conexão' : (config.evolutionMethod === 'code' ? 'Informe o celular e gere o código' : 'Configure a URL abaixo e gere o QR')}
                                             </p>
@@ -528,7 +528,7 @@ export const WhatsAppInbox: React.FC = () => {
                         <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-5 cursor-pointer transition-all hover:bg-white border-l-4 group relative", selectedChatId === conv.id ? "bg-white border-l-teal-500 shadow-sm z-10" : "border-l-transparent")}>
                             <div className="flex justify-between items-start mb-1">
                                 <span className="font-black text-sm text-slate-800 group-hover:text-teal-700 transition-colors">{conv.contact_name}</span>
-                                <span className="text-[9px] font-black text-slate-400 uppercase">{new Date(conv.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                <span className="text-[9px] font-black text-slate-400 uppercase">{new Date(conv.updated_at).toLocaleDateString()}</span>
                             </div>
                             <p className="text-xs text-slate-500 truncate font-medium">{conv.last_message}</p>
                             {conv.unread_count > 0 && <span className="absolute right-5 bottom-5 w-5 h-5 bg-teal-600 text-white text-[10px] font-black flex items-center justify-center rounded-full shadow-lg shadow-teal-600/30">{conv.unread_count}</span>}

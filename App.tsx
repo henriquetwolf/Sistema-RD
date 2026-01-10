@@ -97,6 +97,9 @@ function App() {
   const [allCollaborators, setAllCollaborators] = useState<any[]>([]);
   const [isHrLoading, setIsHrLoading] = useState(false);
 
+  // Navigation Deep Link State
+  const [pendingNavigation, setPendingNavigation] = useState<{tab: DashboardTab, id: string} | null>(null);
+
   const intervalRef = useRef<number | null>(null);
   const CHECK_INTERVAL_MS = 60 * 1000; 
 
@@ -162,29 +165,6 @@ function App() {
     const { data: { subscription } } = appBackend.auth.onAuthStateChange((s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
-
-  const handleLogout = async () => {
-    // 1. Limpar todos os storages IMEDIATAMENTE
-    sessionStorage.clear();
-    localStorage.clear();
-    
-    // 2. Resetar estados locais do React
-    setCurrentInstructor(null);
-    setCurrentStudent(null);
-    setCurrentCollaborator(null);
-    setCurrentStudio(null);
-    setSession(null);
-    
-    // 3. Efetuar signOut no backend (Supabase)
-    try {
-        await appBackend.auth.signOut();
-    } catch (e) {
-        console.error("Erro ao deslogar:", e);
-    }
-    
-    // 4. Redirecionamento forçado para limpar memória e evitar loops de reconexão
-    window.location.replace(window.location.origin);
-  };
 
   useEffect(() => {
     if (dashboardTab === 'overview' && (session || currentCollaborator)) {
@@ -418,6 +398,14 @@ function App() {
       }
   };
 
+  const handleLogout = async () => {
+    if (currentInstructor) { setCurrentInstructor(null); sessionStorage.removeItem('instructor_session'); }
+    else if (currentStudent) { setCurrentStudent(null); sessionStorage.removeItem('student_session'); }
+    else if (currentCollaborator) { setCurrentCollaborator(null); sessionStorage.removeItem('collaborator_session'); }
+    else if (currentStudio) { setCurrentStudio(null); sessionStorage.removeItem('studio_session'); }
+    else await appBackend.auth.signOut();
+  };
+
   const canAccess = (module: string): boolean => {
       if (session) return true;
       if (currentCollaborator) return !!currentCollaborator.role.permissions[module];
@@ -426,6 +414,9 @@ function App() {
 
   const handleDeepNavigation = (tab: string, recordId: string) => {
       setDashboardTab(tab as DashboardTab);
+      // Aqui simulamos uma busca pelo registro na aba destino
+      // Em uma aplicação real, poderíamos disparar um evento ou passar props para o componente filho
+      // Por enquanto, apenas avisamos que o sistema mudou de contexto
       alert(`Navegando para ${tab}. Registro ID: ${recordId}`);
   };
 
@@ -609,13 +600,13 @@ function App() {
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                                 <div className="bg-slate-800 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Target size={64} className="text-white" /></div>
-                                                    <p className="text-sm font-medium text-teal-400 mb-1">Total de Leads (7d)</p>
+                                                    <p className="text-sm font-medium text-slate-400 mb-1">Total de Leads (7d)</p>
                                                     <h4 className="text-3xl font-black text-white">{overviewStats.leadsWeek}</h4>
                                                     <p className="text-xs text-slate-500 mt-2">Últimos 7 dias corridos</p>
                                                 </div>
                                                 <div className="bg-slate-800 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><CheckCircle size={64} className="text-white" /></div>
-                                                    <p className="text-sm font-medium text-teal-400 mb-1">Vendas Fechadas (7d)</p>
+                                                    <p className="text-sm font-medium text-slate-400 mb-1">Vendas Fechadas (7d)</p>
                                                     <h4 className="text-3xl font-black text-white">{overviewStats.salesWeek}</h4>
                                                     <p className="text-xs text-slate-500 mt-2">Volume de conversão</p>
                                                 </div>

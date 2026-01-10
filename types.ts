@@ -489,29 +489,6 @@ export interface Product {
   description: string;
   certificateTemplateId?: string;
   createdAt: string;
-  thumbnailUrl?: string;
-}
-
-export interface CourseLesson {
-    id: string;
-    moduleId: string;
-    title: string;
-    description: string;
-    videoUrl: string;
-    order: number;
-}
-
-export interface CourseModule {
-    id: string;
-    courseId: string;
-    title: string;
-    order: number;
-}
-
-export interface StudentCourseAccess {
-    studentId: string;
-    courseId: string;
-    unlockedAt: string;
 }
 
 export interface TeacherNews {
@@ -522,6 +499,9 @@ export interface TeacherNews {
   createdAt: string;
 }
 
+/**
+ * NEW TYPES FOR CRM AND PLUGINS
+ */
 export interface PipelineStage {
     id: string;
     title: string;

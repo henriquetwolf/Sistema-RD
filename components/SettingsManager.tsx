@@ -3,7 +3,7 @@ import {
     Upload, Image as ImageIcon, CheckCircle, Save, Database, 
     Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, 
     Palette, History, Clock, Search,
-    Loader2, Package, Tag, Layers, RefreshCw, BookOpen, Book, ListTodo, Zap, Filter, List, ArrowRight, Braces, Sparkles, Landmark, Percent, FileWarning, Globe
+    Loader2, Package, Tag, Layers, RefreshCw, BookOpen, Book, ListTodo, Zap, Filter, List, ArrowRight, Braces, Sparkles, Landmark, Percent, FileWarning, Globe, Edit2, Trash2, Smartphone, FileSearch, UserPlus, Info
 } from 'lucide-react';
 import { appBackend, CompanySetting, WebhookTrigger, Pipeline } from '../services/appBackend';
 import { Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, Product, CourseInfo, SupportTag } from '../types';
@@ -22,8 +22,6 @@ interface UnifiedProduct {
     name: string;
     type: 'Digital' | 'Presencial' | 'Evento';
 }
-
-const COURSES_MASTER = ['Formação Completa em Pilates', 'Formação em Pilates Clássico', 'MIT - Movimento Inteligente', 'Suspensus'];
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ 
   onLogoChange, 
@@ -130,11 +128,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       try {
           const data = await appBackend.getSupportTags();
           setSupportTags(data);
-      } catch (e) {
-          console.error(e);
-      } finally {
-          setIsLoadingTags(false);
-      }
+      } catch (e) { console.error(e); } finally { setIsLoadingTags(false); }
   };
 
   const handleSaveSupportTag = async (e: React.FormEvent) => {
@@ -144,9 +138,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
           await appBackend.saveSupportTag(editingTag);
           setEditingTag(null);
           fetchSupportTags();
-      } catch (e: any) {
-          alert(`Erro ao salvar tag: ${e.message}`);
-      }
+      } catch (e: any) { alert(`Erro ao salvar tag: ${e.message}`); }
   };
 
   const fetchPipelines = async () => {
@@ -171,10 +163,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const fetchBanners = async () => {
       setIsLoadingBanners(true);
-      try { 
-          const data = await appBackend.getBanners(); 
-          setBanners(data); 
-      } catch (e) { console.error(e); } finally { setIsLoadingBanners(false); }
+      try { const data = await appBackend.getBanners(); setBanners(data); } catch (e) { console.error(e); } finally { setIsLoadingBanners(false); }
   };
 
   const fetchCompanies = async () => {
@@ -184,14 +173,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const fetchCourseInfos = async () => {
       setIsLoadingCourseInfo(true);
-      try {
-          const data = await appBackend.getCourseInfos();
-          setCourseInfos(data);
-      } catch (e) {
-          console.error(e);
-      } finally {
-          setIsLoadingCourseInfo(false);
-      }
+      try { const data = await appBackend.getCourseInfos(); setCourseInfos(data); } catch (e) { console.error(e); } finally { setIsLoadingCourseInfo(false); }
   };
 
   const fetchUnifiedProducts = async () => {
@@ -203,18 +185,12 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
           ])) as any[];
 
           const unified: UnifiedProduct[] = [];
-
-          if (digitalRes.data) {
-              (digitalRes.data as any[]).forEach(p => unified.push({ id: String(p.id), name: String(p.name), type: 'Digital' }));
-          }
-          if (eventsRes.data) {
-              (eventsRes.data as any[]).forEach(e => unified.push({ id: String(e.id), name: String(e.name), type: 'Evento' }));
-          }
+          if (digitalRes.data) (digitalRes.data as any[]).forEach(p => unified.push({ id: String(p.id), name: String(p.name), type: 'Digital' }));
+          if (eventsRes.data) (eventsRes.data as any[]).forEach(e => unified.push({ id: String(e.id), name: String(e.name), type: 'Evento' }));
           if (classesRes.data) {
               const uniqueCourses = Array.from(new Set((classesRes.data as any[]).map(c => c.course as string).filter(Boolean)));
               uniqueCourses.forEach((c: string) => unified.push({ id: `course-${c}`, name: c, type: 'Presencial' }));
           }
-
           setAllProducts(unified.sort((a, b) => a.name.localeCompare(b.name)));
       } catch (e) {}
   };
@@ -223,11 +199,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       if (!editingCompany) return [];
       const selectedTypes = editingCompany.productTypes || [];
       if (selectedTypes.length === 0) return [];
-
-      return allProducts.filter(p => 
-          selectedTypes.includes(p.type) && 
-          p.name.toLowerCase().includes(productSearch.toLowerCase())
-      );
+      return allProducts.filter(p => selectedTypes.includes(p.type) && p.name.toLowerCase().includes(productSearch.toLowerCase()));
   }, [allProducts, editingCompany, productSearch]);
 
   const fetchInstructorLevels = async () => {
@@ -237,14 +209,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const fetchLogs = async () => {
       setIsLoadingLogs(true);
-      try {
-          const data = await appBackend.getActivityLogs();
-          setLogs(data);
-      } catch (e) {
-          console.error(e);
-      } finally {
-          setIsLoadingLogs(false);
-      }
+      try { const data = await appBackend.getActivityLogs(); setLogs(data); } catch (e) { console.error(e); } finally { setIsLoadingLogs(false); }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -258,9 +223,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const handleBannerImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
         const reader = new FileReader();
-        reader.onloadend = () => {
-            setEditingBanner(prev => prev ? { ...prev, imageUrl: reader.result as string } : null);
-        };
+        reader.onloadend = () => setEditingBanner(prev => prev ? { ...prev, imageUrl: reader.result as string } : null);
         reader.readAsDataURL(e.target.files[0]);
     }
   };
@@ -279,7 +242,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 -- SCRIPT DE MANUTENÇÃO VOLL CRM (V50)
 -- Implementação do Sistema de LMS e Cursos Online
 
--- 1. Tabela de Módulos
 CREATE TABLE IF NOT EXISTS public.crm_course_modules (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     course_id uuid REFERENCES public.crm_products(id) ON DELETE CASCADE,
@@ -288,7 +250,6 @@ CREATE TABLE IF NOT EXISTS public.crm_course_modules (
     created_at timestamp with time zone DEFAULT now()
 );
 
--- 2. Tabela de Aulas
 CREATE TABLE IF NOT EXISTS public.crm_course_lessons (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     module_id uuid REFERENCES public.crm_course_modules(id) ON DELETE CASCADE,
@@ -299,7 +260,6 @@ CREATE TABLE IF NOT EXISTS public.crm_course_lessons (
     created_at timestamp with time zone DEFAULT now()
 );
 
--- 3. Tabela de Acesso de Alunos aos Cursos
 CREATE TABLE IF NOT EXISTS public.crm_student_course_access (
     student_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
     course_id uuid REFERENCES public.crm_products(id) ON DELETE CASCADE,
@@ -307,12 +267,10 @@ CREATE TABLE IF NOT EXISTS public.crm_student_course_access (
     PRIMARY KEY (student_id, course_id)
 );
 
--- 4. Garante colunas de Thumbnail e Descrição em Produtos
 ALTER TABLE public.crm_products 
 ADD COLUMN IF NOT EXISTS thumbnail_url text,
 ADD COLUMN IF NOT EXISTS description text;
 
--- 5. Permissões Globais
 GRANT ALL ON public.crm_course_modules TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_course_lessons TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_student_course_access TO anon, authenticated, service_role;
@@ -332,10 +290,7 @@ NOTIFY pgrst, 'reload config';
 
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingBanner || !editingBanner.imageUrl) {
-        alert("A imagem do banner é obrigatória.");
-        return;
-    }
+    if (!editingBanner || !editingBanner.imageUrl) { alert("A imagem do banner é obrigatória."); return; }
     await appBackend.saveBanner(editingBanner as Banner);
     fetchBanners();
     setEditingBanner(null);
@@ -344,19 +299,13 @@ NOTIFY pgrst, 'reload config';
   const handleSaveCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCompany) return;
-    
     setIsSavingCompany(true);
     try {
         await appBackend.saveCompany(editingCompany as CompanySetting);
         await fetchCompanies();
         setEditingCompany(null);
         alert("Empresa salva com sucesso!");
-    } catch (err: any) {
-        console.error(err);
-        alert(`Erro ao salvar empresa: ${err.message}`);
-    } finally {
-        setIsSavingCompany(false);
-    }
+    } catch (err: any) { alert(`Erro ao salvar empresa: ${err.message}`); } finally { setIsSavingCompany(false); }
   };
 
   const handleSaveLevel = async (e: React.FormEvent) => {
@@ -376,54 +325,18 @@ NOTIFY pgrst, 'reload config';
           await fetchCourseInfos();
           setEditingCourseInfo(null);
           alert("Informações do curso salvas!");
-      } catch (err: any) {
-          alert(`Erro ao salvar: ${err.message}`);
-      } finally {
-          setIsSavingCourseInfo(false);
-      }
+      } catch (err: any) { alert(`Erro ao salvar: ${err.message}`); } finally { setIsSavingCourseInfo(false); }
   };
 
   const handleSaveWebhookTrigger = async () => {
       if (!selectedFunnel || !selectedStage) return;
       setIsSavingTrigger(true);
       try {
-          await appBackend.saveWebhookTrigger({
-              id: editingTriggerId || undefined,
-              pipelineName: selectedFunnel,
-              stageId: selectedStage,
-              payloadJson: customJson.trim() || undefined
-          });
-          setSelectedFunnel('');
-          setSelectedStage('');
-          setCustomJson('');
-          setEditingTriggerId(null);
+          await appBackend.saveWebhookTrigger({ id: editingTriggerId || undefined, pipelineName: selectedFunnel, stageId: selectedStage, payloadJson: customJson.trim() || undefined });
+          setSelectedFunnel(''); setSelectedStage(''); setCustomJson(''); setEditingTriggerId(null);
           await fetchWebhookTriggers();
       } catch (e: any) { alert(e.message); } finally { setIsSavingTrigger(false); }
   };
-
-  const toggleCompanyProductType = (type: string) => {
-      if (!editingCompany) return;
-      const currentTypes = editingCompany.productTypes || [];
-      const newTypes = currentTypes.includes(type) 
-        ? currentTypes.filter(t => t !== type)
-        : [...currentTypes, type];
-      
-      setEditingCompany({ ...editingCompany, productTypes: newTypes });
-  };
-
-  const toggleCompanyProductId = (id: string) => {
-      if (!editingCompany) return;
-      const currentIds = editingCompany.productIds || [];
-      const newIds = currentIds.includes(id) 
-        ? currentIds.filter(i => i !== id)
-        : [...currentIds, id];
-      setEditingCompany({ ...editingCompany, productIds: newIds });
-  };
-
-  const funnelStages = useMemo(() => {
-      const funnel = pipelines.find(p => p.name === selectedFunnel);
-      return funnel?.stages || [];
-  }, [selectedFunnel, pipelines]);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-8 pb-20">
@@ -484,6 +397,93 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
+        {activeTab === 'connections' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+                <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-lg font-bold text-slate-800">Conexões Google Sheets</h3>
+                    <button onClick={onStartWizard} className="bg-teal-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm">+ Nova Sincronização</button>
+                </div>
+                <div className="space-y-4">
+                    {jobs.length === 0 ? <p className="text-slate-400 italic">Nenhuma sincronização agendada.</p> : jobs.map(job => (
+                        <div key={job.id} className="p-4 border rounded-xl bg-slate-50 flex items-center justify-between">
+                            <div><p className="font-bold text-slate-700">{job.name}</p><p className="text-xs text-slate-400">Tabela: {job.config.tableName}</p></div>
+                            <button onClick={() => onDeleteJob(job.id)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'course_info' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 space-y-6">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-slate-800">Informações Dinâmicas de Cursos</h3>
+                    <button onClick={() => setEditingCourseInfo({ courseName: '', details: '', materials: '', requirements: '' })} className="bg-teal-600 text-white px-4 py-2 rounded-lg font-bold text-sm">+ Adicionar Curso</button>
+                </div>
+                <div className="space-y-4">
+                    {courseInfos.map(info => (
+                        <div key={info.id} className="p-4 border rounded-xl flex items-center justify-between group">
+                            <div><p className="font-bold">{info.courseName}</p><p className="text-xs text-slate-400">Atualizado em: {new Date(info.updatedAt).toLocaleDateString()}</p></div>
+                            <div className="flex gap-2">
+                                <button onClick={() => setEditingCourseInfo(info)} className="p-2 text-slate-400 hover:text-teal-600"><Edit2 size={18}/></button>
+                                <button onClick={() => appBackend.deleteCourseInfo(info.id).then(fetchCourseInfos)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                {editingCourseInfo && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+                        <div className="bg-white rounded-2xl p-8 w-full max-w-2xl shadow-2xl animate-in zoom-in-95">
+                            <h4 className="text-lg font-bold mb-6">Editar Info Curso</h4>
+                            <div className="space-y-4">
+                                <input type="text" className="w-full border p-2 rounded" placeholder="Nome do Curso" value={editingCourseInfo.courseName} onChange={e => setEditingCourseInfo({...editingCourseInfo, courseName: e.target.value})}/>
+                                <textarea className="w-full border p-2 rounded h-32" placeholder="Detalhes" value={editingCourseInfo.details} onChange={e => setEditingCourseInfo({...editingCourseInfo, details: e.target.value})}/>
+                                <button onClick={handleSaveCourseInfo} className="w-full bg-teal-600 text-white py-2 rounded font-bold">Salvar</button>
+                                <button onClick={() => setEditingCourseInfo(null)} className="w-full text-slate-400 text-sm">Cancelar</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {activeTab === 'support_tags' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 space-y-6">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-slate-800">Categorias do Suporte Interno</h3>
+                    <button onClick={() => setEditingTag({ name: '', role: 'all' })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm">+ Nova Tag</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {supportTags.map(tag => (
+                        <div key={tag.id} className="p-4 border rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <Tag className="text-indigo-600" size={18}/>
+                                <div><p className="font-bold text-slate-700">{tag.name}</p><p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Público: {tag.role}</p></div>
+                            </div>
+                            <button onClick={() => appBackend.deleteSupportTag(tag.id).then(fetchSupportTags)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                        </div>
+                    ))}
+                </div>
+                {editingTag && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+                        <div className="bg-white rounded-2xl p-8 w-full max-w-sm shadow-2xl">
+                            <h4 className="font-bold mb-6">Criar Tag de Suporte</h4>
+                            <div className="space-y-4">
+                                <div><label className="text-xs font-bold text-slate-400">Nome da Categoria</label><input type="text" className="w-full border p-2 rounded" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})}/></div>
+                                <div><label className="text-xs font-bold text-slate-400">Disponível para:</label>
+                                    <select className="w-full border p-2 rounded bg-white" value={editingTag.role} onChange={e => setEditingTag({...editingTag, role: e.target.value as any})}>
+                                        <option value="all">Todos</option><option value="student">Alunos</option><option value="instructor">Instrutores</option><option value="studio">Studios</option>
+                                    </select>
+                                </div>
+                                <button onClick={handleSaveSupportTag} className="w-full bg-indigo-600 text-white py-2 rounded font-bold">Salvar Tag</button>
+                                <button onClick={() => setEditingTag(null)} className="w-full text-slate-400 text-sm">Cancelar</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
                 <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V50)</h3></div>
@@ -497,7 +497,31 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
-        {/* ... manter outras abas existentes ... */}
+        {activeTab === 'logs' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 space-y-6">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><History size={20} className="text-blue-600"/> Histórico de Auditoria</h3>
+                    <div className="relative w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="text" className="w-full pl-9 pr-4 py-1.5 border rounded-lg text-xs" placeholder="Buscar no log..." value={logSearch} onChange={e => setLogSearch(e.target.value)}/></div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 font-black uppercase text-slate-400"><tr><th className="p-4">Data</th><th className="p-4">Usuário</th><th className="p-4">Ação</th><th className="p-4">Módulo</th><th className="p-4">Detalhes</th></tr></thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {logs.filter(l => l.details.toLowerCase().includes(logSearch.toLowerCase())).map(log => (
+                                <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="p-4 text-slate-500">{new Date(log.createdAt).toLocaleString()}</td>
+                                    <td className="p-4 font-bold text-slate-700">{log.userName}</td>
+                                    <td className="p-4"><span className={clsx("px-2 py-0.5 rounded uppercase font-black text-[9px]", log.action === 'delete' ? "bg-red-50 text-red-600" : log.action === 'create' ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600")}>{log.action}</span></td>
+                                    <td className="p-4 uppercase font-bold text-slate-400">{log.module}</td>
+                                    <td className="p-4 text-slate-600">{log.details}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        )}
+
       </div>
     </div>
   );

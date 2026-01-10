@@ -97,9 +97,6 @@ function App() {
   const [allCollaborators, setAllCollaborators] = useState<any[]>([]);
   const [isHrLoading, setIsHrLoading] = useState(false);
 
-  // Navigation Deep Link State
-  const [pendingNavigation, setPendingNavigation] = useState<{tab: DashboardTab, id: string} | null>(null);
-
   const intervalRef = useRef<number | null>(null);
   const CHECK_INTERVAL_MS = 60 * 1000; 
 
@@ -399,11 +396,27 @@ function App() {
   };
 
   const handleLogout = async () => {
-    if (currentInstructor) { setCurrentInstructor(null); sessionStorage.removeItem('instructor_session'); }
-    else if (currentStudent) { setCurrentStudent(null); sessionStorage.removeItem('student_session'); }
-    else if (currentCollaborator) { setCurrentCollaborator(null); sessionStorage.removeItem('collaborator_session'); }
-    else if (currentStudio) { setCurrentStudio(null); sessionStorage.removeItem('studio_session'); }
-    else await appBackend.auth.signOut();
+    // Limpeza completa de estado e armazenamento
+    sessionStorage.clear();
+    localStorage.removeItem('instructor_session');
+    localStorage.removeItem('student_session');
+    localStorage.removeItem('collaborator_session');
+    localStorage.removeItem('studio_session');
+    
+    setCurrentInstructor(null);
+    setCurrentStudent(null);
+    setCurrentCollaborator(null);
+    setCurrentStudio(null);
+    setSession(null);
+    
+    try {
+        await appBackend.auth.signOut();
+    } catch (e) {
+        console.error("Erro no signOut do backend:", e);
+    }
+    
+    // Forçar recarregamento da página para garantir estado limpo
+    window.location.href = window.location.origin;
   };
 
   const canAccess = (module: string): boolean => {
@@ -414,9 +427,6 @@ function App() {
 
   const handleDeepNavigation = (tab: string, recordId: string) => {
       setDashboardTab(tab as DashboardTab);
-      // Aqui simulamos uma busca pelo registro na aba destino
-      // Em uma aplicação real, poderíamos disparar um evento ou passar props para o componente filho
-      // Por enquanto, apenas avisamos que o sistema mudou de contexto
       alert(`Navegando para ${tab}. Registro ID: ${recordId}`);
   };
 

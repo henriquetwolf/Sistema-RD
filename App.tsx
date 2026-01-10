@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -165,26 +164,26 @@ function App() {
   }, []);
 
   const handleLogout = async () => {
-    // 1. Limpar todos os storages
+    // 1. Limpar todos os storages IMEDIATAMENTE
     sessionStorage.clear();
     localStorage.clear();
     
-    // 2. Reseta estados de usuário localmente
+    // 2. Resetar estados locais do React
     setCurrentInstructor(null);
     setCurrentStudent(null);
     setCurrentCollaborator(null);
     setCurrentStudio(null);
     setSession(null);
     
-    // 3. Efetuar logout no Supabase/Backend
+    // 3. Efetuar signOut no backend (Supabase)
     try {
         await appBackend.auth.signOut();
     } catch (e) {
-        console.error("Erro ao deslogar no backend:", e);
+        console.error("Erro ao deslogar:", e);
     }
     
-    // 4. Forçar redirecionamento para limpar qualquer rastro de autenticação no histórico/memória
-    window.location.href = window.location.origin;
+    // 4. Redirecionamento forçado para limpar memória e evitar loops de reconexão
+    window.location.replace(window.location.origin);
   };
 
   useEffect(() => {
@@ -610,13 +609,13 @@ function App() {
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                                 <div className="bg-slate-800 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Target size={64} className="text-white" /></div>
-                                                    <p className="text-sm font-medium text-slate-400 mb-1">Total de Leads (7d)</p>
+                                                    <p className="text-sm font-medium text-teal-400 mb-1">Total de Leads (7d)</p>
                                                     <h4 className="text-3xl font-black text-white">{overviewStats.leadsWeek}</h4>
                                                     <p className="text-xs text-slate-500 mt-2">Últimos 7 dias corridos</p>
                                                 </div>
                                                 <div className="bg-slate-800 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><CheckCircle size={64} className="text-white" /></div>
-                                                    <p className="text-sm font-medium text-slate-400 mb-1">Vendas Fechadas (7d)</p>
+                                                    <p className="text-sm font-medium text-teal-400 mb-1">Vendas Fechadas (7d)</p>
                                                     <h4 className="text-3xl font-black text-white">{overviewStats.salesWeek}</h4>
                                                     <p className="text-xs text-slate-500 mt-2">Volume de conversão</p>
                                                 </div>

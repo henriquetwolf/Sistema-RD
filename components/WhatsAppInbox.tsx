@@ -4,7 +4,7 @@ import {
   MessageCircle, Send, CheckCheck, User, X, Plus, 
   Settings, Save, Smartphone, Loader2, Wifi, 
   WifiOff, ChevronRight, RefreshCw, UserCheck, Search, Link2,
-  AlertCircle
+  AlertCircle, ShieldCheck
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -289,9 +289,14 @@ export const WhatsAppInbox: React.FC = () => {
                     <div className="flex justify-between items-start mb-1">
                         <div className="flex flex-col">
                             <span className="font-black text-sm text-slate-800">{conv.contact_name}</span>
-                            <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter">
-                                {formatPhoneDisplay(conv.wa_id, conv.contact_phone)}
-                            </span>
+                            <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter">
+                                    {formatPhoneDisplay(conv.wa_id, conv.contact_phone)}
+                                </span>
+                                {conv.contact_phone && !whatsappService.isLid(conv.contact_phone) && (
+                                    <ShieldCheck size={10} className="text-teal-500" title="Vínculo Real Confirmado" />
+                                )}
+                            </div>
                         </div>
                         <span className="text-[9px] font-black text-slate-300 uppercase">{formatTime(conv.updated_at)}</span>
                     </div>
@@ -316,9 +321,13 @@ export const WhatsAppInbox: React.FC = () => {
                                 <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">
                                     {formatPhoneDisplay(selectedChat.wa_id, selectedChat.contact_phone)}
                                 </p>
-                                {crmInfo && (
+                                {crmInfo ? (
                                     <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-indigo-100">
-                                        <UserCheck size={10}/> {crmInfo.role}
+                                        <UserCheck size={10}/> {crmInfo.role} (Vinculado)
+                                    </span>
+                                ) : (
+                                    <span className="bg-slate-50 text-slate-400 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-slate-100">
+                                        Visitante Externo
                                     </span>
                                 )}
                             </div>

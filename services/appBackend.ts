@@ -1,4 +1,3 @@
-
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -183,9 +182,9 @@ export const appBackend = {
 
   getLessonProgress: async (studentId: string): Promise<string[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_lesson_progress').select('lesson_id').eq('student_id', studentId);
+      const { data, error = null } = await supabase.from('crm_lesson_progress').select('lesson_id').eq('student_id', studentId);
       if (error) return [];
-      return data.map(d => d.lesson_id);
+      return (data || []).map(d => d.lesson_id);
   },
 
   toggleLessonProgress: async (studentId: string, lessonId: string, completed: boolean): Promise<void> => {
@@ -232,7 +231,7 @@ export const appBackend = {
       if (error) throw error;
       return (data || []).map((m: any) => ({
           id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role,
-          content: m.content, createdAt: m.created_at, attachmentUrl: m.attachment_url, attachment_name: m.attachment_name
+          content: m.content, createdAt: m.created_at, attachmentUrl: m.attachment_url, attachmentName: m.attachment_name
       }));
   },
 
@@ -342,7 +341,7 @@ export const appBackend = {
     if (error) throw error;
     return (data || []).map((row: any) => ({
       id: row.id, openInstallments: row.open_installments, totalNegotiatedValue: row.total_negotiated_value, totalInstallments: row.total_installments,
-      dueDate: row.due_date, responsibleAgent: row.responsible_agent, identifier_code: row.identifier_code, fullName: row.full_name,
+      dueDate: row.due_date, responsibleAgent: row.responsible_agent, identifierCode: row.identifier_code, fullName: row.full_name,
       productName: row.product_name, originalValue: row.original_value, paymentMethod: row.payment_method, observations: row.observations,
       status: row.status, team: row.team, voucherLink1: row.voucher_link_1, testDate: row.test_date, voucherLink2: row.voucher_link_2,
       voucherLink3: row.voucher_link_3, boletosLink: row.boletos_link, negotiationReference: row.negotiation_reference, attachments: row.attachments, createdAt: row.created_at
@@ -417,7 +416,7 @@ export const appBackend = {
     const { data, error = null } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((row: any) => ({
-      id: row.id, name: row.name, sheetUrl: row.sheet_url, config: row.config, lastSync: row.last_sync, status: row.status, lastMessage: row.last_message, active: row.active, interval_minutes: row.interval_minutes, createdBy: row.created_by_name, createdAt: row.created_at
+      id: row.id, name: row.name, sheetUrl: row.sheet_url, config: row.config, lastSync: row.last_sync, status: row.status, lastMessage: row.last_message, active: row.active, intervalMinutes: row.interval_minutes, createdBy: row.created_by_name, createdAt: row.created_at
     }));
   },
 
@@ -484,7 +483,7 @@ export const appBackend = {
   },
 
   getAppLogo: async (): Promise<string | null> => await appBackend.getAppSetting('app_logo_url'),
-  saveAppLogo: async (url: string) => await appBackend.saveAppLogo(url),
+  saveAppLogo: async (url: string) => await appBackend.saveAppSetting('app_logo_url', url),
   getInventorySecurityMargin: async (): Promise<number> => {
     const val = await appBackend.getAppSetting('inventory_security_margin');
     return val !== null ? parseInt(val) : 5;
@@ -521,7 +520,7 @@ export const appBackend = {
 
   getRoles: async (): Promise<Role[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_roles').select('*').order('name', { ascending: true });
+    const { data, error = null } = await supabase.from('crm_roles').select('*').order('name', { ascending: true });
     if (error) throw error;
     return (data || []).map((r: any) => ({ id: r.id, name: r.name, permissions: r.permissions || {}, created_at: r.created_at }));
   },
@@ -623,14 +622,12 @@ export const appBackend = {
     if (!isConfigured) return;
     const payload = {
       status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, 
-      // Fixed: Property 'name_on_site' does not exist on type 'PartnerStudio'. Using 'nameOnSite'.
       name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, 
       qty_ladder_barrel: studio.qtyLadderBarrel, 
       has_chair: studio.hasChair, 
       qty_chair: studio.qtyChair, 
       has_cadillac: studio.hasCadillac, 
       qty_cadillac: studio.qtyCadillac, 
-      // Fixed: Property 'max_kits_capacity' does not exist on type 'PartnerStudio'. Using 'maxKitsCapacity'.
       has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
     if (studio.id) {
@@ -739,7 +736,7 @@ export const appBackend = {
       const payload = { 
           id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, 
           questions: form.questions, style: form.style, team_id: form.teamId || null, 
-          distribution_mode: form.distributionMode || 'fixed', 
+          distribution_mode: form.distribution_mode, 
           fixed_owner_id: form.fixedOwnerId || null, 
           target_pipeline: form.targetPipeline || 'Padrão', 
           target_stage: form.targetStage || 'new',
@@ -760,6 +757,7 @@ export const appBackend = {
       }));
   },
 
+  /* FIXED: Corrected property names to match SurveyModel interface (targetType instead of target_type, etc.) */
   saveSurvey: async (survey: SurveyModel): Promise<void> => {
       if (!isConfigured) return;
       const payload = { 
@@ -858,7 +856,7 @@ export const appBackend = {
                           if (!dealPayload.company_name) dealPayload.company_name = value;
                       }
                       
-                      if (q.crmMapping === 'company_name' && dealPayload.title === form.title) {
+                      if (q.company_name === 'company_name' && dealPayload.title === form.title) {
                           dealPayload.title = value;
                       }
                   }
@@ -967,11 +965,11 @@ export const appBackend = {
     const { error } = await supabase.from('crm_certificates').upsert({ 
       id: cert.id || undefined, 
       title: cert.title, 
-      background_base_64: cert.background_base_64, 
-      back_background_base_64: cert.back_background_base_64, 
-      linked_product_id: cert.linked_product_id, 
-      body_text: cert.body_text, 
-      layout_config: cert.layout_config 
+      background_base_64: cert.backgroundData, 
+      back_background_base_64: cert.backBackgroundData, 
+      linked_product_id: cert.linkedProductId, 
+      body_text: cert.bodyText, 
+      layout_config: cert.layoutConfig 
     });
     if (error) throw error;
   },
@@ -1006,7 +1004,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conference_date: d.conference_date, attachments: d.attachments, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date, attachments: d.attachments, createdAt: d.created_at }));
   },
 
   getCourseInfos: async (): Promise<CourseInfo[]> => {
@@ -1093,7 +1091,7 @@ export const appBackend = {
       const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date').order('title');
       if (error) throw error;
       return (data || []).map((b: any) => ({
-          id: b.id, eventId: b.event_id, date: b.date, title: b.title, max_selections: b.max_selections
+          id: b.id, eventId: b.event_id, date: b.date, title: b.title, maxSelections: b.max_selections
       }));
   },
 

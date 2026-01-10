@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock, Banner, SurveyModel, CourseInfo, PartnerStudio, Product, CourseModule, CourseLesson } from '../types';
 import { appBackend } from '../services/appBackend';
@@ -7,7 +6,7 @@ import { SupportTicketModal } from './SupportTicketModal';
 import { 
     LogOut, GraduationCap, BookOpen, Award, Calendar, MapPin, 
     Video, Download, Loader2, User, Sparkles, Bell, PieChart, ArrowRight, Trophy, ChevronRight, Zap, LifeBuoy, Play, Lock as LockIcon, X, CheckCircle, CheckCircle2,
-    Info, ShieldCheck, List, Circle, CheckSquare
+    Info, ShieldCheck, List, Circle, CheckSquare, AlertTriangle
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -51,7 +50,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
     const fetchSupportNotifications = async () => {
         try {
-            // Fixed: Explicitly treating deal as any.
+            /* FIXED: Explicitly cast to any to resolve unknown type access */
             const mainDealId = (student.deals[0] as any)?.id;
             if (mainDealId) {
                 const tickets = await appBackend.getSupportTicketsBySender(mainDealId);
@@ -65,7 +64,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         try {
             const { data } = await appBackend.client.from('crm_products').select('*').eq('category', 'Curso Online').eq('status', 'active');
             if (data) setDigitalProducts(data);
-            // Fixed: Explicitly treating deal as any.
+            /* FIXED: Explicitly cast to any to resolve unknown type access */
             const mainDealId = (student.deals[0] as any)?.id;
             if (mainDealId) {
                 const access = await appBackend.getStudentCourseAccess(mainDealId);
@@ -75,7 +74,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     };
 
     const loadProgress = async () => {
-        // Fixed: Explicitly treating deal as any.
+        /* FIXED: Explicitly cast to any to resolve unknown type access */
         const mainDealId = (student.deals[0] as any)?.id;
         if (mainDealId) {
             const progress = await appBackend.getLessonProgress(mainDealId);
@@ -87,7 +86,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         try {
             const mainDeal = student.deals[0];
             if (mainDeal) {
-                // Fixed: Explicitly treating mainDeal as any to fix 'unknown' type error.
+                /* FIXED: Explicitly cast to any to resolve unknown type access */
                 const surveys = await appBackend.getEligibleSurveysForStudent((mainDeal as any).id);
                 setMySurveys(surveys);
             }
@@ -97,7 +96,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const loadStudentData = async () => {
         setIsLoading(true);
         try {
-            // Fixed: Explicitly typed deal elements as any to avoid inference as unknown.
             const mod1Codes = student.deals.map((d: any) => d.class_mod_1).filter(Boolean);
             const mod2Codes = student.deals.map((d: any) => d.class_mod_2).filter(Boolean);
             const allCodes = Array.from(new Set([...mod1Codes, ...mod2Codes]));
@@ -105,7 +103,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 const { data } = await appBackend.client.from('crm_classes').select('*').or(`mod_1_code.in.(${allCodes.map(c => `"${c}"`).join(',')}),mod_2_code.in.(${allCodes.map(c => `"${c}"`).join(',')})`);
                 if (data) setClasses(data);
             }
-            // Fixed: Explicitly typed deal elements as any to avoid inference as unknown.
             const dealIds = student.deals.map((d: any) => d.id);
             if (dealIds.length > 0) {
                 const { data: issuedCerts } = await appBackend.client.from('crm_student_certificates').select('*').in('student_deal_id', dealIds);
@@ -115,7 +112,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     };
 
     const toggleLesson = async (lessonId: string) => {
-        // Fixed: Explicitly treating deal as any.
+        /* FIXED: Explicitly cast to any to resolve unknown type access */
         const mainDealId = (student.deals[0] as any)?.id;
         if (!mainDealId) return;
         
@@ -125,22 +122,33 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     };
 
     const openCoursePlayer = async (course: Product) => {
-        if (!unlockedCourseIds.includes(course.id)) return;
+        // Se o curso for gratuito (preço 0), permite o acesso independente da liberação manual
+        const isFree = Number(course.price) === 0;
+        if (!isFree && !unlockedCourseIds.includes(course.id)) return;
+        
         setActiveCourse(course);
         setIsLoadingPlayer(true);
         try {
             const mods = await appBackend.getCourseModules(course.id);
             setActiveModules(mods);
-            const map: Record<string, CourseLesson[]> = {};
+            
+            const lessonsMap: Record<string, CourseLesson[]> = {};
             let firstLesson: CourseLesson | null = null;
+            
+            // Carregamento sequencial para garantir que temos a primeira aula antes de finalizar o loading principal
             for (const m of mods) {
                 const les = await appBackend.getCourseLessons(m.id);
-                map[m.id] = les;
+                lessonsMap[m.id] = les;
                 if (!firstLesson && les.length > 0) firstLesson = les[0];
             }
-            setActiveLessons(map);
+            
+            setActiveLessons(lessonsMap);
             setCurrentLesson(firstLesson);
-        } catch (e) { alert("Erro ao abrir conteúdo."); } finally { setIsLoadingPlayer(false); }
+        } catch (e) { 
+            alert("Erro ao abrir conteúdo do curso. Verifique sua conexão."); 
+        } finally { 
+            setIsLoadingPlayer(false); 
+        }
     };
 
     const loadBanners = async () => {
@@ -148,27 +156,25 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     };
 
     const getCourseProgress = (courseId: string) => {
-        // Encontra todas as aulas deste curso (precisaria carregar de antemão ou estimar)
-        // Como o carregamento é sob demanda no player, vamos simular ou usar os dados se disponíveis
         if (activeCourse?.id === courseId) {
             const allLessons = Object.values(activeLessons).flat();
             if (allLessons.length === 0) return 0;
             const completedInCourse = allLessons.filter(l => completedLessonIds.includes(l.id)).length;
             return Math.round((completedInCourse / allLessons.length) * 100);
         }
-        return 0; // Valor default enquanto não abre
+        return 0;
     };
 
     const handleIssueAutoCertificate = async () => {
         if (!activeCourse || !activeCourse.certificateTemplateId) return;
         setIsIssuingAuto(true);
         try {
-            // Fixed: Explicitly treating deal as any.
+            /* FIXED: Explicitly cast to any to resolve unknown type access */
             const mainDealId = (student.deals[0] as any)?.id;
             if (!mainDealId) return;
             const hash = await appBackend.issueCertificate(mainDealId, activeCourse.certificateTemplateId);
             alert("Certificado emitido com sucesso! Você pode visualizá-lo na aba Certificados.");
-            loadStudentData(); // Refresh list
+            loadStudentData(); 
         } catch (e: any) {
             alert("Erro ao emitir: " + e.message);
         } finally {
@@ -176,22 +182,35 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         }
     };
 
+    /**
+     * getEmbedUrl robusto para lidar com diferentes formatos de URL do YouTube
+     */
     const getEmbedUrl = (url: string) => {
         if (!url) return '';
+        // Regex aprimorada para capturar apenas o ID do vídeo, ignorando outros parâmetros
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
         const match = url.match(regExp);
         if (match && match[2].length === 11) {
             const videoId = match[2];
-            return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&showinfo=0&controls=1&autohide=1&fs=1`;
+            // fs=1 permite tela cheia
+            // modestbranding=1 remove logo do YouTube
+            // rel=0 impede recomendações externas
+            return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&showinfo=0&controls=1&autohide=1&fs=1&autoplay=1`;
+        }
+        // Se já for uma URL de embed, apenas retorna com os parâmetros white-label
+        if (url.includes('youtube.com/embed/')) {
+            const separator = url.includes('?') ? '&' : '?';
+            return `${url}${separator}rel=0&modestbranding=1&showinfo=0&autoplay=1`;
         }
         return url;
     };
 
-    if (activeSurvey) return <FormViewer form={activeSurvey} onBack={() => setActiveSurvey(null)} studentId={student.deals[0]?.id} onSuccess={() => { setActiveSurvey(null); loadSurveys(); }} />;
+    if (activeSurvey) return <FormViewer form={activeSurvey} onBack={() => setActiveSurvey(null)} studentId={(student.deals[0] as any)?.id} onSuccess={() => { setActiveSurvey(null); loadSurveys(); }} />;
 
     if (activeCourse) {
         const progress = getCourseProgress(activeCourse.id);
-        const hasCertIssued = certificates.some(c => c.student_deal_id === student.deals[0]?.id && c.certificate_template_id === activeCourse.certificateTemplateId);
+        /* FIXED: Explicitly cast to any to resolve unknown type access */
+        const hasCertIssued = certificates.some(c => c.student_deal_id === (student.deals[0] as any)?.id && c.certificate_template_id === activeCourse.certificateTemplateId);
 
         return (
             <div className="fixed inset-0 z-[150] bg-slate-900 flex flex-col animate-in fade-in duration-300">
@@ -203,7 +222,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                             <div className="flex items-center gap-3">
                                 <p className="text-teal-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><ShieldCheck size={10}/> Ambiente VOLL</p>
                                 <div className="h-1 w-20 bg-white/10 rounded-full overflow-hidden">
-                                    <div className="h-full bg-teal-500" style={{ width: `${progress}%` }}></div>
+                                    <div className="h-full bg-teal-500 transition-all duration-700" style={{ width: `${progress}%` }}></div>
                                 </div>
                                 <span className="text-[10px] font-black text-white/40">{progress}% Concluído</span>
                             </div>
@@ -218,18 +237,29 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 </header>
                 <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
                     <main className="flex-1 bg-black flex flex-col relative overflow-hidden group/player">
-                        {currentLesson ? (
+                        {isLoadingPlayer ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-teal-500 gap-4">
+                                <Loader2 size={48} className="animate-spin" />
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Carregando Ambiente de Estudo...</p>
+                            </div>
+                        ) : currentLesson ? (
                             <>
                                 <div className="flex-1 relative overflow-hidden">
-                                    {/* Overlay de proteção invisível no topo do vídeo (oculta título e share) */}
                                     <div className="absolute top-0 left-0 w-full h-[15%] z-20 cursor-default"></div>
-                                    <iframe 
-                                        src={getEmbedUrl(currentLesson.videoUrl)} 
-                                        className="absolute inset-0 w-full h-full z-10" 
-                                        frameBorder="0" 
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                        allowFullScreen
-                                    ></iframe>
+                                    {currentLesson.videoUrl ? (
+                                        <iframe 
+                                            src={getEmbedUrl(currentLesson.videoUrl)} 
+                                            className="absolute inset-0 w-full h-full z-10" 
+                                            frameBorder="0" 
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                            allowFullScreen
+                                        ></iframe>
+                                    ) : (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 gap-4 z-10">
+                                            <AlertTriangle size={64} className="opacity-20" />
+                                            <p className="text-sm font-bold opacity-50 uppercase tracking-widest">Nenhum vídeo disponível para esta aula.</p>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="p-8 bg-slate-900 border-t border-white/5 text-white shrink-0 shadow-2xl relative z-30">
                                     <div className="max-w-4xl flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -242,7 +272,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                             onClick={() => toggleLesson(currentLesson.id)}
                                             className={clsx(
                                                 "px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 shrink-0 border-2",
-                                                completedLessonIds.includes(currentLesson.id) ? "bg-teal-600/20 border-teal-500 text-teal-400" : "bg-white text-slate-900 border-white hover:bg-teal-500 hover:border-teal-500 hover:text-white"
+                                                completedLessonIds.includes(currentLesson.id) ? "bg-teal-600/20 border-teal-500 text-teal-400 shadow-[0_0_20px_rgba(20,184,166,0.1)]" : "bg-white text-slate-900 border-white hover:bg-teal-500 hover:border-teal-500 hover:text-white"
                                             )}
                                         >
                                             {completedLessonIds.includes(currentLesson.id) ? <><CheckCircle size={18}/> Aula Concluída</> : <><Circle size={18}/> Marcar como Concluída</>}
@@ -268,23 +298,24 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                     <div className="space-y-1">
                                         {activeLessons[mod.id]?.map(les => {
                                             const isDone = completedLessonIds.includes(les.id);
+                                            const isActive = currentLesson?.id === les.id;
                                             return (
                                                 <button 
                                                     key={les.id} 
                                                     onClick={() => setCurrentLesson(les)} 
                                                     className={clsx(
                                                         "w-full text-left px-4 py-3 rounded-xl flex items-center gap-4 transition-all relative group", 
-                                                        currentLesson?.id === les.id ? "bg-teal-600 text-white shadow-lg ring-1 ring-white/20" : "text-white/40 hover:bg-white/5"
+                                                        isActive ? "bg-teal-600 text-white shadow-lg ring-1 ring-white/20" : "text-white/40 hover:bg-white/5"
                                                     )}
                                                 >
-                                                    <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all", currentLesson?.id === les.id ? "bg-white/20" : "bg-white/5 group-hover:bg-white/10")}>
-                                                        {isDone ? <CheckSquare size={14} className="text-teal-400" /> : <Play size={14} className={currentLesson?.id === les.id ? "fill-white" : "fill-white/20"}/>}
+                                                    <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all", isActive ? "bg-white/20" : "bg-white/5 group-hover:bg-white/10")}>
+                                                        {isDone ? <CheckSquare size={14} className={isActive ? "text-white" : "text-teal-400"} /> : <Play size={14} className={isActive ? "fill-white" : "fill-white/20"}/>}
                                                     </div>
                                                     <div className="min-w-0 flex-1">
-                                                        <p className={clsx("text-xs font-bold truncate", isDone && currentLesson?.id !== les.id && "text-white/20")}>{les.title}</p>
+                                                        <p className={clsx("text-xs font-bold truncate", isDone && !isActive && "text-white/20")}>{les.title}</p>
                                                         <p className="text-[9px] font-black opacity-40 uppercase tracking-tighter">Aula {les.order}</p>
                                                     </div>
-                                                    {currentLesson?.id === les.id && <div className="absolute right-4 w-2 h-2 bg-white rounded-full animate-pulse"></div>}
+                                                    {isActive && <div className="absolute right-4 w-2 h-2 bg-white rounded-full animate-pulse"></div>}
                                                 </button>
                                             );
                                         })}
@@ -320,104 +351,4 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {mySurveys.map(s => (
                                 <div key={s.id} className="bg-white border-2 border-amber-100 rounded-3xl p-6 flex items-center gap-6 shadow-sm hover:shadow-md transition-all group">
-                                    <div className="bg-amber-100 p-4 rounded-2xl text-amber-600 group-hover:scale-110 transition-transform"><PieChart size={32} /></div>
-                                    <div className="flex-1"><h4 className="font-black text-slate-800 mb-1">{s.title}</h4><p className="text-sm text-slate-500">Sua opinião é vital.</p></div>
-                                    <button onClick={() => setActiveSurvey(s)} className="p-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl transition-all"><ArrowRight size={20} /></button>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
-                )}
-
-                <nav className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
-                    {[{ id: 'classes', label: 'Cursos Presenciais', icon: GraduationCap, color: 'text-purple-600' }, { id: 'products', label: 'Cursos Online VOLL', icon: Zap, color: 'text-amber-500' }, { id: 'certificates', label: 'Certificados', icon: Award, color: 'text-emerald-600' }].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("flex-1 min-w-[120px] py-3.5 px-4 rounded-2xl text-sm font-black flex items-center justify-center gap-3 transition-all", activeTab === tab.id ? "bg-white text-slate-800 shadow-md" : "text-slate-500 hover:bg-white/40")}>
-                            <tab.icon size={20} className={clsx(activeTab === tab.id ? tab.color : "text-slate-400")} /> {tab.label}
-                        </button>
-                    ))}
-                </nav>
-
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    {activeTab === 'classes' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {classes.map(cls => (
-                                <div key={cls.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all relative overflow-hidden border-b-8 border-b-purple-500">
-                                    <h3 className="text-xl font-black text-slate-800 mb-2 leading-tight">{cls.course}</h3>
-                                    <div className="flex items-center gap-2 text-slate-500 text-sm mb-4"><MapPin size={16} /> {cls.city}, {cls.state}</div>
-                                    <span className="text-xs font-mono font-bold bg-slate-100 px-2 py-1 rounded-lg text-slate-500">#{cls.class_code}</span>
-                                </div>
-                            ))}
-                            {classes.length === 0 && (
-                                <div className="col-span-full py-20 text-center bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200">
-                                    <GraduationCap className="mx-auto text-slate-200 mb-4" size={48}/>
-                                    <p className="font-bold text-slate-400">Nenhuma matrícula presencial localizada.</p>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {activeTab === 'products' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {digitalProducts.map(course => {
-                                const isUnlocked = unlockedCourseIds.includes(course.id);
-                                return (
-                                    <div key={course.id} className={clsx("bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col group transition-all", isUnlocked ? "hover:shadow-2xl" : "opacity-80 grayscale")}>
-                                        <div className="h-48 bg-slate-100 relative overflow-hidden">
-                                            {course.thumbnailUrl ? <img src={course.thumbnailUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><Play size={40}/></div>}
-                                            {!isUnlocked && (
-                                                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
-                                                    <LockIcon size={40} className="mb-2 text-amber-400" />
-                                                    <span className="text-[10px] font-black uppercase tracking-widest">Acesso Bloqueado</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="p-8 flex-1 flex flex-col">
-                                            <h3 className="font-black text-slate-800 text-lg mb-3 leading-tight">{course.name}</h3>
-                                            <p className="text-sm text-slate-500 line-clamp-2 flex-1 leading-relaxed mb-4">{course.description}</p>
-                                            
-                                            {isUnlocked ? (
-                                                <button onClick={() => openCoursePlayer(course)} className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all">Assistir Agora</button>
-                                            ) : (
-                                                <div className="bg-slate-50 p-4 rounded-2xl text-center"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aguardando liberação financeira.</p></div>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-
-                    {activeTab === 'certificates' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {certificates.map(cert => (
-                                <div key={cert.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-6 shadow-sm hover:shadow-xl transition-all group">
-                                    <div className="bg-emerald-50 p-5 rounded-[2rem] text-emerald-600"><Trophy size={32}/></div>
-                                    <div className="flex-1">
-                                        <h4 className="font-black text-slate-800 text-lg">Certificado VOLL</h4>
-                                        <p className="text-xs text-slate-400 font-bold">Emitido em: {new Date(cert.issued_at).toLocaleDateString()}</p>
-                                    </div>
-                                    <a href={`/?certificateHash=${cert.hash}`} target="_blank" className="p-4 bg-emerald-500 text-white rounded-2xl transition-all active:scale-95"><Download size={24}/></a>
-                                </div>
-                            ))}
-                            {certificates.length === 0 && (
-                                <div className="col-span-full py-20 text-center bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200">
-                                    <Award className="mx-auto text-slate-200 mb-4" size={48}/>
-                                    <p className="font-bold text-slate-400">Nenhum certificado liberado até o momento.</p>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </main>
-
-            <SupportTicketModal 
-                isOpen={showSupportModal} 
-                onClose={() => { setShowSupportModal(false); fetchSupportNotifications(); }}
-                senderId={student.deals[0]?.id || 'guest'}
-                senderName={student.name}
-                senderEmail={student.email}
-                senderRole="student"
-            />
-        </div>
-    );
-};
+                                    <div className="bg

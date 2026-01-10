@@ -49,44 +49,74 @@ export const whatsappService = {
     },
 
     /**
-     * Busca informações do contato no CRM
+     * Identifica um contato em qualquer tabela do sistema
      */
-    findContactInCrm: async (identifier: string, pushName?: string) => {
+    identifyContactGlobally: async (identifier: string, pushName?: string) => {
         const actualNum = whatsappService.extractActualNumber(identifier);
-        
-        if (actualNum) {
-            const last8 = actualNum.slice(-8);
-            const { data: contactByPhone } = await appBackend.client
-                .from('crm_deals')
-                .select('id, contact_name, company_name, phone, email, stage')
-                .ilike('phone', `%${last8}%`)
-                .maybeSingle();
-            
-            if (contactByPhone) return { 
-                name: contactByPhone.company_name || contactByPhone.contact_name, 
-                phone: contactByPhone.phone, 
-                role: contactByPhone.stage === 'closed' ? 'Aluno Matriculado' : 'Lead CRM',
-                email: contactByPhone.email,
-                dealId: contactByPhone.id
-            };
-        }
+        if (!actualNum) return null;
 
-        if (pushName && pushName.length > 2) {
-            const { data: contactByName } = await appBackend.client
-                .from('crm_deals')
-                .select('id, contact_name, company_name, phone, email, stage')
-                .or(`contact_name.ilike."%${pushName}%",company_name.ilike."%${pushName}%"`)
-                .limit(1)
-                .maybeSingle();
-            
-            if (contactByName) return { 
-                name: contactByName.company_name || contactByName.contact_name, 
-                phone: contactByName.phone, 
-                role: contactByName.stage === 'closed' ? 'Aluno (Match Nome)' : 'Lead (Match Nome)',
-                email: contactByName.email,
-                dealId: contactByName.id
-            };
-        }
+        const last8 = actualNum.slice(-8);
+
+        // 1. Buscar em Alunos / Leads
+        const { data: deal } = await appBackend.client
+            .from('crm_deals')
+            .select('id, contact_name, company_name, phone, stage')
+            .ilike('phone', `%${last8}%`)
+            .maybeSingle();
+        if (deal) return { 
+            id: deal.id, 
+            name: deal.company_name || deal.contact_name, 
+            type: 'student', 
+            label: deal.stage === 'closed' ? 'Aluno' : 'Lead',
+            color: 'text-purple-600 bg-purple-50 border-purple-100',
+            tab: 'students'
+        };
+
+        // 2. Buscar em Professores
+        const { data: teacher } = await appBackend.client
+            .from('crm_teachers')
+            .select('id, full_name, phone')
+            .ilike('phone', `%${last8}%`)
+            .maybeSingle();
+        if (teacher) return { 
+            id: teacher.id, 
+            name: teacher.full_name, 
+            type: 'teacher', 
+            label: 'Professor',
+            color: 'text-orange-600 bg-orange-50 border-orange-100',
+            tab: 'teachers'
+        };
+
+        // 3. Buscar em Studios Parceiros
+        const { data: studio } = await appBackend.client
+            .from('crm_partner_studios')
+            .select('id, fantasy_name, phone')
+            .ilike('phone', `%${last8}%`)
+            .maybeSingle();
+        if (studio) return { 
+            id: studio.id, 
+            name: studio.fantasy_name, 
+            type: 'studio', 
+            label: 'Studio Parceiro',
+            color: 'text-teal-600 bg-teal-50 border-teal-100',
+            tab: 'partner_studios'
+        };
+
+        // 4. Buscar em Franquias
+        const { data: franchise } = await appBackend.client
+            .from('crm_franchises')
+            .select('id, franchisee_name, phone')
+            .ilike('phone', `%${last8}%`)
+            .maybeSingle();
+        if (franchise) return { 
+            id: franchise.id, 
+            name: franchise.franchisee_name, 
+            type: 'franchise', 
+            label: 'Franqueado',
+            color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+            tab: 'franchises'
+        };
+
         return null;
     },
 
@@ -120,23 +150,13 @@ export const whatsappService = {
             .maybeSingle();
 
         if (existingChat) {
-            if (!existingChat.contact_phone || whatsappService.isLid(existingChat.contact_phone)) {
-                const contact = await whatsappService.findContactInCrm(waId, pushName);
-                if (contact?.phone) {
-                    const cleanPhone = contact.phone.replace(/\D/g, '');
-                    await appBackend.client.from('crm_whatsapp_chats').update({ 
-                        contact_phone: cleanPhone,
-                        contact_name: contact.name 
-                    }).eq('id', existingChat.id);
-                    existingChat.contact_phone = cleanPhone;
-                    existingChat.contact_name = contact.name;
-                }
-            }
+            // Se o chat está fechado e recebemos uma nova interação (simulado aqui, real via trigger SQL),
+            // a UI deve refletir a reabertura.
             return existingChat;
         }
 
-        const contact = await whatsappService.findContactInCrm(waId, pushName);
-        const finalPhone = contact?.phone ? contact.phone.replace(/\D/g, '') : whatsappService.extractActualNumber(waId);
+        const contact = await whatsappService.identifyContactGlobally(waId, pushName);
+        const finalPhone = contact?.id ? contact.id : whatsappService.extractActualNumber(waId);
 
         const { data: newChat, error } = await appBackend.client
             .from('crm_whatsapp_chats')
@@ -181,9 +201,19 @@ export const whatsappService = {
             .select().single();
         if (error) throw error;
 
+        // Se o atendente responde, garantimos que o status não seja mais 'open' (novo)
+        const { data: chat } = await appBackend.client.from('crm_whatsapp_chats').select('status').eq('id', chatId).single();
+        
+        const updates: any = { last_message: text, updated_at: new Date().toISOString() };
+        
+        // Se estava aberto (novo), movemos para 'pending' (em atendimento) ao responder
+        if (chat?.status === 'open' && senderType === 'agent') {
+            updates.status = 'pending';
+        }
+
         await appBackend.client
             .from('crm_whatsapp_chats')
-            .update({ last_message: text, updated_at: new Date().toISOString() })
+            .update(updates)
             .eq('id', chatId);
         return data;
     }

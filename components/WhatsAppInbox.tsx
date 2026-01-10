@@ -5,7 +5,7 @@ import {
   Settings, Save, Smartphone, Loader2, Wifi, 
   WifiOff, ChevronRight, RefreshCw, UserCheck, Search, Link2,
   AlertCircle, ShieldCheck, UserPlus, Kanban, List, MoveRight,
-  Clock, CheckCircle, Circle, MessageSquare
+  Clock, CheckCircle, Circle, MessageSquare, ExternalLink, GraduationCap, School, Building2, Store
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -60,7 +60,7 @@ export const WhatsAppInbox: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [crmInfo, setCrmInfo] = useState<any>(null);
+  const [globalContactInfo, setGlobalContactInfo] = useState<any>(null);
   
   // UI States
   const [showSettings, setShowSettings] = useState(false);
@@ -118,13 +118,22 @@ export const WhatsAppInbox: React.FC = () => {
   useEffect(() => {
       if (selectedChatId) {
           fetchMessages(selectedChatId);
-          loadCrmDetails();
+          loadGlobalIdentification();
           handleMarkAsRead(selectedChatId);
       } else {
           setMessages([]);
-          setCrmInfo(null);
+          setGlobalContactInfo(null);
       }
   }, [selectedChatId]);
+
+  const loadGlobalIdentification = async () => {
+      if (!selectedChat) return;
+      const info = await whatsappService.identifyContactGlobally(selectedChat.wa_id, selectedChat.contact_name);
+      setGlobalContactInfo(info);
+      if (!info && whatsappService.isLid(selectedChat.wa_id)) {
+          setIdentifyName(selectedChat.contact_name);
+      }
+  };
 
   const handleMarkAsRead = async (chatId: string) => {
       const chat = conversations.find(c => c.id === chatId);
@@ -140,15 +149,6 @@ export const WhatsAppInbox: React.FC = () => {
           setConversations(prev => prev.map(c => c.id === chatId ? { ...c, status } : c));
       } catch (e) {
           alert("Erro ao mudar etapa do atendimento.");
-      }
-  };
-
-  const loadCrmDetails = async () => {
-      if (!selectedChat) return;
-      const info = await whatsappService.findContactInCrm(selectedChat.wa_id, selectedChat.contact_name);
-      setCrmInfo(info);
-      if (!info && whatsappService.isLid(selectedChat.wa_id)) {
-          setIdentifyName(selectedChat.contact_name);
       }
   };
 
@@ -212,7 +212,6 @@ export const WhatsAppInbox: React.FC = () => {
         const waId = result.key?.id || result.messageId; 
         await whatsappService.syncMessage(selectedChatId, messageText, 'agent', waId);
         
-        // Ao responder, movemos o chat para "Aguardando Cliente" se estiver em "Novo" ou "Atendimento"
         if (selectedChat.status === 'open' || selectedChat.status === 'pending') {
             await handleUpdateStage(selectedChatId, 'waiting');
         }
@@ -241,7 +240,7 @@ export const WhatsAppInbox: React.FC = () => {
       try {
           await whatsappService.associateLidWithPhone(selectedChatId, identifyPhone, identifyName);
           await fetchConversations();
-          await loadCrmDetails();
+          await loadGlobalIdentification();
           setShowIdentifyModal(false);
           setIdentifyPhone('');
       } catch (e: any) {
@@ -315,10 +314,20 @@ export const WhatsAppInbox: React.FC = () => {
       return number;
   };
 
+  const getEntityIcon = (type: string) => {
+      switch(type) {
+          case 'student': return <GraduationCap size={12}/>;
+          case 'teacher': return <School size={12}/>;
+          case 'studio': return <Building2 size={12}/>;
+          case 'franchise': return <Store size={12}/>;
+          default: return <UserCheck size={12}/>;
+      }
+  };
+
   return (
     <div className="flex h-[calc(100vh-140px)] bg-slate-50 rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative">
       
-      {/* SIDEBAR (Lista ou Kanban) */}
+      {/* SIDEBAR */}
       <div className={clsx("flex flex-col border-r border-slate-100 w-full md:w-80 lg:w-96 shrink-0 bg-white", selectedChatId && viewMode === 'list' ? "hidden md:flex" : "flex")}>
         <div className="p-6 border-b border-slate-100 space-y-4">
             <div className="flex items-center justify-between">
@@ -359,7 +368,6 @@ export const WhatsAppInbox: React.FC = () => {
                     </div>
                 ))
             ) : (
-                /* Kanban Sidebar / Minimal List for Kanban selection */
                 <div className="p-4 space-y-2">
                     {ATTENDANCE_STAGES.map(stage => {
                         const count = conversations.filter(c => c.status === stage.id).length;
@@ -381,7 +389,7 @@ export const WhatsAppInbox: React.FC = () => {
         </div>
       </div>
 
-      {/* ÁREA DE CONVERSA (CRM STYLE) */}
+      {/* ÁREA DE CONVERSA */}
       <div className="flex-1 flex flex-col bg-[#efeae2] relative min-w-0">
           {selectedChat ? (
               <>
@@ -389,23 +397,42 @@ export const WhatsAppInbox: React.FC = () => {
                     <div className="flex items-center gap-4">
                         <button className="md:hidden text-slate-500" onClick={() => setSelectedChatId(null)}><ChevronRight size={24} className="rotate-180" /></button>
                         <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 font-bold border border-slate-200 shadow-inner"><User size={28} /></div>
-                        <div>
-                            <h3 className="font-black text-slate-800 text-base leading-tight">{selectedChat.contact_name}</h3>
-                            <div className="flex items-center gap-2">
+                        <div className="min-w-0">
+                            <h3 className="font-black text-slate-800 text-base leading-tight truncate">{selectedChat.contact_name}</h3>
+                            <div className="flex flex-wrap items-center gap-2 mt-0.5">
                                 <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">{formatPhoneDisplay(selectedChat.wa_id, selectedChat.contact_phone)}</p>
-                                {crmInfo ? <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-indigo-100"><UserCheck size={10}/> {crmInfo.role}</span> : (whatsappService.isLid(selectedChat.wa_id) && !selectedChat.contact_phone && <button onClick={() => setShowIdentifyModal(true)} className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-amber-200 hover:bg-amber-200 transition-colors"><UserPlus size={10}/> Identificar</button>)}
+                                
+                                {globalContactInfo ? (
+                                    <div className="flex items-center gap-2">
+                                        <span className={clsx("px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border", globalContactInfo.color)}>
+                                            {getEntityIcon(globalContactInfo.type)} {globalContactInfo.label}
+                                        </span>
+                                        {/* Botão Dinâmico de Navegação */}
+                                        <button 
+                                            onClick={() => alert(`Navegando para o módulo: ${globalContactInfo.tab}`)}
+                                            className="text-[9px] font-bold text-indigo-600 hover:underline flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200"
+                                        >
+                                            <ExternalLink size={10}/> Ver Cadastro
+                                        </button>
+                                    </div>
+                                ) : (
+                                    whatsappService.isLid(selectedChat.wa_id) && !selectedChat.contact_phone && 
+                                    <button onClick={() => setShowIdentifyModal(true)} className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-amber-200 hover:bg-amber-200 transition-colors">
+                                        <UserPlus size={10}/> Identificar
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
 
-                    {/* SELECTOR DE ETAPA DO ATENDIMENTO (ESTILO CRM) */}
-                    <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner w-full md:w-auto">
+                    {/* SELECTOR DE ETAPA */}
+                    <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner w-full md:w-auto overflow-x-auto no-scrollbar">
                         {ATTENDANCE_STAGES.map(stage => (
                             <button 
                                 key={stage.id} 
                                 onClick={() => handleUpdateStage(selectedChat.id, stage.id)}
                                 className={clsx(
-                                    "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tighter flex items-center gap-1.5 transition-all flex-1 md:flex-none justify-center",
+                                    "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tighter flex items-center gap-1.5 transition-all flex-1 md:flex-none justify-center whitespace-nowrap",
                                     selectedChat.status === stage.id ? "bg-white text-indigo-700 shadow-md ring-1 ring-slate-200" : "text-slate-400 hover:text-slate-600"
                                 )}
                             >
@@ -422,7 +449,7 @@ export const WhatsAppInbox: React.FC = () => {
                             <div className={clsx("max-w-[75%] rounded-2xl px-4 py-3 shadow-md relative text-sm font-medium", msg.sender_type === 'agent' ? "bg-teal-100 text-teal-900 rounded-tr-none" : "bg-white text-slate-800 rounded-tl-none")}>
                                 <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                                 <div className="flex items-center justify-end gap-1.5 mt-1.5">
-                                    <span className="text-[9px] font-black text-slate-400 opacity-60 uppercase">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                    <span className="text-[9px] font-black text-slate-400 opacity-60 uppercase">{new Date(msg.created_at).toLocaleDateString()} {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                     {msg.sender_type === 'agent' && <CheckCheck size={14} className="text-teal-600" />}
                                 </div>
                             </div>
@@ -431,7 +458,7 @@ export const WhatsAppInbox: React.FC = () => {
                     <div ref={messagesEndRef} />
                 </div>
 
-                <div className="bg-white/95 backdrop-blur-md p-5 border-t border-slate-200">
+                <div className="bg-white/95 backdrop-blur-md p-5 border-t border-slate-200 shrink-0">
                     <form onSubmit={handleSendMessage} className="flex gap-3 max-w-5xl mx-auto">
                         <input type="text" className="flex-1 px-6 py-4 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none focus:bg-white focus:ring-4 focus:ring-teal-500/10 text-sm font-medium transition-all" placeholder="Escreva aqui..." value={inputText} onChange={e => setInputText(e.target.value)} />
                         <button type="submit" disabled={isSending || !inputText.trim()} className="bg-teal-600 text-white p-4 rounded-2xl hover:bg-teal-700 disabled:opacity-50 shadow-xl active:scale-95 shrink-0 flex items-center justify-center">
@@ -499,7 +526,7 @@ export const WhatsAppInbox: React.FC = () => {
 
       {/* MODAL NEW CHAT */}
       {showNewChatModal && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-150 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50"><div className="flex items-center gap-3"><Plus className="text-teal-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Nova Conversa</h3></div><button onClick={() => setShowNewChatModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button></div>
                   <form onSubmit={handleStartNewChat} className="p-8 space-y-6">

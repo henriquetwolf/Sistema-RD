@@ -266,52 +266,60 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE MANUTENÇÃO VOLL CRM (V35)
--- Foco em Identificação de Número Real em LIDs do WhatsApp.
+-- SCRIPT DE MANUTENÇÃO VOLL CRM (V36)
+-- Reabertura Automática de Chats e Identificação Global
 
 -- 1. Garante colunas de identificação robustas nos Chats
 ALTER TABLE public.crm_whatsapp_chats 
 ADD COLUMN IF NOT EXISTS contact_phone text,
 ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}';
 
--- 2. Cria índices para busca ultra-rápida (Crucial para performance do Inbox)
+-- 2. Cria índices para busca ultra-rápida em todas as tabelas
 CREATE INDEX IF NOT EXISTS idx_chats_wa_id ON public.crm_whatsapp_chats(wa_id);
-CREATE INDEX IF NOT EXISTS idx_chats_contact_phone ON public.crm_whatsapp_chats(contact_phone);
+CREATE INDEX IF NOT EXISTS idx_deals_phone ON public.crm_deals(phone);
+CREATE INDEX IF NOT EXISTS idx_teachers_phone ON public.crm_teachers(phone);
+CREATE INDEX IF NOT EXISTS idx_studios_phone ON public.crm_partner_studios(phone);
+CREATE INDEX IF NOT EXISTS idx_franchises_phone ON public.crm_franchises(phone);
 
--- 3. Função Inteligente de Identificação (Melhorada para V35)
-CREATE OR REPLACE FUNCTION public.identify_wa_number(p_push_name text) 
-RETURNS text AS $$
-DECLARE
-    v_phone text;
-BEGIN
-    -- Tenta match por nome no CRM
-    SELECT phone INTO v_phone 
-    FROM public.crm_deals 
-    WHERE contact_name ILIKE '%' || p_push_name || '%' 
-       OR company_name ILIKE '%' || p_push_name || '%'
-    LIMIT 1;
-    
-    RETURN v_phone;
-END;
-$$ LANGUAGE plpgsql;
-
--- 4. TRIGGER para auto-vincular chats novos (Opcional, mas recomendado)
-CREATE OR REPLACE FUNCTION public.trg_auto_identify_chat() 
+-- 3. TRIGGER para REABRIR chat quando o usuário responde
+CREATE OR REPLACE FUNCTION public.trg_reopen_chat_on_message() 
 RETURNS trigger AS $$
 BEGIN
-    IF NEW.contact_phone IS NULL OR length(NEW.contact_phone) > 15 THEN
-        NEW.contact_phone := public.identify_wa_number(NEW.contact_name);
+    -- Se a mensagem vier do usuário (user) e o chat estiver fechado (closed)
+    IF NEW.sender_type = 'user' THEN
+        UPDATE public.crm_whatsapp_chats
+        SET status = 'open', updated_at = NOW()
+        WHERE id = NEW.chat_id AND status = 'closed';
     END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS t_auto_identify_chat ON public.crm_whatsapp_chats;
-CREATE TRIGGER t_auto_identify_chat 
-BEFORE INSERT ON public.crm_whatsapp_chats 
-FOR EACH ROW EXECUTE FUNCTION public.trg_auto_identify_chat();
+DROP TRIGGER IF EXISTS t_reopen_chat ON public.crm_whatsapp_messages;
+CREATE TRIGGER t_reopen_chat 
+AFTER INSERT ON public.crm_whatsapp_messages 
+FOR EACH ROW EXECUTE FUNCTION public.trg_reopen_chat_on_message();
 
--- 5. Garante permissões
+-- 4. Função Inteligente de Identificação Global (V36)
+CREATE OR REPLACE FUNCTION public.identify_wa_contact(p_phone text) 
+RETURNS TABLE(contact_name text, contact_type text) AS $$
+BEGIN
+    -- Tenta Alunos
+    SELECT company_name, 'student' FROM public.crm_deals WHERE phone ILIKE '%' || RIGHT(p_phone, 8) || '%' LIMIT 1 INTO contact_name, contact_type;
+    IF contact_name IS NOT NULL THEN RETURN NEXT; RETURN; END IF;
+    
+    -- Tenta Professores
+    SELECT full_name, 'teacher' FROM public.crm_teachers WHERE phone ILIKE '%' || RIGHT(p_phone, 8) || '%' LIMIT 1 INTO contact_name, contact_type;
+    IF contact_name IS NOT NULL THEN RETURN NEXT; RETURN; END IF;
+    
+    -- Tenta Studios
+    SELECT fantasy_name, 'studio' FROM public.crm_partner_studios WHERE phone ILIKE '%' || RIGHT(p_phone, 8) || '%' LIMIT 1 INTO contact_name, contact_type;
+    IF contact_name IS NOT NULL THEN RETURN NEXT; RETURN; END IF;
+
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
 GRANT ALL ON public.crm_whatsapp_chats TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_whatsapp_messages TO anon, authenticated, service_role;
 
@@ -424,7 +432,7 @@ NOTIFY pgrst, 'reload config';
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-8 pb-20">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <h2 className="text-2xl font-bold text-slate-800">Configurações do Sistema</h2>
+            <h2 className="text-2xl font-bold text-slate-800">Configurações do Systema</h2>
             <p className="text-slate-500 text-sm">Personalize acessos, identidade e acompanhe atividades.</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto shrink-0 max-w-full no-scrollbar">
@@ -957,9 +965,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V35)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos de identificação e unificação de contatos.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V35</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V36)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos de identificação global e reabertura de chamados.</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V36</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

@@ -249,7 +249,7 @@ export const WhatsAppInbox: React.FC = () => {
   const supabaseProjectUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
   const edgeFunctionUrl = `${supabaseProjectUrl}/functions/v1/${config.edgeFunctionName}`;
 
-  // Lógica de Renderização de Status (Isolada para evitar ternários complexos)
+  // Lógica de Renderização de Status
   let statusContent = null;
   if (isGeneratingConnection) {
       statusContent = (
@@ -276,9 +276,9 @@ export const WhatsAppInbox: React.FC = () => {
   } else if (config.mode === 'evolution' && config.evolutionMethod === 'code' && pairingCodeValue) {
       statusContent = (
           <div className="flex flex-col items-center justify-center gap-4">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Código de Pareamento</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center leading-tight">Código de Pareamento</p>
               <div className="bg-slate-900 text-teal-400 px-6 py-4 rounded-2xl font-mono text-3xl font-black shadow-lg">{pairingCodeValue}</div>
-              <p className="text-[9px] text-slate-500 font-bold uppercase text-center">Insira no seu WhatsApp - Menu Dispositivos</p>
+              <p className="text-[9px] text-slate-500 font-bold uppercase text-center max-w-[180px]">Insira no seu WhatsApp - Menu Dispositivos</p>
           </div>
       );
   } else if (config.mode === 'evolution' && config.evolutionMethod === 'qr' && qrCodeUrl) {
@@ -293,7 +293,7 @@ export const WhatsAppInbox: React.FC = () => {
       statusContent = (
           <div className="flex flex-col items-center">
               <PlaceholderIcon size={48} className="text-slate-300 mb-3" />
-              <p className="text-[10px] font-black text-slate-400 uppercase leading-tight text-center">{placeholderText}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase leading-tight text-center max-w-[160px]">{placeholderText}</p>
           </div>
       );
   }
@@ -408,98 +408,101 @@ export const WhatsAppInbox: React.FC = () => {
           )}
       </div>
 
-      {/* OVERLAY DE CONFIGURAÇÕES (CORRIGIDO) */}
+      {/* OVERLAY DE CONFIGURAÇÕES (REVISADO) */}
       {showSettings && (
-          <div className="absolute inset-0 z-[60] bg-slate-50 flex flex-col animate-in slide-in-from-right-4">
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8 flex flex-col items-center">
-                <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col mb-20">
-                    <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-teal-100 p-2 rounded-xl text-teal-700"><Settings size={24} /></div>
-                            <div>
-                                <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Conectar WhatsApp</h2>
-                                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Escolha seu provedor</p>
-                            </div>
-                        </div>
-                        <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"><X size={24} /></button>
-                    </div>
+          <div className="absolute inset-0 z-[60] bg-slate-50 flex flex-col animate-in slide-in-from-right-4 overflow-hidden">
+              {/* Header Fixo */}
+              <div className="px-8 py-6 border-b border-slate-200 flex justify-between items-center bg-white shrink-0 z-10 shadow-sm">
+                  <div className="flex items-center gap-3">
+                      <div className="bg-teal-100 p-2 rounded-xl text-teal-700"><Settings size={24} /></div>
+                      <div>
+                          <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Conectar WhatsApp</h2>
+                          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Escolha seu provedor</p>
+                      </div>
+                  </div>
+                  <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"><X size={24} /></button>
+              </div>
 
-                    <div className="p-8 space-y-8 bg-slate-50">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <button onClick={() => setConfig({...config, mode: 'twilio'})} className={clsx("p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4", config.mode === 'twilio' ? "bg-white border-red-500 shadow-lg" : "bg-white border-slate-100 opacity-60")}>
-                                <div className={clsx("p-3 rounded-2xl", config.mode === 'twilio' ? "bg-red-600 text-white" : "bg-slate-100 text-slate-400")}><Cloud size={24}/></div>
-                                <div><h4 className="font-black text-slate-800 text-sm uppercase">Twilio WhatsApp</h4><p className="text-xs text-slate-500 mt-1">Conexão oficial estável.</p></div>
-                            </button>
-                            <button onClick={() => setConfig({...config, mode: 'evolution'})} className={clsx("p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4", config.mode === 'evolution' ? "bg-white border-blue-500 shadow-lg" : "bg-white border-slate-100 opacity-60")}>
-                                <div className={clsx("p-3 rounded-2xl", config.mode === 'evolution' ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400")}><Link2 size={24}/></div>
-                                <div><h4 className="font-black text-slate-800 text-sm uppercase">Evolution API</h4><p className="text-xs text-slate-500 mt-1">Servidor próprio (QR/Código).</p></div>
-                            </button>
-                        </div>
+              {/* Corpo com Scroll Independente */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-10 space-y-8 bg-slate-50">
+                  <div className="max-w-4xl mx-auto space-y-8">
+                      {/* Seleção de Modo */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <button onClick={() => setConfig({...config, mode: 'twilio'})} className={clsx("p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4", config.mode === 'twilio' ? "bg-white border-red-500 shadow-lg" : "bg-white border-slate-100 opacity-60")}>
+                              <div className={clsx("p-3 rounded-2xl", config.mode === 'twilio' ? "bg-red-600 text-white" : "bg-slate-100 text-slate-400")}><Cloud size={24}/></div>
+                              <div><h4 className="font-black text-slate-800 text-sm uppercase">Twilio WhatsApp</h4><p className="text-xs text-slate-500 mt-1">Conexão oficial estável.</p></div>
+                          </button>
+                          <button onClick={() => setConfig({...config, mode: 'evolution'})} className={clsx("p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4", config.mode === 'evolution' ? "bg-white border-blue-500 shadow-lg" : "bg-white border-slate-100 opacity-60")}>
+                              <div className={clsx("p-3 rounded-2xl", config.mode === 'evolution' ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400")}><Link2 size={24}/></div>
+                              <div><h4 className="font-black text-slate-800 text-sm uppercase">Evolution API</h4><p className="text-xs text-slate-500 mt-1">Servidor próprio (QR/Código).</p></div>
+                          </button>
+                      </div>
 
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
-                                <div className="flex flex-col md:flex-row items-center gap-10">
-                                    <div className="w-full md:w-64 aspect-square bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-6 overflow-hidden">
-                                        {statusContent}
-                                    </div>
-                                    <div className="flex-1 space-y-4">
-                                        <h4 className="text-lg font-black text-slate-800">Status da Instância:</h4>
-                                        {config.mode === 'evolution' && (
-                                            <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
-                                                <button onClick={() => setConfig({...config, evolutionMethod: 'qr'})} className={clsx("px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", config.evolutionMethod === 'qr' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500")}>QR Code</button>
-                                                <button onClick={() => setConfig({...config, evolutionMethod: 'code'})} className={clsx("px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", config.evolutionMethod === 'code' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500")}>Código</button>
-                                            </div>
-                                        )}
-                                        <ul className="space-y-1">
-                                            <li className="text-xs text-slate-500 font-medium">• 1. Insira os dados abaixo</li>
-                                            <li className="text-xs text-slate-500 font-medium">• 2. Clique em Conectar para validar</li>
-                                        </ul>
-                                        <div className="bg-slate-900 rounded-xl p-4 h-24 font-mono text-[9px] text-teal-400 overflow-y-auto custom-scrollbar">
-                                            {connLogs.length === 0 ? "> Aguardando início..." : connLogs.map((log, i) => <div key={i}>{log}</div>)}
-                                        </div>
-                                        <div className="pt-2">{actionBtn}</div>
-                                    </div>
-                                </div>
-                                
-                                {config.mode === 'twilio' ? (
-                                    <div className="bg-red-50 p-6 rounded-3xl border border-red-100 space-y-4">
-                                        <h5 className="text-[10px] font-black text-red-700 uppercase flex items-center gap-2"><Cloud size={14}/> Credenciais Twilio Console</h5>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="md:col-span-2"><label className="block text-[9px] font-black text-red-400 uppercase mb-1">Account SID</label><input type="text" className="w-full px-4 py-2 border rounded-xl text-xs font-mono" value={config.twilioAccountSid} onChange={e => setConfig({...config, twilioAccountSid: e.target.value})} /></div>
-                                            <div><label className="block text-[9px] font-black text-red-400 uppercase mb-1">Auth Token</label><input type="password" title="Auth Token" className="w-full px-4 py-2 border rounded-xl text-xs font-mono" value={config.twilioAuthToken} onChange={e => setConfig({...config, twilioAuthToken: e.target.value})} /></div>
-                                            <div><label className="block text-[9px] font-black text-red-400 uppercase mb-1">Número Twilio (whatsapp:+...)</label><input type="text" className="w-full px-4 py-2 border rounded-xl text-xs font-mono" value={config.twilioFromNumber} onChange={e => setConfig({...config, twilioFromNumber: e.target.value})} /></div>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100 space-y-4">
-                                        <h5 className="text-[10px] font-black text-blue-700 uppercase flex items-center gap-2"><Smartphone size={14}/> Dados Evolution API</h5>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="md:col-span-2"><label className="block text-[9px] font-black text-blue-400 uppercase mb-1">URL da API</label><input type="text" className="w-full px-3 py-2 border rounded-xl text-xs font-mono" value={config.instanceUrl} onChange={e => setConfig({...config, instanceUrl: e.target.value})} placeholder="https://api.evol.com" /></div>
-                                            <div><label className="block text-[9px] font-black text-blue-400 uppercase mb-1">Instância</label><input type="text" className="w-full px-3 py-2 border rounded-xl text-xs" value={config.instanceName} onChange={e => setConfig({...config, instanceName: e.target.value})} /></div>
-                                            <div><label className="block text-[9px] font-black text-blue-400 uppercase mb-1">API Key</label><input type="password" title="Key" className="w-full px-3 py-2 border rounded-xl text-xs" value={config.apiKey} onChange={e => setConfig({...config, apiKey: e.target.value})} /></div>
-                                            {config.evolutionMethod === 'code' && (
-                                                <div className="md:col-span-2"><label className="block text-[9px] font-black text-blue-400 uppercase mb-1">Seu Celular p/ Pareamento (55...)</label><input type="text" className="w-full px-3 py-2 border rounded-xl text-xs font-bold" value={config.pairingNumber} onChange={e => setConfig({...config, pairingNumber: e.target.value})} /></div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                        </div>
+                      {/* Painel de Status */}
+                      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
+                          <div className="flex flex-col lg:flex-row items-start lg:items-center gap-8 lg:gap-12">
+                              <div className="w-full lg:w-64 aspect-square bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-6 overflow-hidden shrink-0">
+                                  {statusContent}
+                              </div>
+                              <div className="flex-1 space-y-4 w-full min-w-0">
+                                  <h4 className="text-lg font-black text-slate-800">Status da Instância:</h4>
+                                  {config.mode === 'evolution' && (
+                                      <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
+                                          <button onClick={() => setConfig({...config, evolutionMethod: 'qr'})} className={clsx("px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", config.evolutionMethod === 'qr' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500")}>QR Code</button>
+                                          <button onClick={() => setConfig({...config, evolutionMethod: 'code'})} className={clsx("px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all", config.evolutionMethod === 'code' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500")}>Código</button>
+                                      </div>
+                                  )}
+                                  <div className="bg-slate-900 rounded-xl p-4 h-28 font-mono text-[10px] text-teal-400 overflow-y-auto custom-scrollbar w-full">
+                                      {connLogs.length === 0 ? "> Aguardando início da conexão..." : connLogs.map((log, i) => <div key={i}>{log}</div>)}
+                                  </div>
+                                  <div className="pt-2">{actionBtn}</div>
+                              </div>
+                          </div>
+                          
+                          {/* Configurações do Provedor */}
+                          <div className="pt-4 border-t border-slate-100">
+                              {config.mode === 'twilio' ? (
+                                  <div className="bg-red-50 p-6 rounded-3xl border border-red-100 space-y-6">
+                                      <h5 className="text-[10px] font-black text-red-700 uppercase flex items-center gap-2 tracking-widest"><Cloud size={14}/> Credenciais Twilio Console</h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                          <div className="md:col-span-2"><label className="block text-[9px] font-black text-red-400 uppercase mb-1.5 ml-1">Account SID</label><input type="text" className="w-full px-4 py-3 border border-red-200 rounded-xl text-sm font-mono bg-white focus:ring-4 focus:ring-red-500/5 transition-all outline-none" value={config.twilioAccountSid} onChange={e => setConfig({...config, twilioAccountSid: e.target.value})} /></div>
+                                          <div><label className="block text-[9px] font-black text-red-400 uppercase mb-1.5 ml-1">Auth Token</label><input type="password" title="Auth Token" className="w-full px-4 py-3 border border-red-200 rounded-xl text-sm font-mono bg-white focus:ring-4 focus:ring-red-500/5 transition-all outline-none" value={config.twilioAuthToken} onChange={e => setConfig({...config, twilioAuthToken: e.target.value})} /></div>
+                                          <div><label className="block text-[9px] font-black text-red-400 uppercase mb-1.5 ml-1">Número Twilio (whatsapp:+...)</label><input type="text" className="w-full px-4 py-3 border border-red-200 rounded-xl text-sm font-mono bg-white focus:ring-4 focus:ring-red-500/5 transition-all outline-none" value={config.twilioFromNumber} onChange={e => setConfig({...config, twilioFromNumber: e.target.value})} placeholder="whatsapp:+1..." /></div>
+                                      </div>
+                                  </div>
+                              ) : (
+                                  <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100 space-y-6">
+                                      <h5 className="text-[10px] font-black text-blue-700 uppercase flex items-center gap-2 tracking-widest"><Smartphone size={14}/> Dados Evolution API</h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                          <div className="md:col-span-2"><label className="block text-[9px] font-black text-blue-400 uppercase mb-1.5 ml-1">URL da API</label><input type="text" className="w-full px-4 py-3 border border-blue-200 rounded-xl text-sm font-mono bg-white focus:ring-4 focus:ring-blue-500/5 transition-all outline-none" value={config.instanceUrl} onChange={e => setConfig({...config, instanceUrl: e.target.value})} placeholder="https://api.sua-evolution.com" /></div>
+                                          <div><label className="block text-[9px] font-black text-blue-400 uppercase mb-1.5 ml-1">Instância</label><input type="text" className="w-full px-4 py-3 border border-blue-200 rounded-xl text-sm bg-white focus:ring-4 focus:ring-blue-500/5 transition-all outline-none font-bold" value={config.instanceName} onChange={e => setConfig({...config, instanceName: e.target.value})} /></div>
+                                          <div><label className="block text-[9px] font-black text-blue-400 uppercase mb-1.5 ml-1">API Key</label><input type="password" title="Key" className="w-full px-4 py-3 border border-blue-200 rounded-xl text-sm bg-white focus:ring-4 focus:ring-blue-500/5 transition-all outline-none font-mono" value={config.apiKey} onChange={e => setConfig({...config, apiKey: e.target.value})} /></div>
+                                          {config.evolutionMethod === 'code' && (
+                                              <div className="md:col-span-2"><label className="block text-[9px] font-black text-blue-400 uppercase mb-1.5 ml-1">Seu Celular p/ Pareamento (55...)</label><input type="text" className="w-full px-4 py-3 border border-blue-200 rounded-xl text-sm font-bold bg-white focus:ring-4 focus:ring-blue-500/5 transition-all outline-none" value={config.pairingNumber} onChange={e => setConfig({...config, pairingNumber: e.target.value})} placeholder="55..." /></div>
+                                          )}
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
+                      </div>
 
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-4">
-                            <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2"><Database size={18} className="text-teal-600" /> Webhook de Recebimento</h3>
-                            <div className="p-4 bg-teal-50 border-2 border-teal-200 rounded-2xl flex flex-col md:flex-row gap-2">
-                                <code className="flex-1 bg-white border p-3 rounded-xl text-[10px] font-mono break-all leading-relaxed">{edgeFunctionUrl}</code>
-                                <button onClick={() => { navigator.clipboard.writeText(edgeFunctionUrl); alert("URL Copiada!"); }} className="bg-teal-600 text-white p-3 rounded-xl active:scale-95 transition-all"><Copy size={20}/></button>
-                            </div>
-                        </div>
-                    </div>
+                      {/* Webhook Info */}
+                      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-4">
+                          <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2"><Database size={18} className="text-teal-600" /> Webhook de Recebimento</h3>
+                          <div className="p-4 bg-teal-50 border-2 border-teal-200 rounded-2xl flex flex-col md:flex-row gap-4 items-center">
+                              <code className="flex-1 bg-white border p-4 rounded-xl text-[10px] font-mono break-all leading-relaxed w-full">{edgeFunctionUrl}</code>
+                              <button onClick={() => { navigator.clipboard.writeText(edgeFunctionUrl); alert("URL Copiada!"); }} className="bg-teal-600 text-white p-4 rounded-xl active:scale-95 transition-all shadow-md shrink-0 w-full md:w-auto flex justify-center"><Copy size={20}/></button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
 
-                    <div className="px-8 py-6 bg-white border-t border-slate-100 flex justify-end gap-3 shrink-0 w-full">
-                        <button onClick={() => setShowSettings(false)} className="px-6 py-3 text-slate-500 font-bold text-sm">Cancelar</button>
-                        <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-3 rounded-2xl font-black text-sm shadow-xl flex items-center gap-2 transition-all">
-                            {isSavingConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Configurações
-                        </button>
-                    </div>
-                </div>
+              {/* Footer Fixo */}
+              <div className="px-8 py-6 bg-white border-t border-slate-200 flex flex-col md:flex-row justify-end gap-3 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
+                  <button onClick={() => setShowSettings(false)} className="px-8 py-3 text-slate-500 font-bold text-sm hover:bg-slate-50 rounded-xl transition-all">Cancelar</button>
+                  <button onClick={handleSaveConfig} disabled={isSavingConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-12 py-3 rounded-2xl font-black text-sm shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50">
+                      {isSavingConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Configurações
+                  </button>
               </div>
           </div>
       )}

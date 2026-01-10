@@ -1,18 +1,15 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageCircle, Send, CheckCheck, User, X, Plus, 
   Settings, Save, Smartphone, Loader2, Wifi, 
   WifiOff, ChevronRight, RefreshCw, UserCheck, Search, Link2,
   AlertCircle, ShieldCheck, UserPlus, Kanban, List, MoveRight,
-  Clock, CheckCircle, Circle, MessageSquare, ExternalLink, GraduationCap, School, Building2, Store, Heart,
-  Filter, LayoutGrid, ArrowRightLeft, DollarSign, Briefcase,
-  // Added missing icon imports
-  Edit2, Trash2
+  Clock, CheckCircle, Circle, MessageSquare, ExternalLink, GraduationCap, School, Building2, Store, Heart
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { whatsappService } from '../services/whatsappService';
-import { AttendanceFunnel, AttendanceStage } from '../types';
 
 // --- TYPES ---
 type ChatStatus = 'open' | 'pending' | 'waiting' | 'closed';
@@ -25,8 +22,6 @@ interface WAConversation {
   last_message: string;
   unread_count: number;
   status: ChatStatus;
-  funnel_id?: string;
-  stage_id?: string;
   updated_at: string;
 }
 
@@ -62,10 +57,8 @@ const ATTENDANCE_STAGES: { id: ChatStatus; label: string; color: string; bg: str
 ];
 
 export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord, currentAgentName }) => {
-  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'config'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [conversations, setConversations] = useState<WAConversation[]>([]);
-  const [funnels, setFunnels] = useState<AttendanceFunnel[]>([]);
-  const [selectedFunnelId, setSelectedFunnelId] = useState<string | null>(null);
   const [messages, setMessages] = useState<WAMessage[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
@@ -73,18 +66,12 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [globalContactInfo, setGlobalContactInfo] = useState<any>(null);
-  const [draggedChatId, setDraggedChatId] = useState<string | null>(null);
   
   // UI States
   const [showSettings, setShowSettings] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [showIdentifyModal, setShowIdentifyModal] = useState(false);
-  const [showMoveModal, setShowMoveModal] = useState<WAConversation | null>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
-
-  // Funnel Config States
-  const [editingFunnel, setEditingFunnel] = useState<AttendanceFunnel | null>(null);
-  const [isSavingFunnel, setIsSavingFunnel] = useState(false);
 
   // Form Identify
   const [identifyPhone, setIdentifyPhone] = useState('');
@@ -119,20 +106,19 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
 
   useEffect(() => {
       fetchConversations();
-      fetchFunnels();
       loadConfig();
   }, []);
 
   useEffect(() => {
       const timer = setInterval(() => {
-          if (!showSettings && !showIdentifyModal && viewMode !== 'config') {
+          if (!showSettings && !showIdentifyModal) {
             fetchConversations(false);
             if (selectedChatId) fetchMessages(selectedChatId, false);
             checkRealStatus();
           }
       }, 8000); 
       return () => clearInterval(timer);
-  }, [selectedChatId, showSettings, showIdentifyModal, config.instanceUrl, viewMode]);
+  }, [selectedChatId, showSettings, showIdentifyModal, config.instanceUrl]);
 
   useEffect(() => {
       if (selectedChatId) {
@@ -145,18 +131,9 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
       }
   }, [selectedChatId]);
 
-  const fetchFunnels = async () => {
-      try {
-          const data = await whatsappService.getFunnels();
-          setFunnels(data);
-          if (data.length > 0 && !selectedFunnelId) {
-              setSelectedFunnelId(data[0].id);
-          }
-      } catch (e) { console.error(e); }
-  };
-
   const loadGlobalIdentification = async () => {
       if (!selectedChat) return;
+      // Tenta identificar o contato usando o wa_id ou telefone vinculado
       const identifier = selectedChat.contact_phone || selectedChat.wa_id;
       const info = await whatsappService.identifyContactGlobally(identifier, selectedChat.contact_name);
       setGlobalContactInfo(info);
@@ -166,7 +143,10 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
   };
 
   const handleMarkAsRead = async (chatId: string) => {
+      // Feedback instantâneo no UI
       setConversations(prev => prev.map(c => c.id === chatId ? { ...c, unread_count: 0 } : c));
+      
+      // Persiste no Supabase
       try {
           await whatsappService.markAsRead(chatId);
       } catch (e) {
@@ -181,28 +161,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
       } catch (e) {
           alert("Erro ao mudar etapa do atendimento.");
       }
-  };
-
-  const handleMoveChatAction = async (chat: WAConversation, fId: string, sId: string) => {
-      try {
-          await whatsappService.moveChat(chat.id, fId, sId);
-          setConversations(prev => prev.map(c => c.id === chat.id ? { ...c, funnel_id: fId, stage_id: sId } : c));
-          setShowMoveModal(null);
-      } catch (e) {
-          alert("Erro ao mover chat.");
-      }
-  };
-
-  const handleDragStart = (id: string) => setDraggedChatId(id);
-  const handleOnDrop = async (stageId: string) => {
-      if (!draggedChatId || !selectedFunnelId) return;
-      try {
-          await whatsappService.moveChat(draggedChatId, selectedFunnelId, stageId);
-          setConversations(prev => prev.map(c => c.id === draggedChatId ? { ...c, stage_id: stageId } : c));
-      } catch (e) {
-          alert("Erro ao mover card.");
-      }
-      setDraggedChatId(null);
   };
 
   const addLog = (msg: string) => setConnLogs(prev => [msg, ...prev].slice(0, 5));
@@ -240,10 +198,10 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
               .order('updated_at', { ascending: false });
           
           if (data) {
-              const processed = data.map((c: any) => ({
-                  ...c,
-                  unread_count: c.id === selectedChatId ? 0 : (c.unread_count || 0)
-              }));
+              const processed = data.map((c: any) => {
+                  if (c.id === selectedChatId) return { ...c, unread_count: 0 };
+                  return c;
+              });
               setConversations(processed);
           }
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
@@ -265,33 +223,32 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
     if (e) e.preventDefault();
     if (!inputText.trim() || !selectedChatId || !selectedChat) return;
     setIsSending(true);
+    
+    // Identifica quem está enviando e assina a mensagem
     const agentName = currentAgentName || 'Atendimento VOLL';
     const signedMessage = `*Atendente ${agentName}:*\n${inputText}`;
+    
     const messageText = inputText;
     setInputText('');
+    
     try {
+        // Envia a mensagem assinada pela API do WhatsApp
         const result = await whatsappService.sendTextMessage(selectedChat, signedMessage);
         const waId = result.key?.id || result.messageId; 
+        
+        // Sincroniza no banco de dados a mensagem com a assinatura
         await whatsappService.syncMessage(selectedChatId, signedMessage, 'agent', waId);
+        
         if (selectedChat.status === 'open' || selectedChat.status === 'pending') {
             await handleUpdateStage(selectedChatId, 'waiting');
         }
+
         await fetchMessages(selectedChatId, false);
         await fetchConversations(false);
     } catch (err: any) {
         alert("Erro ao enviar: " + err.message);
         setInputText(messageText);
     } finally { setIsSending(false); }
-  };
-
-  const handleSaveFunnel = async () => {
-      if (!editingFunnel?.name) return;
-      setIsSavingFunnel(true);
-      try {
-          await whatsappService.saveFunnel(editingFunnel);
-          await fetchFunnels();
-          setEditingFunnel(null);
-      } catch (e) { alert("Erro ao salvar funil."); } finally { setIsSavingFunnel(false); }
   };
 
   const handleSaveConfig = async () => {
@@ -395,41 +352,24 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
       }
   };
 
-  const currentFunnel = funnels.find(f => f.id === selectedFunnelId);
-
   return (
     <div className="flex h-full bg-slate-50 rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative">
       
       {/* SIDEBAR */}
-      <div className={clsx("flex flex-col border-r border-slate-100 w-full md:w-80 lg:w-96 shrink-0 bg-white", selectedChatId && viewMode !== 'config' ? "hidden md:flex" : "flex")}>
+      <div className={clsx("flex flex-col border-r border-slate-100 w-full md:w-80 lg:w-96 shrink-0 bg-white", selectedChatId && viewMode === 'list' ? "hidden md:flex" : "flex")}>
         <div className="p-6 border-b border-slate-100 space-y-4">
             <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black text-slate-800 flex items-center gap-3"><MessageCircle className="text-teal-600" /> Atendimento</h2>
+                <h2 className="text-xl font-black text-slate-800 flex items-center gap-3"><MessageCircle className="text-teal-600" /> Conversas</h2>
                 <div className="flex gap-1">
                     <div className="bg-slate-100 p-1 rounded-lg flex mr-2">
                         <button onClick={() => setViewMode('list')} className={clsx("p-1.5 rounded-md transition-all", viewMode === 'list' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Vista Lista"><List size={16}/></button>
                         <button onClick={() => setViewMode('kanban')} className={clsx("p-1.5 rounded-md transition-all", viewMode === 'kanban' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Vista Kanban"><Kanban size={16}/></button>
-                        <button onClick={() => setViewMode('config')} className={clsx("p-1.5 rounded-md transition-all", viewMode === 'config' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Configurar Funis"><Settings size={16}/></button>
                     </div>
                     <button onClick={() => fetchConversations()} className="p-2 text-slate-400 hover:text-teal-600 rounded-xl transition-all"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""} /></button>
                     <button onClick={() => setShowNewChatModal(true)} className="p-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 shadow-lg active:scale-95"><Plus size={18} /></button>
-                    <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-teal-600 rounded-xl transition-all"><Filter size={18} /></button>
+                    <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-teal-600 rounded-xl transition-all"><Settings size={18} /></button>
                 </div>
             </div>
-            
-            {viewMode === 'kanban' && (
-                <div className="relative animate-in slide-in-from-top-2">
-                    <LayoutGrid className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
-                    <select 
-                        className="w-full pl-9 pr-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-teal-500 appearance-none"
-                        value={selectedFunnelId || ''}
-                        onChange={e => setSelectedFunnelId(e.target.value)}
-                    >
-                        {funnels.map(f => <option key={f.id} value={f.id}>Funil: {f.name}</option>)}
-                    </select>
-                </div>
-            )}
-
             <div className={clsx("p-3 rounded-2xl border-2 flex items-center justify-between transition-all", config.isConnected ? "bg-teal-50 border-teal-100" : "bg-red-50 border-red-100")}>
                 <div className="flex items-center gap-2">
                     <div className={clsx("w-2 h-2 rounded-full", config.isConnected ? "bg-teal-500 animate-pulse" : "bg-red-500")}></div>
@@ -452,79 +392,26 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                             <span className="text-[9px] font-black text-slate-300 uppercase">{formatTime(conv.updated_at)}</span>
                         </div>
                         <p className={clsx("text-xs truncate pr-6 mt-1", conv.unread_count > 0 ? "font-bold text-slate-800" : "text-slate-500")}>{conv.last_message}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                             {ATTENDANCE_STAGES.find(s => s.id === conv.status) && (
-                                 <span className={clsx("text-[8px] font-black px-1.5 py-0.5 rounded uppercase border", ATTENDANCE_STAGES.find(s => s.id === conv.status)?.bg, ATTENDANCE_STAGES.find(s => s.id === conv.status)?.color)}>
-                                     {ATTENDANCE_STAGES.find(s => s.id === conv.status)?.label}
-                                 </span>
-                             )}
-                             {conv.funnel_id && (
-                                 <span className="text-[8px] font-black bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded uppercase border border-indigo-100 flex items-center gap-1">
-                                     <Filter size={8}/> {funnels.find(f => f.id === conv.funnel_id)?.name}
-                                 </span>
-                             )}
-                        </div>
                         {conv.unread_count > 0 && <span className="absolute right-5 bottom-5 w-5 h-5 bg-red-500 text-white text-[10px] font-black flex items-center justify-center rounded-full animate-bounce shadow-lg">{conv.unread_count}</span>}
                     </div>
                 ))
-            ) : viewMode === 'kanban' ? (
-                <div className="p-4 space-y-6">
-                    {currentFunnel?.stages.map(stage => {
-                        const stageDeals = conversations.filter(c => c.funnel_id === currentFunnel.id && c.stage_id === stage.id);
+            ) : (
+                <div className="p-4 space-y-2">
+                    {ATTENDANCE_STAGES.map(stage => {
+                        const count = conversations.filter(c => c.status === stage.id).length;
+                        if (count === 0) return null;
                         return (
-                            <div key={stage.id} className="space-y-2">
-                                <div className="flex items-center justify-between px-2">
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                                        <div className={clsx("w-2 h-2 rounded-full", stage.color)}></div>
-                                        {stage.title}
-                                    </h4>
-                                    <span className="text-[9px] font-black bg-slate-100 px-1.5 py-0.5 rounded-full border">{stageDeals.length}</span>
-                                </div>
-                                <div 
-                                    onDragOver={e => e.preventDefault()}
-                                    onDrop={() => handleOnDrop(stage.id)}
-                                    className="min-h-[60px] bg-slate-100/50 rounded-2xl p-2 border border-dashed border-slate-200"
-                                >
-                                    {stageDeals.map(c => (
-                                        <div 
-                                            key={c.id} 
-                                            draggable 
-                                            onDragStart={() => handleDragStart(c.id)}
-                                            onClick={() => setSelectedChatId(c.id)}
-                                            className={clsx("bg-white p-3 rounded-xl shadow-sm border mb-2 cursor-grab active:cursor-grabbing hover:border-teal-400 transition-all", selectedChatId === c.id ? "ring-2 ring-teal-500 border-transparent" : "border-slate-100")}
-                                        >
-                                            <div className="flex justify-between items-start mb-1">
-                                                <p className="text-xs font-bold text-slate-800 truncate">{c.contact_name}</p>
-                                                {c.unread_count > 0 && <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>}
-                                            </div>
-                                            <p className="text-[10px] text-slate-400 truncate">{c.last_message}</p>
-                                        </div>
-                                    ))}
-                                </div>
+                            <div key={stage.id} className="space-y-1">
+                                <h4 className={clsx("text-[10px] font-black uppercase tracking-widest mb-2 px-2", stage.color)}>{stage.label} ({count})</h4>
+                                {conversations.filter(c => c.status === stage.id).map(c => (
+                                    <div key={c.id} onClick={() => setSelectedChatId(c.id)} className={clsx("p-3 rounded-xl cursor-pointer transition-all border", selectedChatId === c.id ? "bg-teal-50 border-teal-200 shadow-sm" : "bg-white hover:bg-slate-50 border-slate-100")}>
+                                        <p className="text-xs font-bold text-slate-800 truncate">{c.contact_name}</p>
+                                        <p className="text-[9px] text-slate-400 truncate">{c.last_message}</p>
+                                    </div>
+                                ))}
                             </div>
                         );
                     })}
-                    {!currentFunnel && <div className="p-10 text-center text-slate-400 text-xs italic">Crie um funil nas configurações para usar o Kanban.</div>}
-                </div>
-            ) : (
-                <div className="p-6 space-y-6">
-                    <div className="flex items-center justify-between"><h3 className="font-black text-slate-800 text-sm uppercase tracking-widest flex items-center gap-2"><Filter size={16} className="text-teal-600"/> Gerenciar Funis</h3><button onClick={() => setEditingFunnel({ id: crypto.randomUUID(), name: '', stages: [] })} className="p-1.5 bg-teal-600 text-white rounded-lg"><Plus size={16}/></button></div>
-                    <div className="space-y-3">
-                        {funnels.map(f => (
-                            <div key={f.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-teal-300 transition-all group">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h4 className="font-bold text-slate-800 text-sm">{f.name}</h4>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => setEditingFunnel(f)} className="p-1 text-slate-400 hover:text-teal-600"><Edit2 size={14}/></button>
-                                        <button onClick={() => whatsappService.deleteFunnel(f.id).then(fetchFunnels)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
-                                    </div>
-                                </div>
-                                <div className="flex flex-wrap gap-1">
-                                    {f.stages.map(s => <span key={s.id} className={clsx("px-1.5 py-0.5 rounded-[4px] text-[8px] font-black uppercase border", s.color)}>{s.title}</span>)}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             )}
         </div>
@@ -542,52 +429,45 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                             <h3 className="font-black text-slate-800 text-base leading-tight truncate">{selectedChat.contact_name}</h3>
                             <div className="flex flex-wrap items-center gap-2 mt-0.5">
                                 <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">{formatPhoneDisplay(selectedChat.wa_id, selectedChat.contact_phone)}</p>
-                                {globalContactInfo && (
-                                    <span className={clsx("px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border", globalContactInfo.color)}>
-                                        {getEntityIcon(globalContactInfo.type)} {globalContactInfo.label}
-                                    </span>
+                                
+                                {globalContactInfo ? (
+                                    <div className="flex items-center gap-2">
+                                        <span className={clsx("px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border", globalContactInfo.color)}>
+                                            {getEntityIcon(globalContactInfo.type)} {globalContactInfo.label}
+                                        </span>
+                                        {/* Botão Dinâmico de Navegação para o Cadastro Real */}
+                                        <button 
+                                            onClick={() => onNavigateToRecord?.(globalContactInfo.tab, globalContactInfo.id)}
+                                            className="text-[9px] font-bold text-indigo-600 hover:underline flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 active:scale-95 transition-all"
+                                        >
+                                            <ExternalLink size={10}/> Ver Cadastro Completo
+                                        </button>
+                                    </div>
+                                ) : (
+                                    whatsappService.isLid(selectedChat.wa_id) && !selectedChat.contact_phone && 
+                                    <button onClick={() => setShowIdentifyModal(true)} className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-amber-200 hover:bg-amber-200 transition-colors">
+                                        <UserPlus size={10}/> Identificar Contato
+                                    </button>
                                 )}
-                                <button 
-                                    onClick={() => setShowMoveModal(selectedChat)}
-                                    className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-indigo-100 hover:bg-indigo-100"
-                                >
-                                    <ArrowRightLeft size={10}/> Mover de Funil
-                                </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* SELECTOR DE ETAPA LEGADO E DINÂMICO */}
+                    {/* SELECTOR DE ETAPA */}
                     <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner w-full md:w-auto overflow-x-auto no-scrollbar">
-                        {selectedChat.funnel_id ? (
-                            funnels.find(f => f.id === selectedChat.funnel_id)?.stages.map(s => (
-                                <button 
-                                    key={s.id} 
-                                    onClick={() => handleMoveChatAction(selectedChat, selectedChat.funnel_id!, s.id)}
-                                    className={clsx(
-                                        "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tighter flex items-center gap-1.5 transition-all flex-1 md:flex-none justify-center whitespace-nowrap",
-                                        selectedChat.stage_id === s.id ? "bg-white text-indigo-700 shadow-md ring-1 ring-slate-200" : "text-slate-400 hover:text-slate-600"
-                                    )}
-                                >
-                                    {selectedChat.stage_id === s.id ? <CheckCircle size={10}/> : <Circle size={10}/>}
-                                    {s.title}
-                                </button>
-                            ))
-                        ) : (
-                            ATTENDANCE_STAGES.map(stage => (
-                                <button 
-                                    key={stage.id} 
-                                    onClick={() => handleUpdateStage(selectedChat.id, stage.id)}
-                                    className={clsx(
-                                        "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tighter flex items-center gap-1.5 transition-all flex-1 md:flex-none justify-center whitespace-nowrap",
-                                        selectedChat.status === stage.id ? "bg-white text-indigo-700 shadow-md ring-1 ring-slate-200" : "text-slate-400 hover:text-slate-600"
-                                    )}
-                                >
-                                    {selectedChat.status === stage.id ? <CheckCircle size={10}/> : <Circle size={10}/>}
-                                    {stage.label.split(' ')[0]}
-                                </button>
-                            ))
-                        )}
+                        {ATTENDANCE_STAGES.map(stage => (
+                            <button 
+                                key={stage.id} 
+                                onClick={() => handleUpdateStage(selectedChat.id, stage.id)}
+                                className={clsx(
+                                    "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tighter flex items-center gap-1.5 transition-all flex-1 md:flex-none justify-center whitespace-nowrap",
+                                    selectedChat.status === stage.id ? "bg-white text-indigo-700 shadow-md ring-1 ring-slate-200" : "text-slate-400 hover:text-slate-600"
+                                )}
+                            >
+                                {selectedChat.status === stage.id ? <CheckCircle size={10}/> : <Circle size={10}/>}
+                                {stage.label.split(' ')[0]}
+                            </button>
+                        ))}
                     </div>
                 </div>
                 
@@ -624,109 +504,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
           )}
       </div>
 
-      {/* MODAL CONFIG FUNNEL */}
-      {editingFunnel && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="text-lg font-black text-slate-800">Configurar Funil de Atendimento</h3>
-                      <button onClick={() => setEditingFunnel(null)} className="p-2 text-slate-400"><X size={24}/></button>
-                  </div>
-                  <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-6">
-                      <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nome do Funil</label>
-                          <input type="text" className="w-full px-4 py-2 border rounded-xl font-bold" value={editingFunnel.name} onChange={e => setEditingFunnel({...editingFunnel, name: e.target.value})} placeholder="Ex: Atendimento Geral, Financeiro..." />
-                      </div>
-                      <div className="space-y-4">
-                          <div className="flex justify-between items-center">
-                              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Etapas do Funil</h4>
-                              <button onClick={() => setEditingFunnel({...editingFunnel, stages: [...editingFunnel.stages, { id: crypto.randomUUID(), title: 'Nova Etapa', color: 'bg-slate-500' }]})} className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded text-[10px] font-bold">+ Adicionar</button>
-                          </div>
-                          <div className="space-y-2">
-                              {editingFunnel.stages.map((stage, idx) => (
-                                  <div key={stage.id} className="flex gap-2 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
-                                      <input type="text" className="flex-1 bg-white border px-3 py-1.5 rounded-lg text-sm font-bold" value={stage.title} onChange={e => {
-                                          const newStages = [...editingFunnel.stages];
-                                          newStages[idx].title = e.target.value;
-                                          setEditingFunnel({...editingFunnel, stages: newStages});
-                                      }} />
-                                      <select className="px-2 py-1.5 border rounded-lg text-xs font-bold bg-white" value={stage.color} onChange={e => {
-                                          const newStages = [...editingFunnel.stages];
-                                          newStages[idx].color = e.target.value;
-                                          setEditingFunnel({...editingFunnel, stages: newStages});
-                                      }}>
-                                          <option value="bg-slate-500">Cinza</option>
-                                          <option value="bg-red-500">Vermelho</option>
-                                          <option value="bg-amber-500">Amarelo</option>
-                                          <option value="bg-blue-500">Azul</option>
-                                          <option value="bg-green-500">Verde</option>
-                                          <option value="bg-purple-500">Roxo</option>
-                                      </select>
-                                      <button onClick={() => setEditingFunnel({...editingFunnel, stages: editingFunnel.stages.filter((_, i) => i !== idx)})} className="p-1.5 text-red-400 hover:bg-red-100 rounded-lg"><Trash2 size={16}/></button>
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
-                  </div>
-                  <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-3xl">
-                      <button onClick={() => setEditingFunnel(null)} className="px-6 py-2.5 text-slate-600 font-bold">Cancelar</button>
-                      <button onClick={handleSaveFunnel} disabled={isSavingFunnel} className="bg-teal-600 text-white px-8 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2">
-                          {isSavingFunnel ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Funil
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL MOVE CHAT */}
-      {showMoveModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 flex flex-col">
-                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="text-lg font-black text-slate-800">Direcionar Atendimento</h3>
-                      <button onClick={() => setShowMoveModal(null)} className="p-2 text-slate-400"><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-6">
-                      <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-indigo-600 font-black">{showMoveModal.contact_name.charAt(0)}</div>
-                          <div><p className="text-[10px] font-black text-indigo-400 uppercase">Mover cliente:</p><p className="text-sm font-bold text-indigo-900">{showMoveModal.contact_name}</p></div>
-                      </div>
-                      <div className="space-y-4">
-                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Selecione o Funil de Destino</p>
-                          <div className="grid grid-cols-1 gap-2">
-                              {funnels.map(f => (
-                                  <div key={f.id} className="space-y-1">
-                                      <div className="px-2 py-1 text-[10px] font-black text-slate-400 uppercase bg-slate-100 rounded flex items-center gap-2"><LayoutGrid size={10}/> {f.name}</div>
-                                      <div className="flex flex-wrap gap-2 p-2">
-                                          {f.stages.map(s => (
-                                              <button 
-                                                key={s.id} 
-                                                onClick={() => handleMoveChatAction(showMoveModal, f.id, s.id)}
-                                                className={clsx(
-                                                    "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border transition-all hover:shadow-md",
-                                                    showMoveModal.funnel_id === f.id && showMoveModal.stage_id === s.id ? "bg-teal-600 text-white border-transparent" : "bg-white text-slate-600 border-slate-200"
-                                                )}
-                                              >
-                                                  {s.title}
-                                              </button>
-                                          ))}
-                                      </div>
-                                  </div>
-                              ))}
-                              <div className="space-y-1 mt-4">
-                                  <div className="px-2 py-1 text-[10px] font-black text-slate-400 uppercase bg-slate-100 rounded flex items-center gap-2"><Clock size={10}/> Fluxo Legado</div>
-                                  <div className="flex flex-wrap gap-2 p-2">
-                                      <button onClick={() => { whatsappService.moveChat(showMoveModal.id, '', ''); handleUpdateStage(showMoveModal.id, 'closed'); setShowMoveModal(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase bg-red-50 text-red-600 border border-red-200">Resetar p/ Atendimento Raiz</button>
-                                  </div>
-                              </div>
-                          </div>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL SETTINGS & IDENTIFY (Existentes no arquivo anterior) */}
+      {/* MODAL IDENTIFY */}
       {showIdentifyModal && (
           <div className="fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md animate-in zoom-in-95 overflow-hidden">
@@ -746,6 +524,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
           </div>
       )}
 
+      {/* MODAL SETTINGS */}
       {showSettings && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
@@ -773,6 +552,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
           </div>
       )}
 
+      {/* MODAL NEW CHAT */}
       {showNewChatModal && (
           <div className="fixed inset-0 z-150 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md animate-in zoom-in-95 overflow-hidden">
@@ -782,7 +562,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                           <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Celular do Destinatário</label><div className="relative"><Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/><input type="text" required className="w-full pl-12 pr-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm focus:bg-white outline-none font-bold" value={newChatPhone} onChange={e => setNewChatPhone(e.target.value.replace(/\D/g, ''))} placeholder="5551999999999" /></div></div>
                           <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nome (Opcional)</label><input type="text" className="w-full px-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm outline-none" value={newChatName} onChange={e => setNewChatName(e.target.value)} placeholder="Identificação do contato" /></div>
                       </div>
-                      <button type="submit" disabled={isCreatingChat} className="w-full py-4 bg-teal-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-teal-600/20 active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2">{isCreatingChat ? <Loader2 size={18} className="animate-spin" /> : 'Abrir Chat'}</button>
+                      <button type="submit" disabled={isCreatingChat} className="w-full py-4 bg-teal-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-teal-600/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">{isCreatingChat ? <Loader2 size={18} className="animate-spin" /> : 'Abrir Chat'}</button>
                   </form>
               </div>
           </div>

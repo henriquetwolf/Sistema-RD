@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LifeBuoy, Search, Filter, Clock, CheckCircle, AlertTriangle, User, Users, 
@@ -144,6 +143,25 @@ export const SupportManager: React.FC = () => {
       setTickets(prev => prev.map(t => t.id === ticket.id ? updated : t));
       if (selectedTicket?.id === ticket.id) setSelectedTicket(updated);
     } catch (e) { alert("Erro ao atualizar."); }
+  };
+
+  const handleDeleteTicket = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (window.confirm("Deseja realmente excluir este chamado permanentemente? Esta ação removerá o histórico e não pode ser desfeita.")) {
+      try {
+        await appBackend.deleteSupportTicket(id);
+        setTickets(prev => prev.filter(t => t.id !== id));
+        if (selectedTicket?.id === id) setSelectedTicket(null);
+        await appBackend.logActivity({ 
+          action: 'delete', 
+          module: 'suporte', 
+          details: `Excluiu chamado ID: ${id.split('-')[0]}`, 
+          recordId: id 
+        });
+      } catch (e: any) {
+        alert(`Erro ao excluir chamado: ${e.message}`);
+      }
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -409,7 +427,7 @@ export const SupportManager: React.FC = () => {
                                 draggable
                                 onDragStart={() => handleDragStartActual(t.id)}
                                 onClick={() => setSelectedTicket(t)}
-                                className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-grab active:cursor-grabbing group"
+                                className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-grab active:cursor-grabbing group relative"
                               >
                                   <div className="flex justify-between items-start mb-2">
                                       <span className={clsx("text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded border", 
@@ -417,7 +435,12 @@ export const SupportManager: React.FC = () => {
                                         (t.senderRole === 'admin' ? t.targetRole : t.senderRole) === 'instructor' ? "text-orange-600 border-orange-100 bg-orange-50" :
                                         "text-teal-600 border-teal-100 bg-teal-50"
                                       )}>{t.senderRole === 'admin' ? `À: ${t.targetRole}` : `DE: ${t.senderRole}`}</span>
-                                      <span className="text-[9px] text-slate-400">{new Date(t.createdAt).toLocaleDateString()}</span>
+                                      <button 
+                                          onClick={(e) => handleDeleteTicket(e, t.id)}
+                                          className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                      >
+                                          <Trash2 size={12}/>
+                                      </button>
                                   </div>
                                   <div className="flex items-center gap-1.5 mb-1.5">
                                       <span className="bg-indigo-100 text-indigo-700 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full">{t.tag || 'Geral'}</span>
@@ -474,7 +497,18 @@ export const SupportManager: React.FC = () => {
                             </td>
                             <td className="px-6 py-4 font-medium text-slate-600 truncate max-w-xs">{t.subject}</td>
                             <td className="px-6 py-4 text-xs text-slate-500 font-bold">{t.assignedName || '--'}</td>
-                            <td className="px-6 py-4 text-right"><ChevronRight size={18} className="text-slate-200 group-hover:text-indigo-600 ml-auto transition-colors" /></td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button 
+                                    onClick={(e) => handleDeleteTicket(e, t.id)}
+                                    className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                    title="Excluir Chamado"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                                <ChevronRight size={18} className="text-slate-200 group-hover:text-indigo-600 transition-colors" />
+                              </div>
+                            </td>
                         </tr>
                     );
                 })}
@@ -611,6 +645,15 @@ export const SupportManager: React.FC = () => {
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'pending')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'pending' ? "bg-amber-500 text-white shadow-md" : "bg-white text-amber-500 border border-amber-100")}>Em Análise</button>
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'waiting')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'waiting' ? "bg-blue-500 text-white shadow-md" : "bg-white text-blue-500 border border-blue-100")}>Aguardando Usuário</button>
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'closed')} className="w-full py-2 rounded-lg text-[10px] font-black uppercase bg-green-600 text-white hover:bg-green-700 transition-all shadow-md mt-2">Resolvido / Fechar</button>
+                            </div>
+
+                            <div className="pt-4 mt-4 border-t border-indigo-100">
+                                <button 
+                                    onClick={(e) => handleDeleteTicket(e, selectedTicket.id)}
+                                    className="w-full py-2 flex items-center justify-center gap-2 text-[10px] font-black uppercase text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                >
+                                    <Trash2 size={14} /> Excluir Chamado
+                                </button>
                             </div>
                         </div>
                     </div>

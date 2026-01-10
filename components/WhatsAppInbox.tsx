@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-// Fix: Added missing ChevronDown import from lucide-react
 import { 
   MessageCircle, Send, CheckCheck, User, X, Plus, 
   Settings, Save, Smartphone, Loader2, Wifi, 
@@ -8,7 +7,7 @@ import {
   AlertCircle, ShieldCheck, UserPlus, List, MoveRight,
   Clock, CheckCircle, Circle, MessageSquare, ExternalLink, GraduationCap, School, Building2, Store, Heart,
   Filter, LayoutGrid, ArrowRightLeft, DollarSign, Briefcase,
-  Edit2, Trash2, Tag, Hash
+  Edit2, Trash2, Tag, Hash, Kanban
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -54,15 +53,15 @@ interface WhatsAppInboxProps {
     currentAgentName?: string;
 }
 
-const ATTENDANCE_STAGES: { id: ChatStatus; label: string; color: string; bg: string }[] = [
-    { id: 'open', label: 'Novos / Sem Resposta', color: 'text-red-600', bg: 'bg-red-50' },
-    { id: 'pending', label: 'Em Atendimento', color: 'text-amber-600', bg: 'bg-amber-50' },
-    { id: 'waiting', label: 'Aguardando Cliente', color: 'text-blue-600', bg: 'bg-blue-50' },
-    { id: 'closed', label: 'Finalizados', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+const ATTENDANCE_STAGES: { id: ChatStatus; label: string; color: string; bg: string; dot: string }[] = [
+    { id: 'open', label: 'Novos / Sem Resposta', color: 'text-red-600', bg: 'bg-red-50', dot: 'bg-red-500' },
+    { id: 'pending', label: 'Em Atendimento', color: 'text-amber-600', bg: 'bg-amber-50', dot: 'bg-amber-500' },
+    { id: 'waiting', label: 'Aguardando Cliente', color: 'text-blue-600', bg: 'bg-blue-50', dot: 'bg-blue-500' },
+    { id: 'closed', label: 'Finalizados', color: 'text-emerald-600', bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
 ];
 
 export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord, currentAgentName }) => {
-  const [viewMode, setViewMode] = useState<'list' | 'config'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'config'>('list');
   const [conversations, setConversations] = useState<WAConversation[]>([]);
   const [tags, setTags] = useState<AttendanceTag[]>([]);
   const [messages, setMessages] = useState<WAMessage[]>([]);
@@ -72,12 +71,13 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [globalContactInfo, setGlobalContactInfo] = useState<any>(null);
+  const [draggedChatId, setDraggedChatId] = useState<string | null>(null);
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('all');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
+  const [selectedStatusFilters, setSelectedStatusFilters] = useState<ChatStatus[]>([]);
 
   // UI States
   const [showSettings, setShowSettings] = useState(false);
@@ -202,6 +202,18 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
       } catch (e) {
           alert("Erro ao excluir atendimento.");
       }
+  };
+
+  const handleDragStart = (id: string) => setDraggedChatId(id);
+  const handleOnDrop = async (newStatus: ChatStatus) => {
+      if (!draggedChatId) return;
+      try {
+          await whatsappService.updateChatStatus(draggedChatId, newStatus);
+          setConversations(prev => prev.map(c => c.id === draggedChatId ? { ...c, status: newStatus } : c));
+      } catch (e) {
+          alert("Erro ao mover atendimento.");
+      }
+      setDraggedChatId(null);
   };
 
   const addLog = (msg: string) => setConnLogs(prev => [msg, ...prev].slice(0, 5));
@@ -399,10 +411,16 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
       const matchesSearch = (c.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesPhone = (c.contact_phone || c.wa_id || '').includes(searchPhone.replace(/\D/g, ''));
       const matchesTag = selectedTagFilter === 'all' || c.tag === selectedTagFilter;
-      const matchesStatus = selectedStatusFilter === 'all' || c.status === selectedStatusFilter;
+      const matchesStatus = selectedStatusFilters.length === 0 || selectedStatusFilters.includes(c.status);
       return matchesSearch && matchesPhone && matchesTag && matchesStatus;
     });
-  }, [conversations, searchTerm, searchPhone, selectedTagFilter, selectedStatusFilter]);
+  }, [conversations, searchTerm, searchPhone, selectedTagFilter, selectedStatusFilters]);
+
+  const toggleStatusFilter = (status: ChatStatus) => {
+      setSelectedStatusFilters(prev => 
+          prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+      );
+  };
 
   return (
     <div className="flex h-full bg-slate-50 rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative">
@@ -415,6 +433,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                 <div className="flex gap-1">
                     <div className="bg-slate-100 p-1 rounded-lg flex mr-2">
                         <button onClick={() => setViewMode('list')} className={clsx("p-1.5 rounded-md transition-all", viewMode === 'list' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Vista Lista"><List size={16}/></button>
+                        <button onClick={() => setViewMode('kanban')} className={clsx("p-1.5 rounded-md transition-all", viewMode === 'kanban' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Vista Kanban"><Kanban size={16}/></button>
                         <button onClick={() => setViewMode('config')} className={clsx("p-1.5 rounded-md transition-all", viewMode === 'config' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Configurar Tags"><Settings size={16}/></button>
                     </div>
                     <button onClick={() => fetchConversations()} className="p-2 text-slate-400 hover:text-teal-600 rounded-xl transition-all"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""} /></button>
@@ -445,11 +464,11 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                         onChange={e => setSearchPhone(e.target.value)}
                     />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
                     <div className="relative">
                         <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={12}/>
                         <select 
-                            className="w-full pl-8 pr-2 py-1.5 bg-slate-50 border rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-teal-500 appearance-none"
+                            className="w-full pl-8 pr-8 py-1.5 bg-slate-50 border rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-teal-500 appearance-none"
                             value={selectedTagFilter}
                             onChange={e => setSelectedTagFilter(e.target.value)}
                         >
@@ -457,21 +476,28 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                             <option value="">Sem Tag</option>
                             {tags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                         </select>
-                        {/* Fix: Added missing ChevronDown icon */}
                         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={12}/>
                     </div>
-                    <div className="relative">
-                        <LayoutGrid className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={12}/>
-                        <select 
-                            className="w-full pl-8 pr-2 py-1.5 bg-slate-50 border rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-teal-500 appearance-none"
-                            value={selectedStatusFilter}
-                            onChange={e => setSelectedStatusFilter(e.target.value)}
-                        >
-                            <option value="all">Todos Status</option>
-                            {ATTENDANCE_STAGES.map(s => <option key={s.id} value={s.id}>{s.label.split(' ')[0]}</option>)}
-                        </select>
-                        {/* Fix: Added missing ChevronDown icon */}
-                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={12}/>
+                    
+                    {/* MULTI-SELECT STATUS FILTER */}
+                    <div className="flex flex-wrap gap-1">
+                        {ATTENDANCE_STAGES.map(s => (
+                            <button
+                                key={s.id}
+                                onClick={() => toggleStatusFilter(s.id)}
+                                className={clsx(
+                                    "px-2 py-1 rounded-full text-[8px] font-black uppercase border transition-all",
+                                    selectedStatusFilters.includes(s.id) 
+                                        ? `${s.bg} ${s.color} border-current shadow-sm` 
+                                        : "bg-slate-50 text-slate-400 border-slate-200"
+                                )}
+                            >
+                                {s.label.split(' ')[0]}
+                            </button>
+                        ))}
+                        {selectedStatusFilters.length > 0 && (
+                            <button onClick={() => setSelectedStatusFilters([])} className="p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors"><X size={10}/></button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -516,15 +542,64 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                         {conv.unread_count > 0 && <span className="absolute right-5 bottom-5 w-5 h-5 bg-red-500 text-white text-[10px] font-black flex items-center justify-center rounded-full animate-bounce shadow-lg">{conv.unread_count}</span>}
                     </div>
                 ))
+            ) : viewMode === 'kanban' ? (
+                <div className="p-4 flex flex-col gap-6">
+                    {ATTENDANCE_STAGES.map(stage => {
+                        const stageChats = filteredConversations.filter(c => c.status === stage.id);
+                        return (
+                            <div key={stage.id} className="space-y-2">
+                                <div className="flex items-center justify-between px-2">
+                                    <h4 className={clsx("text-[10px] font-black uppercase tracking-widest flex items-center gap-2", stage.color)}>
+                                        <div className={clsx("w-2 h-2 rounded-full", stage.dot)}></div>
+                                        {stage.label}
+                                    </h4>
+                                    <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded-full border">{stageChats.length}</span>
+                                </div>
+                                <div 
+                                    onDragOver={e => e.preventDefault()}
+                                    onDrop={() => handleOnDrop(stage.id)}
+                                    className="min-h-[80px] bg-slate-100/50 rounded-2xl p-2 border border-dashed border-slate-200 transition-colors"
+                                >
+                                    {stageChats.map(c => (
+                                        <div 
+                                            key={c.id} 
+                                            draggable 
+                                            onDragStart={() => handleDragStart(c.id)}
+                                            onClick={() => setSelectedChatId(c.id)}
+                                            className={clsx("bg-white p-3 rounded-xl shadow-sm border mb-2 cursor-grab active:cursor-grabbing hover:border-teal-400 transition-all group relative", selectedChatId === c.id ? "ring-2 ring-teal-500 border-transparent" : "border-slate-100")}
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <p className="text-xs font-bold text-slate-800 truncate pr-4">{c.contact_name}</p>
+                                                <button onClick={(e) => handleDeleteChat(e, c.id)} className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-red-500 absolute top-2 right-2"><Trash2 size={10}/></button>
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 truncate">{c.last_message}</p>
+                                            {c.tag && (
+                                                <div className="mt-2 flex">
+                                                    <span className={clsx("text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase border", tags.find(t => t.name === c.tag)?.color || 'bg-slate-50 text-slate-400')}>
+                                                        {c.tag}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {c.unread_count > 0 && <div className="absolute top-1/2 -translate-y-1/2 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm animate-pulse"></div>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             ) : (
                 <div className="p-6 space-y-6">
-                    <div className="flex items-center justify-between"><h3 className="font-black text-slate-800 text-sm uppercase tracking-widest flex items-center gap-2"><Tag size={16} className="text-teal-600"/> Gerenciar Tags</h3><button onClick={() => setEditingTag({ name: '', color: 'bg-slate-500 text-white border-slate-600' })} className="p-1.5 bg-teal-600 text-white rounded-lg"><Plus size={16}/></button></div>
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest flex items-center gap-2"><Tag size={16} className="text-teal-600"/> Gerenciar Tags</h3>
+                        <button onClick={() => setEditingTag({ name: '', color: 'bg-slate-100 text-slate-600 border-slate-200' })} className="p-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 shadow-md active:scale-95 transition-all"><Plus size={16}/></button>
+                    </div>
                     <div className="space-y-3">
                         {tags.map(t => (
                             <div key={t.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-teal-300 transition-all group">
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-3">
-                                        <div className={clsx("w-3 h-3 rounded-full", t.color.split(' ')[0])}></div>
+                                        <div className={clsx("w-3 h-3 rounded-full border shadow-inner", t.color.split(' ')[0])}></div>
                                         <h4 className="font-bold text-slate-800 text-sm">{t.name}</h4>
                                     </div>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -534,7 +609,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                                 </div>
                             </div>
                         ))}
-                        {tags.length === 0 && <div className="p-10 text-center text-slate-300 text-xs italic">Nenhuma tag cadastrada.</div>}
+                        {tags.length === 0 && <div className="p-10 text-center text-slate-300 text-xs italic">Nenhuma tag cadastrada. Clique em "+" para criar.</div>}
                     </div>
                 </div>
             )}
@@ -548,7 +623,9 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                 <div className="bg-white px-6 py-4 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center shadow-sm z-10 shrink-0 gap-4">
                     <div className="flex items-center gap-4">
                         <button className="md:hidden text-slate-500" onClick={() => setSelectedChatId(null)}><ChevronRight size={24} className="rotate-180" /></button>
-                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 font-bold border border-slate-200 shadow-inner"><User size={28} /></div>
+                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 font-bold border border-slate-200 shadow-inner overflow-hidden">
+                            {globalContactInfo?.photoUrl ? <img src={globalContactInfo.photoUrl} className="w-full h-full object-cover" /> : <User size={28} />}
+                        </div>
                         <div className="min-w-0">
                             <h3 className="font-black text-slate-800 text-base leading-tight truncate">{selectedChat.contact_name}</h3>
                             <div className="flex flex-wrap items-center gap-2 mt-0.5">
@@ -632,21 +709,21 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
           )}
       </div>
 
-      {/* MODAL CONFIG TAGS */}
+      {/* MODAL CONFIG TAGS (ADD/EDIT) */}
       {editingTag && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-sm animate-in zoom-in-95 flex flex-col">
-                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="text-lg font-black text-slate-800">Configurar Tag</h3>
-                      <button onClick={() => setEditingTag(null)} className="p-2 text-slate-400"><X size={24}/></button>
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 flex flex-col">
+                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50 rounded-t-3xl">
+                      <h3 className="text-lg font-black text-slate-800">{editingTag.id ? 'Editar Tag' : 'Criar Nova Tag'}</h3>
+                      <button onClick={() => setEditingTag(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"><X size={24}/></button>
                   </div>
                   <div className="p-8 space-y-6">
                       <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nome da Tag</label>
-                          <input type="text" className="w-full px-4 py-2 border rounded-xl font-bold" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Dúvida Técnica..." />
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome da Tag</label>
+                          <input type="text" className="w-full px-4 py-2.5 border rounded-xl font-bold bg-slate-50 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-teal-500" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Dúvida Técnica..." autoFocus />
                       </div>
                       <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Cor de Identificação</label>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Cor de Identificação</label>
                           <div className="grid grid-cols-4 gap-2">
                               {[
                                   { bg: 'bg-slate-100 text-slate-600 border-slate-200' },
@@ -661,16 +738,16 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                                   <button 
                                     key={i} 
                                     onClick={() => setEditingTag({...editingTag, color: c.bg})} 
-                                    className={clsx("w-full h-10 rounded-lg border-2 transition-all", c.bg.split(' ')[0], editingTag.color?.startsWith(c.bg.split(' ')[0]) ? "border-slate-800 scale-110" : "border-transparent")}
+                                    className={clsx("w-full h-10 rounded-lg border-2 transition-all hover:scale-105 active:scale-95", c.bg.split(' ')[0], editingTag.color?.startsWith(c.bg.split(' ')[0]) ? "border-slate-800 ring-2 ring-slate-800/20" : "border-transparent")}
                                   ></button>
                               ))}
                           </div>
                       </div>
                   </div>
                   <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-3xl">
-                      <button onClick={() => setEditingTag(null)} className="px-6 py-2 text-slate-600 font-bold">Cancelar</button>
-                      <button onClick={handleSaveTag} disabled={isSavingTag} className="bg-teal-600 text-white px-8 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2">
-                          {isSavingTag ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Tag
+                      <button onClick={() => setEditingTag(null)} className="px-6 py-2.5 text-slate-600 font-bold text-sm hover:underline">Cancelar</button>
+                      <button onClick={handleSaveTag} disabled={isSavingTag || !editingTag.name?.trim()} className="bg-teal-600 text-white px-8 py-2.5 rounded-xl font-bold shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50">
+                          {isSavingTag ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} {editingTag.id ? 'Salvar Tag' : 'Criar Tag'}
                       </button>
                   </div>
               </div>

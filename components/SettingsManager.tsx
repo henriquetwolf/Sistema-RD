@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, 
     Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, 
@@ -51,6 +51,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [banners, setBanners] = useState<Banner[]>([]);
   const [editingBanner, setEditingBanner] = useState<Partial<Banner> | null>(null);
   const [isLoadingBanners, setIsLoadingBanners] = useState(false);
+  const bannerFileInputRef = useRef<HTMLInputElement>(null);
 
   const [companies, setCompanies] = useState<CompanySetting[]>([]);
   const [allProducts, setAllProducts] = useState<UnifiedProduct[]>([]);
@@ -174,7 +175,11 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const fetchBanners = async () => {
       setIsLoadingBanners(true);
-      try { const data = await appBackend.getBanners('instructor'); setBanners(data); } catch (e) { console.error(e); } finally { setIsLoadingBanners(false); }
+      try { 
+          // REMOVIDO FILTRO FIXO: Agora busca todos para gerenciar
+          const data = await appBackend.getBanners(); 
+          setBanners(data); 
+      } catch (e) { console.error(e); } finally { setIsLoadingBanners(false); }
   };
 
   const fetchCompanies = async () => {
@@ -255,6 +260,16 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
     }
   };
 
+  const handleBannerImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setEditingBanner(prev => prev ? { ...prev, imageUrl: reader.result as string } : null);
+        };
+        reader.readAsDataURL(e.target.files[0]);
+    }
+  };
+
   const handleSaveGlobal = async () => {
     if (preview) {
       await appBackend.saveAppLogo(preview);
@@ -308,7 +323,10 @@ NOTIFY pgrst, 'reload config';
 
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingBanner) return;
+    if (!editingBanner || !editingBanner.imageUrl) {
+        alert("A imagem do banner é obrigatória.");
+        return;
+    }
     await appBackend.saveBanner(editingBanner as Banner);
     fetchBanners();
     setEditingBanner(null);
@@ -854,42 +872,103 @@ NOTIFY pgrst, 'reload config';
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-slate-800">Banners de Promoção</h3>
-                    <button onClick={() => setEditingBanner({ title: '', imageUrl: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Banner</button>
+                    <button onClick={() => setEditingBanner({ title: '', imageUrl: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-2">+ Novo Banner</button>
                 </div>
                 {editingBanner && (
-                    <form onSubmit={handleSaveBanner} className="bg-slate-50 p-6 rounded-xl border mb-8 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <form onSubmit={handleSaveBanner} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 mb-8 space-y-6 animate-in zoom-in-95">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="md:col-span-2">
-                                <label className="block text-xs font-bold mb-1">Título Interno</label>
-                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} required />
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Título Interno</label>
+                                <input type="text" className="w-full px-4 py-2.5 border rounded-xl text-sm font-bold" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} required />
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold mb-1">URL da Imagem</label>
-                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.imageUrl} onChange={e => setEditingBanner({...editingBanner, imageUrl: e.target.value})} required />
+                            
+                            <div className="md:col-span-1">
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Link de Destino (Opcional)</label>
+                                <input type="text" className="w-full px-4 py-2.5 border rounded-xl text-sm" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} placeholder="https://..." />
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold mb-1">Link de Destino</label>
-                                <input type="text" className="w-full p-2 border rounded text-sm" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold mb-1">Público</label>
-                                <select className="w-full p-2 border rounded text-sm" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
-                                    <option value="student">Área do Aluno</option>
-                                    <option value="instructor">Área do Instrutor</option>
+
+                            <div className="md:col-span-1">
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Público do Banner</label>
+                                <select className="w-full px-4 py-2.5 border rounded-xl text-sm bg-white font-bold" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
+                                    <option value="student">Portal do Aluno</option>
+                                    <option value="instructor">Portal do Instrutor</option>
                                 </select>
                             </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Imagem do Banner (Upload)</label>
+                                <div className="flex flex-col md:flex-row gap-6 items-start">
+                                    <div 
+                                        onClick={() => bannerFileInputRef.current?.click()}
+                                        className={clsx(
+                                            "w-full md:w-64 h-32 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-all",
+                                            editingBanner.imageUrl ? "border-orange-200 bg-orange-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                                        )}
+                                    >
+                                        <input 
+                                            ref={bannerFileInputRef}
+                                            type="file" 
+                                            className="hidden" 
+                                            accept="image/*" 
+                                            onChange={handleBannerImageUpload} 
+                                        />
+                                        {editingBanner.imageUrl ? (
+                                            <img src={editingBanner.imageUrl} className="h-full w-full object-cover rounded-[1.4rem]" alt="Preview" />
+                                        ) : (
+                                            <>
+                                                <Upload size={24} className="text-slate-300" />
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase">Selecionar Arquivo</span>
+                                            </>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 text-xs text-slate-400 space-y-2">
+                                        <p className="font-bold text-orange-600">Recomendação:</p>
+                                        <p>• Formato: PNG, JPG ou WEBP</p>
+                                        <p>• Proporção: Paisagem (Ex: 1200x400px)</p>
+                                        <p>• Tamanho máx: 2MB</p>
+                                        {editingBanner.imageUrl && (
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setEditingBanner({...editingBanner, imageUrl: ''})}
+                                                className="text-red-500 font-bold hover:underline flex items-center gap-1 mt-4"
+                                            >
+                                                <Trash2 size={12}/> Remover Imagem
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingBanner(null)} className="px-4 py-2 text-sm">Cancelar</button><button type="submit" className="bg-orange-600 text-white px-6 py-2 rounded-lg font-bold text-sm">Salvar Banner</button></div>
+                        <div className="flex justify-end gap-3 pt-6 border-t">
+                            <button type="button" onClick={() => setEditingBanner(null)} className="px-6 py-2 text-slate-500 font-bold text-sm">Cancelar</button>
+                            <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl shadow-orange-600/20 active:scale-95 transition-all flex items-center gap-2">
+                                <Save size={18} /> Salvar Banner
+                            </button>
+                        </div>
                     </form>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {banners.map(b => (
-                        <div key={b.id} className="p-3 border rounded-xl flex items-center gap-4 bg-white group">
-                            <div className="w-20 h-12 bg-slate-100 rounded overflow-hidden flex-shrink-0"><img src={b.imageUrl} className="w-full h-full object-cover" /></div>
-                            <div className="flex-1 truncate"><h4 className="font-bold text-sm text-slate-800">{b.title}</h4><p className="text-[10px] text-slate-400 uppercase">{b.targetAudience}</p></div>
-                            <div className="flex gap-1"><button onClick={() => setEditingBanner(b)} className="p-1.5 text-slate-400 hover:text-orange-600"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteBanner(b.id).then(fetchBanners)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button></div>
+                        <div key={b.id} className="p-3 border rounded-2xl flex items-center gap-4 bg-white group hover:border-orange-200 transition-all shadow-sm">
+                            <div className="w-24 h-14 bg-slate-100 rounded-xl overflow-hidden flex-shrink-0 border border-slate-100">
+                                {b.imageUrl ? <img src={b.imageUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><ImageIcon size={20}/></div>}
+                            </div>
+                            <div className="flex-1 truncate">
+                                <h4 className="font-bold text-sm text-slate-800 truncate">{b.title}</h4>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className={clsx("text-[8px] font-black uppercase px-1.5 py-0.5 rounded border", b.targetAudience === 'student' ? "bg-purple-50 text-purple-600 border-purple-100" : "bg-orange-50 text-orange-600 border-orange-100")}>
+                                        {b.targetAudience === 'student' ? 'Alunos' : 'Instrutores'}
+                                    </span>
+                                    {b.linkUrl && <LinkIcon size={10} className="text-slate-300" />}
+                                </div>
+                            </div>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => setEditingBanner(b)} className="p-1.5 text-slate-400 hover:text-orange-600 bg-slate-50 rounded-lg"><Edit2 size={16}/></button>
+                                <button onClick={() => appBackend.deleteBanner(b.id).then(fetchBanners)} className="p-1.5 text-slate-400 hover:text-red-600 bg-slate-50 rounded-lg"><Trash2 size={16}/></button>
+                            </div>
                         </div>
                     ))}
+                    {banners.length === 0 && <div className="col-span-full py-12 text-center text-slate-300 italic text-sm">Nenhum banner cadastrado.</div>}
                 </div>
             </div>
         )}

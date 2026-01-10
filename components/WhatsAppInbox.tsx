@@ -124,7 +124,7 @@ export const WhatsAppInbox: React.FC = () => {
           const { data } = await appBackend.client
               .from('crm_whatsapp_chats')
               .select('*')
-              .order('updated_at', { ascending: false });
+              .order('updated_at', { ascending: false }); // Garante que as conversas recentes fiquem no topo
           if (data) setConversations(data);
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
@@ -244,7 +244,14 @@ export const WhatsAppInbox: React.FC = () => {
       } catch (e: any) { alert(`Erro ao criar conversa: ${e.message}`); } finally { setIsCreatingChat(false); }
   };
 
-  const formatTime = (isoString: string) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (isoString: string) => {
+      const date = new Date(isoString);
+      const now = new Date();
+      if (date.toDateString() === now.toDateString()) {
+          return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+      return date.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+  };
 
   const supabaseProjectUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
   const edgeFunctionUrl = `${supabaseProjectUrl}/functions/v1/${config.edgeFunctionName}`;
@@ -351,8 +358,8 @@ export const WhatsAppInbox: React.FC = () => {
                 <div className="divide-y divide-slate-100">
                     {conversations.map(conv => (
                         <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-5 cursor-pointer transition-all hover:bg-white border-l-4 group relative", selectedChatId === conv.id ? "bg-white border-l-teal-500 shadow-sm" : "border-l-transparent")}>
-                            <div className="flex justify-between items-start mb-1"><span className="font-black text-sm text-slate-800">{conv.contact_name}</span><span className="text-[9px] font-black text-slate-400 uppercase">{new Date(conv.updated_at).toLocaleDateString()}</span></div>
-                            <p className="text-xs text-slate-500 truncate">{conv.last_message}</p>
+                            <div className="flex justify-between items-start mb-1"><span className="font-black text-sm text-slate-800">{conv.contact_name}</span><span className="text-[9px] font-black text-slate-400 uppercase">{formatTime(conv.updated_at)}</span></div>
+                            <p className="text-xs text-slate-500 truncate pr-6">{conv.last_message}</p>
                             {conv.unread_count > 0 && <span className="absolute right-5 bottom-5 w-5 h-5 bg-teal-600 text-white text-[10px] font-black flex items-center justify-center rounded-full">{conv.unread_count}</span>}
                         </div>
                     ))}
@@ -380,7 +387,7 @@ export const WhatsAppInbox: React.FC = () => {
                             <div key={msg.id} className={clsx("flex animate-in fade-in slide-in-from-bottom-2", msg.sender_type === 'agent' ? "justify-end" : "justify-start")}>
                                 <div className={clsx("max-w-[75%] rounded-2xl px-4 py-3 shadow-md relative text-sm font-medium", msg.sender_type === 'agent' ? "bg-teal-100 text-teal-900 rounded-tr-none" : "bg-white text-slate-800 rounded-tl-none")}>
                                     <p className="whitespace-pre-wrap">{msg.text}</p>
-                                    <div className="flex items-center justify-end gap-1.5 mt-1.5"><span className="text-[9px] font-black text-slate-400 opacity-60 uppercase">{formatTime(msg.created_at)}</span>{msg.sender_type === 'agent' && <CheckCheck size={14} className="text-teal-600" />}</div>
+                                    <div className="flex items-center justify-end gap-1.5 mt-1.5"><span className="text-[9px] font-black text-slate-400 opacity-60 uppercase">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>{msg.sender_type === 'agent' && <CheckCheck size={14} className="text-teal-600" />}</div>
                                 </div>
                             </div>
                         ))

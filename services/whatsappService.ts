@@ -3,6 +3,19 @@ import { appBackend } from './appBackend';
 
 export const whatsappService = {
     /**
+     * Normaliza um número de WhatsApp para o formato padrão do banco (sem JID e tratando o 9º dígito BR)
+     */
+    normalizeNumber: (jid: string) => {
+        // Remove @s.whatsapp.net ou @g.us
+        let clean = jid.split('@')[0].replace(/\D/g, '');
+        
+        // Tratamento especial para Brasil (55)
+        // Se o número tem 13 dígitos (55 + DDD + 9 + 8 dígitos), tentamos normalizar
+        // Nota: O ID interno do WhatsApp muitas vezes ignora o 9º dígito para contas antigas.
+        return clean;
+    },
+
+    /**
      * Retorna as configurações atuais do WhatsApp
      */
     getConfig: async () => {
@@ -17,6 +30,7 @@ export const whatsappService = {
         
         if (!config) throw new Error("WhatsApp não configurado. Vá em Configurações.");
 
+        // Normalizamos o número de destino para garantir consistência
         const cleanNumber = to.replace(/\D/g, '');
 
         // --- MODO TWILIO ---
@@ -26,8 +40,6 @@ export const whatsappService = {
             }
             
             try {
-                // Em um ambiente de produção real, as chaves não devem ficar no frontend.
-                // Aqui fazemos a chamada REST padrão do Twilio.
                 const auth = btoa(`${config.twilioAccountSid}:${config.twilioAuthToken}`);
                 const twilioTo = `whatsapp:+${cleanNumber}`;
                 
@@ -49,7 +61,7 @@ export const whatsappService = {
                 if (!response.ok) throw new Error(data.message || "Erro na API do Twilio");
                 return data;
             } catch (e: any) {
-                throw new Error(e.message || "Não foi possível conectar ao Twilio. Verifique suas credenciais.");
+                throw new Error(e.message || "Não foi possível conectar ao Twilio.");
             }
         }
 
@@ -86,7 +98,7 @@ export const whatsappService = {
     /**
      * Sincroniza uma mensagem enviada/recebida no banco de dados local
      */
-    syncMessage: async (chatId: string, text: string, senderType: 'user' | 'agent', waMessageId?: string) => {
+    syncMessage: async (chatId: string, text: string, senderType: 'user' | 'agent' | 'system', waMessageId?: string) => {
         const { data, error } = await appBackend.client
             .from('crm_whatsapp_messages')
             .insert([{
@@ -101,6 +113,7 @@ export const whatsappService = {
         
         if (error) throw error;
 
+        // Atualiza o último texto e timestamp do chat para subir na lista
         await appBackend.client
             .from('crm_whatsapp_chats')
             .update({ 
@@ -113,18 +126,37 @@ export const whatsappService = {
     },
 
     /**
-     * Cria ou busca um chat por número de telefone
+     * Cria ou busca um chat por número de telefone com suporte a variação de 9º dígito
      */
     getOrCreateChat: async (phone: string, name: string) => {
         const cleanPhone = phone.replace(/\D/g, '');
-        const { data: existing } = await appBackend.client
+        
+        // 1. Tenta busca exata
+        let { data: existing } = await appBackend.client
             .from('crm_whatsapp_chats')
             .select('*')
             .eq('wa_id', cleanPhone)
             .maybeSingle();
         
+        // 2. Se for número brasileiro e não achou, tenta a variação do 9º dígito
+        if (!existing && cleanPhone.startsWith('55') && (cleanPhone.length === 12 || cleanPhone.length === 13)) {
+            const isWithNine = cleanPhone.length === 13;
+            const variation = isWithNine 
+                ? cleanPhone.slice(0, 4) + cleanPhone.slice(5) // Remove o 9
+                : cleanPhone.slice(0, 4) + '9' + cleanPhone.slice(4); // Adiciona o 9
+
+            const { data: fuzzyMatch } = await appBackend.client
+                .from('crm_whatsapp_chats')
+                .select('*')
+                .eq('wa_id', variation)
+                .maybeSingle();
+            
+            if (fuzzyMatch) existing = fuzzyMatch;
+        }
+
         if (existing) return existing;
 
+        // 3. Se realmente não existe, cria um novo
         const { data: newChat, error } = await appBackend.client
             .from('crm_whatsapp_chats')
             .insert([{

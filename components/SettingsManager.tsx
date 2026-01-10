@@ -266,51 +266,31 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE MANUTENÇÃO VOLL CRM (V38)
--- Reabertura Automática de Chats e Motor de Busca Global Robusto
+-- SCRIPT DE MANUTENÇÃO VOLL CRM (V39)
+-- Funis de Atendimento e Kanban WhatsApp
 
--- 1. Garante colunas de identificação robustas nos Chats
+-- 1. Cria tabela de Funis de Atendimento
+CREATE TABLE IF NOT EXISTS public.crm_attendance_funnels (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    name text NOT NULL,
+    stages jsonb DEFAULT '[]',
+    created_at timestamp with time zone DEFAULT now()
+);
+
+-- 2. Insere Funis Iniciais se não existirem
+INSERT INTO public.crm_attendance_funnels (name, stages)
+VALUES 
+('Atendimento Geral', '[{"id": "new", "title": "Novos", "color": "bg-red-500"}, {"id": "process", "title": "Triagem", "color": "bg-blue-500"}, {"id": "done", "title": "Resolvidos", "color": "bg-green-500"}]'::jsonb),
+('Cobrança Financeira', '[{"id": "pending", "title": "Pendente", "color": "bg-amber-500"}, {"id": "negotiating", "title": "Em Acordo", "color": "bg-indigo-500"}, {"id": "paid", "title": "Pago", "color": "bg-emerald-500"}]'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- 3. Garante colunas de controle no Chat
 ALTER TABLE public.crm_whatsapp_chats 
-ADD COLUMN IF NOT EXISTS contact_phone text,
-ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}';
+ADD COLUMN IF NOT EXISTS funnel_id uuid REFERENCES public.crm_attendance_funnels(id),
+ADD COLUMN IF NOT EXISTS stage_id text;
 
--- 2. Cria índices para busca ultra-rápida em todas as tabelas
-CREATE INDEX IF NOT EXISTS idx_chats_wa_id ON public.crm_whatsapp_chats(wa_id);
-CREATE INDEX IF NOT EXISTS idx_deals_phone ON public.crm_deals(phone);
-CREATE INDEX IF NOT EXISTS idx_teachers_phone ON public.crm_teachers(phone);
-CREATE INDEX IF NOT EXISTS idx_studios_phone ON public.crm_partner_studios(phone);
-CREATE INDEX IF NOT EXISTS idx_franchises_phone ON public.crm_franchises(phone);
-CREATE INDEX IF NOT EXISTS idx_collaborators_cell ON public.crm_collaborators(cellphone);
-
--- 3. TRIGGER para REABRIR chat quando o usuário responde (Otimizado V38)
-CREATE OR REPLACE FUNCTION public.trg_reopen_chat_on_message() 
-RETURNS trigger AS $$
-BEGIN
-    -- Se a mensagem vier do usuário (user) e o chat estiver fechado (closed)
-    IF NEW.sender_type = 'user' THEN
-        UPDATE public.crm_whatsapp_chats
-        SET status = 'open', 
-            updated_at = NOW(),
-            unread_count = unread_count + 1
-        WHERE id = NEW.chat_id AND status = 'closed';
-        
-        -- Garante que o contador de mensagens suba se o chat estiver aberto mas não selecionado
-        UPDATE public.crm_whatsapp_chats
-        SET unread_count = unread_count + 1,
-            updated_at = NOW()
-        WHERE id = NEW.chat_id AND status != 'closed';
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS t_reopen_chat ON public.crm_whatsapp_messages;
-CREATE TRIGGER t_reopen_chat 
-AFTER INSERT ON public.crm_whatsapp_messages 
-FOR EACH ROW EXECUTE FUNCTION public.trg_reopen_chat_on_message();
-
-GRANT ALL ON public.crm_whatsapp_chats TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_whatsapp_messages TO anon, authenticated, service_role;
+-- 4. Permissões
+GRANT ALL ON public.crm_attendance_funnels TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload config';
   `.trim();
@@ -954,9 +934,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V38)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos de identificação global e reabertura de chamados.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V38</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V39)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos de funis de atendimento e kanban.</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V39</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

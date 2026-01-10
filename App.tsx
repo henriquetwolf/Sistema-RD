@@ -653,7 +653,7 @@ function App() {
                         {dashboardTab === 'events' && <EventsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} jobs={jobs} onStartWizard={handleStartWizard} onDeleteJob={handleDeleteJob} />}
                         {dashboardTab === 'analysis' && <SalesAnalysis />}
-                        {dashboardTab === 'whatsapp' && <WhatsAppInbox onNavigateToRecord={handleDeepNavigation} />}
+                        {dashboardTab === 'whatsapp' && <WhatsAppInbox onNavigateToRecord={handleDeepNavigation} currentAgentName={currentUserName} />}
                     </div>
                 </div>
             </main>

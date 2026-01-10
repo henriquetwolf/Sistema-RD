@@ -6,13 +6,24 @@ export interface SupportTag {
   createdAt: string;
 }
 
+export interface AttendanceStage {
+    id: string;
+    title: string;
+    color: string;
+}
+
+export interface AttendanceFunnel {
+    id: string;
+    name: string;
+    stages: AttendanceStage[];
+}
+
 export interface SupportTicket {
   id: string;
   senderId: string;
   senderName: string;
   senderEmail: string;
   senderRole: 'student' | 'instructor' | 'studio' | 'admin';
-  // Novos campos para chamados iniciados pelo Admin
   targetId?: string;
   targetName?: string;
   targetEmail?: string;
@@ -330,14 +341,7 @@ export interface PartnerStudioSession {
 }
 
 export interface TextStyle {
-  x: number;
-  y: number;
-  fontSize: number;
-  fontFamily: string;
-  color: string;
-  fontWeight: string;
-  textAlign: 'left' | 'center' | 'right';
-  width: number;
+  x: number; y: number; fontSize: number; fontFamily: string; color: string; fontWeight: string; textAlign: 'left' | 'center' | 'right'; width: number;
 }
 
 export interface CertificateLayout {
@@ -493,9 +497,6 @@ export interface TeacherNews {
   createdAt: string;
 }
 
-/**
- * NEW TYPES FOR CRM AND PLUGINS
- */
 export interface PipelineStage {
     id: string;
     title: string;

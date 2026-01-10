@@ -256,7 +256,13 @@ export const WhatsAppInbox: React.FC = () => {
   const formatPhoneDisplay = (id: string) => {
       if (!id) return '';
       const cleaned = id.replace(/\D/g, '');
-      if (cleaned.length > 13) return `ID: ${id.substring(0, 12)}...`; // Formato compacto para LID
+      
+      // Se for um ID técnico (LID) muito longo, formata de forma reduzida
+      if (cleaned.length > 13) {
+          return `ID: ${id.substring(0, 10)}...`;
+      }
+      
+      // Formatação brasileira
       if (cleaned.startsWith('55') && cleaned.length >= 12) {
           const ddd = cleaned.slice(2, 4);
           const rest = cleaned.slice(4);
@@ -374,7 +380,7 @@ export const WhatsAppInbox: React.FC = () => {
                             <div className="flex justify-between items-start mb-1">
                                 <div className="flex flex-col">
                                     <span className="font-black text-sm text-slate-800">{conv.contact_name}</span>
-                                    <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter opacity-70">{formatPhoneDisplay(conv.wa_id)}</span>
+                                    <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter opacity-70">{formatPhoneDisplay(conv.wa_id)}</span>
                                 </div>
                                 <span className="text-[9px] font-black text-slate-400 uppercase">{formatTime(conv.updated_at)}</span>
                             </div>

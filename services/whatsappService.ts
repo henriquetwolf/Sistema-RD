@@ -7,70 +7,67 @@ export const whatsappService = {
      */
     isLid: (id: string) => {
         if (!id) return false;
-        const clean = id.split('@')[0].replace(/\D/g, '');
-        // LIDs técnicos costumam ter 15+ dígitos
+        const clean = id.split('@')[0].split(':')[0].replace(/\D/g, '');
+        // LIDs costumam ter 15+ dígitos e começam com padrões diferentes de DDI
         return clean.length > 13;
     },
 
     /**
-     * Normaliza um número para formato E.164 brasileiro
-     */
-    normalizeNumber: (phone: string) => {
-        if (!phone) return '';
-        let clean = phone.split('@')[0].replace(/\D/g, '');
-        if (clean.length >= 10 && clean.length <= 11 && !clean.startsWith('55')) {
-            clean = '55' + clean;
-        }
-        return clean;
-    },
-
-    /**
-     * Tenta extrair o número de telefone real de uma string suja ou LID
+     * Tenta extrair o número de telefone real de uma string suja (incluindo multi-device)
      */
     extractActualNumber: (raw: string) => {
         if (!raw) return null;
-        const parts = raw.split(':'); 
-        const clean = parts[0].split('@')[0].replace(/\D/g, '');
-        return clean.length <= 13 ? clean : null;
+        // Remove @s.whatsapp.net e pega a parte antes do : (se houver :1, :2 de multidevice)
+        const partBeforeAt = raw.split('@')[0];
+        const cleanNumber = partBeforeAt.split(':')[0].replace(/\D/g, '');
+        
+        // Se for um número de telefone válido (DDI 55 + DDD + Numero = 12 ou 13 dígitos)
+        if (cleanNumber.length >= 10 && cleanNumber.length <= 13) {
+            return cleanNumber;
+        }
+        return null;
     },
 
     /**
-     * Busca informações do contato no CRM por número ou nome
+     * Busca informações do contato no CRM de forma exaustiva
      */
     findContactInCrm: async (identifier: string, pushName?: string) => {
-        const cleanId = identifier.split('@')[0];
-        
-        // 1. Tenta pelo ID se ele parecer um número real
+        // 1. Tenta extrair número real do ID técnico
         const actualNum = whatsappService.extractActualNumber(identifier);
+        
         if (actualNum) {
+            // Busca no CRM pelo número (tentando match flexível com o final do número)
+            const last8 = actualNum.slice(-8);
             const { data: contact } = await appBackend.client
                 .from('crm_deals')
-                .select('contact_name, company_name, phone, email')
-                .ilike('phone', `%${actualNum.slice(-8)}%`) // Busca flexível pelos últimos 8 dígitos
+                .select('id, contact_name, company_name, phone, email, stage')
+                .ilike('phone', `%${last8}%`)
                 .maybeSingle();
             
             if (contact) return { 
                 name: contact.company_name || contact.contact_name, 
                 phone: contact.phone, 
-                role: 'Cliente', 
-                detail: contact.email 
+                role: contact.stage === 'closed' ? 'Aluno Matriculado' : 'Lead CRM',
+                email: contact.email,
+                dealId: contact.id
             };
         }
 
-        // 2. Tenta pelo Nome do Perfil (muito útil para LIDs)
-        if (pushName && pushName.length > 2) {
+        // 2. Se for um LID ou não achou por número, tenta pelo Nome do Perfil (pushName)
+        if (pushName && pushName.length > 3) {
             const { data: contactByPush } = await appBackend.client
                 .from('crm_deals')
-                .select('contact_name, company_name, phone, email')
-                .or(`contact_name.ilike.%${pushName}%,company_name.ilike.%${pushName}%`)
+                .select('id, contact_name, company_name, phone, email, stage')
+                .or(`contact_name.ilike.${pushName},company_name.ilike.${pushName}`)
                 .limit(1)
                 .maybeSingle();
             
             if (contactByPush) return { 
                 name: contactByPush.company_name || contactByPush.contact_name, 
                 phone: contactByPush.phone, 
-                role: 'CRM Match', 
-                detail: contactByPush.email 
+                role: contactByPush.stage === 'closed' ? 'Aluno (Match p/ Nome)' : 'Lead (Match p/ Nome)',
+                email: contactByPush.email,
+                dealId: contactByPush.id
             };
         }
 
@@ -78,22 +75,34 @@ export const whatsappService = {
     },
 
     /**
-     * Cria ou recupera um chat unificado
+     * Cria ou recupera um chat unificado, tentando vincular ao CRM
      */
     getOrCreateChat: async (waId: string, pushName: string) => {
         const cleanId = waId.split('@')[0];
         
+        // 1. Verifica se já existe o chat no banco pelo wa_id técnico
         const { data: existingChat } = await appBackend.client
             .from('crm_whatsapp_chats')
             .select('*')
             .eq('wa_id', cleanId)
             .maybeSingle();
 
-        if (existingChat) return existingChat;
+        if (existingChat) {
+            // Se o chat existe mas não tem telefone real, tenta buscar no CRM agora
+            if (!existingChat.contact_phone) {
+                const contact = await whatsappService.findContactInCrm(waId, pushName);
+                if (contact?.phone) {
+                    const cleanPhone = contact.phone.replace(/\D/g, '');
+                    await appBackend.client.from('crm_whatsapp_chats').update({ contact_phone: cleanPhone }).eq('id', existingChat.id);
+                    existingChat.contact_phone = cleanPhone;
+                }
+            }
+            return existingChat;
+        }
 
-        // Se for novo, tenta identificar no CRM para pegar o telefone real
+        // 2. Chat novo: Busca no CRM para tentar "desmascarar" o ID técnico
         const contact = await whatsappService.findContactInCrm(waId, pushName);
-        const finalPhone = contact?.phone ? contact.phone.replace(/\D/g, '') : (whatsappService.isLid(cleanId) ? null : cleanId);
+        const finalPhone = contact?.phone ? contact.phone.replace(/\D/g, '') : whatsappService.extractActualNumber(waId);
 
         const { data: newChat, error } = await appBackend.client
             .from('crm_whatsapp_chats')
@@ -102,7 +111,7 @@ export const whatsappService = {
                 contact_name: contact?.name || pushName || cleanId,
                 contact_phone: finalPhone,
                 status: 'open',
-                last_message: 'Mensagem recebida'
+                last_message: 'Chat iniciado'
             }])
             .select()
             .single();
@@ -111,14 +120,11 @@ export const whatsappService = {
         return newChat;
     },
 
-    /**
-     * Envio de Mensagem: Prioriza sempre o telefone real (contact_phone)
-     */
     sendTextMessage: async (chat: any, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
         if (!config) throw new Error("WhatsApp não configurado.");
 
-        // PRIORIDADE: Número Real do CRM > ID Técnico do WhatsApp
+        // PRIORIDADE: Enviar para o número real se disponível, senão ID técnico
         const target = chat.contact_phone || chat.wa_id;
 
         const baseUrl = config.instanceUrl.replace(/\/$/, "");

@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageCircle, Send, CheckCheck, User, X, Plus, 
   Settings, Save, Smartphone, Loader2, Wifi, 
-  WifiOff, ChevronRight, RefreshCw, UserCheck
+  WifiOff, ChevronRight, RefreshCw, UserCheck, Search, Link2,
+  AlertCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -94,7 +95,7 @@ export const WhatsAppInbox: React.FC = () => {
             if (selectedChatId) fetchMessages(selectedChatId, false);
             checkRealStatus();
           }
-      }, 7000); 
+      }, 8000); 
       return () => clearInterval(timer);
   }, [selectedChatId, showSettings, config.instanceUrl]);
 
@@ -110,6 +111,7 @@ export const WhatsAppInbox: React.FC = () => {
 
   const loadCrmDetails = async () => {
       if (!selectedChat) return;
+      // Tenta buscar no CRM usando o wa_id (ID técnico) e o nome exibido
       const info = await whatsappService.findContactInCrm(selectedChat.wa_id, selectedChat.contact_name);
       setCrmInfo(info);
   };
@@ -233,15 +235,27 @@ export const WhatsAppInbox: React.FC = () => {
       } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsCreatingChat(false); }
   };
 
+  const formatTime = (dateStr: string) => {
+      if (!dateStr) return '';
+      try {
+          const date = new Date(dateStr);
+          return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (e) { return ''; }
+  };
+
   const formatPhoneDisplay = (id: string, contactPhone?: string) => {
       const number = contactPhone || id;
       if (!number) return '';
       const cleaned = number.replace(/\D/g, '');
-      if (cleaned.length > 13) return `ID: ${number.substring(0, 8)}...`;
+      
+      // Se for um ID técnico (LID) e não tivermos o telefone real ainda
+      if (cleaned.length > 13 && !contactPhone) return `ID Técnico: ${number.substring(0, 8)}...`;
+      
+      // Formatação brasileira
       if (cleaned.startsWith('55') && cleaned.length >= 12) {
           const ddd = cleaned.slice(2, 4);
           const rest = cleaned.slice(4);
-          return `(${ddd}) ${rest.length === 9 ? rest.slice(0, 5) + '-' + rest.slice(5) : rest.slice(0, 4) + '-' + rest.slice(4)}`;
+          return `+55 (${ddd}) ${rest.length === 9 ? rest.slice(0, 5) + '-' + rest.slice(5) : rest.slice(0, 4) + '-' + rest.slice(4)}`;
       }
       return number;
   };
@@ -275,10 +289,11 @@ export const WhatsAppInbox: React.FC = () => {
                     <div className="flex justify-between items-start mb-1">
                         <div className="flex flex-col">
                             <span className="font-black text-sm text-slate-800">{conv.contact_name}</span>
-                            <span className="text-[10px] font-bold text-slate-400 font-mono">
+                            <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter">
                                 {formatPhoneDisplay(conv.wa_id, conv.contact_phone)}
                             </span>
                         </div>
+                        <span className="text-[9px] font-black text-slate-300 uppercase">{formatTime(conv.updated_at)}</span>
                     </div>
                     <p className="text-xs text-slate-500 truncate pr-6 mt-1">{conv.last_message}</p>
                     {conv.unread_count > 0 && <span className="absolute right-5 bottom-5 w-5 h-5 bg-teal-600 text-white text-[10px] font-black flex items-center justify-center rounded-full">{conv.unread_count}</span>}
@@ -293,8 +308,8 @@ export const WhatsAppInbox: React.FC = () => {
               <>
                 <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shadow-sm z-10 shrink-0">
                     <div className="flex items-center gap-4">
-                        <button className="md:hidden text-slate-50" onClick={() => setSelectedChatId(null)}><ChevronRight size={24} className="rotate-180" /></button>
-                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 font-bold border border-slate-200"><User size={28} /></div>
+                        <button className="md:hidden text-slate-500" onClick={() => setSelectedChatId(null)}><ChevronRight size={24} className="rotate-180" /></button>
+                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 font-bold border border-slate-200 shadow-inner"><User size={28} /></div>
                         <div>
                             <h3 className="font-black text-slate-800 text-base leading-tight">{selectedChat.contact_name}</h3>
                             <div className="flex items-center gap-2">
@@ -303,7 +318,7 @@ export const WhatsAppInbox: React.FC = () => {
                                 </p>
                                 {crmInfo && (
                                     <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-indigo-100">
-                                        CRM: {crmInfo.role}
+                                        <UserCheck size={10}/> {crmInfo.role}
                                     </span>
                                 )}
                             </div>
@@ -334,7 +349,7 @@ export const WhatsAppInbox: React.FC = () => {
                 </div>
               </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-white/50">
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-white/50 backdrop-blur-sm">
                 <div className="w-24 h-24 bg-white rounded-[2.5rem] shadow-xl flex items-center justify-center mb-6 animate-bounce"><MessageCircle size={48} className="text-teal-500 opacity-40" /></div>
                 <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Atendimento WhatsApp</h3>
                 <p className="text-sm font-medium text-center mt-2 max-w-xs">Selecione uma conversa para iniciar.</p>
@@ -345,7 +360,7 @@ export const WhatsAppInbox: React.FC = () => {
       {/* MODAL SETTINGS */}
       {showSettings && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50 shrink-0">
                       <div className="flex items-center gap-3"><Settings className="text-teal-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Evolution API Config</h3></div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>

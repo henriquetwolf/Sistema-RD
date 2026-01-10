@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock, Banner, SurveyModel, CourseInfo, PartnerStudio, Product, CourseModule, CourseLesson } from '../types';
 import { appBackend } from '../services/appBackend';
@@ -6,8 +7,7 @@ import { SupportTicketModal } from './SupportTicketModal';
 import { 
     LogOut, GraduationCap, BookOpen, Award, Calendar, MapPin, 
     Video, Download, Loader2, User, Sparkles, Bell, PieChart, ArrowRight, Trophy, ChevronRight, Zap, LifeBuoy, Play, Lock as LockIcon, X, CheckCircle, CheckCircle2,
-    // Fix: Added missing 'List' icon to imports
-    Info, ShieldCheck, List
+    Info, ShieldCheck, List, Circle, CheckSquare
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -22,6 +22,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [certificates, setCertificates] = useState<any[]>([]);
     const [digitalProducts, setDigitalProducts] = useState<Product[]>([]);
     const [unlockedCourseIds, setUnlockedCourseIds] = useState<string[]>([]);
+    const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
     
     // LMS Player States
     const [activeCourse, setActiveCourse] = useState<Product | null>(null);
@@ -29,6 +30,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [activeLessons, setActiveLessons] = useState<Record<string, CourseLesson[]>>({});
     const [currentLesson, setCurrentLesson] = useState<CourseLesson | null>(null);
     const [isLoadingPlayer, setIsLoadingPlayer] = useState(false);
+    const [isIssuingAuto, setIsIssuingAuto] = useState(false);
     
     const [banners, setBanners] = useState<Banner[]>([]);
     const [mySurveys, setMySurveys] = useState<SurveyModel[]>([]);
@@ -44,11 +46,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         loadSurveys();
         fetchSupportNotifications();
         loadDigitalCatalog();
+        loadProgress();
     }, [student]);
 
     const fetchSupportNotifications = async () => {
         try {
-            const mainDealId = student.deals[0]?.id;
+            // Fixed: Explicitly treating deal as any.
+            const mainDealId = (student.deals[0] as any)?.id;
             if (mainDealId) {
                 const tickets = await appBackend.getSupportTicketsBySender(mainDealId);
                 const pending = tickets.filter(t => t.status === 'pending').length;
@@ -61,7 +65,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         try {
             const { data } = await appBackend.client.from('crm_products').select('*').eq('category', 'Curso Online').eq('status', 'active');
             if (data) setDigitalProducts(data);
-            const mainDealId = student.deals[0]?.id;
+            // Fixed: Explicitly treating deal as any.
+            const mainDealId = (student.deals[0] as any)?.id;
             if (mainDealId) {
                 const access = await appBackend.getStudentCourseAccess(mainDealId);
                 setUnlockedCourseIds(access);
@@ -69,11 +74,21 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         } catch (e) {}
     };
 
+    const loadProgress = async () => {
+        // Fixed: Explicitly treating deal as any.
+        const mainDealId = (student.deals[0] as any)?.id;
+        if (mainDealId) {
+            const progress = await appBackend.getLessonProgress(mainDealId);
+            setCompletedLessonIds(progress);
+        }
+    };
+
     const loadSurveys = async () => {
         try {
             const mainDeal = student.deals[0];
             if (mainDeal) {
-                const surveys = await appBackend.getEligibleSurveysForStudent(mainDeal.id);
+                // Fixed: Explicitly treating mainDeal as any to fix 'unknown' type error.
+                const surveys = await appBackend.getEligibleSurveysForStudent((mainDeal as any).id);
                 setMySurveys(surveys);
             }
         } catch (e) { console.error(e); }
@@ -82,19 +97,31 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const loadStudentData = async () => {
         setIsLoading(true);
         try {
-            const mod1Codes = student.deals.map(d => d.class_mod_1).filter(Boolean);
-            const mod2Codes = student.deals.map(d => d.class_mod_2).filter(Boolean);
+            // Fixed: Explicitly typed deal elements as any to avoid inference as unknown.
+            const mod1Codes = student.deals.map((d: any) => d.class_mod_1).filter(Boolean);
+            const mod2Codes = student.deals.map((d: any) => d.class_mod_2).filter(Boolean);
             const allCodes = Array.from(new Set([...mod1Codes, ...mod2Codes]));
             if (allCodes.length > 0) {
                 const { data } = await appBackend.client.from('crm_classes').select('*').or(`mod_1_code.in.(${allCodes.map(c => `"${c}"`).join(',')}),mod_2_code.in.(${allCodes.map(c => `"${c}"`).join(',')})`);
                 if (data) setClasses(data);
             }
-            const dealIds = student.deals.map(d => d.id);
+            // Fixed: Explicitly typed deal elements as any to avoid inference as unknown.
+            const dealIds = student.deals.map((d: any) => d.id);
             if (dealIds.length > 0) {
                 const { data: issuedCerts } = await appBackend.client.from('crm_student_certificates').select('*').in('student_deal_id', dealIds);
                 if (issuedCerts) setCertificates(issuedCerts);
             }
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
+    };
+
+    const toggleLesson = async (lessonId: string) => {
+        // Fixed: Explicitly treating deal as any.
+        const mainDealId = (student.deals[0] as any)?.id;
+        if (!mainDealId) return;
+        
+        const isCompleted = completedLessonIds.includes(lessonId);
+        await appBackend.toggleLessonProgress(mainDealId, lessonId, !isCompleted);
+        setCompletedLessonIds(prev => isCompleted ? prev.filter(id => id !== lessonId) : [...prev, lessonId]);
     };
 
     const openCoursePlayer = async (course: Product) => {
@@ -120,23 +147,42 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         try { const data = await appBackend.getBanners('student'); setBanners(data); } catch (e) {}
     };
 
-    /**
-     * White Label Embed Logic para YouTube
-     */
+    const getCourseProgress = (courseId: string) => {
+        // Encontra todas as aulas deste curso (precisaria carregar de antemão ou estimar)
+        // Como o carregamento é sob demanda no player, vamos simular ou usar os dados se disponíveis
+        if (activeCourse?.id === courseId) {
+            const allLessons = Object.values(activeLessons).flat();
+            if (allLessons.length === 0) return 0;
+            const completedInCourse = allLessons.filter(l => completedLessonIds.includes(l.id)).length;
+            return Math.round((completedInCourse / allLessons.length) * 100);
+        }
+        return 0; // Valor default enquanto não abre
+    };
+
+    const handleIssueAutoCertificate = async () => {
+        if (!activeCourse || !activeCourse.certificateTemplateId) return;
+        setIsIssuingAuto(true);
+        try {
+            // Fixed: Explicitly treating deal as any.
+            const mainDealId = (student.deals[0] as any)?.id;
+            if (!mainDealId) return;
+            const hash = await appBackend.issueCertificate(mainDealId, activeCourse.certificateTemplateId);
+            alert("Certificado emitido com sucesso! Você pode visualizá-lo na aba Certificados.");
+            loadStudentData(); // Refresh list
+        } catch (e: any) {
+            alert("Erro ao emitir: " + e.message);
+        } finally {
+            setIsIssuingAuto(false);
+        }
+    };
+
     const getEmbedUrl = (url: string) => {
         if (!url) return '';
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
         const match = url.match(regExp);
         if (match && match[2].length === 11) {
             const videoId = match[2];
-            // Parametros para ocultar o máximo de branding:
-            // rel=0 (não mostra videos recomendados externos)
-            // modestbranding=1 (remove logo do youtube da barra)
-            // controls=1 (mantem controles mas limpos)
-            // showinfo=0 (legado, desativado pelo YT mas ainda usado em algumas versões)
-            // iv_load_policy=3 (remove anotações)
-            // disablekb=1 (desativa atalhos de teclado)
-            return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&showinfo=0&controls=1&autohide=1`;
+            return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&showinfo=0&controls=1&autohide=1&fs=1`;
         }
         return url;
     };
@@ -144,6 +190,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     if (activeSurvey) return <FormViewer form={activeSurvey} onBack={() => setActiveSurvey(null)} studentId={student.deals[0]?.id} onSuccess={() => { setActiveSurvey(null); loadSurveys(); }} />;
 
     if (activeCourse) {
+        const progress = getCourseProgress(activeCourse.id);
+        const hasCertIssued = certificates.some(c => c.student_deal_id === student.deals[0]?.id && c.certificate_template_id === activeCourse.certificateTemplateId);
+
         return (
             <div className="fixed inset-0 z-[150] bg-slate-900 flex flex-col animate-in fade-in duration-300">
                 <header className="bg-slate-900/80 border-b border-white/10 p-4 flex items-center justify-between shrink-0">
@@ -151,73 +200,94 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         <button onClick={() => setActiveCourse(null)} className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-xl transition-all"><X size={24}/></button>
                         <div>
                             <h2 className="text-white font-black leading-tight">{activeCourse.name}</h2>
-                            <p className="text-teal-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><ShieldCheck size={10}/> Ambiente de Ensino VOLL</p>
+                            <div className="flex items-center gap-3">
+                                <p className="text-teal-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><ShieldCheck size={10}/> Ambiente VOLL</p>
+                                <div className="h-1 w-20 bg-white/10 rounded-full overflow-hidden">
+                                    <div className="h-full bg-teal-500" style={{ width: `${progress}%` }}></div>
+                                </div>
+                                <span className="text-[10px] font-black text-white/40">{progress}% Concluído</span>
+                            </div>
                         </div>
                     </div>
-                    <div className="hidden md:flex items-center gap-4">
-                        <span className="text-white/40 text-[10px] font-black uppercase tracking-widest border border-white/10 px-3 py-1 rounded-full">Proteção Digital Ativa</span>
-                    </div>
+                    {progress === 100 && activeCourse.certificateTemplateId && !hasCertIssued && (
+                        <button onClick={handleIssueAutoCertificate} disabled={isIssuingAuto} className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 shadow-lg animate-bounce">
+                            {isIssuingAuto ? <Loader2 size={16} className="animate-spin"/> : <Trophy size={16}/>}
+                            Emitir Certificado
+                        </button>
+                    )}
                 </header>
                 <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
                     <main className="flex-1 bg-black flex flex-col relative overflow-hidden group/player">
                         {currentLesson ? (
                             <>
-                                <div className="flex-1 relative">
-                                    {/* Overlay transparente para mitigar cliques indesejados no branding do YT */}
-                                    <div className="absolute top-0 right-0 w-full h-24 z-10 pointer-events-none bg-gradient-to-b from-black/40 to-transparent"></div>
+                                <div className="flex-1 relative overflow-hidden">
+                                    {/* Overlay de proteção invisível no topo do vídeo (oculta título e share) */}
+                                    <div className="absolute top-0 left-0 w-full h-[15%] z-20 cursor-default"></div>
                                     <iframe 
                                         src={getEmbedUrl(currentLesson.videoUrl)} 
-                                        className="absolute inset-0 w-full h-full" 
+                                        className="absolute inset-0 w-full h-full z-10" 
                                         frameBorder="0" 
                                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                                         allowFullScreen
                                     ></iframe>
                                 </div>
-                                <div className="p-8 bg-slate-900 border-t border-white/5 text-white shrink-0 shadow-2xl relative z-20">
-                                    <div className="max-w-4xl">
-                                        <span className="text-teal-500 text-[10px] font-black uppercase tracking-widest block mb-2">Assistindo agora</span>
-                                        <h3 className="text-2xl font-black mb-3">{currentLesson.title}</h3>
-                                        <div className="h-px bg-white/5 w-full mb-4"></div>
-                                        <p className="text-white/60 text-sm whitespace-pre-wrap leading-relaxed max-w-3xl">{currentLesson.description || "Nenhuma descrição disponível para esta aula."}</p>
+                                <div className="p-8 bg-slate-900 border-t border-white/5 text-white shrink-0 shadow-2xl relative z-30">
+                                    <div className="max-w-4xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                        <div className="flex-1">
+                                            <span className="text-teal-500 text-[10px] font-black uppercase tracking-widest block mb-2">Módulo: {activeModules.find(m => m.id === currentLesson.moduleId)?.title}</span>
+                                            <h3 className="text-2xl font-black mb-3">{currentLesson.title}</h3>
+                                            <p className="text-white/60 text-sm whitespace-pre-wrap leading-relaxed max-w-3xl">{currentLesson.description || "Inicie seus estudos agora."}</p>
+                                        </div>
+                                        <button 
+                                            onClick={() => toggleLesson(currentLesson.id)}
+                                            className={clsx(
+                                                "px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 shrink-0 border-2",
+                                                completedLessonIds.includes(currentLesson.id) ? "bg-teal-600/20 border-teal-500 text-teal-400" : "bg-white text-slate-900 border-white hover:bg-teal-500 hover:border-teal-500 hover:text-white"
+                                            )}
+                                        >
+                                            {completedLessonIds.includes(currentLesson.id) ? <><CheckCircle size={18}/> Aula Concluída</> : <><Circle size={18}/> Marcar como Concluída</>}
+                                        </button>
                                     </div>
                                 </div>
                             </>
                         ) : (
                             <div className="flex-1 flex flex-col items-center justify-center text-white/20 uppercase font-black tracking-[0.3em] gap-4">
                                 <Play size={64} className="opacity-10"/>
-                                Selecione uma aula para iniciar
+                                Selecione uma aula na lateral
                             </div>
                         )}
                     </main>
                     <aside className="w-full md:w-96 bg-slate-900 border-l border-white/10 flex flex-col overflow-y-auto custom-scrollbar-dark shrink-0">
                         <div className="p-6 border-b border-white/5 bg-white/5">
-                            {/* Fix: Added missing 'List' icon component usage */}
-                            <h4 className="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2"><List size={16} className="text-teal-500"/> Conteúdo do Curso</h4>
+                            <h4 className="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2"><List size={16} className="text-teal-500"/> Grade de Conteúdo</h4>
                         </div>
                         <div className="p-4 space-y-6">
                             {activeModules.map(mod => (
                                 <div key={mod.id} className="space-y-2">
                                     <div className="px-4 py-2 bg-white/5 rounded-xl text-white/90 text-[10px] font-black uppercase tracking-[0.1em] border border-white/5">{mod.title}</div>
                                     <div className="space-y-1">
-                                        {activeLessons[mod.id]?.map(les => (
-                                            <button 
-                                                key={les.id} 
-                                                onClick={() => setCurrentLesson(les)} 
-                                                className={clsx(
-                                                    "w-full text-left px-4 py-3 rounded-xl flex items-center gap-4 transition-all relative group", 
-                                                    currentLesson?.id === les.id ? "bg-teal-600 text-white shadow-lg ring-1 ring-white/20" : "text-white/40 hover:bg-white/5"
-                                                )}
-                                            >
-                                                <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all", currentLesson?.id === les.id ? "bg-white/20" : "bg-white/5 group-hover:bg-white/10")}>
-                                                    <Play size={14} className={currentLesson?.id === les.id ? "fill-white" : "fill-white/20"}/>
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-xs font-bold truncate">{les.title}</p>
-                                                    <p className="text-[9px] font-black opacity-40 uppercase tracking-tighter">Aula {les.order}</p>
-                                                </div>
-                                                {currentLesson?.id === les.id && <div className="absolute right-4 w-2 h-2 bg-white rounded-full animate-pulse"></div>}
-                                            </button>
-                                        ))}
+                                        {activeLessons[mod.id]?.map(les => {
+                                            const isDone = completedLessonIds.includes(les.id);
+                                            return (
+                                                <button 
+                                                    key={les.id} 
+                                                    onClick={() => setCurrentLesson(les)} 
+                                                    className={clsx(
+                                                        "w-full text-left px-4 py-3 rounded-xl flex items-center gap-4 transition-all relative group", 
+                                                        currentLesson?.id === les.id ? "bg-teal-600 text-white shadow-lg ring-1 ring-white/20" : "text-white/40 hover:bg-white/5"
+                                                    )}
+                                                >
+                                                    <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all", currentLesson?.id === les.id ? "bg-white/20" : "bg-white/5 group-hover:bg-white/10")}>
+                                                        {isDone ? <CheckSquare size={14} className="text-teal-400" /> : <Play size={14} className={currentLesson?.id === les.id ? "fill-white" : "fill-white/20"}/>}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className={clsx("text-xs font-bold truncate", isDone && currentLesson?.id !== les.id && "text-white/20")}>{les.title}</p>
+                                                        <p className="text-[9px] font-black opacity-40 uppercase tracking-tighter">Aula {les.order}</p>
+                                                    </div>
+                                                    {currentLesson?.id === les.id && <div className="absolute right-4 w-2 h-2 bg-white rounded-full animate-pulse"></div>}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             ))}
@@ -303,11 +373,12 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                         </div>
                                         <div className="p-8 flex-1 flex flex-col">
                                             <h3 className="font-black text-slate-800 text-lg mb-3 leading-tight">{course.name}</h3>
-                                            <p className="text-sm text-slate-500 line-clamp-2 flex-1 leading-relaxed">{course.description}</p>
+                                            <p className="text-sm text-slate-500 line-clamp-2 flex-1 leading-relaxed mb-4">{course.description}</p>
+                                            
                                             {isUnlocked ? (
-                                                <button onClick={() => openCoursePlayer(course)} className="w-full mt-6 py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all">Assistir Agora</button>
+                                                <button onClick={() => openCoursePlayer(course)} className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all">Assistir Agora</button>
                                             ) : (
-                                                <div className="bg-slate-50 p-4 mt-6 rounded-2xl text-center"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fale com suporte para liberar.</p></div>
+                                                <div className="bg-slate-50 p-4 rounded-2xl text-center"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aguardando liberação financeira.</p></div>
                                             )}
                                         </div>
                                     </div>
@@ -331,7 +402,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                             {certificates.length === 0 && (
                                 <div className="col-span-full py-20 text-center bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200">
                                     <Award className="mx-auto text-slate-200 mb-4" size={48}/>
-                                    <p className="font-bold text-slate-400">Nenhum certificado emitido até o momento.</p>
+                                    <p className="font-bold text-slate-400">Nenhum certificado liberado até o momento.</p>
                                 </div>
                             )}
                         </div>

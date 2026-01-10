@@ -130,7 +130,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order', { ascending: true });
       if (error) throw error;
-      return data.map((d: any) => ({ id: d.id, moduleId: d.module_id, title: d.title, description: d.description, videoUrl: d.video_url, order: d.order }));
+      return data.map((d: any) => ({ id: d.id, moduleId: d.module_id, title: d.title, description: d.description, video_url: d.video_url, order: d.order }));
   },
 
   saveCourseModule: async (module: Partial<CourseModule>): Promise<void> => {
@@ -163,7 +163,7 @@ export const appBackend = {
       await supabase.from('crm_course_lessons').delete().eq('id', id);
   },
 
-  // --- STUDENT COURSE ACCESS ---
+  // --- STUDENT COURSE ACCESS AND PROGRESS ---
   getStudentCourseAccess: async (studentId: string): Promise<string[]> => {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('crm_student_course_access').select('course_id').eq('student_id', studentId);
@@ -179,6 +179,22 @@ export const appBackend = {
   revokeCourseAccess: async (studentId: string, courseId: string): Promise<void> => {
       if (!isConfigured) return;
       await supabase.from('crm_student_course_access').delete().match({ student_id: studentId, course_id: courseId });
+  },
+
+  getLessonProgress: async (studentId: string): Promise<string[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_lesson_progress').select('lesson_id').eq('student_id', studentId);
+      if (error) return [];
+      return data.map(d => d.lesson_id);
+  },
+
+  toggleLessonProgress: async (studentId: string, lessonId: string, completed: boolean): Promise<void> => {
+      if (!isConfigured) return;
+      if (completed) {
+          await supabase.from('crm_lesson_progress').upsert({ student_id: studentId, lesson_id: lessonId, completed_at: new Date().toISOString() });
+      } else {
+          await supabase.from('crm_lesson_progress').delete().match({ student_id: studentId, lesson_id: lessonId });
+      }
   },
 
   // --- SUPORTE INTERNO ---
@@ -212,11 +228,11 @@ export const appBackend = {
 
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
+      const { data, error = null } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
       if (error) throw error;
       return (data || []).map((m: any) => ({
           id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role,
-          content: m.content, createdAt: m.created_at, attachmentUrl: m.attachment_url, attachmentName: m.attachment_name
+          content: m.content, createdAt: m.created_at, attachmentUrl: m.attachment_url, attachment_name: m.attachment_name
       }));
   },
 
@@ -468,7 +484,7 @@ export const appBackend = {
   },
 
   getAppLogo: async (): Promise<string | null> => await appBackend.getAppSetting('app_logo_url'),
-  saveAppLogo: async (url: string) => await appBackend.saveAppSetting('app_logo_url', url),
+  saveAppLogo: async (url: string) => await appBackend.saveAppLogo(url),
   getInventorySecurityMargin: async (): Promise<number> => {
     const val = await appBackend.getAppSetting('inventory_security_margin');
     return val !== null ? parseInt(val) : 5;
@@ -606,12 +622,15 @@ export const appBackend = {
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, 
+      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, 
+      // Fixed: Property 'name_on_site' does not exist on type 'PartnerStudio'. Using 'nameOnSite'.
+      name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, 
       qty_ladder_barrel: studio.qtyLadderBarrel, 
       has_chair: studio.hasChair, 
       qty_chair: studio.qtyChair, 
       has_cadillac: studio.hasCadillac, 
       qty_cadillac: studio.qtyCadillac, 
+      // Fixed: Property 'max_kits_capacity' does not exist on type 'PartnerStudio'. Using 'maxKitsCapacity'.
       has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
     if (studio.id) {
@@ -948,11 +967,11 @@ export const appBackend = {
     const { error } = await supabase.from('crm_certificates').upsert({ 
       id: cert.id || undefined, 
       title: cert.title, 
-      background_base_64: cert.backgroundData, 
-      back_background_base_64: cert.backBackgroundData, 
-      linked_product_id: cert.linkedProductId, 
-      body_text: cert.bodyText, 
-      layout_config: cert.layoutConfig 
+      background_base_64: cert.background_base_64, 
+      back_background_base_64: cert.back_background_base_64, 
+      linked_product_id: cert.linked_product_id, 
+      body_text: cert.body_text, 
+      layout_config: cert.layout_config 
     });
     if (error) throw error;
   },

@@ -5,7 +5,6 @@ import {
     Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, 
     Palette, History, Clock, Search,
     Loader2, Package, Tag, Layers, RefreshCw, BookOpen, Book, ListTodo, Zap, Filter, List, ArrowRight, Braces, Sparkles, Landmark, Percent, FileWarning, Globe, Edit2, Trash2, Smartphone, FileSearch, UserPlus, Info,
-    // Added missing icons used in the component
     Plus, Shield, DollarSign, GraduationCap, FileSpreadsheet
 } from 'lucide-react';
 import { appBackend, CompanySetting, WebhookTrigger, Pipeline } from '../services/appBackend';
@@ -242,8 +241,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE MANUTENÇÃO VOLL CRM (V51)
--- Implementação do Sistema de LMS e Cursos Online
+-- SCRIPT DE MANUTENÇÃO VOLL CRM (V52)
+-- Implementação do Sistema de LMS, Cursos Online e Progresso
 
 CREATE TABLE IF NOT EXISTS public.crm_course_modules (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -270,13 +269,21 @@ CREATE TABLE IF NOT EXISTS public.crm_student_course_access (
     PRIMARY KEY (student_id, course_id)
 );
 
+CREATE TABLE IF NOT EXISTS public.crm_lesson_progress (
+    student_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
+    lesson_id uuid REFERENCES public.crm_course_lessons(id) ON DELETE CASCADE,
+    completed_at timestamp with time zone DEFAULT now(),
+    PRIMARY KEY (student_id, lesson_id)
+);
+
 ALTER TABLE public.crm_products 
-ADD COLUMN IF NOT EXISTS thumbnail_url text,
+ADD COLUMN IF NOT EXISTS thumbnailUrl text,
 ADD COLUMN IF NOT EXISTS description text;
 
 GRANT ALL ON public.crm_course_modules TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_course_lessons TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_student_course_access TO anon, authenticated, service_role;
+GRANT ALL ON public.crm_lesson_progress TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload config';
   `.trim();
@@ -655,7 +662,6 @@ NOTIFY pgrst, 'reload config';
                         </div>
                         <div className="md:col-span-2 lg:col-span-3">
                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
-                                {/* Fix JSX syntax error with double curly braces for literal text */}
                                 <span>Payload Customizado (Opcional - JSON)</span> <span className="text-indigo-400 lowercase font-medium">use {'{{ placeholders }}'}</span>
                             </label>
                             <textarea className="w-full border p-3 rounded font-mono text-[11px] h-32 bg-white resize-none" value={customJson} onChange={e => setCustomJson(e.target.value)} placeholder='{ "nome": "{{nome_cliente}}", "venda": "{{deal_number}}" }' />
@@ -772,9 +778,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-8 space-y-4 animate-in fade-in">
-                <div className="flex items-center gap-3 mb-2"><div className="bg-amber-100 text-amber-600 p-2.5 rounded-xl"><Database size={28}/></div><div><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (SQL V51)</h3><p className="text-sm text-slate-500">Gere o script necessário para atualizar a estrutura do banco de dados.</p></div></div>
+                <div className="flex items-center gap-3 mb-2"><div className="bg-amber-100 text-amber-600 p-2.5 rounded-xl"><Database size={28}/></div><div><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (SQL V52)</h3><p className="text-sm text-slate-500">Gere o script necessário para atualizar a estrutura do banco de dados.</p></div></div>
                 <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-xs text-red-700 font-bold leading-relaxed flex items-start gap-3"><AlertTriangle className="shrink-0 mt-0.5" size={16}/><span>Execute este script apenas no SQL Editor do seu projeto Supabase. Ele cria as tabelas de módulos, aulas e permissões sem afetar dados existentes de usuários ou turmas.</span></div>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-4 bg-slate-900 text-slate-100 rounded-xl font-mono text-sm hover:bg-slate-800 transition-all shadow-xl">Gerar Script de Atualização V51</button> : (
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-4 bg-slate-900 text-slate-100 rounded-xl font-mono text-sm hover:bg-slate-800 transition-all shadow-xl">Gerar Script de Atualização V52</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-5 rounded-2xl text-[11px] font-mono overflow-auto max-h-[500px] border border-amber-900/50 leading-relaxed custom-scrollbar-dark">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-4 right-4 bg-slate-700 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-slate-600 transition-all shadow-lg active:scale-95">{sqlCopied ? 'Copiado para Área de Transferência!' : 'Copiar Código SQL'}</button>

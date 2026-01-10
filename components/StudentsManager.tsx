@@ -1,12 +1,13 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
   Award, Eye, Download, ExternalLink, CheckCircle, Trash2, Wand2, Calendar, BookOpen, X,
-  // Fix: Added missing 'Check' icon to imports
-  Zap, Save, CheckCircle2, ShieldCheck, ShoppingBag, Tag, MapPin, DollarSign, Edit2, Check
+  Zap, Save, CheckCircle2, ShieldCheck, ShoppingBag, Tag, MapPin, DollarSign, Edit2, Check,
+  Share2
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { Product } from '../types';
+import { Product, CertificateModel } from '../types';
 import clsx from 'clsx';
 
 interface StudentsManagerProps {
@@ -16,6 +17,8 @@ interface StudentsManagerProps {
 export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const [students, setStudents] = useState<any[]>([]);
   const [digitalProducts, setDigitalProducts] = useState<Product[]>([]);
+  const [certificates, setCertificates] = useState<Record<string, any>>({});
+  const [templates, setTemplates] = useState<CertificateModel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -25,21 +28,47 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const [activeAccessIds, setActiveAccessIds] = useState<string[]>([]);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [issuingFor, setIssuingFor] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
     fetchDigitalProducts();
+    fetchTemplates();
   }, []);
+
+  const fetchTemplates = async () => {
+      try {
+          const data = await appBackend.getCertificates();
+          setTemplates(data);
+      } catch (e) {}
+  };
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
+        // Buscamos apenas os DEALS que chegaram na etapa final de fechamento (pago)
         const { data, error } = await appBackend.client
             .from('crm_deals')
             .select('*')
+            .eq('stage', 'closed')
             .order('contact_name', { ascending: true });
+        
         if (error) throw error;
         setStudents(data || []);
+
+        // Busca certificados já emitidos para estes alunos
+        if (data && data.length > 0) {
+            const { data: certs } = await appBackend.client
+                .from('crm_student_certificates')
+                .select('student_deal_id, hash, issued_at');
+            
+            const certMap: Record<string, any> = {};
+            certs?.forEach((c: any) => {
+                certMap[c.student_deal_id] = c;
+            });
+            setCertificates(certMap);
+        }
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
@@ -48,6 +77,35 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           const { data } = await appBackend.client.from('crm_products').select('*').eq('category', 'Curso Online').eq('status', 'active');
           if (data) setDigitalProducts(data);
       } catch (e) {}
+  };
+
+  const handleIssueCertificate = async (student: any) => {
+      // Tenta encontrar um template vinculado ao produto do aluno
+      const template = templates.find(t => t.linkedProductId === student.product_name);
+      if (!template) {
+          alert("Não há modelo de certificado vinculado ao produto: " + (student.product_name || 'Nenhum'));
+          return;
+      }
+
+      if (!window.confirm(`Liberar certificado para ${student.contact_name}?`)) return;
+
+      setIssuingFor(student.id);
+      try {
+          const hash = await appBackend.issueCertificate(student.id, template.id);
+          setCertificates(prev => ({ ...prev, [student.id]: { hash, issued_at: new Date().toISOString() } }));
+          alert("Certificado liberado com sucesso!");
+      } catch (e: any) {
+          alert("Erro ao emitir: " + e.message);
+      } finally {
+          setIssuingFor(null);
+      }
+  };
+
+  const copyCertLink = (hash: string) => {
+      const link = `${window.location.origin}/?certificateHash=${hash}`;
+      navigator.clipboard.writeText(link);
+      setCopiedLink(hash);
+      setTimeout(() => setCopiedLink(null), 2000);
   };
 
   const openAccessManager = async (student: any) => {
@@ -73,9 +131,9 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           for (const id of toAdd) await appBackend.grantCourseAccess(studentId, id);
           for (const id of toRemove) await appBackend.revokeCourseAccess(studentId, id);
 
-          alert("Acessos digitais atualizados!");
+          alert("Acessos ao LMS atualizados!");
           setShowAccessModal(null);
-          await appBackend.logActivity({ action: 'update', module: 'students', details: `Alterou acessos de cursos do aluno: ${showAccessModal.contact_name}`, recordId: studentId });
+          await appBackend.logActivity({ action: 'update', module: 'students', details: `Liberou acesso a cursos para: ${showAccessModal.contact_name}`, recordId: studentId });
       } catch (e) {
           alert("Erro ao salvar permissões.");
       } finally {
@@ -97,7 +155,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           }).eq('id', showEditModal.id);
           
           if (error) throw error;
-          alert("Dados atualizados com sucesso!");
+          alert("Dados atualizados!");
           setShowEditModal(null);
           fetchData();
       } catch (e: any) {
@@ -120,11 +178,18 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
             <div className="flex items-center gap-4">
                 <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800">Diretório de Alunos</h2>
-                    <p className="text-slate-500 text-sm">Controle central de acessos e informações de matriculados.</p>
+                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                        <Users className="text-teal-600" /> Alunos Matriculados
+                    </h2>
+                    <p className="text-slate-500 text-sm">Visualizando apenas alunos com pagamento confirmado.</p>
                 </div>
             </div>
-            <button onClick={fetchData} className="p-2 text-slate-400 hover:text-teal-600 transition-all"><RefreshCw size={20} className={isLoading ? "animate-spin" : ""} /></button>
+            <div className="flex items-center gap-3">
+                <div className="bg-green-50 text-green-700 px-4 py-2 rounded-xl text-xs font-black uppercase border border-green-100 shadow-sm flex items-center gap-2">
+                    <CheckCircle2 size={16}/> Pagamento Confirmado
+                </div>
+                <button onClick={fetchData} className="p-2 text-slate-400 hover:text-teal-600 transition-all"><RefreshCw size={20} className={isLoading ? "animate-spin" : ""} /></button>
+            </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4">
@@ -133,7 +198,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                 <input type="text" placeholder="Buscar por nome, e-mail ou CPF..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
             <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg text-xs font-bold text-slate-400 border border-slate-100">
-                <Users size={14}/> {filtered.length} Registros
+                <Users size={14}/> {filtered.length} Alunos
             </div>
         </div>
 
@@ -144,7 +209,8 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                         <th className="px-6 py-4">Aluno / Identificação</th>
                         <th className="px-6 py-4">Localização</th>
                         <th className="px-6 py-4">Origem / Campanha</th>
-                        <th className="px-6 py-4 text-center">Permissões LMS</th>
+                        <th className="px-6 py-4 text-center">Curso Online</th>
+                        <th className="px-6 py-4 text-center">Certificado</th>
                         <th className="px-6 py-4 text-right">Ação</th>
                     </tr>
                 </thead>
@@ -153,13 +219,13 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                         <tr key={s.id} className="hover:bg-slate-50 transition-colors group">
                             <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-black border border-teal-100 shadow-inner overflow-hidden">
+                                    <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-black border border-teal-100 shadow-inner">
                                         {s.contact_name.charAt(0)}
                                     </div>
                                     <div>
                                         <p className="font-bold text-slate-800 leading-tight">{s.company_name || s.contact_name}</p>
-                                        <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1 mt-0.5"><Mail size={10}/> {s.email || 'S/ Email'}</p>
-                                        <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1"><Tag size={10}/> CPF: {s.cpf || 'Não informado'}</p>
+                                        <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1 mt-0.5"><Mail size={10}/> {s.email || '—'}</p>
+                                        <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1"><Tag size={10}/> CPF: {s.cpf || '—'}</p>
                                     </div>
                                 </div>
                             </td>
@@ -171,31 +237,51 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             </td>
                             <td className="px-6 py-4">
                                 <div className="flex flex-col">
-                                    <span className="text-xs font-bold text-indigo-600">{s.source || 'Manual'}</span>
+                                    <span className="text-xs font-bold text-indigo-600">{s.source || 'CRM'}</span>
                                     <span className="text-[10px] text-slate-400 italic truncate max-w-[120px]">{s.campaign || 'Sem Campanha'}</span>
                                 </div>
                             </td>
                             <td className="px-6 py-4 text-center">
-                                <button onClick={() => openAccessManager(s)} className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 mx-auto border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm">
-                                    <Zap size={14}/> Liberar Cursos
+                                <button onClick={() => openAccessManager(s)} className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 mx-auto border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all">
+                                    <Zap size={14}/> Liberar LMS
                                 </button>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                                {certificates[s.id] ? (
+                                    <button 
+                                        onClick={() => copyCertLink(certificates[s.id].hash)}
+                                        className={clsx("p-2 rounded-xl transition-all shadow-sm flex items-center gap-2 mx-auto border", copiedLink === certificates[s.id].hash ? "bg-teal-600 text-white border-teal-700" : "bg-teal-50 text-teal-700 border-teal-100 hover:bg-teal-600 hover:text-white")}
+                                        title="Copiar Link do Certificado"
+                                    >
+                                        <Award size={14}/> 
+                                        <span className="text-[9px] font-black uppercase">{copiedLink === certificates[s.id].hash ? 'Link Copiado!' : 'Emitido'}</span>
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={() => handleIssueCertificate(s)}
+                                        disabled={issuingFor === s.id}
+                                        className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 mx-auto border border-amber-100 hover:bg-amber-500 hover:text-white transition-all disabled:opacity-50"
+                                    >
+                                        {issuingFor === s.id ? <Loader2 size={12} className="animate-spin" /> : <Award size={14}/>}
+                                        Liberar Agora
+                                    </button>
+                                )}
                             </td>
                             <td className="px-6 py-4 text-right">
                                 <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => setShowEditModal(s)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-all"><Edit2 size={16}/></button>
-                                    <button className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
+                                    <button onClick={() => setShowEditModal(s)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg"><Edit2 size={16}/></button>
                                 </div>
                             </td>
                         </tr>
                     ))}
                     {filtered.length === 0 && !isLoading && (
-                        <tr><td colSpan={5} className="py-20 text-center text-slate-400 italic">Nenhum aluno encontrado.</td></tr>
+                        <tr><td colSpan={6} className="py-20 text-center text-slate-400 italic">Nenhum aluno pago localizado.</td></tr>
                     )}
                 </tbody>
             </table>
         </div>
 
-        {/* ACCESS MODAL */}
+        {/* ACCESS MODAL (LMS) */}
         {showAccessModal && (
             <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
                 <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl animate-in zoom-in-95 flex flex-col">
@@ -223,7 +309,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                     </div>
                                 </div>
                                 <div className={clsx("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all", activeAccessIds.includes(course.id) ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}>
-                                    {/* Fix: Added missing 'Check' icon component usage */}
                                     {activeAccessIds.includes(course.id) && <Check size={14}/>}
                                 </div>
                                 <input type="checkbox" className="hidden" checked={activeAccessIds.includes(course.id)} onChange={() => handleToggleAccess(course.id)} />
@@ -265,20 +350,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">CPF</label>
                                 <input type="text" className="w-full px-5 py-3.5 bg-slate-50 border rounded-2xl text-sm font-bold focus:bg-white outline-none" value={showEditModal.cpf} onChange={e => setShowEditModal({...showEditModal, cpf: e.target.value})} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Telefone</label>
-                                <input type="text" className="w-full px-5 py-3.5 bg-slate-50 border rounded-2xl text-sm font-bold focus:bg-white outline-none" value={showEditModal.phone} onChange={e => setShowEditModal({...showEditModal, phone: e.target.value})} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">UF</label>
-                                    <input type="text" className="w-full px-5 py-3.5 bg-slate-50 border rounded-2xl text-sm font-bold focus:bg-white outline-none" value={showEditModal.course_state} onChange={e => setShowEditModal({...showEditModal, course_state: e.target.value})} maxLength={2} />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Cidade</label>
-                                    <input type="text" className="w-full px-5 py-3.5 bg-slate-50 border rounded-2xl text-sm font-bold focus:bg-white outline-none" value={showEditModal.course_city} onChange={e => setShowEditModal({...showEditModal, course_city: e.target.value})} />
-                                </div>
                             </div>
                         </div>
                     </div>

@@ -1,11 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  MessageCircle, Search, MoreVertical, Paperclip, Send, 
-  CheckCheck, User, X, Plus, Settings, Save, Smartphone, 
-  Copy, Loader2, RefreshCw, Zap, ShieldAlert, Code, Terminal, 
-  Database, QrCode, Wifi, WifiOff, CheckCircle2, ChevronRight, ShieldCheck,
-  Cpu, Link2, AlertTriangle, Info, Check, Bug, Cloud, Hash
+  MessageCircle, Paperclip, Send, CheckCheck, User, X, Plus, 
+  Settings, Save, Smartphone, Copy, Loader2, QrCode, Wifi, 
+  WifiOff, CheckCircle2, ChevronRight, ShieldCheck, Link2, 
+  AlertTriangle, Cloud, Hash, Database
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -40,7 +39,6 @@ interface WAConfig {
   instanceName: string;
   apiKey: string;
   pairingNumber: string;
-  // Twilio Fields
   twilioAccountSid: string;
   twilioAuthToken: string;
   twilioFromNumber: string;
@@ -65,7 +63,6 @@ export const WhatsAppInbox: React.FC = () => {
   const [newChatName, setNewChatName] = useState('');
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
-  // States para o QR Code / Conexão
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [isGeneratingConnection, setIsGeneratingConnection] = useState(false);
@@ -263,6 +260,68 @@ export const WhatsAppInbox: React.FC = () => {
   const supabaseProjectUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
   const edgeFunctionUrl = `${supabaseProjectUrl}/functions/v1/${config.edgeFunctionName}`;
 
+  // Helper para renderizar o estado de conexão sem ternários aninhados excessivos
+  const renderStatusDisplay = () => {
+    if (isGeneratingConnection) {
+        return (
+            <div className="flex flex-col items-center gap-2">
+                <Loader2 size={32} className="animate-spin text-teal-600" />
+                <p className="text-[10px] font-black text-teal-600 uppercase">Processando...</p>
+            </div>
+        );
+    }
+    
+    if (connError) {
+        return (
+            <div className="flex flex-col items-center gap-2 text-red-500 p-4">
+                <AlertTriangle size={32} />
+                <p className="text-[9px] font-black uppercase text-center leading-tight">Falha: {connError}</p>
+                <button onClick={handleConnectEvolution} className="text-[9px] font-bold underline mt-2">Tentar Novamente</button>
+            </div>
+        );
+    }
+
+    if (config.isConnected) {
+        return (
+            <div className="flex flex-col items-center animate-bounce">
+                <CheckCircle2 size={64} className="text-teal-500 mb-2" />
+                <p className="text-xs font-black text-teal-600 uppercase">Conectado!</p>
+            </div>
+        );
+    }
+
+    if (config.mode === 'evolution') {
+        if (config.evolutionMethod === 'code' && pairingCode) {
+            return (
+                <div className="flex flex-col items-center justify-center gap-4 animate-in zoom-in-95">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Código de Pareamento</p>
+                    <div className="bg-slate-900 text-teal-400 px-6 py-4 rounded-2xl font-mono text-3xl font-black shadow-lg">
+                        {pairingCode}
+                    </div>
+                    <p className="text-[9px] text-slate-500 font-bold uppercase leading-tight max-w-[150px] text-center">Insira no WhatsApp > Dispositivos Conectados</p>
+                </div>
+            );
+        }
+        if (config.evolutionMethod === 'qr' && qrCode) {
+            return (
+                <div className="w-full h-full p-2 bg-white rounded-xl">
+                    <img src={qrCode} alt="QR Code" className="w-full h-full object-contain animate-in zoom-in-95" />
+                </div>
+            );
+        }
+    }
+
+    // Default Placeholder
+    return (
+        <div className="flex flex-col items-center">
+            {config.mode === 'twilio' ? <Cloud size={48} className="text-red-300 mb-3" /> : (config.evolutionMethod === 'code' ? <Smartphone size={48} className="text-blue-300 mb-3" /> : <QrCode size={48} className="text-slate-300 mb-3" />)}
+            <p className="text-[10px] font-black text-slate-400 uppercase leading-tight text-center">
+                {config.mode === 'twilio' ? 'Preencha os dados e valide' : 'Gere o código ou QR para conectar'}
+            </p>
+        </div>
+    );
+  };
+
   if (showSettings) {
       return (
           <div className="h-full bg-slate-50 flex flex-col items-center p-6 overflow-y-auto animate-in fade-in custom-scrollbar">
@@ -280,7 +339,6 @@ export const WhatsAppInbox: React.FC = () => {
 
                   <div className="p-8 space-y-8 bg-slate-50">
                       
-                      {/* SELETOR DE MODO */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <button 
                             onClick={() => setConfig({...config, mode: 'twilio'})}
@@ -313,47 +371,7 @@ export const WhatsAppInbox: React.FC = () => {
                       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8 animate-in slide-in-from-top-4">
                             <div className="flex flex-col md:flex-row items-center gap-10">
                                 <div className="w-full md:w-64 aspect-square bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-6 text-center overflow-hidden relative">
-                                    {isGeneratingConnection ? (
-                                        <div className="flex flex-col items-center gap-2">
-                                            <Loader2 size={32} className="animate-spin text-teal-600" />
-                                            <p className="text-[10px] font-black text-teal-600 uppercase">{config.mode === 'twilio' ? 'Validando...' : 'Processando...'}</p>
-                                        </div>
-                                    ) : connError ? (
-                                        <div className="flex flex-col items-center gap-2 text-red-500 p-4">
-                                            <AlertTriangle size={32} />
-                                            <p className="text-[9px] font-black uppercase text-center leading-tight">Falha na API: {connError}</p>
-                                            <button onClick={handleConnectEvolution} className="text-[9px] font-bold underline mt-2">Tentar Novamente</button>
-                                        </div>
-                                    ) : pairingCode && config.mode === 'evolution' && config.evolutionMethod === 'code' ? (
-                                        <div className="flex flex-col items-center justify-center gap-4 animate-in zoom-in-95">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Código de Pareamento</p>
-                                            <div className="bg-slate-900 text-teal-400 px-6 py-4 rounded-2xl font-mono text-3xl font-black shadow-lg">
-                                                {pairingCode}
-                                            </div>
-                                            <p className="text-[9px] text-slate-500 font-bold uppercase leading-tight max-w-[150px]">Insira este código em: <br/> WhatsApp > Configurações > Dispositivos Conectados > Conectar com número</p>
-                                        </div>
-                                    ) : qrCode && config.mode === 'evolution' && config.evolutionMethod === 'qr' ? (
-                                        <div className="w-full h-full p-2 bg-white rounded-xl">
-                                            <img 
-                                                src={qrCode} 
-                                                alt="WhatsApp QR Code" 
-                                                className="w-full h-full object-contain animate-in zoom-in-95" 
-                                                onError={() => setConnError("Erro ao carregar imagem do QR Code.")}
-                                            />
-                                        </div>
-                                    ) : config.isConnected ? (
-                                        <div className="flex flex-col items-center animate-bounce">
-                                            <CheckCircle2 size={64} className="text-teal-500 mb-2" />
-                                            <p className="text-xs font-black text-teal-600 uppercase">Conectado!</p>
-                                        </div>
-                                    ) : (
-                                        <div className="flex flex-col items-center">
-                                            {config.mode === 'twilio' ? <Cloud size={48} className="text-red-300 mb-3" /> : (config.evolutionMethod === 'code' ? <Smartphone size={48} className="text-blue-300 mb-3" /> : <QrCode size={48} className="text-slate-300 mb-3" />)}
-                                            <p className="text-[10px] font-black text-slate-400 uppercase leading-tight">
-                                                {config.mode === 'twilio' ? 'Preencha os dados e valide a conexão' : (config.evolutionMethod === 'code' ? 'Informe o celular e gere o código' : 'Configure a URL abaixo e gere o QR')}
-                                            </p>
-                                        </div>
-                                    )}
+                                    {renderStatusDisplay()}
                                 </div>
                                 <div className="flex-1 space-y-4">
                                     <h4 className="text-lg font-black text-slate-800">Status da Instância:</h4>
@@ -383,10 +401,6 @@ export const WhatsAppInbox: React.FC = () => {
                                         <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
                                             <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">2</span>
                                             {config.mode === 'twilio' ? 'Clique em "Verificar Credenciais"' : (config.evolutionMethod === 'code' ? 'Gere o código de 8 dígitos' : 'Gere o QR Code de pareamento')}
-                                        </li>
-                                        <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
-                                            <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">3</span>
-                                            Pareamento completo e pronto para uso
                                         </li>
                                     </ul>
                                     <div className="bg-slate-900 rounded-xl p-4 h-24 font-mono text-[9px] text-teal-400 overflow-y-auto custom-scrollbar leading-relaxed shadow-inner">
@@ -462,10 +476,9 @@ export const WhatsAppInbox: React.FC = () => {
                             )}
                       </div>
 
-                      {/* WEBHOOK HELPERS */}
                       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-4">
                           <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2"><Database size={18} className="text-teal-600" /> Webhook de Recebimento</h3>
-                          <p className="text-xs text-slate-500 leading-relaxed">Cadastre esta URL no seu Console {config.mode === 'twilio' ? 'Twilio (Messaging Service)' : 'Evolution (Webhooks)'} para receber mensagens em tempo real no app:</p>
+                          <p className="text-xs text-slate-500 leading-relaxed">Cadastre esta URL no seu Console {config.mode === 'twilio' ? 'Twilio' : 'Evolution'} para receber mensagens em tempo real:</p>
                           <div className="p-4 bg-teal-50 border-2 border-teal-200 rounded-2xl">
                               <div className="flex gap-2">
                                   <code className="flex-1 bg-white border border-teal-300 p-3 rounded-xl text-[10px] font-mono text-slate-700 break-all leading-relaxed">{edgeFunctionUrl}</code>
@@ -489,7 +502,6 @@ export const WhatsAppInbox: React.FC = () => {
 
   return (
     <div className="flex h-[calc(100vh-140px)] bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
-      {/* Sidebar List */}
       <div className={clsx("flex flex-col border-r border-slate-100 w-full md:w-80 lg:w-96 shrink-0 bg-slate-50/50", selectedChatId ? "hidden md:flex" : "flex")}>
         <div className="p-6 border-b border-slate-100 bg-white space-y-4">
             <div className="flex items-center justify-between">
@@ -499,8 +511,6 @@ export const WhatsAppInbox: React.FC = () => {
                     <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-teal-600 hover:bg-slate-100 rounded-xl transition-all" title="Configurar"><Settings size={18} /></button>
                 </div>
             </div>
-            
-            {/* Connection Bar */}
             <div className={clsx(
                 "p-3 rounded-2xl border-2 flex items-center justify-between transition-all",
                 config.isConnected ? "bg-teal-50 border-teal-100" : "bg-red-50 border-red-100"
@@ -539,7 +549,6 @@ export const WhatsAppInbox: React.FC = () => {
         </div>
       </div>
 
-      {/* Chat Area */}
       <div className="flex-1 flex flex-col bg-[#efeae2] relative min-w-0">
           {selectedChat ? (
               <>
@@ -607,7 +616,6 @@ export const WhatsAppInbox: React.FC = () => {
           )}
       </div>
 
-      {/* New Chat Modal */}
       {showNewChatModal && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">

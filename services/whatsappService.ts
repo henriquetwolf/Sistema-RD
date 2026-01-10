@@ -20,7 +20,7 @@ export const whatsappService = {
         const partBeforeAt = raw.split('@')[0];
         const cleanNumber = partBeforeAt.split(':')[0].replace(/\D/g, '');
         
-        // Se for um número de telefone brasileiro válido (12 ou 13 dígitos: 55 + DDD + Numero)
+        // Se for um número de telefone brasileiro válido (12 ou 13 dígitos)
         if (cleanNumber.length >= 10 && cleanNumber.length <= 13) {
             return cleanNumber;
         }
@@ -31,7 +31,6 @@ export const whatsappService = {
      * Busca informações do contato no CRM de forma exaustiva (Número ou Nome)
      */
     findContactInCrm: async (identifier: string, pushName?: string) => {
-        // 1. TENTA PELO NÚMERO (Se o ID não for LID)
         const actualNum = whatsappService.extractActualNumber(identifier);
         
         if (actualNum) {
@@ -51,8 +50,6 @@ export const whatsappService = {
             };
         }
 
-        // 2. TENTA PELO NOME (Crucial para desmascarar LIDs)
-        // Se o Evolution enviou o pushName, procuramos ele no CRM
         if (pushName && pushName.length > 2) {
             const { data: contactByName } = await appBackend.client
                 .from('crm_deals')
@@ -74,12 +71,29 @@ export const whatsappService = {
     },
 
     /**
-     * Cria ou recupera um chat unificado, forçando a descoberta do número real
+     * Associa manualmente um wa_id (LID) a um telefone real e nome
+     */
+    associateLidWithPhone: async (chatId: string, phone: string, name: string) => {
+        const cleanPhone = phone.replace(/\D/g, '');
+        const { error } = await appBackend.client
+            .from('crm_whatsapp_chats')
+            .update({ 
+                contact_phone: cleanPhone,
+                contact_name: name,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', chatId);
+        
+        if (error) throw error;
+        return true;
+    },
+
+    /**
+     * Cria ou recupera um chat unificado
      */
     getOrCreateChat: async (waId: string, pushName: string) => {
         const cleanId = waId.split('@')[0];
         
-        // 1. Verifica se já existe o chat
         const { data: existingChat } = await appBackend.client
             .from('crm_whatsapp_chats')
             .select('*')
@@ -87,7 +101,6 @@ export const whatsappService = {
             .maybeSingle();
 
         if (existingChat) {
-            // Se o chat existe mas está sem o telefone real, tenta vincular agora
             if (!existingChat.contact_phone || whatsappService.isLid(existingChat.contact_phone)) {
                 const contact = await whatsappService.findContactInCrm(waId, pushName);
                 if (contact?.phone) {
@@ -104,7 +117,6 @@ export const whatsappService = {
             return existingChat;
         }
 
-        // 2. Chat novo: Busca no CRM para tentar "desmascarar" o ID técnico imediatamente
         const contact = await whatsappService.findContactInCrm(waId, pushName);
         const finalPhone = contact?.phone ? contact.phone.replace(/\D/g, '') : whatsappService.extractActualNumber(waId);
 
@@ -124,14 +136,10 @@ export const whatsappService = {
         return newChat;
     },
 
-    /**
-     * Envio de Mensagem: Prioriza o número real (contact_phone)
-     */
     sendTextMessage: async (chat: any, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
         if (!config) throw new Error("WhatsApp não configurado.");
 
-        // Evolution API identifica melhor o número real
         const target = chat.contact_phone && !whatsappService.isLid(chat.contact_phone) 
             ? chat.contact_phone 
             : chat.wa_id;

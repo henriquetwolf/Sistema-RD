@@ -4,48 +4,24 @@ import { appBackend } from './appBackend';
 export const whatsappService = {
     /**
      * Verifica se o identificador é um LID (Linked ID) do WhatsApp.
-     * LIDs geralmente têm mais de 13 dígitos e começam com identificadores técnicos.
      */
     isLid: (id: string) => {
+        if (!id) return false;
         const clean = id.split('@')[0].replace(/\D/g, '');
+        // LIDs de dispositivos pareados costumam ser muito longos (15+ dígitos)
         return clean.length > 13;
     },
 
     /**
-     * Normaliza um número para formato E.164 brasileiro (55 + DDD + Numero)
+     * Normaliza um número para formato E.164 brasileiro
      */
     normalizeNumber: (phone: string) => {
         if (!phone) return '';
         let clean = phone.split('@')[0].replace(/\D/g, '');
-        
-        // Se for número brasileiro (sem DDI) e tiver 10 ou 11 dígitos, adiciona o 55
         if (clean.length >= 10 && clean.length <= 11 && !clean.startsWith('55')) {
             clean = '55' + clean;
         }
         return clean;
-    },
-
-    /**
-     * Gera variações de números brasileiros para busca (com e sem o 9º dígito)
-     */
-    getPhoneVariations: (phone: string) => {
-        const normalized = whatsappService.normalizeNumber(phone);
-        if (!normalized || whatsappService.isLid(normalized) || normalized.length < 10) return [normalized];
-        
-        const variations = [normalized];
-        if (normalized.startsWith('55') && (normalized.length === 12 || normalized.length === 13)) {
-            const ddd = normalized.slice(2, 4);
-            const rest = normalized.slice(4);
-
-            if (normalized.length === 13 && rest.startsWith('9')) {
-                // Tem o 9, gera a versão sem o 9
-                variations.push('55' + ddd + rest.slice(1));
-            } else if (normalized.length === 12) {
-                // Não tem o 9, gera a versão com o 9
-                variations.push('55' + ddd + '9' + rest);
-            }
-        }
-        return variations;
     },
 
     /**
@@ -54,9 +30,16 @@ export const whatsappService = {
     findContactInCrm: async (identifier: string, pushName?: string) => {
         const cleanId = identifier.split('@')[0];
         
-        // Se parece um número real, busca por variações
+        // 1. Se parece um número real, busca por variações de 9º dígito
         if (!whatsappService.isLid(cleanId) && cleanId.length <= 13) {
-            const variations = whatsappService.getPhoneVariations(cleanId);
+            const normalized = whatsappService.normalizeNumber(cleanId);
+            const ddd = normalized.slice(2, 4);
+            const rest = normalized.slice(4);
+            const variations = [normalized];
+            
+            if (normalized.length === 13 && rest.startsWith('9')) variations.push('55' + ddd + rest.slice(1));
+            else if (normalized.length === 12) variations.push('55' + ddd + '9' + rest);
+
             const { data: contact } = await appBackend.client
                 .from('crm_deals')
                 .select('contact_name, company_name, phone, email')
@@ -66,16 +49,21 @@ export const whatsappService = {
             if (contact) return { name: contact.company_name || contact.contact_name, phone: contact.phone, role: 'Cliente/Lead', detail: contact.email };
         }
 
-        // Se for um LID ou não achou pelo número, tenta pelo nome do perfil
+        // 2. Tenta pelo nome do perfil (PushName)
         if (pushName && pushName.length > 2) {
             const { data: contactByPush } = await appBackend.client
                 .from('crm_deals')
-                .select('contact_name, company_name, phone')
+                .select('contact_name, company_name, phone, email')
                 .or(`contact_name.ilike.%${pushName}%,company_name.ilike.%${pushName}%`)
                 .limit(1)
                 .maybeSingle();
             
-            if (contactByPush) return { name: contactByPush.company_name || contactByPush.contact_name, phone: contactByPush.phone, role: 'CRM Match', detail: 'Identificado via Nome' };
+            if (contactByPush) return { 
+                name: contactByPush.company_name || contactByPush.contact_name, 
+                phone: contactByPush.phone, 
+                role: 'CRM Match', 
+                detail: contactByPush.email 
+            };
         }
 
         return null;
@@ -84,10 +72,9 @@ export const whatsappService = {
     /**
      * Garante a criação ou retorno de um chat unificado
      */
-    getOrCreateChat: async (waId: string, pushName: string, actualNumber?: string) => {
+    getOrCreateChat: async (waId: string, pushName: string, actualNumberFromWebhook?: string) => {
         const cleanId = waId.split('@')[0];
-        const normalizedActual = actualNumber ? whatsappService.normalizeNumber(actualNumber) : null;
-
+        
         // 1. Já existe esse ID EXATO?
         const { data: existingChat } = await appBackend.client
             .from('crm_whatsapp_chats')
@@ -96,32 +83,36 @@ export const whatsappService = {
             .maybeSingle();
 
         if (existingChat) {
-            // Se o chat existe mas o telefone real está vazio, atualiza se tivermos agora
-            if (!existingChat.contact_phone && normalizedActual && !whatsappService.isLid(normalizedActual)) {
-                await appBackend.client.from('crm_whatsapp_chats').update({ contact_phone: normalizedActual }).eq('id', existingChat.id);
+            // Se o chat existe mas não tem o telefone real salvo, tentamos buscar no CRM para preencher
+            if (!existingChat.contact_phone || whatsappService.isLid(existingChat.contact_phone)) {
+                const contact = await whatsappService.findContactInCrm(actualNumberFromWebhook || cleanId, pushName);
+                if (contact?.phone) {
+                    await appBackend.client.from('crm_whatsapp_chats').update({ 
+                        contact_phone: whatsappService.normalizeNumber(contact.phone),
+                        contact_name: contact.name 
+                    }).eq('id', existingChat.id);
+                }
             }
             return existingChat;
         }
 
-        // 2. É um LID? Tenta buscar chat antigo pelo TELEFONE REAL extraído ou CRM
-        const contact = await whatsappService.findContactInCrm(normalizedActual || cleanId, pushName);
-        const finalPhone = normalizedActual || contact?.phone || (!whatsappService.isLid(cleanId) ? cleanId : '');
+        // 2. Se for um LID, tenta buscar um chat antigo pelo TELEFONE REAL ou CRM
+        const contact = await whatsappService.findContactInCrm(actualNumberFromWebhook || cleanId, pushName);
+        const finalPhone = contact?.phone ? whatsappService.normalizeNumber(contact.phone) : (whatsappService.isLid(cleanId) ? null : cleanId);
 
-        if (finalPhone && !whatsappService.isLid(finalPhone)) {
-            const variations = whatsappService.getPhoneVariations(finalPhone);
+        if (finalPhone) {
             const { data: oldChatByPhone } = await appBackend.client
                 .from('crm_whatsapp_chats')
                 .select('*')
-                .or(`wa_id.in.(${variations.map(v => `"${v}"`).join(',')}),contact_phone.in.(${variations.map(v => `"${v}"`).join(',')})`)
+                .eq('contact_phone', finalPhone)
                 .maybeSingle();
 
             if (oldChatByPhone) {
-                // UNIFICAÇÃO: O contato mudou de ID técnico (LID) mas o telefone é o mesmo.
+                // UNIFICAÇÃO: Atualiza o wa_id (LID) do chat que já tem o telefone real
                 const { data: merged } = await appBackend.client
                     .from('crm_whatsapp_chats')
                     .update({ 
                         wa_id: cleanId, 
-                        contact_phone: oldChatByPhone.contact_phone || finalPhone,
                         contact_name: contact?.name || oldChatByPhone.contact_name || pushName
                     })
                     .eq('id', oldChatByPhone.id)
@@ -150,14 +141,31 @@ export const whatsappService = {
     },
 
     /**
-     * Envio priorizando sempre o MSISDN (Telefone) estável
+     * Envio robusto: Se wa_id for LID, tenta o contact_phone. 
+     * Se falhar, tenta buscar o telefone no CRM em tempo real antes de desistir.
      */
     sendTextMessage: async (chat: any, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
         if (!config) throw new Error("WhatsApp não configurado.");
 
-        // Se o wa_id for um LID (longo), usamos o contact_phone (5551...) para garantir entrega
-        const target = whatsappService.isLid(chat.wa_id) ? (chat.contact_phone || chat.wa_id) : chat.wa_id;
+        let target = chat.contact_phone;
+        
+        // Se não temos o telefone real salvo ou se o salvo parece ser um LID
+        if (!target || whatsappService.isLid(target)) {
+            // Última tentativa: Buscar no CRM antes de enviar
+            const contact = await whatsappService.findContactInCrm(chat.wa_id, chat.contact_name);
+            if (contact?.phone) {
+                target = whatsappService.normalizeNumber(contact.phone);
+                // Salva para as próximas vezes
+                await appBackend.client.from('crm_whatsapp_chats').update({ contact_phone: target }).eq('id', chat.id);
+            } else {
+                // Se não achou no CRM e o ID original é um LID, a Evolution vai dar erro
+                if (whatsappService.isLid(chat.wa_id)) {
+                    throw new Error("Não foi possível localizar o número de telefone real para este ID de dispositivo (LID).");
+                }
+                target = chat.wa_id;
+            }
+        }
 
         const baseUrl = config.instanceUrl.replace(/\/$/, "");
         const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;

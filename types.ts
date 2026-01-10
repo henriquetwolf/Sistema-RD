@@ -524,3 +524,16 @@ export interface CompanySetting {
     productTypes: string[];
     productIds: string[];
 }
+
+// FIX: Added missing AttendanceStage and AttendanceFunnel interfaces
+export interface AttendanceStage {
+    id: string;
+    title: string;
+    color: string;
+}
+
+export interface AttendanceFunnel {
+    id: string;
+    name: string;
+    stages: AttendanceStage[];
+}

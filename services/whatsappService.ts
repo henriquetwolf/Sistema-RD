@@ -1,5 +1,6 @@
 
 import { appBackend } from './appBackend';
+import { AttendanceFunnel } from '../types';
 
 export const whatsappService = {
     /**
@@ -37,7 +38,80 @@ export const whatsappService = {
     },
 
     /**
-     * Atualiza a etapa (status) do atendimento
+     * Busca funis de atendimento
+     */
+    getFunnels: async (): Promise<AttendanceFunnel[]> => {
+        const { data, error } = await appBackend.client
+            .from('crm_attendance_funnels')
+            .select('*')
+            .order('name');
+        if (error) throw error;
+        return (data || []).map((f: any) => ({
+            id: f.id,
+            name: f.name,
+            stages: f.stages || []
+        }));
+    },
+
+    /**
+     * Salva ou atualiza um funil de atendimento
+     */
+    saveFunnel: async (funnel: AttendanceFunnel) => {
+        const { error } = await appBackend.client
+            .from('crm_attendance_funnels')
+            .upsert({
+                id: funnel.id || undefined,
+                name: funnel.name,
+                stages: funnel.stages
+            });
+        if (error) throw error;
+        return true;
+    },
+
+    /**
+     * Exclui um funil
+     */
+    deleteFunnel: async (id: string) => {
+        const { error } = await appBackend.client
+            .from('crm_attendance_funnels')
+            .delete()
+            .eq('id', id);
+        if (error) throw error;
+        return true;
+    },
+
+    /**
+     * Exclui um chat/atendimento permanentemente
+     */
+    deleteChat: async (chatId: string) => {
+        // As mensagens costumam ter FK com ON DELETE CASCADE, 
+        // mas garantimos a limpeza se necessário ou apenas deletamos o chat.
+        const { error } = await appBackend.client
+            .from('crm_whatsapp_chats')
+            .delete()
+            .eq('id', chatId);
+        if (error) throw error;
+        return true;
+    },
+
+    /**
+     * Atualiza o funil e etapa de um chat
+     */
+    moveChat: async (chatId: string, funnelId: string, stageId: string) => {
+        const { error } = await appBackend.client
+            .from('crm_whatsapp_chats')
+            .update({ 
+                funnel_id: funnelId, 
+                stage_id: stageId,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', chatId);
+        if (error) throw error;
+        return true;
+    },
+
+    /**
+     * Atualiza a etapa (status legado) do atendimento
      */
     updateChatStatus: async (chatId: string, status: 'open' | 'pending' | 'waiting' | 'closed') => {
         const { error } = await appBackend.client

@@ -125,21 +125,7 @@ export const WhatsAppInbox: React.FC = () => {
               .select('*')
               .order('updated_at', { ascending: false });
           
-          if (data) {
-              // Tenta resolver nomes de contatos que só tem número
-              const resolvedData = await Promise.all(data.map(async (conv) => {
-                  if (!conv.contact_name || conv.contact_name === conv.wa_id) {
-                      const name = await whatsappService.resolveContactName(conv.wa_id);
-                      if (name) {
-                          // Atualiza o nome no banco para as próximas vezes
-                          await appBackend.client.from('crm_whatsapp_chats').update({ contact_name: name }).eq('id', conv.id);
-                          return { ...conv, contact_name: name };
-                      }
-                  }
-                  return conv;
-              }));
-              setConversations(resolvedData);
-          }
+          if (data) setConversations(data);
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
@@ -270,7 +256,7 @@ export const WhatsAppInbox: React.FC = () => {
   const formatPhoneDisplay = (id: string) => {
       if (!id) return '';
       const cleaned = id.replace(/\D/g, '');
-      if (cleaned.length > 13) return id; // Provável LID ou ID de Grupo
+      if (cleaned.length > 13) return `ID: ${id.substring(0, 12)}...`; // Formato compacto para LID
       if (cleaned.startsWith('55') && cleaned.length >= 12) {
           const ddd = cleaned.slice(2, 4);
           const rest = cleaned.slice(4);
@@ -387,8 +373,8 @@ export const WhatsAppInbox: React.FC = () => {
                         <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-5 cursor-pointer transition-all hover:bg-white border-l-4 group relative", selectedChatId === conv.id ? "bg-white border-l-teal-500 shadow-sm" : "border-l-transparent")}>
                             <div className="flex justify-between items-start mb-1">
                                 <div className="flex flex-col">
-                                    <span className="font-black text-sm text-slate-800">{conv.contact_name || formatPhoneDisplay(conv.wa_id)}</span>
-                                    <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter opacity-70">ID: {conv.wa_id}</span>
+                                    <span className="font-black text-sm text-slate-800">{conv.contact_name}</span>
+                                    <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter opacity-70">{formatPhoneDisplay(conv.wa_id)}</span>
                                 </div>
                                 <span className="text-[9px] font-black text-slate-400 uppercase">{formatTime(conv.updated_at)}</span>
                             </div>

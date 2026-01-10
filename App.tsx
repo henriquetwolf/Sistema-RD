@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -162,6 +163,29 @@ function App() {
     const { data: { subscription } } = appBackend.auth.onAuthStateChange((s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
+
+  const handleLogout = async () => {
+    // 1. Limpar todos os storages
+    sessionStorage.clear();
+    localStorage.clear();
+    
+    // 2. Reseta estados de usuário localmente
+    setCurrentInstructor(null);
+    setCurrentStudent(null);
+    setCurrentCollaborator(null);
+    setCurrentStudio(null);
+    setSession(null);
+    
+    // 3. Efetuar logout no Supabase/Backend
+    try {
+        await appBackend.auth.signOut();
+    } catch (e) {
+        console.error("Erro ao deslogar no backend:", e);
+    }
+    
+    // 4. Forçar redirecionamento para limpar qualquer rastro de autenticação no histórico/memória
+    window.location.href = window.location.origin;
+  };
 
   useEffect(() => {
     if (dashboardTab === 'overview' && (session || currentCollaborator)) {
@@ -393,30 +417,6 @@ function App() {
           await appBackend.deleteSyncJob(id);
           setJobs(prev => prev.filter(j => j.id !== id));
       }
-  };
-
-  const handleLogout = async () => {
-    // Limpeza completa de estado e armazenamento
-    sessionStorage.clear();
-    localStorage.removeItem('instructor_session');
-    localStorage.removeItem('student_session');
-    localStorage.removeItem('collaborator_session');
-    localStorage.removeItem('studio_session');
-    
-    setCurrentInstructor(null);
-    setCurrentStudent(null);
-    setCurrentCollaborator(null);
-    setCurrentStudio(null);
-    setSession(null);
-    
-    try {
-        await appBackend.auth.signOut();
-    } catch (e) {
-        console.error("Erro no signOut do backend:", e);
-    }
-    
-    // Forçar recarregamento da página para garantir estado limpo
-    window.location.href = window.location.origin;
   };
 
   const canAccess = (module: string): boolean => {

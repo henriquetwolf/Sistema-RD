@@ -47,6 +47,8 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno';
+
 function App() {
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
   const [publicContract, setPublicContract] = useState<Contract | null>(null);
@@ -72,7 +74,7 @@ function App() {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const jobsRef = useRef<SyncJob[]>([]); 
   
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
 
   const [overviewStats, setOverviewStats] = useState({
       leadsToday: 0,
@@ -95,6 +97,9 @@ function App() {
 
   const [allCollaborators, setAllCollaborators] = useState<any[]>([]);
   const [isHrLoading, setIsHrLoading] = useState(false);
+
+  // Navigation Deep Link State
+  const [pendingNavigation, setPendingNavigation] = useState<{tab: DashboardTab, id: string} | null>(null);
 
   const intervalRef = useRef<number | null>(null);
   const CHECK_INTERVAL_MS = 60 * 1000; 
@@ -408,6 +413,14 @@ function App() {
       return false;
   };
 
+  const handleDeepNavigation = (tab: string, recordId: string) => {
+      setDashboardTab(tab as DashboardTab);
+      // Aqui simulamos uma busca pelo registro na aba destino
+      // Em uma aplicação real, poderíamos disparar um evento ou passar props para o componente filho
+      // Por enquanto, apenas avisamos que o sistema mudou de contexto
+      alert(`Navegando para ${tab}. Registro ID: ${recordId}`);
+  };
+
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   if (isPublicLoading) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
@@ -640,7 +653,7 @@ function App() {
                         {dashboardTab === 'events' && <EventsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} jobs={jobs} onStartWizard={handleStartWizard} onDeleteJob={handleDeleteJob} />}
                         {dashboardTab === 'analysis' && <SalesAnalysis />}
-                        {dashboardTab === 'whatsapp' && <WhatsAppInbox />}
+                        {dashboardTab === 'whatsapp' && <WhatsAppInbox onNavigateToRecord={handleDeepNavigation} />}
                     </div>
                 </div>
             </main>

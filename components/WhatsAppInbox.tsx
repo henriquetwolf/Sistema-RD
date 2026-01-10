@@ -5,7 +5,7 @@ import {
   Settings, Save, Smartphone, Loader2, Wifi, 
   WifiOff, ChevronRight, RefreshCw, UserCheck, Search, Link2,
   AlertCircle, ShieldCheck, UserPlus, Kanban, List, MoveRight,
-  Clock, CheckCircle, Circle, MessageSquare, ExternalLink, GraduationCap, School, Building2, Store
+  Clock, CheckCircle, Circle, MessageSquare, ExternalLink, GraduationCap, School, Building2, Store, Heart
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -44,6 +44,10 @@ interface WAConfig {
   isConnected: boolean;
 }
 
+interface WhatsAppInboxProps {
+    onNavigateToRecord?: (tab: string, recordId: string) => void;
+}
+
 const ATTENDANCE_STAGES: { id: ChatStatus; label: string; color: string; bg: string }[] = [
     { id: 'open', label: 'Novos / Sem Resposta', color: 'text-red-600', bg: 'bg-red-50' },
     { id: 'pending', label: 'Em Atendimento', color: 'text-amber-600', bg: 'bg-amber-50' },
@@ -51,7 +55,7 @@ const ATTENDANCE_STAGES: { id: ChatStatus; label: string; color: string; bg: str
     { id: 'closed', label: 'Finalizados', color: 'text-emerald-600', bg: 'bg-emerald-50' },
 ];
 
-export const WhatsAppInbox: React.FC = () => {
+export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord }) => {
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [conversations, setConversations] = useState<WAConversation[]>([]);
   const [messages, setMessages] = useState<WAMessage[]>([]);
@@ -128,7 +132,9 @@ export const WhatsAppInbox: React.FC = () => {
 
   const loadGlobalIdentification = async () => {
       if (!selectedChat) return;
-      const info = await whatsappService.identifyContactGlobally(selectedChat.wa_id, selectedChat.contact_name);
+      // Tenta identificar o contato usando o wa_id ou telefone vinculado
+      const identifier = selectedChat.contact_phone || selectedChat.wa_id;
+      const info = await whatsappService.identifyContactGlobally(identifier, selectedChat.contact_name);
       setGlobalContactInfo(info);
       if (!info && whatsappService.isLid(selectedChat.wa_id)) {
           setIdentifyName(selectedChat.contact_name);
@@ -136,10 +142,14 @@ export const WhatsAppInbox: React.FC = () => {
   };
 
   const handleMarkAsRead = async (chatId: string) => {
-      const chat = conversations.find(c => c.id === chatId);
-      if (chat && chat.unread_count > 0) {
+      // Feedback instantâneo no UI
+      setConversations(prev => prev.map(c => c.id === chatId ? { ...c, unread_count: 0 } : c));
+      
+      // Persiste no Supabase
+      try {
           await whatsappService.markAsRead(chatId);
-          setConversations(prev => prev.map(c => c.id === chatId ? { ...c, unread_count: 0 } : c));
+      } catch (e) {
+          console.error("Erro ao marcar como lido no DB", e);
       }
   };
 
@@ -185,7 +195,14 @@ export const WhatsAppInbox: React.FC = () => {
               .from('crm_whatsapp_chats')
               .select('*')
               .order('updated_at', { ascending: false });
-          if (data) setConversations(data);
+          
+          if (data) {
+              const processed = data.map((c: any) => {
+                  if (c.id === selectedChatId) return { ...c, unread_count: 0 };
+                  return c;
+              });
+              setConversations(processed);
+          }
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
@@ -318,6 +335,7 @@ export const WhatsAppInbox: React.FC = () => {
       switch(type) {
           case 'student': return <GraduationCap size={12}/>;
           case 'teacher': return <School size={12}/>;
+          case 'collaborator': return <Heart size={12} className="fill-blue-600"/>;
           case 'studio': return <Building2 size={12}/>;
           case 'franchise': return <Store size={12}/>;
           default: return <UserCheck size={12}/>;
@@ -325,7 +343,7 @@ export const WhatsAppInbox: React.FC = () => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-140px)] bg-slate-50 rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative">
+    <div className="flex h-full bg-slate-50 rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative">
       
       {/* SIDEBAR */}
       <div className={clsx("flex flex-col border-r border-slate-100 w-full md:w-80 lg:w-96 shrink-0 bg-white", selectedChatId && viewMode === 'list' ? "hidden md:flex" : "flex")}>
@@ -407,18 +425,18 @@ export const WhatsAppInbox: React.FC = () => {
                                         <span className={clsx("px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border", globalContactInfo.color)}>
                                             {getEntityIcon(globalContactInfo.type)} {globalContactInfo.label}
                                         </span>
-                                        {/* Botão Dinâmico de Navegação */}
+                                        {/* Botão Dinâmico de Navegação para o Cadastro Real */}
                                         <button 
-                                            onClick={() => alert(`Navegando para o módulo: ${globalContactInfo.tab}`)}
-                                            className="text-[9px] font-bold text-indigo-600 hover:underline flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200"
+                                            onClick={() => onNavigateToRecord?.(globalContactInfo.tab, globalContactInfo.id)}
+                                            className="text-[9px] font-bold text-indigo-600 hover:underline flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 active:scale-95 transition-all"
                                         >
-                                            <ExternalLink size={10}/> Ver Cadastro
+                                            <ExternalLink size={10}/> Ver Cadastro Completo
                                         </button>
                                     </div>
                                 ) : (
                                     whatsappService.isLid(selectedChat.wa_id) && !selectedChat.contact_phone && 
                                     <button onClick={() => setShowIdentifyModal(true)} className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 border border-amber-200 hover:bg-amber-200 transition-colors">
-                                        <UserPlus size={10}/> Identificar
+                                        <UserPlus size={10}/> Identificar Contato
                                     </button>
                                 )}
                             </div>
@@ -500,7 +518,7 @@ export const WhatsAppInbox: React.FC = () => {
       {showSettings && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
-                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50 shrink-0">
+                  <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 shrink-0 flex justify-between items-center">
                       <div className="flex items-center gap-3"><Settings className="text-teal-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Evolution API Config</h3></div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                   </div>

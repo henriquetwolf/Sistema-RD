@@ -49,7 +49,7 @@ export const whatsappService = {
     },
 
     /**
-     * Identifica um contato em qualquer tabela do sistema
+     * Identifica um contato em qualquer tabela do sistema (V38 - Otimizado)
      */
     identifyContactGlobally: async (identifier: string, pushName?: string) => {
         const actualNum = whatsappService.extractActualNumber(identifier);
@@ -57,7 +57,37 @@ export const whatsappService = {
 
         const last8 = actualNum.slice(-8);
 
-        // 1. Buscar em Alunos / Leads
+        // 1. Prioridade RH: Buscar em Colaboradores
+        const { data: collab } = await appBackend.client
+            .from('crm_collaborators')
+            .select('id, full_name, email, phone, cellphone')
+            .or(`phone.ilike.%${last8}%,cellphone.ilike.%${last8}%`)
+            .maybeSingle();
+        if (collab) return {
+            id: collab.id,
+            name: collab.full_name,
+            type: 'collaborator',
+            label: 'Equipe VOLL (RH)',
+            color: 'text-blue-600 bg-blue-50 border-blue-100',
+            tab: 'hr'
+        };
+
+        // 2. Buscar em Franqueados
+        const { data: franchise } = await appBackend.client
+            .from('crm_franchises')
+            .select('id, franchisee_name, phone')
+            .ilike('phone', `%${last8}%`)
+            .maybeSingle();
+        if (franchise) return { 
+            id: franchise.id, 
+            name: franchise.franchisee_name, 
+            type: 'franchise', 
+            label: 'Franqueado',
+            color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+            tab: 'franchises'
+        };
+
+        // 3. Buscar em Alunos / Leads
         const { data: deal } = await appBackend.client
             .from('crm_deals')
             .select('id, contact_name, company_name, phone, stage')
@@ -72,7 +102,7 @@ export const whatsappService = {
             tab: 'students'
         };
 
-        // 2. Buscar em Professores
+        // 4. Buscar em Professores
         const { data: teacher } = await appBackend.client
             .from('crm_teachers')
             .select('id, full_name, phone')
@@ -87,7 +117,7 @@ export const whatsappService = {
             tab: 'teachers'
         };
 
-        // 3. Buscar em Studios Parceiros
+        // 5. Buscar em Studios Parceiros
         const { data: studio } = await appBackend.client
             .from('crm_partner_studios')
             .select('id, fantasy_name, phone')
@@ -100,21 +130,6 @@ export const whatsappService = {
             label: 'Studio Parceiro',
             color: 'text-teal-600 bg-teal-50 border-teal-100',
             tab: 'partner_studios'
-        };
-
-        // 4. Buscar em Franquias
-        const { data: franchise } = await appBackend.client
-            .from('crm_franchises')
-            .select('id, franchisee_name, phone')
-            .ilike('phone', `%${last8}%`)
-            .maybeSingle();
-        if (franchise) return { 
-            id: franchise.id, 
-            name: franchise.franchisee_name, 
-            type: 'franchise', 
-            label: 'Franqueado',
-            color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
-            tab: 'franchises'
         };
 
         return null;
@@ -150,8 +165,6 @@ export const whatsappService = {
             .maybeSingle();
 
         if (existingChat) {
-            // Se o chat está fechado e recebemos uma nova interação (simulado aqui, real via trigger SQL),
-            // a UI deve refletir a reabertura.
             return existingChat;
         }
 
@@ -201,12 +214,10 @@ export const whatsappService = {
             .select().single();
         if (error) throw error;
 
-        // Se o atendente responde, garantimos que o status não seja mais 'open' (novo)
         const { data: chat } = await appBackend.client.from('crm_whatsapp_chats').select('status').eq('id', chatId).single();
         
         const updates: any = { last_message: text, updated_at: new Date().toISOString() };
         
-        // Se estava aberto (novo), movemos para 'pending' (em atendimento) ao responder
         if (chat?.status === 'open' && senderType === 'agent') {
             updates.status = 'pending';
         }

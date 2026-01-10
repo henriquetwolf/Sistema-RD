@@ -1,13 +1,13 @@
 
-import React, { useEffect, useState } from 'react';
-import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock, Banner, SurveyModel, CourseInfo, PartnerStudio } from '../types';
+import React, { useEffect, useState, useMemo } from 'react';
+import { StudentSession, EventModel, Workshop, EventRegistration, EventBlock, Banner, SurveyModel, CourseInfo, PartnerStudio, Product, CourseModule, CourseLesson } from '../types';
 import { appBackend } from '../services/appBackend';
 import { FormViewer } from './FormViewer';
 import { SupportTicketModal } from './SupportTicketModal';
 import { 
     LogOut, GraduationCap, BookOpen, Award, ExternalLink, Calendar, MapPin, 
     Video, Download, Loader2, UserCircle, User, CheckCircle, Mic, CheckSquare, Clock, Users, X, Save, Lock, AlertCircle, DollarSign, Layers, Edit2, List,
-    PieChart, Send, ArrowRight, Sparkles, Bell, Bookmark, Search, Zap, Trophy, ChevronRight, Book, ListTodo, LifeBuoy
+    PieChart, Send, ArrowRight, Sparkles, Bell, Bookmark, Search, Zap, Trophy, ChevronRight, Book, ListTodo, LifeBuoy, Play, Lock as LockIcon, ChevronDown, CheckCircle2
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -27,7 +27,16 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [classes, setClasses] = useState<any[]>([]);
     const [certificates, setCertificates] = useState<any[]>([]);
     const [events, setEvents] = useState<EventModel[]>([]);
-    const [myRegistrations, setMyRegistrations] = useState<EventRegistration[]>([]);
+    const [digitalProducts, setDigitalProducts] = useState<Product[]>([]);
+    const [unlockedCourseIds, setUnlockedCourseIds] = useState<string[]>([]);
+    
+    // LMS Player States
+    const [activeCourse, setActiveCourse] = useState<Product | null>(null);
+    const [activeModules, setActiveModules] = useState<CourseModule[]>([]);
+    const [activeLessons, setActiveLessons] = useState<Record<string, CourseLesson[]>>({});
+    const [currentLesson, setCurrentLesson] = useState<CourseLesson | null>(null);
+    const [isLoadingPlayer, setIsLoadingPlayer] = useState(false);
+    
     const [banners, setBanners] = useState<Banner[]>([]);
     const [mySurveys, setMySurveys] = useState<SurveyModel[]>([]);
     
@@ -35,7 +44,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [activeSurvey, setActiveSurvey] = useState<SurveyModel | null>(null);
     const [surveyInitialAnswers, setSurveyInitialAnswers] = useState<Record<string, any>>({});
     
-    const [selectedEvent, setSelectedEvent] = useState<EventModel | null>(null);
     const [selectedClass, setSelectedClass] = useState<any | null>(null);
     const [selectedCourseInfo, setSelectedCourseInfo] = useState<CourseInfo | null>(null);
     const [selectedStudioDetails, setSelectedStudioDetails] = useState<PartnerStudio | null>(null);
@@ -47,6 +55,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         loadBanners();
         loadSurveys();
         fetchSupportNotifications();
+        loadDigitalCatalog();
     }, [student]);
 
     const fetchSupportNotifications = async () => {
@@ -60,89 +69,16 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         } catch (e) {}
     };
 
-    useEffect(() => {
-        if (activeTab === 'events') {
-            loadEventsData();
-        }
-    }, [activeTab]);
-
-    useEffect(() => {
-        if (selectedClass) {
-            loadCourseInfo(selectedClass.course);
-            loadStudioDetails(selectedClass.studio_mod_1);
-        } else {
-            setSelectedCourseInfo(null);
-            setSelectedStudioDetails(null);
-        }
-    }, [selectedClass]);
-
-    const loadCourseInfo = async (courseName: string) => {
+    const loadDigitalCatalog = async () => {
         try {
-            const { data } = await appBackend.client
-                .from('crm_course_info')
-                .select('*')
-                .eq('course_name', courseName)
-                .maybeSingle();
-            
-            if (data) {
-                setSelectedCourseInfo({
-                    id: data.id,
-                    courseName: data.course_name,
-                    details: data.details || '',
-                    materials: data.materials || '',
-                    requirements: data.requirements || '',
-                    updatedAt: data.updated_at
-                });
+            const { data } = await appBackend.client.from('crm_products').select('*').eq('category', 'Curso Online').eq('status', 'active');
+            if (data) setDigitalProducts(data);
+            const mainDealId = student.deals[0]?.id;
+            if (mainDealId) {
+                const access = await appBackend.getStudentCourseAccess(mainDealId);
+                setUnlockedCourseIds(access);
             }
         } catch (e) {}
-    };
-
-    const loadStudioDetails = async (fantasyName: string) => {
-        if (!fantasyName) return;
-        try {
-            const { data } = await appBackend.client
-                .from('crm_partner_studios')
-                .select('*')
-                .eq('fantasy_name', fantasyName)
-                .maybeSingle();
-            
-            if (data) {
-                setSelectedStudioDetails({
-                    id: data.id,
-                    status: data.status,
-                    responsibleName: data.responsible_name,
-                    cpf: data.cpf,
-                    phone: data.phone,
-                    email: data.email,
-                    fantasyName: data.fantasy_name,
-                    legalName: data.legal_name,
-                    cnpj: data.cnpj,
-                    address: data.address,
-                    city: data.city,
-                    state: data.state,
-                    country: data.country,
-                    hasReformer: data.has_reformer,
-                    qtyReformer: data.qty_reformer,
-                    hasLadderBarrel: data.has_ladder_barrel,
-                    qtyLadderBarrel: data.qty_ladder_barrel,
-                    hasChair: data.has_chair,
-                    qtyChair: data.qty_chair,
-                    hasCadillac: data.has_cadillac,
-                    qtyCadillac: data.qty_cadillac,
-                    hasChairsForCourse: data.has_chairs_for_course,
-                    hasTv: data.has_tv
-                });
-            }
-        } catch (e) {}
-    };
-
-    const loadBanners = async () => {
-        try {
-            const data = await appBackend.getBanners('student');
-            setBanners(data);
-        } catch (e) {
-            console.error("Failed to load banners", e);
-        }
     };
 
     const loadSurveys = async () => {
@@ -207,25 +143,107 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         }
     };
 
-    const loadEventsData = async () => {
-        setIsLoading(true);
+    const loadCourseInfo = async (courseName: string) => {
         try {
-            const eventsData = await appBackend.getEvents();
-            setEvents(eventsData);
-            const mainStudentId = student.deals[0]?.id;
-            if (mainStudentId) {
-                const { data: regs } = await appBackend.client
-                    .from('crm_event_registrations')
-                    .select('*')
-                    .eq('student_id', mainStudentId);
-                if (regs) {
-                    const mappedRegs: EventRegistration[] = regs.map((r: any) => ({
-                        id: r.id, eventId: r.event_id, workshopId: r.workshop_id, studentId: r.student_id, studentName: r.student_name, studentEmail: r.student_email, registeredAt: r.created_at
-                    }));
-                    setMyRegistrations(mappedRegs);
-                }
+            const { data } = await appBackend.client
+                .from('crm_course_info')
+                .select('*')
+                .eq('course_name', courseName)
+                .maybeSingle();
+            
+            if (data) {
+                setSelectedCourseInfo({
+                    id: data.id,
+                    courseName: data.course_name,
+                    details: data.details || '',
+                    materials: data.materials || '',
+                    requirements: data.requirements || '',
+                    updatedAt: data.updated_at
+                });
             }
-        } catch (e) { console.error(e); } finally { setIsLoading(false); }
+        } catch (e) {}
+    };
+
+    const loadStudioDetails = async (fantasyName: string) => {
+        if (!fantasyName) return;
+        try {
+            const { data } = await appBackend.client
+                .from('crm_partner_studios')
+                .select('*')
+                .eq('fantasy_name', fantasyName)
+                .maybeSingle();
+            
+            if (data) {
+                setSelectedStudioDetails({
+                    id: data.id,
+                    status: data.status,
+                    responsibleName: data.responsible_name,
+                    cpf: data.cpf,
+                    phone: data.phone,
+                    email: data.email,
+                    fantasyName: data.fantasy_name,
+                    legalName: data.legal_name,
+                    cnpj: data.cnpj,
+                    address: data.address,
+                    city: data.city,
+                    state: data.state,
+                    country: data.country,
+                    hasReformer: data.has_reformer,
+                    qtyReformer: data.qty_reformer,
+                    hasLadderBarrel: data.has_ladder_barrel,
+                    qtyLadderBarrel: data.qty_ladder_barrel,
+                    hasChair: data.has_chair,
+                    qtyChair: data.qty_chair,
+                    hasCadillac: data.has_cadillac,
+                    qtyCadillac: data.qty_cadillac,
+                    hasChairsForCourse: data.has_chairs_for_course,
+                    hasTv: data.has_tv
+                });
+            }
+        } catch (e) {}
+    };
+
+    const openCoursePlayer = async (course: Product) => {
+        if (!unlockedCourseIds.includes(course.id)) return;
+        setActiveCourse(course);
+        setIsLoadingPlayer(true);
+        try {
+            const mods = await appBackend.getCourseModules(course.id);
+            setActiveModules(mods);
+            const map: Record<string, CourseLesson[]> = {};
+            let firstLesson: CourseLesson | null = null;
+            for (const m of mods) {
+                const les = await appBackend.getCourseLessons(m.id);
+                map[m.id] = les;
+                if (!firstLesson && les.length > 0) firstLesson = les[0];
+            }
+            setActiveLessons(map);
+            setCurrentLesson(firstLesson);
+        } catch (e) {
+            alert("Erro ao abrir conteúdo do curso.");
+        } finally {
+            setIsLoadingPlayer(false);
+        }
+    };
+
+    const getEmbedUrl = (url: string) => {
+        if (!url) return '';
+        if (url.includes('youtube.com/embed/')) return url;
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = url.match(regExp);
+        if (match && match[2].length === 11) {
+            return `https://www.youtube.com/embed/${match[2]}?rel=0&modestbranding=1`;
+        }
+        return url;
+    };
+
+    const loadBanners = async () => {
+        try {
+            const data = await appBackend.getBanners('student');
+            setBanners(data);
+        } catch (e) {
+            console.error("Failed to load banners", e);
+        }
     };
 
     const openSurvey = (survey: SurveyModel) => {
@@ -260,6 +278,89 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     if (activeSurvey) return (
         <FormViewer form={activeSurvey} onBack={() => setActiveSurvey(null)} studentId={student.deals[0]?.id} initialAnswers={surveyInitialAnswers} onSuccess={handleSurveyFinish} />
     );
+
+    if (activeCourse) {
+        return (
+            <div className="fixed inset-0 z-[150] bg-slate-900 flex flex-col animate-in fade-in duration-300">
+                <header className="bg-slate-900/80 backdrop-blur-md border-b border-white/10 p-4 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => setActiveCourse(null)} className="p-2 text-white/60 hover:text-white transition-colors"><X size={24}/></button>
+                        <div>
+                            <h2 className="text-white font-black leading-tight">{activeCourse.name}</h2>
+                            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Plataforma Digital VOLL</p>
+                        </div>
+                    </div>
+                    {currentLesson && (
+                        <div className="hidden md:flex items-center gap-2 bg-white/5 px-4 py-2 rounded-2xl border border-white/10">
+                            <Video size={16} className="text-teal-400" />
+                            <span className="text-xs font-bold text-white/80">{currentLesson.title}</span>
+                        </div>
+                    )}
+                </header>
+
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                    <main className="flex-1 bg-black flex flex-col relative overflow-hidden">
+                        {currentLesson ? (
+                            <>
+                                <div className="flex-1 relative">
+                                    <iframe 
+                                        src={getEmbedUrl(currentLesson.videoUrl)}
+                                        className="absolute inset-0 w-full h-full"
+                                        frameBorder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowFullScreen
+                                    ></iframe>
+                                </div>
+                                <div className="p-8 bg-slate-900/50 backdrop-blur-xl border-t border-white/5 overflow-y-auto max-h-[250px] custom-scrollbar shrink-0">
+                                    <h3 className="text-xl font-black text-white mb-2">{currentLesson.title}</h3>
+                                    <p className="text-white/60 text-sm leading-relaxed whitespace-pre-wrap">{currentLesson.description || 'Nenhuma descrição para esta aula.'}</p>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-full text-white/20">
+                                <Play size={80} className="mb-4 opacity-10" />
+                                <p className="font-black uppercase tracking-widest">Selecione uma aula na lateral</p>
+                            </div>
+                        )}
+                    </main>
+
+                    <aside className="w-full md:w-80 lg:w-96 bg-slate-900 border-l border-white/5 flex flex-col shrink-0 overflow-hidden">
+                        <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                            <h4 className="text-white text-xs font-black uppercase tracking-[0.2em]">Conteúdo do Curso</h4>
+                            <span className="text-white/30 text-[10px] font-mono">{activeModules.length} Módulos</span>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar-dark p-2 space-y-2">
+                            {activeModules.map(mod => (
+                                <div key={mod.id} className="space-y-1">
+                                    <div className="px-4 py-3 bg-white/5 rounded-xl flex items-center gap-3">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-teal-500"></div>
+                                        <span className="text-white/90 text-xs font-black uppercase tracking-wider">{mod.title}</span>
+                                    </div>
+                                    <div className="space-y-1 pl-2">
+                                        {(activeLessons[mod.id] || []).map(les => (
+                                            <button 
+                                                key={les.id} 
+                                                onClick={() => setCurrentLesson(les)}
+                                                className={clsx(
+                                                    "w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 transition-all",
+                                                    currentLesson?.id === les.id ? "bg-teal-600 text-white shadow-lg shadow-teal-600/20" : "text-white/40 hover:bg-white/5 hover:text-white"
+                                                )}
+                                            >
+                                                {currentLesson?.id === les.id ? <CheckCircle size={16}/> : <Play size={16} className="opacity-40" />}
+                                                <div className="min-w-0">
+                                                    <p className="text-xs font-bold truncate leading-tight">{les.title}</p>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
@@ -327,8 +428,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <section className="bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-purple-900/20 relative overflow-hidden group flex flex-col justify-between">
                         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
-                        <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-60 h-60 bg-purple-500/20 rounded-full blur-3xl"></div>
-                        
                         <div className="relative z-10">
                             <div className="inline-flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-4 border border-white/30 backdrop-blur-md">
                                 <Sparkles size={12} className="text-amber-400" /> Seja bem-vindo
@@ -370,20 +469,14 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                 </div>
                             </div>
                         </section>
-                    ) : (
-                        <div className="bg-slate-100 rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 p-8">
-                            <Layers size={32} className="mb-2 opacity-20" />
-                            <p className="text-xs font-bold uppercase tracking-widest">Sem banners ativos</p>
-                        </div>
-                    )}
+                    ) : null}
                 </div>
 
                 <nav className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 overflow-x-auto no-scrollbar gap-1">
                     {[
-                        { id: 'classes', label: 'Minhas Turmas', icon: GraduationCap, color: 'text-purple-600', bg: 'bg-purple-50' },
-                        { id: 'products', label: 'Digital', icon: Zap, color: 'text-amber-500', bg: 'bg-amber-50' },
-                        { id: 'events', label: 'Eventos', icon: Mic, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                        { id: 'certificates', label: 'Diplomas', icon: Award, color: 'text-emerald-600', bg: 'bg-emerald-50' }
+                        { id: 'classes', label: 'Cursos Presenciais', icon: GraduationCap, color: 'text-purple-600', bg: 'bg-purple-50' },
+                        { id: 'products', label: 'Cursos Online VOLL', icon: Zap, color: 'text-amber-500', bg: 'bg-amber-50' },
+                        { id: 'certificates', label: 'Certificados', icon: Award, color: 'text-emerald-600', bg: 'bg-emerald-50' }
                     ].map(tab => (
                         <button 
                             key={tab.id} 
@@ -424,43 +517,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                 <span className="text-xs font-mono font-bold bg-slate-100 px-2 py-1 rounded-lg text-slate-500">#{cls.class_code}</span>
                                             </div>
                                         </div>
-                                        
                                         <h3 className="text-xl font-black text-slate-800 mb-2 leading-tight min-h-[56px] line-clamp-2">{cls.course}</h3>
                                         <div className="flex items-center gap-2 text-slate-500 text-sm mb-8 font-medium">
                                             <MapPin size={16} className="text-purple-500" /> 
                                             {cls.city}, {cls.state}
                                         </div>
-
-                                        <div className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
-                                                    <span className="block text-[9px] font-black text-slate-400 uppercase mb-2 tracking-wider">Módulo 01</span>
-                                                    <div className="flex items-center gap-2 font-black text-slate-700 text-xs">
-                                                        <Calendar size={14} className="text-purple-500" />
-                                                        {cls.date_mod_1 ? new Date(cls.date_mod_1).toLocaleDateString('pt-BR') : 'A definir'}
-                                                    </div>
-                                                </div>
-                                                <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
-                                                    <span className="block text-[9px] font-black text-slate-400 uppercase mb-2 tracking-wider">Módulo 02</span>
-                                                    <div className="flex items-center gap-2 font-black text-slate-700 text-xs">
-                                                        <Calendar size={14} className="text-orange-500" />
-                                                        {cls.date_mod_2 ? new Date(cls.date_mod_2).toLocaleDateString('pt-BR') : 'A definir'}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="flex items-center justify-between px-2">
-                                                <div className="flex items-center gap-2">
-                                                    <div className={clsx("w-3 h-3 rounded-full shadow-sm", cls.status === 'Confirmado' ? 'bg-green-500' : 'bg-amber-400')}></div>
-                                                    <span className="text-xs font-black text-slate-700 uppercase tracking-tighter">{cls.status}</span>
-                                                </div>
-                                                <button 
-                                                    onClick={() => setSelectedClass(cls)}
-                                                    className="text-xs font-black text-purple-600 hover:text-purple-800 uppercase tracking-widest flex items-center gap-1 group/btn"
-                                                >
-                                                    Ver Detalhes <ChevronRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
-                                                </button>
-                                            </div>
+                                        <div className="flex items-center justify-between">
+                                            <button onClick={() => setSelectedClass(cls)} className="text-xs font-black text-purple-600 hover:text-purple-800 uppercase tracking-widest flex items-center gap-1 group/btn">Ver Detalhes <ChevronRight size={14} /></button>
                                         </div>
                                     </div>
                                 ))
@@ -469,26 +532,36 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     )}
 
                     {activeTab === 'products' && (
-                        <div className="bg-white rounded-[2.5rem] p-16 border border-slate-200 text-center shadow-sm">
-                            <div className="w-24 h-24 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6 text-amber-500">
-                                <Zap size={48} />
-                            </div>
-                            <h3 className="text-2xl font-black text-slate-800 mb-2">Plataforma Digital</h3>
-                            <p className="text-slate-500 max-w-sm mx-auto mb-8 font-medium">Seus materiais de estudo e videoaulas estão disponíveis em nossa plataforma de ensino exclusiva.</p>
-                            <button className="bg-slate-800 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl hover:bg-slate-900 transition-all active:scale-95 flex items-center gap-3 mx-auto">
-                                Acessar Área de Membros <ExternalLink size={18}/>
-                            </button>
-                        </div>
-                    )}
-
-                    {activeTab === 'events' && (
-                        <div className="bg-white rounded-[2.5rem] p-16 border border-slate-200 text-center shadow-sm">
-                            <div className="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600">
-                                <Mic size={48} />
-                            </div>
-                            <h3 className="text-2xl font-black text-slate-800 mb-2">Upcoming Events</h3>
-                            <p className="text-slate-500 max-w-sm mx-auto mb-2 font-medium">Fique de olho! Em breve lançaremos a grade do próximo Congresso.</p>
-                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">Nenhum evento aberto</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {digitalProducts.map(course => {
+                                const isUnlocked = unlockedCourseIds.includes(course.id);
+                                return (
+                                    <div key={course.id} className={clsx("bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col group transition-all", isUnlocked ? "hover:shadow-2xl hover:border-amber-400" : "opacity-80 grayscale")}>
+                                        <div className="h-48 bg-slate-100 relative overflow-hidden">
+                                            {course.thumbnailUrl ? <img src={course.thumbnailUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><Play size={40}/></div>}
+                                            {!isUnlocked && (
+                                                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+                                                    <LockIcon size={40} className="mb-2 text-amber-400" />
+                                                    <span className="text-[10px] font-black uppercase tracking-widest">Acesso Bloqueado</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="p-8 flex-1 flex flex-col">
+                                            <h3 className="font-black text-slate-800 text-lg leading-tight mb-3">{course.name}</h3>
+                                            <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed mb-8 flex-1">{course.description}</p>
+                                            {isUnlocked ? (
+                                                <button onClick={() => openCoursePlayer(course)} className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+                                                    Continuar Assistindo <Play size={16} fill="currentColor" />
+                                                </button>
+                                            ) : (
+                                                <div className="bg-slate-50 p-4 rounded-2xl text-center">
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed">Você ainda não tem acesso a este conteúdo.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
 
@@ -500,7 +573,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                         <Award size={40} />
                                     </div>
                                     <h3 className="text-lg font-bold text-slate-600">Nenhum certificado emitido</h3>
-                                    <p className="text-slate-400 text-sm max-w-xs mt-1">Seus diplomas aparecerão aqui assim que você concluir suas formações.</p>
                                 </div>
                             ) : (
                                 certificates.map(cert => (
@@ -526,125 +598,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 </div>
             </main>
 
-            {selectedClass && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-3xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                        <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                            <div>
-                                <h3 className="text-2xl font-black text-slate-800 leading-tight">{selectedClass.course}</h3>
-                                <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">Detalhes da Turma #{selectedClass.class_code}</p>
-                            </div>
-                            <button onClick={() => setSelectedClass(null)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
-                                <X size={24} />
-                            </button>
-                        </div>
-                        <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-10">
-                            
-                            {selectedCourseInfo && (
-                                <div className="space-y-6 animate-in fade-in duration-500">
-                                    <div className="bg-teal-50 p-6 rounded-[2rem] border border-teal-100">
-                                        <h4 className="text-[10px] font-black text-teal-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                                            <Book size={14}/> Sobre este Curso
-                                        </h4>
-                                        <p className="text-sm text-teal-900 leading-relaxed whitespace-pre-wrap">{selectedCourseInfo.details}</p>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {selectedCourseInfo.materials && (
-                                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                                                    <Layers size={14}/> Materiais Inclusos
-                                                </h4>
-                                                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{selectedCourseInfo.materials}</p>
-                                            </div>
-                                        )}
-                                        {selectedCourseInfo.requirements && (
-                                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                                                    <ListTodo size={14}/> Orientações Importantes
-                                                </h4>
-                                                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{selectedCourseInfo.requirements}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="h-px bg-slate-100 w-full"></div>
-                                </div>
-                            )}
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-6">
-                                    <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Localização</h4>
-                                        <div className="flex items-start gap-3">
-                                            <MapPin size={20} className="text-purple-600 mt-1" />
-                                            <div>
-                                                <p className="font-black text-slate-800">{selectedClass.city}, {selectedClass.state}</p>
-                                                <p className="text-sm text-slate-500 mt-1">{selectedClass.studio_mod_1 || 'Studio a definir'}</p>
-                                                {selectedStudioDetails && (
-                                                    <div className="mt-2 p-3 bg-white rounded-xl border border-slate-100 shadow-sm animate-in fade-in slide-in-from-top-1">
-                                                        <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Endereço Completo</p>
-                                                        <p className="text-xs text-slate-600 leading-tight">{selectedStudioDetails.address}</p>
-                                                        <p className="text-[10px] text-slate-400 mt-1">{selectedStudioDetails.city} - {selectedStudioDetails.state}</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="bg-purple-50 p-6 rounded-[2rem] border border-purple-100">
-                                        <h4 className="text-[10px] font-black text-purple-400 uppercase tracking-[0.2em] mb-4">Módulo 01</h4>
-                                        <div className="space-y-4">
-                                            <div className="flex items-center gap-3">
-                                                <Calendar size={18} className="text-purple-600" />
-                                                <span className="font-bold text-slate-700">{selectedClass.date_mod_1 ? new Date(selectedClass.date_mod_1).toLocaleDateString('pt-BR') : 'Data a confirmar'}</span>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <User size={18} className="text-purple-600" />
-                                                <span className="font-bold text-slate-700">Instrutor: {selectedClass.instructor_mod_1 || 'A definir'}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="space-y-6">
-                                    <div className="bg-orange-50 p-6 rounded-[2rem] border border-orange-100">
-                                        <h4 className="text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-4">Módulo 02</h4>
-                                        <div className="space-y-4">
-                                            <div className="flex items-center gap-3">
-                                                <Calendar size={18} className="text-orange-600" />
-                                                <span className="font-bold text-slate-700">{selectedClass.date_mod_2 ? new Date(selectedClass.date_mod_2).toLocaleDateString('pt-BR') : 'Data a confirmar'}</span>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <User size={18} className="text-orange-600" />
-                                                <span className="font-bold text-slate-700">Instrutor: {selectedClass.instructor_mod_2 || 'A definir'}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100">
-                                        <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] mb-4">Seu Status</h4>
-                                        <div className="flex items-center gap-3">
-                                            <div className={clsx("w-3 h-3 rounded-full shadow-sm", selectedClass.status === 'Confirmado' ? 'bg-green-500' : 'bg-amber-400')}></div>
-                                            <span className="font-black text-slate-800 uppercase text-xs">{selectedClass.status}</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-2 font-medium">Sua matrícula está ativa para este curso.</p>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            {selectedClass.observations && (
-                                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Informações Adicionais</h4>
-                                    <p className="text-sm text-slate-600 leading-relaxed italic">{selectedClass.observations}</p>
-                                </div>
-                            )}
-                        </div>
-                        <div className="px-10 py-6 bg-slate-50 border-t border-slate-100 rounded-b-[2.5rem] flex justify-end">
-                            <button onClick={() => setSelectedClass(null)} className="bg-slate-800 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-900 transition-all active:scale-95 shadow-lg">
-                                Entendi
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             <SupportTicketModal 
                 isOpen={showSupportModal} 
                 onClose={() => { setShowSupportModal(false); fetchSupportNotifications(); }}
@@ -653,13 +606,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 senderEmail={student.email}
                 senderRole="student"
             />
-
-            <footer className="py-12 text-center text-slate-400 bg-white/40 border-t border-slate-200 mt-12">
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] mb-4">VOLL Pilates Group &copy; {new Date().getFullYear()}</p>
-                <div className="flex justify-center gap-6">
-                    <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-6 grayscale opacity-30" />
-                </div>
-            </footer>
         </div>
     );
 };

@@ -6,12 +6,9 @@ import {
   EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, 
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
-  CompanySetting, Pipeline, WebhookTrigger, SupportTag
+  CompanySetting, Pipeline, WebhookTrigger, SupportTag, Product, CourseModule, CourseLesson
 } from '../types';
 
-/**
- * Exporting types required by other components
- */
 export type { CompanySetting, Pipeline, WebhookTrigger };
 export type PipelineStage = { id: string; title: string; color?: string; };
 
@@ -43,7 +40,6 @@ const MOCK_SESSION = {
   }
 };
 
-// Helper interno para gerar número de negócio
 const generateInternalDealNumber = () => {
     const now = new Date();
     const yyyy = now.getFullYear();
@@ -73,7 +69,7 @@ export const appBackend = {
         window.location.reload(); 
         return;
       }
-      await supabase.auth.signOut();
+      await supabase.signOut();
     },
     getSession: async () => {
       if (!isConfigured) return MOCK_SESSION as unknown as Session;
@@ -122,6 +118,69 @@ export const appBackend = {
       }));
   },
 
+  // --- ONLINE COURSES CONTENT ---
+  getCourseModules: async (courseId: string): Promise<CourseModule[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_course_modules').select('*').eq('course_id', courseId).order('order', { ascending: true });
+      if (error) throw error;
+      return data.map((d: any) => ({ id: d.id, courseId: d.course_id, title: d.title, order: d.order }));
+  },
+
+  getCourseLessons: async (moduleId: string): Promise<CourseLesson[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order', { ascending: true });
+      if (error) throw error;
+      return data.map((d: any) => ({ id: d.id, moduleId: d.module_id, title: d.title, description: d.description, videoUrl: d.video_url, order: d.order }));
+  },
+
+  saveCourseModule: async (module: Partial<CourseModule>): Promise<void> => {
+      if (!isConfigured) return;
+      const payload = { course_id: module.courseId, title: module.title, order: module.order };
+      if (module.id) {
+          await supabase.from('crm_course_modules').update(payload).eq('id', module.id);
+      } else {
+          await supabase.from('crm_course_modules').insert([{ ...payload, id: crypto.randomUUID() }]);
+      }
+  },
+
+  deleteCourseModule: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_course_modules').delete().eq('id', id);
+  },
+
+  saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
+      if (!isConfigured) return;
+      const payload = { module_id: lesson.moduleId, title: lesson.title, description: lesson.description, video_url: lesson.videoUrl, order: lesson.order };
+      if (lesson.id) {
+          await supabase.from('crm_course_lessons').update(payload).eq('id', lesson.id);
+      } else {
+          await supabase.from('crm_course_lessons').insert([{ ...payload, id: crypto.randomUUID() }]);
+      }
+  },
+
+  deleteCourseLesson: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_course_lessons').delete().eq('id', id);
+  },
+
+  // --- STUDENT COURSE ACCESS ---
+  getStudentCourseAccess: async (studentId: string): Promise<string[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_student_course_access').select('course_id').eq('student_id', studentId);
+      if (error) return [];
+      return data.map(d => d.course_id);
+  },
+
+  grantCourseAccess: async (studentId: string, courseId: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_student_course_access').upsert({ student_id: studentId, course_id: courseId, unlocked_at: new Date().toISOString() });
+  },
+
+  revokeCourseAccess: async (studentId: string, courseId: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_student_course_access').delete().match({ student_id: studentId, course_id: courseId });
+  },
+
   // --- SUPORTE INTERNO ---
   getSupportTickets: async (): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
@@ -137,7 +196,7 @@ export const appBackend = {
 
   getSupportTicketsBySender: async (id: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_support_tickets')
+    const { data, error = null } = await supabase.from('crm_support_tickets')
         .select('*')
         .or(`sender_id.eq.${id},target_id.eq.${id}`)
         .order('created_at', { ascending: false });
@@ -224,7 +283,6 @@ export const appBackend = {
     if (error) throw error;
   },
 
-  // --- SUPPORT TAGS ---
   getSupportTags: async (role?: SupportTag['role']): Promise<SupportTag[]> => {
     if (!isConfigured) return [];
     let query = supabase.from('crm_support_tags').select('*').order('name');
@@ -262,7 +320,6 @@ export const appBackend = {
     if (error) throw error;
   },
 
-  // --- OUTROS MÉTODOS CRM ---
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
@@ -533,7 +590,6 @@ export const appBackend = {
       pixKey: d.pix_key, 
       hasReformer: d.has_reformer, 
       qtyReformer: d.qty_reformer, 
-      /* FIXED: Corrected mapping of quantity fields from database (snake_case) to interface (camelCase) */
       hasLadderBarrel: d.has_ladder_barrel, 
       qtyLadderBarrel: d.qty_ladder_barrel, 
       hasChair: d.has_chair, 
@@ -551,7 +607,6 @@ export const appBackend = {
     if (!isConfigured) return;
     const payload = {
       status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, 
-      /* FIXED: Corrected reference to property names on studio object (camelCase) for payload mapping */
       qty_ladder_barrel: studio.qtyLadderBarrel, 
       has_chair: studio.hasChair, 
       qty_chair: studio.qtyChair, 
@@ -665,7 +720,6 @@ export const appBackend = {
       const payload = { 
           id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, 
           questions: form.questions, style: form.style, team_id: form.teamId || null, 
-          // FIX: Accessing FormModel properties using camelCase
           distribution_mode: form.distributionMode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null, 
           target_pipeline: form.targetPipeline || 'Padrão', 
@@ -755,11 +809,9 @@ export const appBackend = {
       if (isConfigured) {
           const cleanStudentId = (studentId && typeof studentId === 'string' && studentId.trim() !== '') ? studentId : null;
           
-          // 1. Salvar a submissão bruta
           const { error } = await supabase.from('crm_form_submissions').insert([{ form_id: formId, answers: answers, student_id: cleanStudentId }]);
           if (error) throw error;
           
-          // 2. Se for Lead Capture, criar o card no CRM
           if (isLeadCapture) {
               const dealPayload: any = {
                   deal_number: generateInternalDealNumber(),
@@ -771,33 +823,28 @@ export const appBackend = {
                   created_at: new Date().toISOString()
               };
 
-              // Mapeamento dinâmico baseado no crmMapping de cada pergunta
               form.questions.forEach(q => {
                   const ans = answers.find(a => a.questionId === q.id);
                   if (ans && q.crmMapping) {
                       const value = ans.value;
                       
-                      // Tratamento especial para o campo 'value' (moeda/número)
                       if (q.crmMapping === 'value') {
                           dealPayload[q.crmMapping] = parseFloat(value.replace(/[^\d.-]/g, '')) || 0;
                       } else {
                           dealPayload[q.crmMapping] = value;
                       }
 
-                      // Melhoria de UX: Se mapeou 'contact_name', usa no Título do card e 'company_name' para consistência visual
                       if (q.crmMapping === 'contact_name') {
                           dealPayload.title = value;
                           if (!dealPayload.company_name) dealPayload.company_name = value;
                       }
                       
-                      // Melhoria de UX: Se mapeou 'company_name', e não tem título, usa
                       if (q.crmMapping === 'company_name' && dealPayload.title === form.title) {
                           dealPayload.title = value;
                       }
                   }
               });
 
-              // Definir dono (Owner) baseado nas regras de distribuição
               if (form.distributionMode === 'fixed' && form.fixedOwnerId) {
                   dealPayload.owner_id = form.fixedOwnerId;
               } else if (form.distributionMode === 'round-robin' && form.teamId) {
@@ -808,11 +855,9 @@ export const appBackend = {
                   }
               }
 
-              // Inserir na tabela de negociações
               await supabase.from('crm_deals').insert([dealPayload]);
           }
 
-          // 3. Atualizar contagem
           await supabase.from('crm_surveys').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
           await supabase.from('crm_forms').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
       }

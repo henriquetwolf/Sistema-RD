@@ -253,6 +253,16 @@ export const WhatsAppInbox: React.FC = () => {
       return date.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
   };
 
+  const formatPhoneDisplay = (phone: string) => {
+      const cleaned = phone.replace(/\D/g, '');
+      if (cleaned.startsWith('55') && cleaned.length >= 12) {
+          const ddd = cleaned.slice(2, 4);
+          const rest = cleaned.slice(4);
+          return `(${ddd}) ${rest.length === 9 ? rest.slice(0, 5) + '-' + rest.slice(5) : rest.slice(0, 4) + '-' + rest.slice(4)}`;
+      }
+      return phone;
+  };
+
   const supabaseProjectUrl = (appBackend.client as any).supabaseUrl || 'https://sua-url.supabase.co';
   const edgeFunctionUrl = `${supabaseProjectUrl}/functions/v1/${config.edgeFunctionName}`;
 
@@ -358,8 +368,14 @@ export const WhatsAppInbox: React.FC = () => {
                 <div className="divide-y divide-slate-100">
                     {conversations.map(conv => (
                         <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-5 cursor-pointer transition-all hover:bg-white border-l-4 group relative", selectedChatId === conv.id ? "bg-white border-l-teal-500 shadow-sm" : "border-l-transparent")}>
-                            <div className="flex justify-between items-start mb-1"><span className="font-black text-sm text-slate-800">{conv.contact_name}</span><span className="text-[9px] font-black text-slate-400 uppercase">{formatTime(conv.updated_at)}</span></div>
-                            <p className="text-xs text-slate-500 truncate pr-6">{conv.last_message}</p>
+                            <div className="flex justify-between items-start mb-1">
+                                <div className="flex flex-col">
+                                    <span className="font-black text-sm text-slate-800">{conv.contact_name}</span>
+                                    <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter">{formatPhoneDisplay(conv.wa_id)}</span>
+                                </div>
+                                <span className="text-[9px] font-black text-slate-400 uppercase">{formatTime(conv.updated_at)}</span>
+                            </div>
+                            <p className="text-xs text-slate-500 truncate pr-6 mt-1">{conv.last_message}</p>
                             {conv.unread_count > 0 && <span className="absolute right-5 bottom-5 w-5 h-5 bg-teal-600 text-white text-[10px] font-black flex items-center justify-center rounded-full">{conv.unread_count}</span>}
                         </div>
                     ))}
@@ -376,7 +392,10 @@ export const WhatsAppInbox: React.FC = () => {
                     <div className="flex items-center gap-4">
                         <button className="md:hidden text-slate-500" onClick={() => setSelectedChatId(null)}><ChevronRight size={24} className="rotate-180" /></button>
                         <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 font-bold border border-slate-200 overflow-hidden shadow-inner"><User size={28} /></div>
-                        <div><h3 className="font-black text-slate-800 text-base leading-tight">{selectedChat.contact_name}</h3><p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">{selectedChat.contact_phone}</p></div>
+                        <div>
+                            <h3 className="font-black text-slate-800 text-base leading-tight">{selectedChat.contact_name}</h3>
+                            <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">{formatPhoneDisplay(selectedChat.wa_id)}</p>
+                        </div>
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")' }}>

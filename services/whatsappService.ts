@@ -3,16 +3,42 @@ import { appBackend } from './appBackend';
 
 export const whatsappService = {
     /**
-     * Normaliza um número de WhatsApp para o formato padrão do banco (sem JID e tratando o 9º dígito BR)
+     * Normaliza um número de WhatsApp para o formato canônico.
+     * Trata o problema do 9º dígito no Brasil e remove sufixos de JID.
      */
-    normalizeNumber: (jid: string) => {
-        // Remove @s.whatsapp.net ou @g.us
-        let clean = jid.split('@')[0].replace(/\D/g, '');
+    normalizeNumber: (phone: string) => {
+        // 1. Remove @s.whatsapp.net, @g.us e qualquer caractere não numérico
+        let clean = phone.split('@')[0].replace(/\D/g, '');
         
-        // Tratamento especial para Brasil (55)
-        // Se o número tem 13 dígitos (55 + DDD + 9 + 8 dígitos), tentamos normalizar
-        // Nota: O ID interno do WhatsApp muitas vezes ignora o 9º dígito para contas antigas.
+        // 2. Se não tem DDI mas tem DDD (10 ou 11 dígitos), assume Brasil (55)
+        if (clean.length === 10 || clean.length === 11) {
+            clean = '55' + clean;
+        }
+
         return clean;
+    },
+
+    /**
+     * Gera as variações possíveis de um número brasileiro para busca (com e sem o 9)
+     */
+    getPhoneVariations: (phone: string) => {
+        const normalized = whatsappService.normalizeNumber(phone);
+        const variations = [normalized];
+
+        // Se for Brasil (DDI 55) e tiver o tamanho esperado (12 ou 13 dígitos)
+        if (normalized.startsWith('55') && (normalized.length === 12 || normalized.length === 13)) {
+            const ddd = normalized.slice(2, 4);
+            const rest = normalized.slice(4);
+
+            if (normalized.length === 13 && rest.startsWith('9')) {
+                // Tem o 9, adiciona a versão sem o 9
+                variations.push('55' + ddd + rest.slice(1));
+            } else if (normalized.length === 12) {
+                // Não tem o 9, adiciona a versão com o 9
+                variations.push('55' + ddd + '9' + rest);
+            }
+        }
+        return variations;
     },
 
     /**
@@ -23,15 +49,15 @@ export const whatsappService = {
     },
 
     /**
-     * Envia uma mensagem de texto (Detecta automaticamente o modo: Evolution ou Twilio)
+     * Envia uma mensagem de texto
      */
     sendTextMessage: async (to: string, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
         
         if (!config) throw new Error("WhatsApp não configurado. Vá em Configurações.");
 
-        // Normalizamos o número de destino para garantir consistência
-        const cleanNumber = to.replace(/\D/g, '');
+        // Usamos o número normalizado para o envio
+        const cleanNumber = whatsappService.normalizeNumber(to);
 
         // --- MODO TWILIO ---
         if (config.mode === 'twilio') {
@@ -129,38 +155,23 @@ export const whatsappService = {
      * Cria ou busca um chat por número de telefone com suporte a variação de 9º dígito
      */
     getOrCreateChat: async (phone: string, name: string) => {
-        const cleanPhone = phone.replace(/\D/g, '');
+        const variations = whatsappService.getPhoneVariations(phone);
         
-        // 1. Tenta busca exata
-        let { data: existing } = await appBackend.client
+        // Tenta encontrar o chat usando qualquer uma das variações (com ou sem o 9)
+        const { data: existing } = await appBackend.client
             .from('crm_whatsapp_chats')
             .select('*')
-            .eq('wa_id', cleanPhone)
+            .in('wa_id', variations)
             .maybeSingle();
-        
-        // 2. Se for número brasileiro e não achou, tenta a variação do 9º dígito
-        if (!existing && cleanPhone.startsWith('55') && (cleanPhone.length === 12 || cleanPhone.length === 13)) {
-            const isWithNine = cleanPhone.length === 13;
-            const variation = isWithNine 
-                ? cleanPhone.slice(0, 4) + cleanPhone.slice(5) // Remove o 9
-                : cleanPhone.slice(0, 4) + '9' + cleanPhone.slice(4); // Adiciona o 9
-
-            const { data: fuzzyMatch } = await appBackend.client
-                .from('crm_whatsapp_chats')
-                .select('*')
-                .eq('wa_id', variation)
-                .maybeSingle();
-            
-            if (fuzzyMatch) existing = fuzzyMatch;
-        }
 
         if (existing) return existing;
 
-        // 3. Se realmente não existe, cria um novo
+        // Se realmente não existe, cria um novo usando a primeira variação (a original informada)
+        const canonical = variations[0];
         const { data: newChat, error } = await appBackend.client
             .from('crm_whatsapp_chats')
             .insert([{
-                wa_id: cleanPhone,
+                wa_id: canonical,
                 contact_name: name,
                 contact_phone: phone,
                 last_message: 'Conversa iniciada',

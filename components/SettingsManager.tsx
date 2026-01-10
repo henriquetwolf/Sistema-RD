@@ -266,40 +266,31 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE MANUTENÇÃO VOLL CRM (V32)
--- Correção de de-duplicação de LIDs e Telefones.
+-- SCRIPT DE MANUTENÇÃO VOLL CRM (V33)
+-- Melhoria na identificação de LIDs e unificação de contatos.
 
--- 1. Tabela de Chats
-CREATE TABLE IF NOT EXISTS public.crm_whatsapp_chats (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    wa_id text UNIQUE NOT NULL, 
-    contact_name text,
-    contact_phone text, 
-    last_message text,
-    unread_count integer DEFAULT 0,
-    status text DEFAULT 'open',
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now()
-);
+-- 1. Garante colunas de identificação robustas nos Chats
+ALTER TABLE public.crm_whatsapp_chats 
+ADD COLUMN IF NOT EXISTS contact_phone text,
+ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}';
 
--- Índices para busca rápida em larga escala
+-- 2. Cria índices para busca ultra-rápida (inclusive fuzzy match para números)
 CREATE INDEX IF NOT EXISTS idx_chats_wa_id ON public.crm_whatsapp_chats(wa_id);
 CREATE INDEX IF NOT EXISTS idx_chats_contact_phone ON public.crm_whatsapp_chats(contact_phone);
 
--- 2. Tabela de Mensagens
-CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    chat_id uuid REFERENCES public.crm_whatsapp_chats(id) ON DELETE CASCADE,
-    text text NOT NULL,
-    sender_type text NOT NULL, 
-    wa_message_id text,
-    status text DEFAULT 'sent',
-    created_at timestamptz DEFAULT now()
-);
+-- 3. Índice GIN para busca no CRM (Melhora match de Nome e Empresa)
+CREATE INDEX IF NOT EXISTS idx_deals_name_search ON public.crm_deals USING gin (contact_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_deals_company_search ON public.crm_deals USING gin (company_name gin_trgm_ops);
 
-CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON public.crm_whatsapp_messages(chat_id);
+-- 4. Função auxiliar para limpar números (Útil para triggers se necessário)
+CREATE OR REPLACE FUNCTION public.clean_phone_number(phone text) 
+RETURNS text AS $$
+BEGIN
+    RETURN regexp_replace(phone, '[^0-9]', '', 'g');
+END;
+$$ LANGUAGE plpgsql;
 
--- Permissões
+-- 5. Garante permissões
 GRANT ALL ON public.crm_whatsapp_chats TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_whatsapp_messages TO anon, authenticated, service_role;
 
@@ -945,9 +936,9 @@ NOTIFY pgrst, 'reload config';
 
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V32)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos de WhatsApp e unificação de LIDs.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V32</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V33)</h3></div>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para sincronizar as tabelas com os novos recursos de identificação e unificação de contatos.</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V33</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>

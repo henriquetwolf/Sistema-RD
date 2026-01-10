@@ -7,10 +7,7 @@ export const whatsappService = {
      */
     normalizeNumber: (phone: string) => {
         if (!phone) return '';
-        // Remove sufixos de JID e caracteres não numéricos
         let clean = phone.split('@')[0].replace(/\D/g, '');
-        
-        // Adiciona DDI Brasil se faltar em números de 10/11 dígitos
         if (clean.length === 10 || clean.length === 11) {
             clean = '55' + clean;
         }
@@ -24,16 +21,12 @@ export const whatsappService = {
         const normalized = whatsappService.normalizeNumber(phone);
         const variations = [normalized];
 
-        // Lógica específica para números brasileiros (DDI 55)
         if (normalized.startsWith('55') && (normalized.length === 12 || normalized.length === 13)) {
             const ddd = normalized.slice(2, 4);
             const rest = normalized.slice(4);
-
             if (normalized.length === 13 && rest.startsWith('9')) {
-                // Tem o 9, gera sem o 9
                 variations.push('55' + ddd + rest.slice(1));
             } else if (normalized.length === 12) {
-                // Não tem o 9, gera com o 9
                 variations.push('55' + ddd + '9' + rest);
             }
         }
@@ -47,97 +40,83 @@ export const whatsappService = {
         const cleanId = identifier.split('@')[0].replace(/\D/g, '');
         const variations = whatsappService.getPhoneVariations(cleanId);
         
-        // 1. Tenta buscar em Alunos/Deals
+        // 1. Busca em Alunos/Leads (crm_deals)
         const { data: deal } = await appBackend.client
             .from('crm_deals')
-            .select('id, contact_name, company_name, phone, email, product_name')
-            .or(`phone.in.(${variations.map(v => `"${v}"`).join(',')}),id.eq.${identifier}`)
+            .select('id, contact_name, company_name, phone, email')
+            .or(`phone.in.(${variations.map(v => `"${v}"`).join(',')}),email.ilike.%${identifier}%`)
             .maybeSingle();
         
-        if (deal) {
-            return {
-                name: deal.company_name || deal.contact_name,
-                phone: deal.phone,
-                email: deal.email,
-                role: 'Aluno/Lead',
-                detail: deal.product_name
-            };
-        }
+        if (deal) return { name: deal.company_name || deal.contact_name, phone: deal.phone };
 
-        // 2. Tenta buscar em Instrutores
+        // 2. Busca em Instrutores
         const { data: teacher } = await appBackend.client
             .from('crm_teachers')
-            .select('id, full_name, phone, email, teacher_level')
-            .or(`phone.in.(${variations.map(v => `"${v}"`).join(',')}),id.eq.${identifier}`)
+            .select('full_name, phone')
+            .in('phone', variations)
             .maybeSingle();
             
-        if (teacher) {
-            return {
-                name: teacher.full_name,
-                phone: teacher.phone,
-                email: teacher.email,
-                role: 'Instrutor',
-                detail: teacher.teacher_level
-            };
-        }
+        if (teacher) return { name: teacher.full_name, phone: teacher.phone };
 
         return null;
     },
 
     /**
-     * Gerencia a criação ou unificação de chats (MSISDN vs LID).
+     * getOrCreateChat: Resolve o problema de IDs estáveis (LIDs).
+     * Garante que o wa_id seja o identificador da conversa, mas o contact_phone seja o número real para envios.
      */
     getOrCreateChat: async (waId: string, pushName: string) => {
         const cleanId = waId.split('@')[0];
 
-        // 1. Tenta buscar o chat pelo ID exato recebido (LID ou MSISDN)
-        const { data: existingChatById } = await appBackend.client
+        // 1. Tenta buscar pelo ID exato que veio da API (LID ou Telefone)
+        const { data: existingChat } = await appBackend.client
             .from('crm_whatsapp_chats')
             .select('*')
             .eq('wa_id', cleanId)
             .maybeSingle();
 
-        if (existingChatById) return existingChatById;
+        if (existingChat) return existingChat;
 
-        // 2. Se não achou, tenta identificar quem é a pessoa via CRM
+        // 2. Se não achou pelo ID, busca no CRM para ver se esse ID pertence a alguém conhecido
         const contact = await whatsappService.findContactInCrm(cleanId);
         
         if (contact) {
-            // Verifica se já temos um chat aberto com o TELEFONE conhecido deste contato
+            // Se achamos o contato (ex: Henrique), verificamos se já existe um chat com o TELEFONE dele
             const phoneVariations = whatsappService.getPhoneVariations(contact.phone || '');
-            const { data: existingChatByPhone } = await appBackend.client
+            const { data: chatByPhone } = await appBackend.client
                 .from('crm_whatsapp_chats')
                 .select('*')
                 .in('wa_id', phoneVariations)
                 .maybeSingle();
 
-            if (existingChatByPhone) {
-                // UNIFICAÇÃO: Atualiza o ID do chat antigo para o novo ID técnico (LID)
-                // Assim o histórico é preservado e a duplicidade resolvida.
-                const { data: updatedChat } = await appBackend.client
+            if (chatByPhone) {
+                // ATUALIZAÇÃO/MERGE: Se já tínhamos um chat pelo telefone, mas agora ele respondeu via LID,
+                // atualizamos o chat antigo com o novo LID (wa_id) para que as próximas mensagens caiam aqui.
+                // Mantemos o contact_phone intacto para os envios da API.
+                const { data: merged } = await appBackend.client
                     .from('crm_whatsapp_chats')
                     .update({ 
-                        wa_id: cleanId, 
+                        wa_id: cleanId, // Atualiza para o ID técnico novo
                         contact_name: contact.name,
-                        last_message: '[Identidade Vinculada]'
+                        contact_phone: contact.phone || chatByPhone.contact_phone 
                     })
-                    .eq('id', existingChatByPhone.id)
+                    .eq('id', chatByPhone.id)
                     .select()
                     .single();
                 
-                return updatedChat;
+                return merged;
             }
         }
 
-        // 3. Se for realmente um contato novo, cria o chat
+        // 3. Se for realmente novo, cria.
         const finalName = contact?.name || pushName || cleanId;
         const { data: newChat, error } = await appBackend.client
             .from('crm_whatsapp_chats')
             .insert([{
                 wa_id: cleanId,
                 contact_name: finalName,
-                contact_phone: contact?.phone || cleanId,
-                last_message: 'Início do atendimento',
+                contact_phone: contact?.phone || (cleanId.length <= 13 ? cleanId : ''), // Só usa o ID como telefone se parecer um número
+                last_message: 'Iniciado',
                 status: 'open'
             }])
             .select()
@@ -148,13 +127,17 @@ export const whatsappService = {
     },
 
     /**
-     * Envia mensagem de texto via Evolution API.
+     * Envia mensagem de texto.
+     * CORREÇÃO: Prioriza o contact_phone se o wa_id for um LID.
      */
-    sendTextMessage: async (to: string, text: string) => {
+    sendTextMessage: async (chat: any, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
         if (!config) throw new Error("WhatsApp não configurado.");
 
-        const target = to.includes('@') ? to.split('@')[0] : to;
+        // Se wa_id for um LID (muito longo), e tivermos o telefone real, usamos o telefone real para a API.
+        const waIdIsLid = chat.wa_id.length > 13;
+        const targetNumber = (waIdIsLid && chat.contact_phone) ? chat.contact_phone : chat.wa_id;
+
         const baseUrl = config.instanceUrl.replace(/\/$/, "");
         const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;
 
@@ -166,18 +149,38 @@ export const whatsappService = {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    number: target,
+                    number: targetNumber, // Envia para o MSISDN real
                     options: { delay: 1000, presence: "composing" },
                     text: text
                 })
             });
 
             const data = await response.json();
-            if (!response.ok) throw new Error(data.message || "Erro API");
+            if (!response.ok) {
+                // Se falhou enviando para o número, tenta uma última vez para o wa_id original
+                if (targetNumber !== chat.wa_id) {
+                    return await whatsappService.retryWithOriginalId(chat.wa_id, text, config);
+                }
+                throw new Error(data.message || "Erro na API Evolution");
+            }
             return data;
         } catch (error: any) {
             throw error;
         }
+    },
+
+    /**
+     * Fallback caso o envio pelo número real falhe.
+     */
+    retryWithOriginalId: async (waId: string, text: string, config: any) => {
+        const baseUrl = config.instanceUrl.replace(/\/$/, "");
+        const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'apikey': config.apiKey.trim(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ number: waId, text: text })
+        });
+        return await response.json();
     },
 
     /**
@@ -200,7 +203,10 @@ export const whatsappService = {
 
         await appBackend.client
             .from('crm_whatsapp_chats')
-            .update({ last_message: text, updated_at: new Date().toISOString() })
+            .update({ 
+                last_message: text, 
+                updated_at: new Date().toISOString() 
+            })
             .eq('id', chatId);
 
         return data;

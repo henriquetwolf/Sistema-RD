@@ -161,13 +161,14 @@ export const WhatsAppInbox: React.FC = () => {
     const messageText = inputText;
     setInputText('');
     try {
-        const result = await whatsappService.sendTextMessage(selectedChat.wa_id, messageText);
+        // CORREÇÃO: Passa o objeto chat completo para o serviço
+        const result = await whatsappService.sendTextMessage(selectedChat, messageText);
         const waId = result.key?.id || result.sid || result.messageId; 
         await whatsappService.syncMessage(selectedChatId, messageText, 'agent', waId);
         await fetchMessages(selectedChatId, false);
         await fetchConversations(false);
     } catch (err: any) {
-        alert(err.message);
+        alert("Erro ao enviar: " + err.message);
         setInputText(messageText);
     } finally { setIsSending(false); }
   };
@@ -269,7 +270,7 @@ export const WhatsAppInbox: React.FC = () => {
   const formatPhoneDisplay = (id: string) => {
       if (!id) return '';
       const cleaned = id.replace(/\D/g, '');
-      if (cleaned.length > 13) return `ID: ${id.substring(0, 12)}...`; 
+      if (cleaned.length > 13) return `ID: ${id.substring(0, 10)}...`; 
       if (cleaned.startsWith('55') && cleaned.length >= 12) {
           const ddd = cleaned.slice(2, 4);
           const rest = cleaned.slice(4);
@@ -315,7 +316,7 @@ export const WhatsAppInbox: React.FC = () => {
                             <div className="flex justify-between items-start mb-1">
                                 <div className="flex flex-col">
                                     <span className="font-black text-sm text-slate-800">{conv.contact_name}</span>
-                                    <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter opacity-70">{formatPhoneDisplay(conv.wa_id)}</span>
+                                    <span className="text-[10px] font-bold text-slate-400 font-mono tracking-tighter opacity-70">{formatPhoneDisplay(conv.wa_id)}</span>
                                 </div>
                                 <span className="text-[9px] font-black text-slate-400 uppercase">{formatTime(conv.updated_at)}</span>
                             </div>
@@ -335,7 +336,7 @@ export const WhatsAppInbox: React.FC = () => {
                 <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shadow-sm z-10 shrink-0">
                     <div className="flex items-center gap-4">
                         <button className="md:hidden text-slate-500" onClick={() => setSelectedChatId(null)}><ChevronRight size={24} className="rotate-180" /></button>
-                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 font-bold border border-slate-200 overflow-hidden shadow-inner"><User size={28} /></div>
+                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 font-bold border border-slate-200 shadow-inner"><User size={28} /></div>
                         <div>
                             <h3 className="font-black text-slate-800 text-base leading-tight">{selectedChat.contact_name}</h3>
                             <div className="flex items-center gap-2">

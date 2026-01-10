@@ -5,7 +5,7 @@ import {
   CheckCheck, User, X, Plus, Settings, Save, Smartphone, 
   Copy, Loader2, RefreshCw, Zap, ShieldAlert, Code, Terminal, 
   Database, QrCode, Wifi, WifiOff, CheckCircle2, ChevronRight, ShieldCheck,
-  Cpu, Link2, AlertTriangle, Info, Check, Bug, Cloud
+  Cpu, Link2, AlertTriangle, Info, Check, Bug, Cloud, Hash, Smartphone as PhoneIcon
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -35,9 +35,11 @@ interface WAMessage {
 
 interface WAConfig {
   mode: 'evolution' | 'twilio';
+  evolutionMethod: 'qr' | 'code';
   instanceUrl: string;
   instanceName: string;
   apiKey: string;
+  pairingNumber: string;
   // Twilio Fields
   twilioAccountSid: string;
   twilioAuthToken: string;
@@ -65,15 +67,18 @@ export const WhatsAppInbox: React.FC = () => {
 
   // States para o QR Code / Conexão
   const [qrCode, setQrCode] = useState<string | null>(null);
-  const [isGeneratingQr, setIsGeneratingQr] = useState(false);
-  const [qrError, setQrError] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [isGeneratingConnection, setIsGeneratingConnection] = useState(false);
+  const [connError, setConnError] = useState<string | null>(null);
   const [connLogs, setConnLogs] = useState<string[]>([]);
 
   const [config, setConfig] = useState<WAConfig>({
       mode: 'evolution',
+      evolutionMethod: 'qr',
       instanceUrl: '',
       instanceName: '',
       apiKey: '',
+      pairingNumber: '',
       twilioAccountSid: '',
       twilioAuthToken: '',
       twilioFromNumber: '',
@@ -170,10 +175,9 @@ export const WhatsAppInbox: React.FC = () => {
           alert("Preencha todos os campos do Twilio para verificar.");
           return;
       }
-      setIsGeneratingQr(true);
+      setIsGeneratingConnection(true);
       setConnLogs(["[TWILIO] Verificando credenciais...", "[API] Solicitando validação..."]);
       try {
-          // Simulação de verificação Twilio (em produção isso chamaria um edge function que valida o token)
           await new Promise(resolve => setTimeout(resolve, 1500));
           setConfig({ ...config, isConnected: true });
           addLog("[OK] Twilio conectado com sucesso.");
@@ -182,48 +186,61 @@ export const WhatsAppInbox: React.FC = () => {
           addLog(`[ERRO] ${e.message}`);
           alert("Falha ao validar Twilio. Verifique o SID e Token.");
       } finally {
-          setIsGeneratingQr(false);
+          setIsGeneratingConnection(false);
       }
   };
 
-  const handleGenerateQr = async () => {
+  const handleConnectEvolution = async () => {
       if (config.mode === 'twilio') {
           handleVerifyTwilio();
           return;
       }
 
-      setIsGeneratingQr(true);
+      setIsGeneratingConnection(true);
       setQrCode(null);
-      setQrError(null);
-      setConnLogs(["[EVOLUTION] Iniciando requisição de pareamento...", "[API] Aguardando resposta do servidor..."]);
+      setPairingCode(null);
+      setConnError(null);
+      setConnLogs([`[EVOLUTION] Iniciando requisição (${config.evolutionMethod === 'qr' ? 'QR Code' : 'Código'})...`, "[API] Aguardando resposta do servidor..."]);
       
       try {
           if (!config.instanceUrl || !config.instanceName) throw new Error("Configure a URL e o nome da instância.");
 
-          const response = await fetch(`${config.instanceUrl.replace(/\/$/, "")}/instance/connect/${config.instanceName}`, {
-              headers: { 'apikey': config.apiKey }
-          }).catch(() => {
-              throw new Error("Servidor Evolution Offline ou URL Inválida.");
-          });
+          const baseUrl = config.instanceUrl.replace(/\/$/, "");
           
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.message || "Erro ao obter QR da Evolution");
-          
-          const token = data.base64 || data.code;
+          if (config.evolutionMethod === 'code') {
+              if (!config.pairingNumber) throw new Error("Informe o número do celular para pareamento.");
+              const cleanNumber = config.pairingNumber.replace(/\D/g, '');
+              
+              const response = await fetch(`${baseUrl}/instance/connect/pairingCode/${config.instanceName}?number=${cleanNumber}`, {
+                  headers: { 'apikey': config.apiKey }
+              });
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.message || "Erro ao obter código de pareamento");
+              
+              setPairingCode(data.code);
+              addLog("[OK] Código recebido. Insira-o no seu WhatsApp.");
+          } else {
+              const response = await fetch(`${baseUrl}/instance/connect/${config.instanceName}`, {
+                  headers: { 'apikey': config.apiKey }
+              });
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.message || "Erro ao obter QR da Evolution");
+              
+              const token = data.base64 || data.code;
+              if (!token) throw new Error("Token de QR Code não retornado pela API.");
 
-          if (!token) throw new Error("Token de QR Code não retornado pela API.");
-
-          const qrUrl = token.startsWith('data:image') 
-              ? token 
-              : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(token)}`;
-          
-          setQrCode(qrUrl);
-          addLog("[OK] QR Code recebido. Escaneie agora.");
+              const qrUrl = token.startsWith('data:image') 
+                  ? token 
+                  : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(token)}`;
+              
+              setQrCode(qrUrl);
+              addLog("[OK] QR Code recebido. Escaneie agora.");
+          }
       } catch (err: any) {
-          setQrError(err.message);
+          setConnError(err.message);
           addLog(`[ERRO] ${err.message}`);
       } finally {
-          setIsGeneratingQr(false);
+          setIsGeneratingConnection(false);
       }
   };
 
@@ -288,7 +305,7 @@ export const WhatsAppInbox: React.FC = () => {
                             <div className={clsx("p-3 rounded-2xl", config.mode === 'evolution' ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400")}><Link2 size={24}/></div>
                             <div>
                                 <h4 className="font-black text-slate-800 text-sm uppercase tracking-tighter">Evolution API</h4>
-                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Conecta seu celular via QR Code em servidor próprio.</p>
+                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Conecta seu celular com ou sem QR Code em servidor próprio.</p>
                             </div>
                         </button>
                       </div>
@@ -296,24 +313,32 @@ export const WhatsAppInbox: React.FC = () => {
                       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8 animate-in slide-in-from-top-4">
                             <div className="flex flex-col md:flex-row items-center gap-10">
                                 <div className="w-full md:w-64 aspect-square bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-6 text-center overflow-hidden relative">
-                                    {isGeneratingQr ? (
+                                    {isGeneratingConnection ? (
                                         <div className="flex flex-col items-center gap-2">
                                             <Loader2 size={32} className="animate-spin text-teal-600" />
-                                            <p className="text-[10px] font-black text-teal-600 uppercase">{config.mode === 'twilio' ? 'Validando...' : 'Buscando QR...'}</p>
+                                            <p className="text-[10px] font-black text-teal-600 uppercase">{config.mode === 'twilio' ? 'Validando...' : 'Processando...'}</p>
                                         </div>
-                                    ) : qrError ? (
+                                    ) : connError ? (
                                         <div className="flex flex-col items-center gap-2 text-red-500 p-4">
                                             <AlertTriangle size={32} />
-                                            <p className="text-[9px] font-black uppercase text-center leading-tight">Falha na API: {qrError}</p>
-                                            <button onClick={handleGenerateQr} className="text-[9px] font-bold underline mt-2">Tentar Novamente</button>
+                                            <p className="text-[9px] font-black uppercase text-center leading-tight">Falha na API: {connError}</p>
+                                            <button onClick={handleConnectEvolution} className="text-[9px] font-bold underline mt-2">Tentar Novamente</button>
                                         </div>
-                                    ) : qrCode && config.mode === 'evolution' ? (
+                                    ) : pairingCode && config.mode === 'evolution' && config.evolutionMethod === 'code' ? (
+                                        <div className="flex flex-col items-center justify-center gap-4 animate-in zoom-in-95">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Código de Pareamento</p>
+                                            <div className="bg-slate-900 text-teal-400 px-6 py-4 rounded-2xl font-mono text-3xl font-black shadow-lg">
+                                                {pairingCode}
+                                            </div>
+                                            <p className="text-[9px] text-slate-500 font-bold uppercase leading-tight max-w-[150px]">Insira este código em: <br/> WhatsApp > Configurações > Dispositivos Conectados > Conectar com número</p>
+                                        </div>
+                                    ) : qrCode && config.mode === 'evolution' && config.evolutionMethod === 'qr' ? (
                                         <div className="w-full h-full p-2 bg-white rounded-xl">
                                             <img 
                                                 src={qrCode} 
                                                 alt="WhatsApp QR Code" 
                                                 className="w-full h-full object-contain animate-in zoom-in-95" 
-                                                onError={() => setQrError("Erro ao carregar imagem do QR Code.")}
+                                                onError={() => setConnError("Erro ao carregar imagem do QR Code.")}
                                             />
                                         </div>
                                     ) : config.isConnected ? (
@@ -323,15 +348,33 @@ export const WhatsAppInbox: React.FC = () => {
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center">
-                                            {config.mode === 'twilio' ? <Cloud size={48} className="text-red-300 mb-3" /> : <QrCode size={48} className="text-slate-300 mb-3" />}
+                                            {config.mode === 'twilio' ? <Cloud size={48} className="text-red-300 mb-3" /> : (config.evolutionMethod === 'code' ? <PhoneIcon size={48} className="text-blue-300 mb-3" /> : <QrCode size={48} className="text-slate-300 mb-3" />)}
                                             <p className="text-[10px] font-black text-slate-400 uppercase leading-tight">
-                                                {config.mode === 'twilio' ? 'Preencha os dados e valide a conexão' : 'Configure a URL abaixo e gere o QR'}
+                                                {config.mode === 'twilio' ? 'Preencha os dados e valide a conexão' : (config.evolutionMethod === 'code' ? 'Informe o celular e gere o código' : 'Configure a URL abaixo e gere o QR')}
                                             </p>
                                         </div>
                                     )}
                                 </div>
                                 <div className="flex-1 space-y-4">
                                     <h4 className="text-lg font-black text-slate-800">Status da Instância:</h4>
+                                    
+                                    {config.mode === 'evolution' && (
+                                        <div className="flex bg-slate-100 p-1 rounded-xl w-fit mb-4">
+                                            <button 
+                                                onClick={() => setConfig({...config, evolutionMethod: 'qr'})}
+                                                className={clsx("px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all", config.evolutionMethod === 'qr' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500")}
+                                            >
+                                                <QrCode size={12} className="inline mr-1"/> QR Code
+                                            </button>
+                                            <button 
+                                                onClick={() => setConfig({...config, evolutionMethod: 'code'})}
+                                                className={clsx("px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all", config.evolutionMethod === 'code' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500")}
+                                            >
+                                                <Smartphone size={12} className="inline mr-1"/> Pairing Code
+                                            </button>
+                                        </div>
+                                    )}
+
                                     <ul className="space-y-2 mb-4">
                                         <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
                                             <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">1</span>
@@ -339,7 +382,7 @@ export const WhatsAppInbox: React.FC = () => {
                                         </li>
                                         <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
                                             <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">2</span>
-                                            {config.mode === 'twilio' ? 'Clique em "Verificar Credenciais"' : 'Gere o QR Code de pareamento'}
+                                            {config.mode === 'twilio' ? 'Clique em "Verificar Credenciais"' : (config.evolutionMethod === 'code' ? 'Gere o código de 8 dígitos' : 'Gere o QR Code de pareamento')}
                                         </li>
                                         <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
                                             <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">3</span>
@@ -355,12 +398,12 @@ export const WhatsAppInbox: React.FC = () => {
                                     <div className="pt-2 flex gap-3">
                                         {!config.isConnected ? (
                                             <button 
-                                                onClick={handleGenerateQr}
-                                                disabled={isGeneratingQr}
+                                                onClick={handleConnectEvolution}
+                                                disabled={isGeneratingConnection}
                                                 className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
                                             >
-                                                {isGeneratingQr ? <Loader2 size={16} className="animate-spin" /> : config.mode === 'twilio' ? <ShieldCheck size={16}/> : <QrCode size={16}/>}
-                                                {config.mode === 'twilio' ? 'Verificar Credenciais' : (qrCode ? 'Atualizar Token' : 'Gerar QR Code')}
+                                                {isGeneratingConnection ? <Loader2 size={16} className="animate-spin" /> : config.mode === 'twilio' ? <ShieldCheck size={16}/> : (config.evolutionMethod === 'code' ? <Hash size={16}/> : <QrCode size={16}/>)}
+                                                {config.mode === 'twilio' ? 'Verificar Credenciais' : (config.evolutionMethod === 'code' ? 'Gerar Código' : (qrCode ? 'Atualizar QR' : 'Gerar QR Code'))}
                                             </button>
                                         ) : (
                                             <button 
@@ -408,6 +451,12 @@ export const WhatsAppInbox: React.FC = () => {
                                             <label className="block text-[9px] font-black text-blue-400 uppercase mb-1">API Key</label>
                                             <input type="password" title="Key" className="w-full px-3 py-2 border rounded-xl text-xs font-mono" value={config.apiKey} onChange={e => setConfig({...config, apiKey: e.target.value})} />
                                         </div>
+                                        {config.evolutionMethod === 'code' && (
+                                            <div>
+                                                <label className="block text-[9px] font-black text-blue-400 uppercase mb-1">Seu Celular (DDI+DDD+Nº)</label>
+                                                <input type="text" className="w-full px-3 py-2 border border-blue-200 bg-white rounded-xl text-xs font-bold" value={config.pairingNumber} onChange={e => setConfig({...config, pairingNumber: e.target.value})} placeholder="5511999999999" />
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}

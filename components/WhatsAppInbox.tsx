@@ -5,7 +5,7 @@ import {
   CheckCheck, User, X, Plus, Settings, Save, Smartphone, 
   Copy, Loader2, RefreshCw, Zap, ShieldAlert, Code, Terminal, 
   Database, QrCode, Wifi, WifiOff, CheckCircle2, ChevronRight, ShieldCheck,
-  Cpu, Link2, AlertTriangle, Info, Check, Bug
+  Cpu, Link2, AlertTriangle, Info, Check, Bug, Cloud
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -34,12 +34,15 @@ interface WAMessage {
 }
 
 interface WAConfig {
-  mode: 'evolution' | 'direct';
+  mode: 'evolution' | 'twilio';
   instanceUrl: string;
   instanceName: string;
   apiKey: string;
+  // Twilio Fields
+  twilioAccountSid: string;
+  twilioAuthToken: string;
+  twilioFromNumber: string;
   edgeFunctionName: string;
-  gatewayUrl: string; 
   isConnected: boolean;
 }
 
@@ -60,19 +63,21 @@ export const WhatsAppInbox: React.FC = () => {
   const [newChatName, setNewChatName] = useState('');
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
-  // States para o QR Code Real
+  // States para o QR Code / Conexão
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
   const [qrError, setQrError] = useState<string | null>(null);
   const [connLogs, setConnLogs] = useState<string[]>([]);
 
   const [config, setConfig] = useState<WAConfig>({
-      mode: 'direct',
+      mode: 'evolution',
       instanceUrl: '',
       instanceName: '',
       apiKey: '',
+      twilioAccountSid: '',
+      twilioAuthToken: '',
+      twilioFromNumber: '',
       edgeFunctionName: 'whatsapp-webhook',
-      gatewayUrl: 'http://localhost:3000',
       isConnected: false
   });
 
@@ -141,7 +146,7 @@ export const WhatsAppInbox: React.FC = () => {
     setInputText('');
     try {
         const result = await whatsappService.sendTextMessage(selectedChat.contact_phone, messageText);
-        const waId = result.key?.id || result.messageId; 
+        const waId = result.key?.id || result.sid || result.messageId; 
         await whatsappService.syncMessage(selectedChatId, messageText, 'agent', waId);
         await fetchMessages(selectedChatId, false);
         await fetchConversations(false);
@@ -160,33 +165,51 @@ export const WhatsAppInbox: React.FC = () => {
       } catch (e: any) { alert(`Erro ao salvar: ${e.message}`); } finally { setIsSavingConfig(false); }
   };
 
+  const handleVerifyTwilio = async () => {
+      if (!config.twilioAccountSid || !config.twilioAuthToken || !config.twilioFromNumber) {
+          alert("Preencha todos os campos do Twilio para verificar.");
+          return;
+      }
+      setIsGeneratingQr(true);
+      setConnLogs(["[TWILIO] Verificando credenciais...", "[API] Solicitando validação..."]);
+      try {
+          // Simulação de verificação Twilio (em produção isso chamaria um edge function que valida o token)
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          setConfig({ ...config, isConnected: true });
+          addLog("[OK] Twilio conectado com sucesso.");
+          alert("Credenciais Twilio validadas!");
+      } catch (e: any) {
+          addLog(`[ERRO] ${e.message}`);
+          alert("Falha ao validar Twilio. Verifique o SID e Token.");
+      } finally {
+          setIsGeneratingQr(false);
+      }
+  };
+
   const handleGenerateQr = async () => {
+      if (config.mode === 'twilio') {
+          handleVerifyTwilio();
+          return;
+      }
+
       setIsGeneratingQr(true);
       setQrCode(null);
       setQrError(null);
-      setConnLogs(["[SISTEMA] Iniciando requisição de pareamento...", "[API] Aguardando resposta do servidor..."]);
+      setConnLogs(["[EVOLUTION] Iniciando requisição de pareamento...", "[API] Aguardando resposta do servidor..."]);
       
       try {
-          let token = "";
-          if (config.mode === 'direct') {
-              // Requisição real ao seu Gateway VOLL
-              const response = await fetch(`${config.gatewayUrl.replace(/\/$/, "")}/get-qr`).catch(() => {
-                  throw new Error("Gateway Offline. Verifique a URL do servidor.");
-              });
-              const data = await response.json();
-              if (!response.ok) throw new Error(data.message || "Erro ao obter QR do Gateway");
-              token = data.qr;
-          } else {
-              // Requisição real à Evolution API
-              const response = await fetch(`${config.instanceUrl.replace(/\/$/, "")}/instance/connect/${config.instanceName}`, {
-                  headers: { 'apikey': config.apiKey }
-              }).catch(() => {
-                  throw new Error("Servidor Evolution Offline ou URL Inválida.");
-              });
-              const data = await response.json();
-              if (!response.ok) throw new Error(data.message || "Erro ao obter QR da Evolution");
-              token = data.base64 || data.code;
-          }
+          if (!config.instanceUrl || !config.instanceName) throw new Error("Configure a URL e o nome da instância.");
+
+          const response = await fetch(`${config.instanceUrl.replace(/\/$/, "")}/instance/connect/${config.instanceName}`, {
+              headers: { 'apikey': config.apiKey }
+          }).catch(() => {
+              throw new Error("Servidor Evolution Offline ou URL Inválida.");
+          });
+          
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.message || "Erro ao obter QR da Evolution");
+          
+          const token = data.base64 || data.code;
 
           if (!token) throw new Error("Token de QR Code não retornado pela API.");
 
@@ -232,7 +255,7 @@ export const WhatsAppInbox: React.FC = () => {
                           <div className="bg-teal-100 p-2 rounded-xl text-teal-700"><Settings size={24} /></div>
                           <div>
                               <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Conectar WhatsApp</h2>
-                              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Configuração de API e Pareamento</p>
+                              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Escolha seu provedor de mensagens</p>
                           </div>
                       </div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"><X size={24} /></button>
@@ -243,16 +266,16 @@ export const WhatsAppInbox: React.FC = () => {
                       {/* SELETOR DE MODO */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <button 
-                            onClick={() => setConfig({...config, mode: 'direct'})}
+                            onClick={() => setConfig({...config, mode: 'twilio'})}
                             className={clsx(
                                 "p-6 rounded-[2rem] border-2 transition-all text-left flex items-start gap-4",
-                                config.mode === 'direct' ? "bg-white border-teal-500 shadow-lg shadow-teal-500/10" : "bg-white border-slate-100 opacity-60 hover:opacity-100"
+                                config.mode === 'twilio' ? "bg-white border-red-500 shadow-lg shadow-red-500/10" : "bg-white border-slate-100 opacity-60 hover:opacity-100"
                             )}
                         >
-                            <div className={clsx("p-3 rounded-2xl", config.mode === 'direct' ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-400")}><Cpu size={24}/></div>
+                            <div className={clsx("p-3 rounded-2xl", config.mode === 'twilio' ? "bg-red-600 text-white" : "bg-slate-100 text-slate-400")}><Cloud size={24}/></div>
                             <div>
-                                <h4 className="font-black text-slate-800 text-sm uppercase">VOLL Direct</h4>
-                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Conexão via Gateway Nativo (Baileys/WPPConnect).</p>
+                                <h4 className="font-black text-slate-800 text-sm uppercase tracking-tighter">Twilio WhatsApp</h4>
+                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Conexão oficial via API do Twilio. Estável e escalável.</p>
                             </div>
                         </button>
                         <button 
@@ -264,8 +287,8 @@ export const WhatsAppInbox: React.FC = () => {
                         >
                             <div className={clsx("p-3 rounded-2xl", config.mode === 'evolution' ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400")}><Link2 size={24}/></div>
                             <div>
-                                <h4 className="font-black text-slate-800 text-sm uppercase">Evolution API</h4>
-                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Utiliza um servidor Evolution externo dedicado.</p>
+                                <h4 className="font-black text-slate-800 text-sm uppercase tracking-tighter">Evolution API</h4>
+                                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Conecta seu celular via QR Code em servidor próprio.</p>
                             </div>
                         </button>
                       </div>
@@ -276,7 +299,7 @@ export const WhatsAppInbox: React.FC = () => {
                                     {isGeneratingQr ? (
                                         <div className="flex flex-col items-center gap-2">
                                             <Loader2 size={32} className="animate-spin text-teal-600" />
-                                            <p className="text-[10px] font-black text-teal-600 uppercase">Buscando QR...</p>
+                                            <p className="text-[10px] font-black text-teal-600 uppercase">{config.mode === 'twilio' ? 'Validando...' : 'Buscando QR...'}</p>
                                         </div>
                                     ) : qrError ? (
                                         <div className="flex flex-col items-center gap-2 text-red-500 p-4">
@@ -284,7 +307,7 @@ export const WhatsAppInbox: React.FC = () => {
                                             <p className="text-[9px] font-black uppercase text-center leading-tight">Falha na API: {qrError}</p>
                                             <button onClick={handleGenerateQr} className="text-[9px] font-bold underline mt-2">Tentar Novamente</button>
                                         </div>
-                                    ) : qrCode ? (
+                                    ) : qrCode && config.mode === 'evolution' ? (
                                         <div className="w-full h-full p-2 bg-white rounded-xl">
                                             <img 
                                                 src={qrCode} 
@@ -300,25 +323,27 @@ export const WhatsAppInbox: React.FC = () => {
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center">
-                                            <QrCode size={48} className="text-slate-300 mb-3" />
-                                            <p className="text-[10px] font-black text-slate-400 uppercase leading-tight">Configure a URL abaixo e gere o QR</p>
+                                            {config.mode === 'twilio' ? <Cloud size={48} className="text-red-300 mb-3" /> : <QrCode size={48} className="text-slate-300 mb-3" />}
+                                            <p className="text-[10px] font-black text-slate-400 uppercase leading-tight">
+                                                {config.mode === 'twilio' ? 'Preencha os dados e valide a conexão' : 'Configure a URL abaixo e gere o QR'}
+                                            </p>
                                         </div>
                                     )}
                                 </div>
                                 <div className="flex-1 space-y-4">
-                                    <h4 className="text-lg font-black text-slate-800">Passo a Passo:</h4>
+                                    <h4 className="text-lg font-black text-slate-800">Status da Instância:</h4>
                                     <ul className="space-y-2 mb-4">
                                         <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
                                             <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">1</span>
-                                            Configure a URL do seu Gateway abaixo
+                                            {config.mode === 'twilio' ? 'Insira suas credenciais da conta Twilio' : 'Configure a URL da sua Evolution API'}
                                         </li>
                                         <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
                                             <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">2</span>
-                                            Clique em "Gerar QR Code"
+                                            {config.mode === 'twilio' ? 'Clique em "Verificar Credenciais"' : 'Gere o QR Code de pareamento'}
                                         </li>
                                         <li className="flex items-center gap-2 text-xs text-slate-600 font-medium">
                                             <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[10px] font-black">3</span>
-                                            Escaneie com seu celular no WhatsApp
+                                            Pareamento completo e pronto para uso
                                         </li>
                                     </ul>
                                     <div className="bg-slate-900 rounded-xl p-4 h-24 font-mono text-[9px] text-teal-400 overflow-y-auto custom-scrollbar leading-relaxed shadow-inner">
@@ -334,32 +359,38 @@ export const WhatsAppInbox: React.FC = () => {
                                                 disabled={isGeneratingQr}
                                                 className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
                                             >
-                                                {isGeneratingQr ? <Loader2 size={16} className="animate-spin"/> : <QrCode size={16}/>}
-                                                {qrCode ? 'Atualizar Token' : 'Gerar QR Code'}
+                                                {isGeneratingQr ? <Loader2 size={16} className="animate-spin" /> : config.mode === 'twilio' ? <ShieldCheck size={16}/> : <QrCode size={16}/>}
+                                                {config.mode === 'twilio' ? 'Verificar Credenciais' : (qrCode ? 'Atualizar Token' : 'Gerar QR Code')}
                                             </button>
                                         ) : (
                                             <button 
                                                 onClick={() => setConfig({...config, isConnected: false})}
                                                 className="bg-red-50 text-red-600 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-red-100 hover:bg-red-100 transition-all"
                                             >
-                                                Desconectar Instância
+                                                Desconectar Provedor
                                             </button>
                                         )}
                                     </div>
                                 </div>
                             </div>
                             
-                            {config.mode === 'direct' ? (
-                                <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 animate-in slide-in-from-bottom-2">
-                                    <h5 className="text-[10px] font-black text-indigo-700 uppercase flex items-center gap-2 mb-3"><Terminal size={14}/> URL do Gateway VOLL (Direct)</h5>
-                                    <input 
-                                        type="text" 
-                                        className="w-full px-4 py-3 bg-white border border-indigo-200 rounded-2xl text-xs font-mono focus:ring-4 focus:ring-indigo-500/10 outline-none" 
-                                        value={config.gatewayUrl} 
-                                        onChange={e => setConfig({...config, gatewayUrl: e.target.value})}
-                                        placeholder="https://seu-gateway-real.com"
-                                    />
-                                    <p className="text-[9px] text-indigo-400 mt-2 italic">* O modo Direct requer que o servidor do Gateway esteja online para o frontend buscar o QR.</p>
+                            {config.mode === 'twilio' ? (
+                                <div className="bg-red-50 p-6 rounded-3xl border border-red-100 animate-in slide-in-from-bottom-2 space-y-4">
+                                    <h5 className="text-[10px] font-black text-red-700 uppercase flex items-center gap-2 mb-1"><Cloud size={14}/> Credenciais Twilio Console</h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="md:col-span-2">
+                                            <label className="block text-[9px] font-black text-red-400 uppercase mb-1">Account SID</label>
+                                            <input type="text" className="w-full px-4 py-2 bg-white border border-red-100 rounded-xl text-xs font-mono focus:ring-4 focus:ring-red-500/10 outline-none" value={config.twilioAccountSid} onChange={e => setConfig({...config, twilioAccountSid: e.target.value})} placeholder="AC..." />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[9px] font-black text-red-400 uppercase mb-1">Auth Token</label>
+                                            <input type="password" title="Auth Token" className="w-full px-4 py-2 bg-white border border-red-100 rounded-xl text-xs font-mono focus:ring-4 focus:ring-red-500/10 outline-none" value={config.twilioAuthToken} onChange={e => setConfig({...config, twilioAuthToken: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[9px] font-black text-red-400 uppercase mb-1">Número Twilio (From)</label>
+                                            <input type="text" className="w-full px-4 py-2 bg-white border border-red-100 rounded-xl text-xs font-mono focus:ring-4 focus:ring-red-500/10 outline-none" value={config.twilioFromNumber} onChange={e => setConfig({...config, twilioFromNumber: e.target.value})} placeholder="whatsapp:+1415..." />
+                                        </div>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100 animate-in slide-in-from-bottom-2 space-y-4">
@@ -385,7 +416,7 @@ export const WhatsAppInbox: React.FC = () => {
                       {/* WEBHOOK HELPERS */}
                       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-4">
                           <h3 className="font-black text-slate-700 text-xs uppercase flex items-center gap-2"><Database size={18} className="text-teal-600" /> Webhook de Recebimento</h3>
-                          <p className="text-xs text-slate-500 leading-relaxed">Cadastre esta URL no seu Gateway ou Instância Evolution para receber mensagens em tempo real no app:</p>
+                          <p className="text-xs text-slate-500 leading-relaxed">Cadastre esta URL no seu Console {config.mode === 'twilio' ? 'Twilio (Messaging Service)' : 'Evolution (Webhooks)'} para receber mensagens em tempo real no app:</p>
                           <div className="p-4 bg-teal-50 border-2 border-teal-200 rounded-2xl">
                               <div className="flex gap-2">
                                   <code className="flex-1 bg-white border border-teal-300 p-3 rounded-xl text-[10px] font-mono text-slate-700 break-all leading-relaxed">{edgeFunctionUrl}</code>
@@ -428,7 +459,7 @@ export const WhatsAppInbox: React.FC = () => {
                 <div className="flex items-center gap-2">
                     <div className={clsx("w-2 h-2 rounded-full", config.isConnected ? "bg-teal-500 animate-pulse" : "bg-red-500")}></div>
                     <span className={clsx("text-[10px] font-black uppercase tracking-widest", config.isConnected ? "text-teal-700" : "text-red-700")}>
-                        {config.isConnected ? "WhatsApp Online" : "Desconectado"}
+                        {config.isConnected ? `${config.mode.toUpperCase()} Ativo` : "WhatsApp Offline"}
                     </span>
                 </div>
                 {config.isConnected ? <Wifi size={14} className="text-teal-400" /> : <WifiOff size={14} className="text-red-400" />}

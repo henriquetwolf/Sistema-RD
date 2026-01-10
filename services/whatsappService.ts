@@ -6,11 +6,11 @@ export const whatsappService = {
      * Retorna as configurações atuais do WhatsApp
      */
     getConfig: async () => {
-        return await appBackend.getWhatsAppConfig() || { mode: 'direct', isConnected: false };
+        return await appBackend.getWhatsAppConfig() || { mode: 'evolution', isConnected: false };
     },
 
     /**
-     * Envia uma mensagem de texto (Detecta automaticamente o modo: Evolution ou Direct)
+     * Envia uma mensagem de texto (Detecta automaticamente o modo: Evolution ou Twilio)
      */
     sendTextMessage: async (to: string, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
@@ -19,27 +19,41 @@ export const whatsappService = {
 
         const cleanNumber = to.replace(/\D/g, '');
 
-        if (config.mode === 'direct') {
-            if (!config.gatewayUrl) {
-                throw new Error("URL do Gateway VOLL não configurada.");
+        // --- MODO TWILIO ---
+        if (config.mode === 'twilio') {
+            if (!config.twilioAccountSid || !config.twilioAuthToken || !config.twilioFromNumber) {
+                throw new Error("Configurações do Twilio incompletas.");
             }
             
             try {
-                const response = await fetch(`${config.gatewayUrl.replace(/\/$/, "")}/send-message`, {
+                // Em um ambiente de produção real, as chaves não devem ficar no frontend.
+                // Aqui fazemos a chamada REST padrão do Twilio.
+                const auth = btoa(`${config.twilioAccountSid}:${config.twilioAuthToken}`);
+                const twilioTo = `whatsapp:+${cleanNumber}`;
+                
+                const body = new URLSearchParams();
+                body.append('To', twilioTo);
+                body.append('From', config.twilioFromNumber);
+                body.append('Body', text);
+
+                const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${config.twilioAccountSid}/Messages.json`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number: cleanNumber, text })
+                    headers: {
+                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: body
                 });
 
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.message || "Erro no Gateway Direct");
+                if (!response.ok) throw new Error(data.message || "Erro na API do Twilio");
                 return data;
             } catch (e: any) {
-                throw new Error(e.message || "Não foi possível conectar ao seu Gateway VOLL. Verifique se o serviço está online.");
+                throw new Error(e.message || "Não foi possível conectar ao Twilio. Verifique suas credenciais.");
             }
         }
 
-        // Modo Evolution API
+        // --- MODO EVOLUTION API ---
         if (!config.instanceUrl || !config.instanceName || !config.apiKey) {
             throw new Error("Configurações da Evolution API incompletas.");
         }

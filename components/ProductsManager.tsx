@@ -60,8 +60,12 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   };
 
   const fetchOnlineCourses = async () => {
-      const data = await appBackend.getOnlineCourses();
-      setCourses(data);
+      try {
+          const data = await appBackend.getOnlineCourses();
+          setCourses(data || []);
+      } catch (e) {
+          console.error(e);
+      }
   };
 
   const fetchCertificates = async () => {
@@ -85,7 +89,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           setModuleLessons(lessonsMap);
       } catch (e) {
           console.error(e);
-          alert("Erro ao carregar conteúdo do curso. Verifique as tabelas do banco.");
+          alert("Erro ao carregar conteúdo do curso. Certifique-se de rodar o SQL Editor no Supabase.");
       } finally {
           setIsLoadingBuilder(false);
       }
@@ -138,26 +142,45 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const handleSaveProduct = async () => {
       if (!formData.name) { alert("Nome é obrigatório."); return; }
       setIsSaving(true);
-      const payload = { name: formData.name, category: formData.category, platform: formData.platform, price: formData.price, url: formData.url, status: formData.status, description: formData.description, certificate_template_id: formData.certificateTemplateId || null };
+      const payload = { 
+          name: formData.name, 
+          category: formData.category, 
+          platform: formData.platform, 
+          price: formData.price, 
+          url: formData.url, 
+          status: formData.status, 
+          description: formData.description, 
+          certificate_template_id: formData.certificateTemplateId || null 
+      };
+
       try {
           if (formData.id) await appBackend.client.from('crm_products').update(payload).eq('id', formData.id);
           else await appBackend.client.from('crm_products').insert([payload]);
           
           if (formData.category === 'Curso Online') {
-              await appBackend.saveOnlineCourse({
-                  title: formData.name,
-                  description: formData.description,
-                  price: formData.price,
-                  paymentLink: formData.url,
-                  certificateTemplateId: formData.certificateTemplateId
-              });
+              try {
+                  await appBackend.saveOnlineCourse({
+                      title: formData.name,
+                      description: formData.description,
+                      price: formData.price,
+                      paymentLink: formData.url,
+                      certificateTemplateId: formData.certificateTemplateId
+                  });
+              } catch (courseErr: any) {
+                  console.error("Erro ao salvar dados técnicos do curso:", courseErr);
+                  alert("Produto salvo, mas houve erro ao criar registro de curso online no portal. Verifique se as tabelas crm_online_courses foram criadas.");
+              }
           }
 
           fetchProducts();
           fetchOnlineCourses();
           setShowModal(false);
           setFormData(initialFormState);
-      } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsSaving(false); }
+      } catch (e: any) { 
+          alert(`Erro ao salvar produto: ${e.message}`); 
+      } finally { 
+          setIsSaving(false); 
+      }
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -206,7 +229,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                 <div className="flex justify-between items-start mb-3">
                                     <span className={clsx("text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide", product.status === 'active' ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500")}>{product.status === 'active' ? 'Ativo' : 'Inativo'}</span>
                                     <div className="relative">
-                                        <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === product.id ? null : product.id); }} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100"><MoreVertical size={18} /></button>
+                                        <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === product.id ? null : product.id); }} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 menu-btn"><MoreVertical size={18} /></button>
                                         {activeMenuId === product.id && (
                                             <div className="absolute right-0 top-8 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
                                                 <button onClick={() => handleEdit(product)} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Edit2 size={12} /> Editar</button>
@@ -223,7 +246,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                         onClick={() => {
                                             const course = courses.find(c => c.title === product.name);
                                             if (course) handleOpenCourseBuilder(course);
-                                            else alert("Curso online não localizado na base técnica. Verifique o nome.");
+                                            else alert("Registro técnico de curso não encontrado. Salve o produto novamente para criar.");
                                         }}
                                         className="mb-4 w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-black uppercase flex items-center justify-center gap-2 border border-indigo-100 transition-all"
                                     >
@@ -254,7 +277,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                 ) : (
                     <div className="space-y-6">
                         {courseModules.length === 0 ? (
-                            <div className="text-center py-20 bg-white border-2 border-dashed rounded-[2rem] text-slate-400">
+                            <div className="text-center py-20 bg-white border-2 border-dashed rounded-[2rem] text-slate-400 shadow-inner">
                                 <LayoutTemplate size={64} className="mx-auto mb-4 opacity-10"/>
                                 <p className="font-bold text-lg">Este curso ainda não tem conteúdo</p>
                                 <p className="text-sm">Comece criando o primeiro módulo acima.</p>

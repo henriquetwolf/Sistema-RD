@@ -82,9 +82,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 appBackend.getStudentCourseAccess(mainDealId),
                 appBackend.getStudentLessonProgress(mainDealId)
             ]);
-            setAllCourses(coursesData);
-            setUnlockedCourseIds(accessIds);
-            setCompletedLessonIds(progressIds);
+            setAllCourses(coursesData || []);
+            setUnlockedCourseIds(accessIds || []);
+            setCompletedLessonIds(progressIds || []);
         } catch (e) { console.error(e); }
     };
 
@@ -298,6 +298,25 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             </header>
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-6 space-y-8">
+                
+                {/* Destaques (Banners) e Welcome Card */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <section className="bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden group flex flex-col justify-between min-h-[250px]">
+                        <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
+                        <div className="relative z-10">
+                            <div className="inline-flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-4 border border-white/30 backdrop-blur-md"><Sparkles size={12} className="text-amber-400" /> Bem-vindo de volta!</div>
+                            <h2 className="text-3xl font-black mb-3 tracking-tight leading-tight">Olá, <span className="text-purple-200">{student.name.split(' ')[0]}</span>!</h2>
+                            <p className="text-purple-100/80 text-base leading-relaxed font-medium">Continue sua jornada acadêmica na maior rede de Pilates do mundo.</p>
+                        </div>
+                    </section>
+
+                    {banners.length > 0 && (
+                        <div className="overflow-hidden rounded-[2.5rem] shadow-xl border-4 border-white relative group h-full">
+                            <img src={banners[0].imageUrl} alt={banners[0].title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                        </div>
+                    )}
+                </div>
+
                 <nav className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 overflow-x-auto no-scrollbar gap-1">
                     {[
                         { id: 'classes', label: 'Formações Presenciais', icon: GraduationCap, color: 'text-purple-600' },
@@ -313,6 +332,27 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 </nav>
 
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
+                    {activeTab === 'classes' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {classes.length === 0 ? <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300"><GraduationCap size={48} className="mb-4 opacity-20"/> <p className="font-bold">Nenhuma formação presencial ativa.</p></div> : classes.map(cls => (
+                                <div key={cls.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all overflow-hidden border-b-8 border-b-purple-500">
+                                    <h3 className="text-xl font-black text-slate-800 mb-4 leading-tight">{cls.course}</h3>
+                                    <div className="flex items-center gap-2 text-slate-500 text-sm mb-6 font-bold uppercase tracking-widest"><MapPin size={16} className="text-purple-500" /> {cls.city}, {cls.state}</div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                                            <span className="block text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Módulo 01</span>
+                                            <div className="flex items-center gap-2 font-black text-slate-700 text-xs"><Calendar size={14} className="text-purple-500" /> {cls.date_mod_1 ? new Date(cls.date_mod_1).toLocaleDateString('pt-BR') : 'A confirmar'}</div>
+                                        </div>
+                                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                                            <span className="block text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Módulo 02</span>
+                                            <div className="flex items-center gap-2 font-black text-slate-700 text-xs"><Calendar size={14} className="text-orange-500" /> {cls.date_mod_2 ? new Date(cls.date_mod_2).toLocaleDateString('pt-BR') : 'A confirmar'}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {activeTab === 'online_courses' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {allCourses.length === 0 ? (
@@ -358,28 +398,23 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         </div>
                     )}
 
-                    {activeTab === 'classes' && (
+                    {activeTab === 'certificates' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {classes.length === 0 ? <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300"><GraduationCap size={48} className="mb-4 opacity-20"/> <p className="font-bold">Nenhuma formação presencial ativa.</p></div> : classes.map(cls => (
-                                <div key={cls.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all overflow-hidden border-b-8 border-b-purple-500">
-                                    <h3 className="text-xl font-black text-slate-800 mb-4 leading-tight">{cls.course}</h3>
-                                    <div className="flex items-center gap-2 text-slate-500 text-sm mb-6 font-bold uppercase tracking-widest"><MapPin size={16} className="text-purple-500" /> {cls.city}, {cls.state}</div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
-                                            <span className="block text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Módulo 01</span>
-                                            <div className="flex items-center gap-2 font-black text-slate-700 text-xs"><Calendar size={14} className="text-purple-500" /> {cls.date_mod_1 ? new Date(cls.date_mod_1).toLocaleDateString('pt-BR') : 'A confirmar'}</div>
-                                        </div>
-                                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
-                                            <span className="block text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Módulo 02</span>
-                                            <div className="flex items-center gap-2 font-black text-slate-700 text-xs"><Calendar size={14} className="text-orange-500" /> {cls.date_mod_2 ? new Date(cls.date_mod_2).toLocaleDateString('pt-BR') : 'A confirmar'}</div>
-                                        </div>
+                            {certificates.length === 0 ? <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300"><Award size={48} className="mb-4 opacity-20"/> <p className="font-bold">Nenhum certificado emitido.</p></div> : certificates.map(cert => (
+                                <div key={cert.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-6 shadow-sm hover:shadow-xl transition-all group">
+                                    <div className="bg-emerald-50 p-5 rounded-[2rem] text-emerald-600 group-hover:rotate-12 transition-transform shadow-inner"><Trophy size={32}/></div>
+                                    <div className="flex-1">
+                                        <h4 className="font-black text-slate-800 text-lg leading-tight mb-1">{cert.crm_certificates?.title}</h4>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Emitido: {new Date(cert.issued_at).toLocaleDateString()}</p>
                                     </div>
+                                    <a href={`/?certificateHash=${cert.hash}`} target="_blank" className="p-4 bg-emerald-500 text-white rounded-2xl shadow-lg hover:bg-emerald-600 transition-all active:scale-95"><Download size={24}/></a>
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
             </main>
+            <SupportTicketModal isOpen={showSupportModal} onClose={() => { setShowSupportModal(false); fetchSupportNotifications(); }} senderId={mainDealId || 'guest'} senderName={student.name} senderEmail={student.email} senderRole="student" />
         </div>
     );
 };

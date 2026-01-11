@@ -20,6 +20,7 @@ interface StudentDeal {
     phone: string;
     product_name: string;
     status: string;
+    stage: string;
     student_access_enabled: boolean;
     class_mod_1?: string;
     class_mod_2?: string;
@@ -65,10 +66,12 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-        // 1. Fetch Students
+        // 1. Fetch Students - FILTERED BY STAGE 'closed'
+        // Apenas alunos que chegaram ao fim do funil (fechamento/pagamento)
         const { data: studentsData, error: studentsError } = await appBackend.client
             .from('crm_deals')
-            .select('id, contact_name, company_name, cpf, email, phone, product_name, status, student_access_enabled, class_mod_1, class_mod_2')
+            .select('id, contact_name, company_name, cpf, email, phone, product_name, status, student_access_enabled, class_mod_1, class_mod_2, stage')
+            .eq('stage', 'closed') 
             .order('contact_name', { ascending: true });
         
         if (studentsError) throw studentsError;
@@ -245,22 +248,19 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       let errorCount = 0;
 
       try {
-          // Use the filtered list directly
           const targetStudents = filtered;
 
           for (const student of targetStudents) {
-              // Check eligibility basics
               if (certificates[student.id]) {
-                  skippedCount++; // Already issued
+                  skippedCount++; 
                   continue;
               }
               const templateId = productTemplates[student.product_name || ''];
               if (!templateId) {
-                  skippedCount++; // No template
+                  skippedCount++; 
                   continue;
               }
 
-              // Find Class
               const classCode = student.class_mod_2 || student.class_mod_1;
               if (!classCode) {
                   skippedCount++;
@@ -274,17 +274,15 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                   continue;
               }
 
-              // Check Date
               const now = new Date();
               const endDate = new Date(classInfo.dateMod2);
-              endDate.setHours(23, 59, 59); // End of day
+              endDate.setHours(23, 59, 59); 
               
               if (now <= endDate) {
-                  skippedCount++; // Course not finished
+                  skippedCount++; 
                   continue;
               }
 
-              // Check Attendance
               const { data: attendance } = await appBackend.client
                   .from('crm_attendance')
                   .select('present')
@@ -302,11 +300,10 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
               const percent = (presentCount / totalDaysRecorded) * 100;
 
               if (percent < 70) {
-                  skippedCount++; // Not enough attendance
+                  skippedCount++; 
                   continue;
               }
 
-              // Issue Certificate
               try {
                   const hash = await appBackend.issueCertificate(student.id, templateId);
                   
@@ -327,7 +324,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           alert(`Erro no processo: ${e.message}`);
       } finally {
           setIsAutoIssuing(false);
-          // Reload to reflect updates
           fetchData(); 
       }
   };
@@ -338,7 +334,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       setDeletingCertId(studentId);
       try {
           await appBackend.deleteStudentCertificate(certId);
-          // Remove from local state
           const newCerts = { ...certificates };
           delete newCerts[studentId];
           setCertificates(newCerts);
@@ -374,7 +369,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                     <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                         <Users className="text-teal-600" /> Gestão de Alunos
                     </h2>
-                    <p className="text-slate-500 text-sm">Controle de acesso e certificados dos alunos.</p>
+                    <p className="text-slate-500 text-sm">Visualizando apenas negociações concluídas (estágio fechamento).</p>
                 </div>
             </div>
             
@@ -453,7 +448,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                     <Loader2 size={32} className="animate-spin text-teal-600" />
                 </div>
             ) : filtered.length === 0 ? (
-                <div className="text-center py-12 text-slate-400">Nenhum aluno encontrado com os filtros atuais.</div>
+                <div className="text-center py-12 text-slate-400">Nenhum aluno (negociação fechada) encontrado com os filtros atuais.</div>
             ) : (
                 <div className="w-full">
                     <div className="px-6 py-2 bg-slate-50 border-b border-slate-100 text-xs text-slate-500 font-medium flex justify-between">
@@ -479,7 +474,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                 return (
                                     <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-6 py-4 font-medium text-slate-800">
-                                            {/* Use Company Name (Full Client Name) if available, otherwise Contact Name */}
                                             {s.company_name || s.contact_name || 'Sem nome'}
                                         </td>
                                         <td className="px-6 py-4">
@@ -495,7 +489,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                             </span>
                                         </td>
                                         
-                                        {/* CERTIFICADO COLUMN */}
                                         <td className="px-6 py-4 text-center">
                                             {cert ? (
                                                 <div className="flex items-center justify-center gap-1">
@@ -525,7 +518,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                         {copiedLink === cert.hash ? <CheckCircle size={14} /> : <ExternalLink size={14} />}
                                                     </button>
                                                     
-                                                    {/* DELETE BUTTON */}
                                                     <button 
                                                         onClick={() => handleDeleteCertificate(s.id, cert.id)}
                                                         disabled={deletingCertId === s.id}

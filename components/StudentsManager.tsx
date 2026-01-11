@@ -76,15 +76,19 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   };
 
   const loadCourses = async () => {
-      // Puxa apenas os cursos que existem tecnicamente e comercialmente
       const data = await appBackend.getOnlineCourses();
       setOnlineCourses(data || []);
   };
 
   const openUnlockModal = async (student: StudentDeal) => {
       setUnlockModalStudent(student);
-      const accessed = await appBackend.getStudentCourseAccess(student.id);
-      setStudentAccessedIds(accessed);
+      setIsSavingAccess(true); // Usado para mostrar loading no modal
+      try {
+          const accessed = await appBackend.getStudentCourseAccess(student.id);
+          setStudentAccessedIds(accessed);
+      } finally {
+          setIsSavingAccess(false);
+      }
   };
 
   const toggleAccess = (courseId: string) => {
@@ -95,14 +99,26 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       if (!unlockModalStudent) return;
       setIsSavingAccess(true);
       try {
+          // 1. Limpa todos os acessos atuais para reinserir
           await appBackend.client.from('crm_student_course_access').delete().eq('student_deal_id', unlockModalStudent.id);
+          
+          // 2. Insere os novos
           if (studentAccessedIds.length > 0) {
-              const inserts = studentAccessedIds.map(cid => ({ student_deal_id: unlockModalStudent.id, course_id: cid, unlocked_at: new Date().toISOString() }));
-              await appBackend.client.from('crm_student_course_access').insert(inserts);
+              const inserts = studentAccessedIds.map(cid => ({ 
+                  student_deal_id: unlockModalStudent.id, 
+                  course_id: cid, 
+                  unlocked_at: new Date().toISOString() 
+              }));
+              const { error: insertError } = await appBackend.client.from('crm_student_course_access').insert(inserts);
+              if (insertError) throw insertError;
           }
-          alert("Acessos atualizados!");
+          alert("Acessos salvos com sucesso!");
           setUnlockModalStudent(null);
-      } catch (e) { alert("Erro ao salvar."); } finally { setIsSavingAccess(false); }
+      } catch (e: any) { 
+          alert("Erro ao salvar acessos: " + e.message); 
+      } finally { 
+          setIsSavingAccess(false); 
+      }
   };
 
   const handleIssueCertificate = async (student: StudentDeal) => {
@@ -200,7 +216,13 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             ))}
                         </div>
                     </div>
-                    <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-3xl"><button onClick={() => setUnlockModalStudent(null)} className="px-6 py-2.5 text-slate-500 font-bold text-sm">Cancelar</button><button onClick={saveAccessChanges} disabled={isSavingAccess} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl shadow-indigo-600/20 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50">{isSavingAccess ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Acessos</button></div>
+                    <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-3xl">
+                        <button onClick={() => setUnlockModalStudent(null)} className="px-6 py-2.5 text-slate-500 font-bold text-sm">Cancelar</button>
+                        <button onClick={saveAccessChanges} disabled={isSavingAccess} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl shadow-indigo-600/20 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50">
+                            {isSavingAccess ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} 
+                            Salvar Acessos
+                        </button>
+                    </div>
                 </div>
             </div>
         )}

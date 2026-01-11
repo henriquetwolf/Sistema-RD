@@ -72,10 +72,12 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
     const loadBanners = async () => {
         try { 
-            // Puxa banners ativos cadastrados no Painel de Configurações
+            // Tenta puxar banners ativos cadastrados no Painel de Configurações
             const data = await appBackend.getBanners('student'); 
-            setBanners(data); 
-        } catch (e) {}
+            setBanners(data || []); 
+        } catch (e) {
+            console.error("Erro ao carregar banners:", e);
+        }
     };
 
     const loadOnlineCourses = async () => {
@@ -86,7 +88,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 appBackend.getStudentCourseAccess(mainDealId),
                 appBackend.getStudentLessonProgress(mainDealId)
             ]);
-            // Filtra apenas cursos que possuem imagem ou descrição válida para evitar lixo
             setAllCourses(coursesData || []);
             setUnlockedCourseIds(accessIds || []);
             setCompletedLessonIds(progressIds || []);

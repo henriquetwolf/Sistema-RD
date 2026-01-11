@@ -27,8 +27,6 @@ interface UnifiedProduct {
     type: 'Digital' | 'Presencial' | 'Evento';
 }
 
-const COURSES_MASTER = ['Formação Completa em Pilates', 'Formação em Pilates Clássico', 'MIT - Movimento Inteligente', 'Suspensus'];
-
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ 
   onLogoChange, 
   currentLogo,
@@ -75,7 +73,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-  const [logSearch, setLogSearch] = useState('');
 
   // Connection Plug States
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -134,38 +131,16 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       try {
           const data = await appBackend.getSupportTags();
           setSupportTags(data);
-      } catch (e) {
-          console.error(e);
-      } finally {
-          setIsLoadingTags(false);
-      }
-  };
-
-  const handleSaveSupportTag = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!editingTag || !editingTag.name || !editingTag.role) return;
-      try {
-          await appBackend.saveSupportTag(editingTag);
-          setEditingTag(null);
-          fetchSupportTags();
-      } catch (e: any) {
-          alert(`Erro ao salvar tag: ${e.message}`);
-      }
+      } catch (e) { console.error(e); } finally { setIsLoadingTags(false); }
   };
 
   const fetchPipelines = async () => {
-      try {
-          const data = await appBackend.getPipelines();
-          setPipelines(data);
-      } catch (e) {}
+      try { const data = await appBackend.getPipelines(); setPipelines(data); } catch (e) {}
   };
 
   const fetchWebhookTriggers = async () => {
       setIsLoadingTriggers(true);
-      try {
-          const data = await appBackend.getWebhookTriggers();
-          setWebhookTriggers(data);
-      } catch (e) {} finally { setIsLoadingTriggers(false); }
+      try { const data = await appBackend.getWebhookTriggers(); setWebhookTriggers(data); } catch (e) {} finally { setIsLoadingTriggers(false); }
   };
 
   const fetchRoles = async () => {
@@ -175,10 +150,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const fetchBanners = async () => {
       setIsLoadingBanners(true);
-      try { 
-          const data = await appBackend.getBanners(); 
-          setBanners(data); 
-      } catch (e) { console.error(e); } finally { setIsLoadingBanners(false); }
+      try { const data = await appBackend.getBanners(); setBanners(data); } catch (e) { console.error(e); } finally { setIsLoadingBanners(false); }
   };
 
   const fetchCompanies = async () => {
@@ -188,37 +160,24 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const fetchCourseInfos = async () => {
       setIsLoadingCourseInfo(true);
-      try {
-          const data = await appBackend.getCourseInfos();
-          setCourseInfos(data);
-      } catch (e) {
-          console.error(e);
-      } finally {
-          setIsLoadingCourseInfo(false);
-      }
+      try { const data = await appBackend.getCourseInfos(); setCourseInfos(data); } catch (e) { console.error(e); } finally { setIsLoadingCourseInfo(false); }
   };
 
   const fetchUnifiedProducts = async () => {
       try {
-          const [digitalRes, eventsRes, classesRes] = (await Promise.all([
+          const [digitalRes, eventsRes, classesRes] = await Promise.all([
               appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
               appBackend.client.from('crm_events').select('id, name'),
               appBackend.client.from('crm_classes').select('course')
-          ])) as any[];
+          ]);
 
           const unified: UnifiedProduct[] = [];
-
-          if (digitalRes.data) {
-              (digitalRes.data as any[]).forEach(p => unified.push({ id: String(p.id), name: String(p.name), type: 'Digital' }));
-          }
-          if (eventsRes.data) {
-              (eventsRes.data as any[]).forEach(e => unified.push({ id: String(e.id), name: String(e.name), type: 'Evento' }));
-          }
+          if (digitalRes.data) (digitalRes.data as any[]).forEach(p => unified.push({ id: String(p.id), name: String(p.name), type: 'Digital' }));
+          if (eventsRes.data) (eventsRes.data as any[]).forEach(e => unified.push({ id: String(e.id), name: String(e.name), type: 'Evento' }));
           if (classesRes.data) {
-              const uniqueCourses = Array.from(new Set((classesRes.data as any[]).map(c => c.course as string).filter(Boolean)));
-              uniqueCourses.forEach((c: string) => unified.push({ id: `course-${c}`, name: c, type: 'Presencial' }));
+              const uniqueCourses = Array.from(new Set((classesRes.data as any[]).map(c => (c as any).course as string).filter(Boolean)));
+              uniqueCourses.forEach((c: any) => unified.push({ id: `course-${c}`, name: String(c), type: 'Presencial' }));
           }
-
           setAllProducts(unified.sort((a, b) => a.name.localeCompare(b.name)));
       } catch (e) {}
   };
@@ -227,11 +186,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       if (!editingCompany) return [];
       const selectedTypes = editingCompany.productTypes || [];
       if (selectedTypes.length === 0) return [];
-
-      return allProducts.filter(p => 
-          selectedTypes.includes(p.type) && 
-          p.name.toLowerCase().includes(productSearch.toLowerCase())
-      );
+      return allProducts.filter(p => selectedTypes.includes(p.type) && p.name.toLowerCase().includes(productSearch.toLowerCase()));
   }, [allProducts, editingCompany, productSearch]);
 
   const fetchInstructorLevels = async () => {
@@ -241,14 +196,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const fetchLogs = async () => {
       setIsLoadingLogs(true);
-      try {
-          const data = await appBackend.getActivityLogs();
-          setLogs(data);
-      } catch (e) {
-          console.error(e);
-      } finally {
-          setIsLoadingLogs(false);
-      }
+      try { const data = await appBackend.getActivityLogs(); setLogs(data); } catch (e) { console.error(e); } finally { setIsLoadingLogs(false); }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -262,9 +210,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const handleBannerImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
         const reader = new FileReader();
-        reader.onloadend = () => {
-            setEditingBanner(prev => prev ? { ...prev, imageUrl: reader.result as string } : null);
-        };
+        reader.onloadend = () => setEditingBanner(prev => prev ? { ...prev, imageUrl: reader.result as string } : null);
         reader.readAsDataURL(e.target.files[0]);
     }
   };
@@ -279,54 +225,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
     setTimeout(() => setIsSaved(false), 2000);
   };
 
-  const generateRepairSQL = () => `
--- SCRIPT DE MANUTENÇÃO VOLL CRM (V41)
--- Correção de Permissões RLS e Schema Cache
-
--- 1. Garante que as tabelas existam com a estrutura correta
-CREATE TABLE IF NOT EXISTS public.crm_course_modules (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    course_id uuid REFERENCES public.crm_online_courses(id) ON DELETE CASCADE,
-    title text NOT NULL,
-    order_index integer DEFAULT 0,
-    created_at timestamp with time zone DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.crm_course_lessons (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    module_id uuid REFERENCES public.crm_course_modules(id) ON DELETE CASCADE,
-    title text NOT NULL,
-    description text,
-    video_url text,
-    materials jsonb DEFAULT '[]',
-    order_index integer DEFAULT 0,
-    created_at timestamp with time zone DEFAULT now()
-);
-
--- 2. Garante a coluna 'materials' especificamente (Caso a tabela já existisse sem ela)
-ALTER TABLE public.crm_course_lessons ADD COLUMN IF NOT EXISTS materials jsonb DEFAULT '[]';
-
--- 3. Habilita RLS
-ALTER TABLE public.crm_course_modules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.crm_course_lessons ENABLE ROW LEVEL SECURITY;
-
--- 4. Cria Políticas de Acesso Total
-DROP POLICY IF EXISTS "Acesso total para módulos" ON public.crm_course_modules;
-CREATE POLICY "Acesso total para módulos" ON public.crm_course_modules FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Acesso total para lições" ON public.crm_course_lessons;
-CREATE POLICY "Acesso total para lições" ON public.crm_course_lessons FOR ALL USING (true) WITH CHECK (true);
-
--- 5. Permissões de acesso aos dados para as roles
-GRANT ALL ON public.crm_course_modules TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_course_lessons TO anon, authenticated, service_role;
-
--- 6. RECARREGA O CACHE DA API (PostgREST) - Resolve erro "Could not find column in schema cache"
-NOTIFY pgrst, 'reload config';
-  `.trim();
-
-  const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
-
   const handleSaveRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRole) return;
@@ -337,10 +235,7 @@ NOTIFY pgrst, 'reload config';
 
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingBanner || !editingBanner.imageUrl) {
-        alert("A imagem do banner é obrigatória.");
-        return;
-    }
+    if (!editingBanner || !editingBanner.imageUrl) return;
     await appBackend.saveBanner(editingBanner as Banner);
     fetchBanners();
     setEditingBanner(null);
@@ -349,86 +244,46 @@ NOTIFY pgrst, 'reload config';
   const handleSaveCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCompany) return;
-    
     setIsSavingCompany(true);
     try {
         await appBackend.saveCompany(editingCompany as CompanySetting);
         await fetchCompanies();
         setEditingCompany(null);
-        alert("Empresa salva com sucesso!");
-    } catch (err: any) {
-        console.error(err);
-        alert(`Erro ao salvar empresa: ${err.message}`);
-    } finally {
-        setIsSavingCompany(false);
-    }
-  };
-
-  const handleSaveLevel = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingLevel) return;
-    await appBackend.saveInstructorLevel(editingLevel as InstructorLevel);
-    fetchInstructorLevels();
-    setEditingLevel(null);
-  };
-
-  const handleSaveCourseInfo = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!editingCourseInfo || !editingCourseInfo.courseName) return;
-      setIsSavingCourseInfo(true);
-      try {
-          await appBackend.saveCourseInfo(editingCourseInfo);
-          await fetchCourseInfos();
-          setEditingCourseInfo(null);
-          alert("Informações do curso salvas!");
-      } catch (err: any) {
-          alert(`Erro ao salvar: ${err.message}`);
-      } finally {
-          setIsSavingCourseInfo(false);
-      }
-  };
-
-  const handleSaveWebhookTrigger = async () => {
-      if (!selectedFunnel || !selectedStage) return;
-      setIsSavingTrigger(true);
-      try {
-          await appBackend.saveWebhookTrigger({
-              id: editingTriggerId || undefined,
-              pipelineName: selectedFunnel,
-              stageId: selectedStage,
-              payloadJson: customJson.trim() || undefined
-          });
-          setSelectedFunnel('');
-          setSelectedStage('');
-          setCustomJson('');
-          setEditingTriggerId(null);
-          await fetchWebhookTriggers();
-      } catch (e: any) { alert(e.message); } finally { setIsSavingTrigger(false); }
+    } catch (err) {} finally { setIsSavingCompany(false); }
   };
 
   const toggleCompanyProductType = (type: string) => {
       if (!editingCompany) return;
       const currentTypes = editingCompany.productTypes || [];
-      const newTypes = currentTypes.includes(type) 
-        ? currentTypes.filter(t => t !== type)
-        : [...currentTypes, type];
-      
+      const newTypes = currentTypes.includes(type) ? currentTypes.filter(t => t !== type) : [...currentTypes, type];
       setEditingCompany({ ...editingCompany, productTypes: newTypes });
   };
 
   const toggleCompanyProductId = (id: string) => {
       if (!editingCompany) return;
       const currentIds = editingCompany.productIds || [];
-      const newIds = currentIds.includes(id) 
-        ? currentIds.filter(i => i !== id)
-        : [...currentIds, id];
+      const newIds = currentIds.includes(id) ? currentIds.filter(i => i !== id) : [...currentIds, id];
       setEditingCompany({ ...editingCompany, productIds: newIds });
   };
 
-  const funnelStages = useMemo(() => {
-      const funnel = pipelines.find(p => p.name === selectedFunnel);
-      return funnel?.stages || [];
-  }, [selectedFunnel, pipelines]);
+  const generateRepairSQL = () => `
+-- SCRIPT DE MANUTENÇÃO VOLL CRM (V42)
+CREATE TABLE IF NOT EXISTS public.crm_banners (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    title text NOT NULL,
+    image_url text NOT NULL,
+    link_url text,
+    target_audience text DEFAULT 'student',
+    active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now()
+);
+ALTER TABLE public.crm_student_course_access ADD COLUMN IF NOT EXISTS unlocked_at timestamp with time zone DEFAULT now();
+ALTER TABLE public.crm_banners ADD COLUMN IF NOT EXISTS link_url text;
+ALTER TABLE public.crm_banners ADD COLUMN IF NOT EXISTS target_audience text DEFAULT 'student';
+NOTIFY pgrst, 'reload config';
+  `.trim();
+
+  const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-8 pb-20">
@@ -438,70 +293,197 @@ NOTIFY pgrst, 'reload config';
             <p className="text-slate-500 text-sm">Personalize acessos, identidade e acompanhe atividades.</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto shrink-0 max-w-full no-scrollbar">
-            <button onClick={() => setActiveTab('visual')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Geral</button>
-            <button onClick={() => setActiveTab('course_info')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'course_info' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Info Cursos</button>
-            <button onClick={() => setActiveTab('support_tags')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'support_tags' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Tags Suporte</button>
-            <button onClick={() => setActiveTab('connections')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'connections' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Conexões</button>
-            <button onClick={() => setActiveTab('company')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'company' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Empresas</button>
-            <button onClick={() => setActiveTab('connection_plug')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'connection_plug' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Connection Plug</button>
-            <button onClick={() => setActiveTab('roles')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'roles' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Acessos</button>
-            <button onClick={() => setActiveTab('logs')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'logs' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Atividades</button>
-            <button onClick={() => setActiveTab('banners')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'banners' ? "bg-white text-orange-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Banners</button>
-            <button onClick={() => setActiveTab('instructor_levels')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'instructor_levels' ? "bg-white text-purple-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Níveis</button>
-            <button onClick={() => setActiveTab('database')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'database' ? "bg-white text-amber-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Banco de Dados</button>
+            <button onClick={() => setActiveTab('visual')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'visual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500")}>Geral</button>
+            <button onClick={() => setActiveTab('company')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'company' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500")}>Empresas</button>
+            <button onClick={() => setActiveTab('banners')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'banners' ? "bg-white text-orange-700 shadow-sm" : "text-slate-500")}>Banners</button>
+            <button onClick={() => setActiveTab('connection_plug')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'connection_plug' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500")}>Plug</button>
+            <button onClick={() => setActiveTab('roles')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'roles' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500")}>Acessos</button>
+            <button onClick={() => setActiveTab('database')} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'database' ? "bg-white text-amber-700 shadow-sm" : "text-slate-500")}>Banco</button>
         </div>
       </div>
       
       <div className="max-w-5xl space-y-8">
+        {activeTab === 'visual' && (
+            <div className="space-y-6">
+                <div className="bg-white rounded-xl border border-slate-200 p-8 space-y-6">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b pb-4"><Palette className="text-teal-600" size={20}/> Identidade</h3>
+                    <div className="flex flex-col sm:flex-row items-center gap-8">
+                        <div className="w-64 h-32 bg-slate-50 border rounded-lg flex items-center justify-center p-4">
+                            {preview ? <img src={preview} alt="Logo" className="max-w-full max-h-full object-contain" /> : <ImageIcon className="text-slate-300" size={48} />}
+                        </div>
+                        <input type="file" className="hidden" id="logo-up" accept="image/*" onChange={handleImageUpload} />
+                        <label htmlFor="logo-up" className="cursor-pointer bg-teal-50 text-teal-700 px-6 py-2 rounded-lg font-bold border border-teal-200">Trocar Logo</label>
+                    </div>
+                </div>
+                <div className="bg-white rounded-xl border border-slate-200 p-8">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4">Margem de Estoque</h3>
+                    <input type="number" className="w-24 px-4 py-2 border rounded-lg" value={securityMargin} onChange={(e) => setSecurityMargin(parseInt(e.target.value) || 0)} />
+                </div>
+                <button onClick={handleSaveGlobal} className="bg-teal-600 text-white px-10 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2">{isSaved ? 'Salvo!' : 'Salvar Geral'}</button>
+            </div>
+        )}
+
+        {activeTab === 'company' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold">Empresas e Faturamento</h3>
+                    <button onClick={() => setEditingCompany({ legalName: '', cnpj: '', productTypes: [], productIds: [] })} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Nova Empresa</button>
+                </div>
+                <div className="space-y-4">
+                    {companies.map(c => (
+                        <div key={c.id} className="p-4 border rounded-xl flex items-center justify-between group">
+                            <div>
+                                <p className="font-bold text-slate-800">{c.legalName}</p>
+                                <p className="text-xs text-slate-500">CNPJ: {c.cnpj}</p>
+                            </div>
+                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => setEditingCompany(c)} className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg"><Edit2 size={16}/></button>
+                                <button onClick={() => appBackend.deleteCompany(c.id).then(fetchCompanies)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'banners' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold">Banners do Portal</h3>
+                    <button onClick={() => setEditingBanner({ title: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Banner</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {banners.map(b => (
+                        <div key={b.id} className="border rounded-xl overflow-hidden group">
+                            <img src={b.imageUrl} className="w-full h-32 object-cover" />
+                            <div className="p-4 flex items-center justify-between bg-slate-50">
+                                <div><p className="font-bold text-xs">{b.title}</p><p className="text-[10px] text-slate-400 uppercase">{b.targetAudience}</p></div>
+                                <div className="flex gap-1">
+                                    <button onClick={() => setEditingBanner(b)} className="p-1.5 text-orange-600 hover:bg-white rounded"><Edit2 size={14}/></button>
+                                    <button onClick={() => appBackend.deleteBanner(b.id).then(fetchBanners)} className="p-1.5 text-red-600 hover:bg-white rounded"><Trash2 size={14}/></button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'roles' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold">Perfis de Acesso</h3>
+                    <button onClick={() => setEditingRole({ id: crypto.randomUUID(), name: '', permissions: {} })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Perfil</button>
+                </div>
+                <div className="space-y-3">
+                    {roles.map(r => (
+                        <div key={r.id} className="p-4 border rounded-xl flex items-center justify-between">
+                            <span className="font-bold">{r.name}</span>
+                            <div className="flex gap-2">
+                                <button onClick={() => setEditingRole(r)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button>
+                                <button onClick={() => appBackend.deleteRole(r.id).then(fetchRoles)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
         {activeTab === 'database' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V41)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para corrigir erros de permissão (RLS) ou colunas não encontradas.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V41</button> : (
-                    <div className="relative animate-in slide-in-from-top-4">
-                        <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
-                        <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs hover:bg-slate-600 transition-colors shadow-lg">{sqlCopied ? 'Copiado!' : 'Copiar SQL'}</button>
+            <div className="bg-white rounded-xl border border-slate-200 p-8">
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold">Manutenção V42</h3></div>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg">Gerar Script de Reparo V42</button> : (
+                    <div className="relative">
+                        <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto">{generateRepairSQL()}</pre>
+                        <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs">{sqlCopied ? 'Copiado!' : 'Copiar'}</button>
                     </div>
                 )}
             </div>
         )}
-
-        {activeTab === 'visual' && (
-            <div className="space-y-6">
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 space-y-6">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b pb-4 mb-2"><Palette className="text-teal-600" size={20}/> Identidade do Sistema</h3>
-                    <div className="flex flex-col sm:flex-row items-center gap-8">
-                        <div className="flex flex-col items-center gap-2">
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pré-visualização</span>
-                            <div className="w-64 h-32 bg-slate-50 border rounded-lg flex items-center justify-center p-4">
-                                {preview ? <img src={preview} alt="Logo" className="max-w-full max-h-full object-contain" /> : <ImageIcon className="text-slate-300" size={48} />}
-                            </div>
-                        </div>
-                        <div className="flex-1 w-full">
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Upload Nova Logo</label>
-                            <label className="cursor-pointer">
-                                <div className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
-                                    <Upload className="w-8 h-8 mb-3 text-slate-400" /><p className="text-sm text-slate-500">Clique para enviar</p>
-                                </div>
-                                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 space-y-6">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b pb-4 mb-2"><Package className="text-teal-600" size={20}/> Configuração de Logística</h3>
-                    <div className="max-w-md">
-                        <label className="block text-sm font-bold text-slate-700 mb-1">Margem de Segurança do Estoque de Studio</label>
-                        <div className="flex items-center gap-4">
-                            <input type="number" className="w-24 px-4 py-2 border rounded-lg font-bold text-slate-800" value={securityMargin} onChange={(e) => setSecurityMargin(parseInt(e.target.value) || 0)} min="0" />
-                            <p className="text-xs text-slate-400">Alerta ativado se o saldo do studio for menor que este valor.</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="flex justify-end pt-4"><button onClick={handleSaveGlobal} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2">{isSaved ? <><Check size={18}/> Salvo!</> : <><Save size={18}/> Salvar Configurações</>}</button></div>
-            </div>
-        )}
       </div>
+
+      {/* MODAL EMPRESA */}
+      {editingCompany && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold">Configurar Empresa de Faturamento</h3>
+                      <button onClick={() => setEditingCompany(null)}><X size={24}/></button>
+                  </div>
+                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6">
+                      <div className="grid grid-cols-2 gap-4">
+                          <input placeholder="Razão Social" className="w-full px-3 py-2 border rounded-lg" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} />
+                          <input placeholder="CNPJ" className="w-full px-3 py-2 border rounded-lg" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} />
+                      </div>
+                      <input placeholder="Webhook URL (Connection Plug)" className="w-full px-3 py-2 border rounded-lg font-mono text-xs" value={editingCompany.webhookUrl} onChange={e => setEditingCompany({...editingCompany, webhookUrl: e.target.value})} />
+                      <div className="border-t pt-4">
+                          <p className="text-xs font-bold text-slate-400 uppercase mb-3">Atribuição Automática por Tipo de Produto</p>
+                          <div className="flex gap-2">
+                              {['Digital', 'Presencial', 'Evento'].map(type => (
+                                  <button key={type} onClick={() => toggleCompanyProductType(type)} className={clsx("px-4 py-2 rounded-lg border-2 text-xs font-bold", editingCompany.productTypes?.includes(type) ? "bg-teal-50 border-teal-500 text-teal-700" : "bg-white border-slate-100")}>{type}</button>
+                              ))}
+                          </div>
+                      </div>
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t flex justify-end">
+                      <button onClick={handleSaveCompany} disabled={isSavingCompany} className="bg-teal-600 text-white px-8 py-2 rounded-lg font-bold">{isSavingCompany ? 'Salvando...' : 'Salvar Empresa'}</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL BANNER */}
+      {editingBanner && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-md animate-in zoom-in-95 flex flex-col">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold">Configurar Banner</h3>
+                      <button onClick={() => setEditingBanner(null)}><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-6">
+                      <input placeholder="Título do Banner" className="w-full px-3 py-2 border rounded-lg" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} />
+                      <input placeholder="Link de Destino (https://...)" className="w-full px-3 py-2 border rounded-lg" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} />
+                      <select className="w-full px-3 py-2 border rounded-lg" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
+                          <option value="student">Público: Aluno</option>
+                          <option value="instructor">Público: Instrutor</option>
+                      </select>
+                      <div className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:bg-slate-50" onClick={() => bannerFileInputRef.current?.click()}>
+                          {editingBanner.imageUrl ? <img src={editingBanner.imageUrl} className="h-20 mx-auto rounded" /> : <p className="text-xs text-slate-400">Clique para enviar imagem</p>}
+                          <input type="file" ref={bannerFileInputRef} className="hidden" accept="image/*" onChange={handleBannerImageUpload} />
+                      </div>
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t flex justify-end">
+                      <button onClick={handleSaveBanner} className="bg-orange-600 text-white px-8 py-2 rounded-lg font-bold">Salvar Banner</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL ROLE */}
+      {editingRole && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold">Permissões do Perfil: {editingRole.name}</h3>
+                      <button onClick={() => setEditingRole(null)}><X size={24}/></button>
+                  </div>
+                  <div className="p-8 overflow-y-auto custom-scrollbar">
+                      <input placeholder="Nome do Perfil" className="w-full px-4 py-2 border rounded-xl mb-8 font-bold text-lg" value={editingRole.name} onChange={e => setEditingRole({...editingRole, name: e.target.value})} />
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {PERMISSION_MODULES.map(mod => (
+                              <label key={mod.id} className={clsx("p-4 border-2 rounded-xl cursor-pointer transition-all flex items-center justify-between", editingRole.permissions[mod.id] ? "bg-indigo-50 border-indigo-500" : "bg-white border-slate-100")}>
+                                  <span className="text-xs font-bold">{mod.label}</span>
+                                  <input type="checkbox" checked={!!editingRole.permissions[mod.id]} onChange={e => setEditingRole({...editingRole, permissions: {...editingRole.permissions, [mod.id]: e.target.checked}})} className="w-5 h-5 rounded text-indigo-600" />
+                              </label>
+                          ))}
+                      </div>
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t flex justify-end">
+                      <button onClick={handleSaveRole} className="bg-indigo-600 text-white px-8 py-2 rounded-lg font-bold">Salvar Perfil</button>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

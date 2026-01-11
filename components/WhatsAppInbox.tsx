@@ -132,7 +132,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
             if (selectedChatId) fetchMessages(selectedChatId, false);
             checkRealStatus();
           }
-      }, 8000); 
+      }, 10000); 
       return () => clearInterval(timer);
   }, [selectedChatId, showSettings, showIdentifyModal, config.instanceUrl, viewMode]);
 
@@ -230,13 +230,21 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
     const target = customConfig || config;
     if (!target.instanceUrl || !target.instanceName) return;
     try {
-        const baseUrl = target.instanceUrl.replace(/\/$/, "");
-        const response = await fetch(`${baseUrl}/instance/connectionState/${target.instanceName}`, {
-            headers: { 'apikey': target.apiKey }
+        let baseUrl = target.instanceUrl.trim();
+        if (!baseUrl.startsWith('http')) baseUrl = `https://${baseUrl}`;
+        baseUrl = baseUrl.replace(/\/$/, "");
+
+        const response = await fetch(`${baseUrl}/instance/connectionState/${target.instanceName.trim()}`, {
+            headers: { 'apikey': target.apiKey.trim() }
         });
         const data = await response.json();
-        const connected = data.instance?.state === 'open' || data.state === 'open';
-        if (connected !== config.isConnected) setConfig(prev => ({ ...prev, isConnected: connected }));
+        // Evolution API pode retornar state em 'instance.state' ou na raiz
+        const state = data.instance?.state || data.state || 'closed';
+        const connected = state === 'open';
+        
+        if (connected !== config.isConnected) {
+            setConfig(prev => ({ ...prev, isConnected: connected }));
+        }
     } catch (e) {
         if (config.isConnected) setConfig(prev => ({ ...prev, isConnected: false }));
     }
@@ -278,20 +286,23 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
     setIsSending(true);
     const agentName = currentAgentName || 'Atendimento VOLL';
     const signedMessage = `*Atendente ${agentName}:*\n${inputText}`;
-    const messageText = inputText;
+    const originalText = inputText;
     setInputText('');
     try {
         const result = await whatsappService.sendTextMessage(selectedChat, signedMessage);
         const waId = result.key?.id || result.messageId; 
         await whatsappService.syncMessage(selectedChatId, signedMessage, 'agent', waId);
+        
+        // Se o atendimento estava aberto ou pendente, muda para esperando cliente
         if (selectedChat.status === 'open' || selectedChat.status === 'pending') {
             await handleUpdateStage(selectedChatId, 'waiting');
         }
+        
         await fetchMessages(selectedChatId, false);
         await fetchConversations(false);
     } catch (err: any) {
         alert("Erro ao enviar: " + err.message);
-        setInputText(messageText);
+        setInputText(originalText);
     } finally { setIsSending(false); }
   };
 
@@ -308,9 +319,18 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
   const handleSaveConfig = async () => {
       setIsSavingConfig(true);
       try {
-          await appBackend.saveWhatsAppConfig(config);
+          // Garantir que a URL salva está limpa
+          const sanitizedConfig = {
+              ...config,
+              instanceUrl: config.instanceUrl.trim().replace(/\/$/, ""),
+              instanceName: config.instanceName.trim(),
+              apiKey: config.apiKey.trim()
+          };
+          await appBackend.saveWhatsAppConfig(sanitizedConfig);
+          setConfig(sanitizedConfig);
           setShowSettings(false);
           alert("Configurações salvas!");
+          checkRealStatus(sanitizedConfig);
       } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsSavingConfig(false); }
   };
 
@@ -338,26 +358,35 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
       setConnLogs([`Iniciando tentativa de conexão...`]);
       try {
           if (!config.instanceUrl || !config.instanceName) throw new Error("Preencha os dados da instância.");
-          const baseUrl = config.instanceUrl.replace(/\/$/, "");
+          
+          let baseUrl = config.instanceUrl.trim();
+          if (!baseUrl.startsWith('http')) baseUrl = `https://${baseUrl}`;
+          baseUrl = baseUrl.replace(/\/$/, "");
+
           if (config.evolutionMethod === 'code') {
               const cleanNumber = config.pairingNumber.replace(/\D/g, '');
-              const response = await fetch(`${baseUrl}/instance/connect/pairingCode/${config.instanceName}?number=${cleanNumber}`, {
-                  headers: { 'apikey': config.apiKey }
+              if (!cleanNumber) throw new Error("Número de pareamento é obrigatório para este método.");
+              
+              const response = await fetch(`${baseUrl}/instance/connect/pairingCode/${config.instanceName.trim()}?number=${cleanNumber}`, {
+                  headers: { 'apikey': config.apiKey.trim() }
               });
               const data = await response.json();
-              if (!response.ok) throw new Error(data.message || "Erro no pareamento");
+              if (!response.ok) throw new Error(data.message || "Erro no pareamento por código.");
               setPairingCodeValue(data.code);
           } else {
-              const response = await fetch(`${baseUrl}/instance/connect/${config.instanceName}`, {
-                  headers: { 'apikey': config.apiKey }
+              const response = await fetch(`${baseUrl}/instance/connect/${config.instanceName.trim()}`, {
+                  headers: { 'apikey': config.apiKey.trim() }
               });
               const data = await response.json();
-              if (!response.ok) throw new Error(data.message || "Erro no QR");
+              if (!response.ok) throw new Error(data.message || "Erro ao gerar QR Code.");
               const token = data.base64 || data.code;
               setQrCodeUrl(token.startsWith('data:image') ? token : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(token)}`);
           }
-          addLog("Solicitação enviada com sucesso.");
-      } catch (err: any) { addLog(`[ERRO] ${err.message}`); } finally { setIsGeneratingConnection(false); }
+          addLog("Solicitação enviada com sucesso. Verifique o celular.");
+      } catch (err: any) { 
+          addLog(`[ERRO] ${err.message}`); 
+          console.error("Erro no pareamento:", err);
+      } finally { setIsGeneratingConnection(false); }
   };
 
   const handleStartNewChat = async (e: React.FormEvent) => {
@@ -754,7 +783,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
           </div>
       )}
 
-      {/* MODAL IDENTIFY (Existentes) */}
+      {/* MODAL IDENTIFY */}
       {showIdentifyModal && (
           <div className="fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md animate-in zoom-in-95 overflow-hidden">
@@ -776,7 +805,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
 
       {showSettings && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
                   <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 shrink-0 flex justify-between items-center">
                       <div className="flex items-center gap-3"><Settings className="text-teal-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Evolution API Config</h3></div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>

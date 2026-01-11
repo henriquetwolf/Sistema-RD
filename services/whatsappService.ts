@@ -17,8 +17,12 @@ export const whatsappService = {
      */
     extractActualNumber: (raw: string) => {
         if (!raw) return null;
+        // Remove @s.whatsapp.net ou similar
         const partBeforeAt = raw.split('@')[0];
+        // Remove :X (sub-IDs) e limpa tudo que não é dígito
         const cleanNumber = partBeforeAt.split(':')[0].replace(/\D/g, '');
+        
+        // Números válidos no Brasil variam de 10 a 13 dígitos (DDI 55 + DDD + Numero)
         if (cleanNumber.length >= 10 && cleanNumber.length <= 13) {
             return cleanNumber;
         }
@@ -110,7 +114,7 @@ export const whatsappService = {
     },
 
     /**
-     * Atualiza a etapa (status legado) do atendimento
+     * Atualiza a etapa (status) do atendimento
      */
     updateChatStatus: async (chatId: string, status: 'open' | 'pending' | 'waiting' | 'closed') => {
         const { error } = await appBackend.client
@@ -122,17 +126,19 @@ export const whatsappService = {
     },
 
     /**
-     * Identifica um contato em qualquer tabela do sistema (V38 - Otimizado)
+     * Identifica um contato em qualquer tabela do sistema (Otimizado V39)
      */
     identifyContactGlobally: async (identifier: string, pushName?: string) => {
         const actualNum = whatsappService.extractActualNumber(identifier);
         if (!actualNum) return null;
 
+        // Pega os últimos 8 dígitos para uma busca mais flexível (ignora 9º dígito e DDI)
         const last8 = actualNum.slice(-8);
 
+        // 1. Equipe / RH
         const { data: collab } = await appBackend.client
             .from('crm_collaborators')
-            .select('id, full_name, email, phone, cellphone')
+            .select('id, full_name, email, phone, cellphone, photo_url')
             .or(`phone.ilike.%${last8}%,cellphone.ilike.%${last8}%`)
             .maybeSingle();
         if (collab) return {
@@ -141,9 +147,11 @@ export const whatsappService = {
             type: 'collaborator',
             label: 'Equipe VOLL (RH)',
             color: 'text-blue-600 bg-blue-50 border-blue-100',
-            tab: 'hr'
+            tab: 'hr',
+            photoUrl: collab.photo_url
         };
 
+        // 2. Franqueados
         const { data: franchise } = await appBackend.client
             .from('crm_franchises')
             .select('id, franchisee_name, phone')
@@ -158,6 +166,7 @@ export const whatsappService = {
             tab: 'franchises'
         };
 
+        // 3. Alunos / Leads
         const { data: deal } = await appBackend.client
             .from('crm_deals')
             .select('id, contact_name, company_name, phone, stage')
@@ -172,9 +181,10 @@ export const whatsappService = {
             tab: 'students'
         };
 
+        // 4. Professores
         const { data: teacher } = await appBackend.client
             .from('crm_teachers')
-            .select('id, full_name, phone')
+            .select('id, full_name, phone, photo_url')
             .ilike('phone', `%${last8}%`)
             .maybeSingle();
         if (teacher) return { 
@@ -183,9 +193,11 @@ export const whatsappService = {
             type: 'teacher', 
             label: 'Professor',
             color: 'text-orange-600 bg-orange-50 border-orange-100',
-            tab: 'teachers'
+            tab: 'teachers',
+            photoUrl: teacher.photo_url
         };
 
+        // 5. Studios
         const { data: studio } = await appBackend.client
             .from('crm_partner_studios')
             .select('id, fantasy_name, phone')
@@ -219,6 +231,7 @@ export const whatsappService = {
     },
 
     getOrCreateChat: async (waId: string, pushName: string) => {
+        // Garante que o waId esteja limpo
         const cleanId = waId.split('@')[0];
         const { data: existingChat } = await appBackend.client
             .from('crm_whatsapp_chats')
@@ -251,21 +264,34 @@ export const whatsappService = {
 
     sendTextMessage: async (chat: any, text: string) => {
         const config = await appBackend.getWhatsAppConfig();
-        if (!config) throw new Error("WhatsApp não configurado.");
+        if (!config || !config.instanceUrl) throw new Error("WhatsApp não configurado. Vá em configurações.");
+        
         const target = chat.contact_phone && !whatsappService.isLid(chat.contact_phone) 
             ? chat.contact_phone 
             : chat.wa_id;
 
-        const baseUrl = config.instanceUrl.replace(/\/$/, "");
+        // Sanitização rigorosa da URL
+        let baseUrl = config.instanceUrl.trim();
+        if (!baseUrl.startsWith('http')) baseUrl = `https://${baseUrl}`;
+        baseUrl = baseUrl.replace(/\/$/, "");
+
         const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;
+        
         const response = await fetch(url, {
             method: 'POST',
-            headers: { 'apikey': config.apiKey.trim(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ number: target, options: { delay: 1200, presence: "composing" }, text: text })
+            headers: { 
+                'apikey': config.apiKey.trim(), 
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify({ 
+                number: target, 
+                options: { delay: 1200, presence: "composing" }, 
+                text: text 
+            })
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.message || "Erro na API Evolution");
+        if (!response.ok) throw new Error(data.message || "Erro na Evolution API. Verifique a instância.");
         return data;
     },
 
@@ -276,10 +302,12 @@ export const whatsappService = {
             .select().single();
         if (error) throw error;
 
+        // Atualiza resumo do chat
         const { data: chat } = await appBackend.client.from('crm_whatsapp_chats').select('status').eq('id', chatId).single();
         
         const updates: any = { last_message: text, updated_at: new Date().toISOString() };
         
+        // Se o agente responde um chat novo, move automaticamente para pendente
         if (chat?.status === 'open' && senderType === 'agent') {
             updates.status = 'pending';
         }

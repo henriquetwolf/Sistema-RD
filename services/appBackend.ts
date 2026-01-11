@@ -142,12 +142,12 @@ export const appBackend = {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
       // Fixed interval_minutes to intervalMinutes
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
       const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
       // Fixed interval_minutes to intervalMinutes
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     }
   },
 
@@ -183,7 +183,8 @@ export const appBackend = {
           title: course.title,
           description: course.description,
           price: course.price,
-          payment_link: course.payment_link,
+          // Fixed: Changed course.payment_link to course.paymentLink to match type definition
+          payment_link: course.paymentLink,
           image_url: course.imageUrl,
           certificate_template_id: course.certificateTemplateId || null
       };
@@ -382,7 +383,7 @@ export const appBackend = {
   saveForm: async (form: FormModel): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      title: form.title, description: form.description, campaign: form.campaign, is_lead_capture: form.isLeadCapture, distribution_mode: form.distributionMode, fixed_owner_id: form.fixedOwnerId, team_id: form.teamId, target_pipeline: form.targetPipeline, target_stage: form.targetStage, questions: form.questions, style: form.style, folder_id: form.folderId
+      title: form.title, description: form.description, campaign: form.campaign, is_lead_capture: form.is_lead_capture, distribution_mode: form.distribution_mode, fixed_owner_id: form.fixed_owner_id, team_id: form.team_id, target_pipeline: form.target_pipeline, target_stage: form.target_stage, questions: form.questions, style: form.style, folder_id: form.folderId
     };
     if (form.id && form.id.length > 10) await supabase.from('crm_forms').update(payload).eq('id', form.id);
     else await supabase.from('crm_forms').insert([payload]);
@@ -790,7 +791,8 @@ export const appBackend = {
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payload_json };
+    // Fixed: Changed trigger.payload_json to trigger.payloadJson to match type definition
+    const payload = { pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson };
     if (trigger.id) await supabase.from('crm_webhook_triggers').update(payload).eq('id', trigger.id);
     else await supabase.from('crm_webhook_triggers').insert([payload]);
   },
@@ -876,7 +878,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     return (data || []).map((d: any) => ({
-      id: d.id, type: d.type, itemApostilaNova: d.item__apostila_nova, itemApostilaClassico: d.item_apostila_classico,
+      id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico,
       itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date,
       studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date,
       attachments: d.attachments, createdAt: d.created_at
@@ -910,7 +912,7 @@ export const appBackend = {
       sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology,
       studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account,
       beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: !!d.has_reformer, qtyReformer: d.qty_reformer || 0,
-      hasLadderBarrel: !!d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel || 0, has_chair: !!d.has_chair, qtyChair: d.qty_chair || 0,
+      hasLadderBarrel: !!d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel || 0, hasChair: !!d.has_chair, qtyChair: d.qty_chair || 0,
       hasCadillac: !!d.has_cadillac, qtyCadillac: d.qty_cadillac || 0, hasChairsForCourse: !!d.has_chairs_for_course,
       hasTv: !!d.has_tv, maxKitsCapacity: d.max_kits_capacity, attachments: d.attachments
     }));
@@ -919,16 +921,47 @@ export const appBackend = {
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      status: studio.status, responsible_name: studio.responsible_name, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password,
-      second_contact_name: studio.second_contact_name, second_contact_phone: studio.second_contact_phone, fantasy_name: studio.fantasy_name,
-      legal_name: studio.legal_name, cnpj: studio.cnpj, studio_phone: studio.studio_phone, address: studio.address, city: studio.city,
-      state: studio.state, country: studio.country, size_m2: studio.size_m2, student_capacity: studio.student_capacity, rent_value: studio.rent_value,
-      methodology: studio.methodology, studio_type: studio.studio_type, name_on_site: studio.name_on_site, bank: studio.bank, agency: studio.agency,
-      account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pix_key, has_reformer: studio.has_reformer, qty_reformer: studio.qty_reformer,
+      // Fixed: Updated multiple properties from snake_case to camelCase on studio object to match type definition
+      status: studio.status, 
+      responsible_name: studio.responsibleName, 
+      cpf: studio.cpf, 
+      phone: studio.phone, 
+      email: studio.email, 
+      password: studio.password,
+      second_contact_name: studio.secondContactName, 
+      second_contact_phone: studio.secondContactPhone, 
+      fantasy_name: studio.fantasyName,
+      legal_name: studio.legalName, 
+      cnpj: studio.cnpj, 
+      studio_phone: studio.studioPhone, 
+      address: studio.address, 
+      city: studio.city,
+      state: studio.state, 
+      country: studio.country, 
+      size_m2: studio.sizeM2, 
+      student_capacity: studio.studentCapacity, 
+      rent_value: studio.rentValue,
+      methodology: studio.methodology, 
+      studio_type: studio.studioType, 
+      name_on_site: studio.nameOnSite, 
+      bank: studio.bank, 
+      agency: studio.agency,
+      account: studio.account, 
+      beneficiary: studio.beneficiary, 
+      pix_key: studio.pixKey, 
+      has_reformer: studio.hasReformer, 
+      qty_reformer: studio.qtyReformer,
       /* Fixed: Property 'qty_ladder_barrel' does not exist on type 'PartnerStudio'. Changed to 'qtyLadderBarrel' */
-      has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel || 0, has_chair: studio.hasChair, qty_chair: studio.qtyChair,
-      has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse,
-      has_tv: studio.hasTv, max_kits_capacity: studio.max_kits_capacity, attachments: studio.attachments
+      has_ladder_barrel: studio.hasLadderBarrel, 
+      qty_ladder_barrel: studio.qtyLadderBarrel || 0, 
+      has_chair: studio.hasChair, 
+      qty_chair: studio.qtyChair,
+      has_cadillac: studio.hasCadillac, 
+      qty_cadillac: studio.qtyCadillac, 
+      has_chairs_for_course: studio.hasChairsForCourse,
+      has_tv: studio.hasTv, 
+      max_kits_capacity: studio.maxKitsCapacity, 
+      attachments: studio.attachments
     };
     if (studio.id) await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
     else await supabase.from('crm_partner_studios').insert([payload]);

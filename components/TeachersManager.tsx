@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   School, Plus, Search, MoreVertical, User, Users,
@@ -89,6 +88,33 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
           const data = await appBackend.getTeacherNews();
           setNews(data);
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
+  };
+
+  const handleToggleStatus = async (id: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+    const label = newStatus ? 'ativar' : 'desativar';
+    
+    if (!window.confirm(`Deseja realmente ${label} o acesso deste professor?`)) return;
+
+    try {
+        const { error } = await appBackend.client
+            .from('crm_teachers')
+            .update({ is_active: newStatus })
+            .eq('id', id);
+        
+        if (error) throw error;
+        
+        setTeachers(prev => prev.map(t => t.id === id ? { ...t, isActive: newStatus } : t));
+        const target = teachers.find(t => t.id === id);
+        await appBackend.logActivity({ 
+            action: 'update', 
+            module: 'teachers', 
+            details: `${label.toUpperCase()} acesso do professor: ${target?.fullName}`,
+            recordId: id
+        });
+    } catch (e: any) {
+        alert(`Erro ao atualizar status: ${e.message}`);
+    }
   };
 
   const handleSave = async () => {
@@ -226,8 +252,18 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                         <div className="flex justify-between items-start mb-4">
                             <div className="w-14 h-14 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xl overflow-hidden border-2 border-white shadow-sm">{teacher.photoUrl ? <img src={teacher.photoUrl} alt="" className="w-full h-full object-cover" /> : (teacher.fullName || '?').charAt(0)}</div>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => { setFormData(teacher); setShowModal(true); }} className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
-                                <button onClick={() => handleDelete(teacher.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                                <button 
+                                    onClick={() => handleToggleStatus(teacher.id, teacher.isActive)} 
+                                    className={clsx(
+                                        "p-1.5 rounded-lg transition-colors", 
+                                        teacher.isActive ? "text-slate-400 hover:text-red-500 hover:bg-red-50" : "text-slate-400 hover:text-green-500 hover:bg-green-50"
+                                    )} 
+                                    title={teacher.isActive ? 'Bloquear Acesso' : 'Liberar Acesso'}
+                                >
+                                    {teacher.isActive ? <Lock size={16} /> : <Unlock size={16} />}
+                                </button>
+                                <button onClick={() => { setFormData(teacher); setShowModal(true); }} className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" title="Editar"><Edit2 size={16} /></button>
+                                <button onClick={() => handleDelete(teacher.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excluir"><Trash2 size={16} /></button>
                             </div>
                         </div>
                         <h3 className="font-bold text-slate-800 text-lg mb-1">{teacher.fullName}</h3>
@@ -302,7 +338,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
                           <textarea className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-2xl text-sm h-32 resize-none transition-all outline-none leading-relaxed" value={newsFormData.content} onChange={e => setNewsFormData({...newsFormData, content: e.target.value})} placeholder="Escreva o aviso detalhado aqui..." />
                       </div>
                       <div>
-                          <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Imagem de Destaque (Opcional)</label>
+                          <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Imagem de Destaque (Opcional)</label>
                           <div className="flex flex-col gap-4">
                               <div className="flex items-center gap-4">
                                   <button 
@@ -343,7 +379,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({ onBack }) => {
           </div>
       )}
 
-      {/* PROFESSOR MODAL (RESTAURADO COMPLETO) */}
+      {/* PROFESSOR MODAL */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[95vh]">

@@ -132,8 +132,9 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
+    // Corrected: preset.interval_minutes to preset.intervalMinutes
     const payload = {
-      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.interval_minutes, created_by_name: preset.createdByName
+      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
@@ -348,7 +349,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, teamId: d.team_id, targetPipeline: d.target_pipeline, targetStage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id
+      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distribution_mode: d.distribution_mode, fixed_owner_id: d.fixed_owner_id, team_id: d.team_id, target_pipeline: d.target_pipeline, target_stage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id
     }));
   },
 
@@ -449,6 +450,7 @@ export const appBackend = {
     if (!data) return null;
     return {
       // Fix: Changed 'd' to 'data' for contract_date to match scope
+      // Corrected: d.contract_date to data.contract_date
       id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers, createdAt: data.created_at
     };
   },
@@ -825,7 +827,7 @@ export const appBackend = {
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson };
+    const payload = { pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payload_json };
     if (trigger.id) await supabase.from('crm_webhook_triggers').update(payload).eq('id', trigger.id);
     else await supabase.from('crm_webhook_triggers').insert([payload]);
   },

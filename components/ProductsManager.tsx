@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ShoppingBag, Plus, Search, MoreVertical, Edit2, Trash2, 
@@ -131,7 +132,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       }
   };
 
-  // --- MODULE ACTIONS ---
   const handleOpenModuleModal = (mod?: CourseModule) => {
       setEditingModule(mod || { title: '', orderIndex: courseModules.length });
       setShowModuleModal(true);
@@ -161,8 +161,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       }
   };
 
-  // --- LESSON ACTIONS ---
-  // Fix: Added handleDeleteLesson to fix the 'Cannot find name' error
   const handleDeleteLesson = async (id: string) => {
       if (window.confirm("Deseja excluir esta aula?")) {
           await appBackend.deleteCourseLesson(id);
@@ -208,7 +206,8 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                   name: editingCourse.title,
                   description: editingCourse.description,
                   price: editingCourse.price,
-                  image_url: editingCourse.imageUrl
+                  image_url: editingCourse.imageUrl,
+                  certificate_template_id: editingCourse.certificateTemplateId || null
               }).eq('id', product.id);
           }
           await fetchOnlineCourses();
@@ -272,7 +271,8 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                   if (!hasTechnical) {
                       await appBackend.saveOnlineCourse({
                           title: prod.name, description: prod.description, price: prod.price,
-                          paymentLink: prod.url, imageUrl: (prod as any).image_url || (prod as any).imageUrl
+                          paymentLink: prod.url, imageUrl: (prod as any).image_url || (prod as any).imageUrl,
+                          certificateTemplateId: prod.certificateTemplateId
                       });
                       syncCount++;
                   }
@@ -464,6 +464,25 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Link de Pagamento / Renovação</label>
                                 <input type="text" className="w-full px-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-2xl text-xs font-mono outline-none" value={editingCourse?.paymentLink} onChange={e => setEditingCourse(prev => prev ? {...prev, paymentLink: e.target.value} : null)} />
                             </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Modelo de Certificado (Automático)</label>
+                                <div className="relative">
+                                    <Award className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500" size={18}/>
+                                    <select 
+                                        className="w-full pl-12 pr-10 py-3.5 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-amber-500 rounded-2xl text-sm font-bold outline-none appearance-none cursor-pointer transition-all"
+                                        value={editingCourse?.certificateTemplateId || ''}
+                                        onChange={e => setEditingCourse(prev => prev ? {...prev, certificateTemplateId: e.target.value} : null)}
+                                    >
+                                        <option value="">Nenhum certificado vinculado</option>
+                                        {certificates.map(cert => (
+                                            <option key={cert.id} value={cert.id}>{cert.title}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={18}/>
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-2 ml-1">Este modelo será emitido para o aluno ao atingir 100% de progresso no curso.</p>
+                            </div>
                         </div>
 
                         <div className="pt-8 border-t flex justify-end">
@@ -479,7 +498,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
         {/* MODAL: NOVO PRODUTO COMERCIAL */}
         {showModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh] overflow-hidden">
+                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl animate-in fade-in zoom-in-95 flex flex-col max-h-[95vh] overflow-hidden">
                     <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                         <h3 className="text-xl font-black text-slate-800 flex items-center gap-3"><MonitorPlay size={24} className="text-indigo-600" /> {formData.id ? 'Ficha do Produto' : 'Novo Cadastro Comercial'}</h3>
                         <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-slate-200 rounded-full transition-all"><X size={24}/></button>
@@ -515,6 +534,31 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                             <div className="md:col-span-2">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Link de Venda / Checkout</label>
                                 <input type="text" className="w-full px-5 py-3.5 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-2xl text-xs font-mono" value={formData.url} onChange={e => setFormData({ ...formData, url: e.target.value })} />
+                            </div>
+
+                            {formData.category === 'Curso Online' && (
+                                <div className="md:col-span-2 animate-in slide-in-from-top-2">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Modelo de Certificado</label>
+                                    <div className="relative">
+                                        <Award className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500" size={18}/>
+                                        <select 
+                                            className="w-full pl-12 pr-10 py-3.5 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-amber-500 rounded-2xl text-sm font-bold outline-none appearance-none cursor-pointer"
+                                            value={formData.certificateTemplateId || ''}
+                                            onChange={e => setFormData({ ...formData, certificateTemplateId: e.target.value })}
+                                        >
+                                            <option value="">Nenhum certificado vinculado</option>
+                                            {certificates.map(cert => (
+                                                <option key={cert.id} value={cert.id}>{cert.title}</option>
+                                            ))}
+                                        </select>
+                                        <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={18}/>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Descrição Comercial</label>
+                                <textarea className="w-full px-5 py-3.5 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-2xl text-sm h-24 resize-none outline-none leading-relaxed" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Resumo do produto para a equipe de vendas..." />
                             </div>
                         </div>
                     </div>

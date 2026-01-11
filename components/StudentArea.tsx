@@ -46,7 +46,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         fetchSupportNotifications();
     }, [student]);
 
-    // Sempre que o aluno abrir a aba de certificados, buscamos os dados mais recentes do banco
+    // Sempre que o aluno abrir a aba de certificados ou o componente carregar, buscamos os dados mais recentes do banco
     useEffect(() => {
         if (activeTab === 'certificates') {
             loadCertificates();
@@ -63,13 +63,19 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
     const loadCertificates = async () => {
         const dealIds = student.deals.map(d => d.id);
-        if (dealIds.length > 0) {
-            const { data: issuedCerts } = await appBackend.client
+        if (dealIds.length === 0) return;
+
+        try {
+            const { data: issuedCerts, error } = await appBackend.client
                 .from('crm_student_certificates')
                 .select('*, crm_certificates(title)')
                 .in('student_deal_id', dealIds)
                 .order('issued_at', { ascending: false });
+            
+            if (error) throw error;
             setCertificates(issuedCerts || []);
+        } catch (err) {
+            console.error("Erro ao carregar diplomas:", err);
         }
     };
 

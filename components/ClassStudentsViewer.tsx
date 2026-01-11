@@ -161,14 +161,31 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
               });
           });
 
-          // Usamos explicitamente a constraint criada no SQL
           const { error } = await appBackend.client
               .from('crm_attendance')
               .upsert(updates, { onConflict: 'class_id,student_id,date' });
 
           if (error) throw error;
-          alert("Chamada salva com sucesso!");
+          
+          // Lógica de Emissão Automática de Certificado:
+          // Se o aluno tiver presença marcada em TODOS os dias ativos da chamada, emitimos o certificado.
+          let autoIssuedCount = 0;
+          for (const student of students) {
+              const alreadyHasCert = !!certificates[student.id];
+              if (!alreadyHasCert) {
+                  const isFullyPresent = courseDates.allActiveDates.every(d => !!presenceMap[`${student.id}_${d}`]);
+                  const templateId = productTemplates[student.product_name || ''];
+                  
+                  if (isFullyPresent && templateId) {
+                      await appBackend.issueCertificate(student.id, templateId);
+                      autoIssuedCount++;
+                  }
+              }
+          }
+
+          alert(`Chamada salva com sucesso!${autoIssuedCount > 0 ? ` ${autoIssuedCount} certificados foram emitidos automaticamente para alunos com 100% de frequência.` : ""}`);
           setAttendanceMode(false);
+          await fetchStudents(); // Recarrega para mostrar os novos ícones de certificado
       } catch(e: any) {
           console.error(e);
           alert(`Erro ao salvar: ${e.message}`);
@@ -241,7 +258,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                 <div className="flex items-center gap-2 text-xs font-bold">
                     <Calendar size={16} /> <span>{isReadOnly ? "Visualização" : "Edição de Chamada"}</span>
                 </div>
-                {/* BOTÃO SALVAR AGORA VISÍVEL EM AMBOS OS MODOS */}
                 {!isReadOnly && (
                     <button onClick={saveAttendance} disabled={isSavingAttendance} className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-50">
                         {isSavingAttendance ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
@@ -315,7 +331,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
             )}
         </div>
 
-        {/* Footer original mantido para o modo Modal do Calendário */}
         {variant === 'modal' && (
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 print:hidden shrink-0">
                 {attendanceMode && !isReadOnly ? (

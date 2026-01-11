@@ -286,19 +286,19 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   }, [allProducts, editingCompany, productSearch]);
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V45 (REPARO TOTAL CERTIFICADOS)
+-- SCRIPT DE FUNDAÇÃO CRM V46 (CORREÇÃO DE RLS CERTIFICADOS)
 CREATE TABLE IF NOT EXISTS public.crm_certificates (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
-    background_data text, -- Armazena Base64 da Frente
-    back_background_data text, -- Armazena Base64 do Verso
+    background_data text, 
+    back_background_data text, 
     linked_product_id text,
     body_text text,
     layout_config jsonb,
     created_at timestamp with time zone DEFAULT now()
 );
 
--- Garante que as colunas existam se a tabela já existir (Migration)
+-- Garante colunas de imagem e layout
 ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS background_data text;
 ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS back_background_data text;
 ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS layout_config jsonb;
@@ -311,21 +311,20 @@ CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
     issued_at timestamp with time zone DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS public.crm_student_course_access (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    student_deal_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
-    course_id uuid REFERENCES public.crm_online_courses(id) ON DELETE CASCADE,
-    unlocked_at timestamp with time zone DEFAULT now(),
-    UNIQUE(student_deal_id, course_id)
-);
-
+-- Ativação de RLS
 ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_student_certificates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.crm_student_course_access ENABLE ROW LEVEL SECURITY;
 
+-- Políticas de Acesso Total (Leitura e Escrita)
+DROP POLICY IF EXISTS "Acesso Total Certificados" ON public.crm_certificates;
+CREATE POLICY "Acesso Total Certificados" ON public.crm_certificates FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Acesso Total Diplomas" ON public.crm_student_certificates;
+CREATE POLICY "Acesso Total Diplomas" ON public.crm_student_certificates FOR ALL USING (true) WITH CHECK (true);
+
+-- Permissões de Perfil
 GRANT ALL ON public.crm_certificates TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_student_certificates TO anon, authenticated, service_role;
-GRANT ALL ON public.crm_student_course_access TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';
   `.trim();
@@ -526,7 +525,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold">Manutenção e Sincronização</h3></div>
                 <p className="text-sm text-slate-500 mb-6">Execute este reparo se notar erros de banco de dados ou colunas ausentes na liberação de alunos.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V45</button> : (
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V46</button> : (
                     <div className="relative">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs">{sqlCopied ? 'Copiado!' : 'Copiar'}</button>

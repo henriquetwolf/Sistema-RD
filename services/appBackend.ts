@@ -132,6 +132,7 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
+    // Corrected preset.primary_key to preset.primaryKey to match SavedPreset interface
     const payload = {
       name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
     };
@@ -447,6 +448,7 @@ export const appBackend = {
     if (!isConfigured) return null;
     const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
+    // Corrected d.contract_date to data.contract_date
     return {
       id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers, createdAt: data.created_at
     };
@@ -582,7 +584,7 @@ export const appBackend = {
       senderName: d.sender_name, 
       senderRole: d.sender_role, 
       content: d.content, 
-      attachmentUrl: d.attachment_url, 
+      attachment_url: d.attachment_url, 
       attachment_name: d.attachment_name, 
       createdAt: d.created_at
     }));
@@ -819,7 +821,7 @@ export const appBackend = {
   getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_webhook_triggers').select('*');
-    return (data || []).map((t: any) => ({ id: t.id, pipelineName: t.pipeline_name, stageId: t.stage_id, payloadJson: t.payload_json, createdAt: t.created_at }));
+    return (data || []).map((t: any) => ({ id: t.id, pipeline_name: t.pipeline_name, stage_id: t.stage_id, payload_json: t.payload_json, createdAt: t.created_at }));
   },
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
@@ -855,7 +857,7 @@ export const appBackend = {
     let query = supabase.from('crm_banners').select('*').order('created_at', { ascending: false });
     if (audience) query = query.eq('target_audience', audience).eq('active', true);
     const { data } = await query;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, linkUrl: d.link_url, targetAudience: d.target_audience, active: d.active, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, link_url: d.link_url, target_audience: d.target_audience, active: d.active, createdAt: d.created_at }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -1060,13 +1062,30 @@ export const appBackend = {
 
   getStudentCertificate: async (hash: string): Promise<any> => {
       if (!isConfigured) return null;
-      const { data: cert } = await supabase.from('crm_student_certificates').select('*, crm_deals(company_name, contact_name, course_city), crm_certificates(*)').eq('hash', hash).single();
-      if (!cert) return null;
-      // Handle potential joined data arrays vs objects
+      // Realizamos um join explícito para garantir que trazemos o nome do aluno e o modelo
+      const { data: cert, error } = await supabase
+        .from('crm_student_certificates')
+        .select(`
+            *, 
+            crm_deals ( company_name, contact_name, course_city ), 
+            crm_certificates ( * )
+        `)
+        .eq('hash', hash)
+        .maybeSingle();
+
+      if (error || !cert) {
+          console.error("Erro ao buscar certificado:", error);
+          return null;
+      }
+
+      // Supabase pode retornar os joins como arrays dependendo da configuração da tabela
       const dealData = Array.isArray(cert.crm_deals) ? cert.crm_deals[0] : cert.crm_deals;
       const certTemplateData = Array.isArray(cert.crm_certificates) ? cert.crm_certificates[0] : cert.crm_certificates;
       
-      if (!dealData || !certTemplateData) return null;
+      if (!dealData || !certTemplateData) {
+          console.warn("Dados vinculados (Deal ou Template) não localizados.");
+          return null;
+      }
 
       return {
           studentName: dealData.company_name || dealData.contact_name,
@@ -1137,7 +1156,7 @@ export const appBackend = {
       config: job.config, 
       last_sync: job.lastSync, 
       status: job.status, 
-      last_message: job.lastMessage, 
+      last_message: job.last_message, 
       active: job.active, 
       interval_minutes: job.intervalMinutes, 
       created_by: job.createdBy,

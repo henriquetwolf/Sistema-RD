@@ -83,7 +83,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       setUnlockModalStudent(student);
       setIsSavingAccess(true);
       try {
-          // Chamada direta ao Supabase para garantir nomes de coluna snake_case
           const { data, error } = await appBackend.client
               .from('crm_student_course_access')
               .select('course_id')
@@ -106,7 +105,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       if (!unlockModalStudent) return;
       setIsSavingAccess(true);
       try {
-          // 1. Limpa todos os acessos atuais (Delete)
           const { error: delErr } = await appBackend.client
             .from('crm_student_course_access')
             .delete()
@@ -114,7 +112,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           
           if (delErr) throw delErr;
 
-          // 2. Insere os novos selecionados (Insert)
           if (studentAccessedIds.length > 0) {
               const inserts = studentAccessedIds.map(cid => ({ 
                   student_deal_id: unlockModalStudent.id, 
@@ -139,11 +136,15 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
   const handleIssueCertificate = async (student: StudentDeal) => {
       const templateId = productTemplates[student.product_name || ''];
-      if (!templateId) return;
-      if (!window.confirm(`Emitir certificado para ${student.contact_name}?`)) return;
+      if (!templateId) {
+          alert("Este produto não possui um modelo de certificado vinculado.");
+          return;
+      }
+      if (!window.confirm(`Deseja emitir agora o certificado para ${student.contact_name}?`)) return;
       try {
           const hash = await appBackend.issueCertificate(student.id, templateId);
           setCertificates(prev => ({ ...prev, [student.id]: { hash, issuedAt: new Date().toISOString() } }));
+          alert("Certificado emitido com sucesso!");
       } catch (e: any) { alert(e.message); }
   };
 
@@ -156,17 +157,17 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                 <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
                 <div><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Users className="text-teal-600" /> Alunos</h2><p className="text-slate-500 text-sm">Liberação de cursos e certificados.</p></div>
             </div>
-            <button onClick={fetchData} className="p-2 text-slate-500 hover:text-teal-600 transition-colors"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
+            <button onClick={fetchData} className="p-2 text-slate-400 hover:text-teal-600 transition-all"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Buscar aluno..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 transition-all text-sm" /></div>
+            <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Buscar aluno pelo nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 transition-all text-sm font-medium" /></div>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto min-h-[400px]">
             {isLoading ? <div className="flex justify-center items-center h-64"><Loader2 size={32} className="animate-spin text-teal-600" /></div> : (
                 <table className="w-full text-left text-sm text-slate-600">
-                    <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500">
+                    <thead className="bg-slate-50 text-xs uppercase font-bold text-slate-500">
                         <tr>
                             <th className="px-6 py-4">Nome</th>
                             <th className="px-6 py-4">Produto Base</th>
@@ -179,15 +180,44 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             const cert = certificates[s.id];
                             return (
                                 <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-bold text-slate-800">{s.company_name || s.contact_name}</td>
-                                    <td className="px-6 py-4"><span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-[10px] font-black uppercase">{s.product_name || 'Geral'}</span></td>
-                                    <td className="px-6 py-4 text-center">
-                                        {cert ? (
-                                            <div className="flex items-center justify-center gap-1">
-                                                <a href={`/?certificateHash=${cert.hash}`} target="_blank" className="p-1.5 bg-slate-100 rounded hover:bg-teal-50 text-slate-400 hover:text-teal-600 transition-all"><Eye size={14}/></a>
-                                                <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?certificateHash=${cert.hash}`); setCopiedLink(cert.hash); setTimeout(() => setCopiedLink(null), 2000); }} className={clsx("p-1.5 rounded transition-all", copiedLink === cert.hash ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-400")}><CheckCircle size={14}/></button>
-                                            </div>
-                                        ) : <span className="text-[10px] text-slate-300">N/A</span>}
+                                    <td className="px-6 py-4 font-bold text-slate-800">{s.contact_name || s.company_name}</td>
+                                    <td className="px-6 py-4"><span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-[10px] font-black uppercase border border-indigo-100">{s.product_name || 'Geral'}</span></td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center justify-center gap-2">
+                                            {cert ? (
+                                                <>
+                                                    <a 
+                                                        href={`/?certificateHash=${cert.hash}`} 
+                                                        target="_blank" 
+                                                        className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-teal-600 hover:border-teal-200 transition-all shadow-sm" 
+                                                        title="Visualizar Certificado"
+                                                    >
+                                                        <Eye size={16}/>
+                                                    </a>
+                                                    <button 
+                                                        onClick={() => { 
+                                                            navigator.clipboard.writeText(`${window.location.origin}/?certificateHash=${cert.hash}`); 
+                                                            setCopiedLink(cert.hash); 
+                                                            setTimeout(() => setCopiedLink(null), 2000); 
+                                                        }} 
+                                                        className={clsx(
+                                                            "p-1.5 border rounded-lg transition-all shadow-sm", 
+                                                            copiedLink === cert.hash ? "bg-green-50 text-green-600 border-green-200" : "bg-white text-slate-500 border-slate-200 hover:bg-teal-50"
+                                                        )}
+                                                        title="Copiar Link de Autenticidade"
+                                                    >
+                                                        {copiedLink === cert.hash ? <CheckCircle size={16}/> : <ExternalLink size={16}/>}
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <button 
+                                                    onClick={() => handleIssueCertificate(s)}
+                                                    className="px-3 py-1 bg-amber-50 text-amber-700 text-[10px] font-black uppercase rounded-lg border border-amber-100 hover:bg-amber-100 transition-all"
+                                                >
+                                                    Liberar Agora
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <button onClick={() => openUnlockModal(s)} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:bg-indigo-700 active:scale-95 transition-all"><MonitorPlay size={14}/> Liberar Cursos</button>

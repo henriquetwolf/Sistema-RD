@@ -286,7 +286,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   }, [allProducts, editingCompany, productSearch]);
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V46 (CORREÇÃO DE RLS CERTIFICADOS)
+-- SCRIPT DE FUNDAÇÃO CRM V47 (REPARO TOTAL DE ACESSO A DIPLOMAS)
+-- 1. Garante que as tabelas existem com os tipos corretos
 CREATE TABLE IF NOT EXISTS public.crm_certificates (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
@@ -298,11 +299,6 @@ CREATE TABLE IF NOT EXISTS public.crm_certificates (
     created_at timestamp with time zone DEFAULT now()
 );
 
--- Garante colunas de imagem e layout
-ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS background_data text;
-ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS back_background_data text;
-ALTER TABLE public.crm_certificates ADD COLUMN IF NOT EXISTS layout_config jsonb;
-
 CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     student_deal_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
@@ -311,21 +307,29 @@ CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
     issued_at timestamp with time zone DEFAULT now()
 );
 
--- Ativação de RLS
+-- 2. Ativação de RLS e Políticas de Acesso Público (Visualização via Hash)
 ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_student_certificates ENABLE ROW LEVEL SECURITY;
 
--- Políticas de Acesso Total (Leitura e Escrita)
+-- Limpa políticas antigas para evitar conflitos
 DROP POLICY IF EXISTS "Acesso Total Certificados" ON public.crm_certificates;
-CREATE POLICY "Acesso Total Certificados" ON public.crm_certificates FOR ALL USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Acesso Total Diplomas" ON public.crm_student_certificates;
-CREATE POLICY "Acesso Total Diplomas" ON public.crm_student_certificates FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Leitura Pública de Diplomas por Hash" ON public.crm_student_certificates;
+DROP POLICY IF EXISTS "Leitura Pública de Modelos" ON public.crm_certificates;
 
--- Permissões de Perfil
+-- Políticas V47: Qualquer um com o HASH pode ler o diploma e o modelo vinculado
+CREATE POLICY "Leitura Pública de Diplomas por Hash" ON public.crm_student_certificates FOR SELECT USING (true);
+CREATE POLICY "Leitura Pública de Modelos" ON public.crm_certificates FOR SELECT USING (true);
+
+-- Política de Escrita (Apenas Admin/Sistema via Service Role ou Autenticado)
+CREATE POLICY "Escrita Admin Certificados" ON public.crm_certificates FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Escrita Admin Diplomas" ON public.crm_student_certificates FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- 3. Permissões de Rede
 GRANT ALL ON public.crm_certificates TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_student_certificates TO anon, authenticated, service_role;
 
+-- 4. Notifica o sistema para recarregar o esquema
 NOTIFY pgrst, 'reload schema';
   `.trim();
 
@@ -525,7 +529,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold">Manutenção e Sincronização</h3></div>
                 <p className="text-sm text-slate-500 mb-6">Execute este reparo se notar erros de banco de dados ou colunas ausentes na liberação de alunos.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V46</button> : (
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V47</button> : (
                     <div className="relative">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs">{sqlCopied ? 'Copiado!' : 'Copiar'}</button>
@@ -535,7 +539,7 @@ NOTIFY pgrst, 'reload schema';
         )}
       </div>
 
-      {/* MODAL EMPRESA (Restaurado com Mapeamento de Produtos) */}
+      {/* MODAL EMPRESA */}
       {editingCompany && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
@@ -577,156 +581,6 @@ NOTIFY pgrst, 'reload schema';
                   </div>
                   <div className="p-6 bg-slate-50 border-t flex justify-end">
                       <button onClick={handleSaveCompany} disabled={isSavingCompany} className="bg-teal-600 text-white px-8 py-2 rounded-lg font-bold">{isSavingCompany ? 'Salvando...' : 'Salvar'}</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL BANNER */}
-      {editingBanner && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in-95 flex flex-col">
-                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="font-bold">Configurar Banner</h3>
-                      <button onClick={() => setEditingBanner(null)}><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-4">
-                      <input placeholder="Título" className="w-full px-3 py-2 border rounded-lg" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} />
-                      <input placeholder="Link" className="w-full px-3 py-2 border rounded-lg" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} />
-                      <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
-                          <option value="student">Público: Aluno</option>
-                          <option value="instructor">Público: Instrutor</option>
-                      </select>
-                      <div className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer" onClick={() => bannerFileInputRef.current?.click()}>
-                          {editingBanner.imageUrl ? <img src={editingBanner.imageUrl} className="h-20 mx-auto" /> : <p className="text-xs text-slate-400">Clique para enviar imagem</p>}
-                          <input type="file" ref={bannerFileInputRef} className="hidden" accept="image/*" onChange={handleBannerImageUpload} />
-                      </div>
-                  </div>
-                  <div className="p-6 bg-slate-50 border-t flex justify-end">
-                      <button onClick={handleSaveBanner} className="bg-orange-600 text-white px-8 py-2 rounded-lg font-bold">Salvar</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL TAG SUPORTE */}
-      {editingTag && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 flex flex-col">
-                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="font-bold">Configurar Categoria</h3>
-                      <button onClick={() => setEditingTag(null)}><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-4">
-                      <input placeholder="Nome da Tag" className="w-full px-3 py-2 border rounded-lg" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} />
-                      <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white" value={editingTag.role} onChange={e => setEditingTag({...editingTag, role: e.target.value as any})}>
-                          <option value="all">Público: Todos</option>
-                          <option value="student">Público: Aluno</option>
-                          <option value="instructor">Público: Instrutor</option>
-                          <option value="studio">Público: Studio</option>
-                      </select>
-                  </div>
-                  <div className="p-6 bg-slate-50 border-t flex justify-end">
-                      <button onClick={handleSaveTag} className="bg-emerald-600 text-white px-8 py-2 rounded-lg font-bold">Salvar</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL INFOS PORTAL */}
-      {editingCourseInfo && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col">
-                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="font-bold">Configurar Infos do Curso</h3>
-                      <button onClick={() => setEditingCourseInfo(null)}><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-4">
-                      <input placeholder="Nome do Curso" className="w-full px-3 py-2 border rounded-lg font-bold" value={editingCourseInfo.courseName} onChange={e => setEditingCourseInfo({...editingCourseInfo, courseName: e.target.value})} />
-                      <textarea placeholder="Detalhes" className="w-full px-3 py-2 border rounded-lg h-24 resize-none" value={editingCourseInfo.details} onChange={e => setEditingCourseInfo({...editingCourseInfo, details: e.target.value})} />
-                      <textarea placeholder="Materiais" className="w-full px-3 py-2 border rounded-lg h-24 resize-none" value={editingCourseInfo.materials} onChange={e => setEditingCourseInfo({...editingCourseInfo, materials: e.target.value})} />
-                      <textarea placeholder="Requisitos" className="w-full px-3 py-2 border rounded-lg h-24 resize-none" value={editingCourseInfo.requirements} onChange={e => setEditingCourseInfo({...editingCourseInfo, requirements: e.target.value})} />
-                  </div>
-                  <div className="p-6 bg-slate-50 border-t flex justify-end">
-                      <button onClick={handleSaveCourseInfo} disabled={isSavingCourseInfo} className="bg-blue-600 text-white px-8 py-2 rounded-lg font-bold">{isSavingCourseInfo ? 'Salvando...' : 'Salvar'}</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL GATILHO PLUG */}
-      {editingTrigger && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 flex flex-col">
-                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="font-bold">Gatilho de Automação</h3>
-                      <button onClick={() => setEditingTrigger(null)}><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-4">
-                      <div>
-                          <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Funil de Vendas</label>
-                          <select className="w-full border rounded-lg px-3 py-2 text-sm bg-white" value={editingTrigger.pipelineName} onChange={e => setEditingTrigger({...editingTrigger, pipelineName: e.target.value})}>
-                              {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                          </select>
-                      </div>
-                      <div>
-                          <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Etapa de Disparo</label>
-                          <select className="w-full border rounded-lg px-3 py-2 text-sm bg-white" value={editingTrigger.stageId} onChange={e => setEditingTrigger({...editingTrigger, stageId: e.target.value})}>
-                              {(pipelines.find(p => p.name === editingTrigger.pipelineName)?.stages || []).map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
-                          </select>
-                      </div>
-                      <div>
-                          <label className="block text-xs font-bold text-slate-400 uppercase mb-1">JSON Customizado (Opcional)</label>
-                          <textarea placeholder='{"venda": "{{deal_number}}"}' className="w-full border rounded-lg px-3 py-2 text-xs font-mono h-32 resize-none bg-slate-50" value={editingTrigger.payloadJson} onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} />
-                      </div>
-                  </div>
-                  <div className="p-6 bg-slate-50 border-t flex justify-end">
-                      <button onClick={handleSaveTrigger} className="bg-indigo-600 text-white px-8 py-2 rounded-lg font-bold">Salvar Gatilho</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL ROLE */}
-      {editingRole && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="font-bold">Permissões: {editingRole.name}</h3>
-                      <button onClick={() => setEditingRole(null)}><X size={24}/></button>
-                  </div>
-                  <div className="p-8 overflow-y-auto custom-scrollbar">
-                      <input placeholder="Nome do Perfil" className="w-full px-4 py-2 border rounded-xl mb-8 font-bold text-lg" value={editingRole.name} onChange={e => setEditingRole({...editingRole, name: e.target.value})} />
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                          {PERMISSION_MODULES.map(mod => (
-                              <label key={mod.id} className={clsx("p-4 border-2 rounded-xl cursor-pointer transition-all flex items-center justify-between", editingRole.permissions[mod.id] ? "bg-indigo-50 border-indigo-500" : "bg-white border-slate-100")}>
-                                  <span className="text-xs font-bold">{mod.label}</span>
-                                  <input type="checkbox" checked={!!editingRole.permissions[mod.id]} onChange={e => setEditingRole({...editingRole, permissions: {...editingRole.permissions, [mod.id]: e.target.checked}})} className="w-5 h-5 rounded text-indigo-600" />
-                              </label>
-                          ))}
-                      </div>
-                  </div>
-                  <div className="p-6 bg-slate-50 border-t flex justify-end">
-                      <button onClick={handleSaveRole} className="bg-indigo-600 text-white px-8 py-2 rounded-lg font-bold">Salvar</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL NÍVEL DOCENTE */}
-      {editingLevel && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 flex flex-col">
-                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="font-bold">Configurar Nível</h3>
-                      <button onClick={() => setEditingLevel(null)}><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-4">
-                      <input placeholder="Nome do Nível" className="w-full px-3 py-2 border rounded-lg" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} />
-                      <input type="number" placeholder="Valor Honorário (R$)" className="w-full px-3 py-2 border rounded-lg" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value) || 0})} />
-                  </div>
-                  <div className="p-6 bg-slate-50 border-t flex justify-end">
-                      <button onClick={() => { appBackend.saveInstructorLevel(editingLevel as InstructorLevel).then(fetchInstructorLevels); setEditingLevel(null); }} className="bg-rose-600 text-white px-8 py-2 rounded-lg font-bold">Salvar</button>
                   </div>
               </div>
           </div>

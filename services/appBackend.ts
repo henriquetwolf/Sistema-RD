@@ -132,7 +132,7 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
-    // Fix: line 136 - Property 'primary_key' does not exist on type 'Partial<SavedPreset>'. Changed to primaryKey.
+    // Fix: Using intervalMinutes from SavedPreset instead of non-existent interval_minutes
     const payload = {
       name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
     };
@@ -306,12 +306,12 @@ export const appBackend = {
       if (!isConfigured) return;
       if (completed) {
           await supabase.from('crm_student_lesson_progress').upsert({ 
-              student_deal_id: studentDealId, 
+              student_deal_id: student_deal_id, 
               lesson_id: lessonId,
               completed_at: new Date().toISOString()
           });
       } else {
-          await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', studentDealId).eq('lesson_id', lessonId);
+          await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', student_deal_id).eq('lesson_id', lessonId);
       }
   },
 
@@ -440,15 +440,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, 
-      title: d.title, 
-      content: d.content, 
-      city: d.city, 
-      contractDate: d.contract_date, 
-      status: d.status, 
-      folderId: d.folder_id, 
-      signers: d.signers, 
-      createdAt: d.created_at
+      id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
     }));
   },
 
@@ -457,7 +449,7 @@ export const appBackend = {
     const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-      id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers, createdAt: data.created_at
+      id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folder_id: data.folder_id, signers: data.signers, createdAt: data.created_at
     };
   },
 
@@ -547,10 +539,26 @@ export const appBackend = {
   saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      sender_id: ticket.senderId, sender_name: ticket.senderName, sender_email: ticket.senderEmail, sender_role: ticket.senderRole, target_id: ticket.targetId, target_name: ticket.targetName, target_email: ticket.targetEmail, target_role: ticket.targetRole, subject: ticket.subject, message: ticket.message, tag: ticket.tag, status: ticket.status, assigned_id: ticket.assignedId, assigned_name: ticket.assignedName, updated_at: new Date().toISOString()
+      id: ticket.id || crypto.randomUUID(), // Ensure ID is in payload for upsert
+      sender_id: ticket.senderId, 
+      sender_name: ticket.senderName, 
+      sender_email: ticket.senderEmail, 
+      sender_role: ticket.senderRole, 
+      target_id: ticket.targetId, 
+      target_name: ticket.targetName, 
+      target_email: ticket.targetEmail, 
+      target_role: ticket.targetRole, 
+      subject: ticket.subject, 
+      message: ticket.message, 
+      tag: ticket.tag, 
+      status: ticket.status, 
+      assigned_id: ticket.assignedId, 
+      assigned_name: ticket.assignedName, 
+      updated_at: new Date().toISOString()
     };
-    if (ticket.id && ticket.id.length > 10) await supabase.from('crm_support_tickets').update(payload).eq('id', ticket.id);
-    else await supabase.from('crm_support_tickets').insert([payload]);
+    
+    // Use upsert instead of conditional update/insert to handle new IDs generated on client
+    await supabase.from('crm_support_tickets').upsert(payload);
   },
 
   deleteSupportTicket: async (id: string): Promise<void> => {
@@ -612,7 +620,6 @@ export const appBackend = {
     if (ws.id && ws.id.length > 10) {
       const { data, error } = await supabase.from('crm_workshops').update(payload).eq('id', ws.id).select().single();
       if (error) throw error;
-      // Fix: return correctly mapped data from supabase single result, using 'data' instead of 'd'
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
     } else {
       const { data, error = null } = await supabase.from('crm_workshops').insert([payload]).select().single();
@@ -678,11 +685,11 @@ export const appBackend = {
       status: d.status, 
       team: d.team, 
       voucherLink1: d.voucher_link1, 
-      testDate: d.test_date, // fixed property mapping
+      testDate: d.test_date, 
       voucherLink2: d.voucher_link2, 
       voucherLink3: d.voucher_link3, 
-      boletosLink: d.boletos_link, // fixed property mapping
-      negotiationReference: d.negotiation_reference, // fixed property mapping
+      boletosLink: d.boletos_link, 
+      negotiationReference: d.negotiation_reference, 
       attachments: d.attachments, 
       createdAt: d.created_at
     }));
@@ -788,7 +795,7 @@ export const appBackend = {
   getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_webhook_triggers').select('*');
-    return (data || []).map((t: any) => ({ id: t.id, pipelineName: t.pipeline_name, stageId: t.stage_id, payloadJson: t.payload_json, createdAt: t.created_at }));
+    return (data || []).map((t: any) => ({ id: t.id, pipelineName: t.pipeline_name, stageId: t.stage_id, payload_json: t.payload_json, createdAt: t.created_at }));
   },
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
@@ -824,7 +831,7 @@ export const appBackend = {
     let query = supabase.from('crm_banners').select('*').order('created_at', { ascending: false });
     if (audience) query = query.eq('target_audience', audience).eq('active', true);
     const { data } = await query;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, linkUrl: d.link_url, targetAudience: d.target_audience, active: d.active, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, link_url: d.link_url, target_audience: d.target_audience, active: d.active, createdAt: d.created_at }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -860,7 +867,7 @@ export const appBackend = {
   getTeacherNews: async (): Promise<TeacherNews[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, imageUrl: d.image_url, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, image_url: d.image_url, createdAt: d.created_at }));
   },
 
   saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
@@ -888,6 +895,7 @@ export const appBackend = {
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
+    // Fix: Using studioId, trackingCode and conferenceDate instead of snake_case versions from InventoryRecord type
     const payload = {
       type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico,
       item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate,

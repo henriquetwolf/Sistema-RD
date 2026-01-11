@@ -755,7 +755,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                   <div className="p-8 space-y-6">
                       <div>
                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome da Tag</label>
-                          <input type="text" className="w-full px-4 py-2.5 border rounded-xl font-bold bg-slate-50 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-teal-50" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Dúvida Técnica..." autoFocus />
+                          <input type="text" className="w-full px-4 py-2.5 border rounded-xl font-bold bg-slate-50 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-teal-500" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Dúvida Técnica..." autoFocus />
                       </div>
                       <div>
                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Cor de Identificação</label>

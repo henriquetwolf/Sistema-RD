@@ -60,7 +60,6 @@ export const appBackend = {
   client: supabase,
 
   auth: {
-    // Fix: Ensure signIn always returns { data, error } structure for consistent type checking in consumers
     signIn: async (email: string, password: string) => {
       if (!isConfigured) {
         return { data: { user: MOCK_SESSION.user as any, session: MOCK_SESSION as any }, error: null };
@@ -133,18 +132,17 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
-    // Fix: Use intervalMinutes property from the preset object (was interval_minutes)
     const payload = {
-      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primary_key, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
+      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primary_key, interval_minutes: preset.interval_minutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
       const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     }
   },
 
@@ -441,7 +439,6 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      // Fix: Use contractDate property from the Contract interface (was contract_date)
       id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
     }));
   },
@@ -596,7 +593,6 @@ export const appBackend = {
 
   getWorkshops: async (eventId: string): Promise<Workshop[]> => {
     if (!isConfigured) return [];
-    // FIXED: Corrected event_id usage (Cannot find name 'event_id'. Did you mean 'eventId'?)
     const { data } = await supabase.from('crm_workshops').select('*').eq('event_id', eventId).order('date').order('time');
     return (data || []).map(d => ({ id: d.id, eventId: d.event_id, blockId: d.block_id, title: d.title, description: d.description, speaker: d.speaker, date: d.date, time: d.time, spots: d.spots }));
   },
@@ -622,9 +618,7 @@ export const appBackend = {
 
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
     if (!isConfigured) return [];
-    // FIXED: Corrected event_id usage (Cannot find name 'event_id'. Did you mean 'eventId'?)
     const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date');
-    // Fix: Use maxSelections property from the EventBlock interface (was max_selections)
     return (data || []).map(d => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
   },
 
@@ -649,7 +643,6 @@ export const appBackend = {
 
   getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
     if (!isConfigured) return [];
-    // FIXED: Corrected event_id usage (Cannot find name 'event_id'. Did you mean 'eventId'?)
     const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId);
     return (data || []).map(d => ({ id: d.id, eventId: d.event_id, workshopId: d.workshop_id, studentId: d.student_id, studentName: d.student_name, studentEmail: d.student_email, registeredAt: d.registered_at }));
   },
@@ -676,7 +669,6 @@ export const appBackend = {
       team: d.team, 
       voucherLink1: d.voucher_link1, 
       testDate: d.test_date, 
-      // Fix: Use camelCase property names from the BillingNegotiation interface (was voucher_link2, voucher_link3)
       voucherLink2: d.voucher_link2, 
       voucherLink3: d.voucher_link3, 
       boletosLink: d.boletos_link, 
@@ -822,7 +814,6 @@ export const appBackend = {
     let query = supabase.from('crm_banners').select('*').order('created_at', { ascending: false });
     if (audience) query = query.eq('target_audience', audience).eq('active', true);
     const { data } = await query;
-    // Fix: Use linkUrl property from the Banner interface (was link_url)
     return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, linkUrl: d.link_url, targetAudience: d.target_audience, active: d.active, createdAt: d.created_at }));
   },
 
@@ -890,7 +881,7 @@ export const appBackend = {
     const payload = {
       type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico,
       item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate,
-      studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations,
+      studio_id: record.studioId || null, tracking_code: record.tracking_code, observations: record.observations,
       conference_date: record.conferenceDate || null, attachments: record.attachments
     };
     if (record.id) await supabase.from('crm_inventory').update(payload).eq('id', record.id);
@@ -937,7 +928,6 @@ export const appBackend = {
       city: studio.city,
       state: studio.state, 
       country: studio.country, 
-      // Fix: Use sizeM2 property from the PartnerStudio interface (was size_m2)
       size_m2: studio.sizeM2, 
       student_capacity: studio.studentCapacity, 
       rent_value: studio.rentValue,
@@ -975,7 +965,6 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
       return (data || []).map((d: any) => ({
-          // Fix: Ensure property names match the CertificateModel interface (camelCase)
           id: d.id, 
           title: d.title, 
           backgroundData: d.background_data, 
@@ -1076,7 +1065,21 @@ export const appBackend = {
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { id: job.id, name: job.name, sheet_url: job.sheetUrl, config: job.config, last_sync: job.lastSync, status: job.status, last_message: job.last_message, active: job.active, interval_minutes: job.intervalMinutes, created_by: job.createdBy };
+    // Fix: Access job.lastMessage instead of job.last_message to match the SyncJob interface
+    // Also added created_at to payload to match database structure and getSyncJobs mapping
+    const payload = { 
+      id: job.id, 
+      name: job.name, 
+      sheet_url: job.sheetUrl, 
+      config: job.config, 
+      last_sync: job.lastSync, 
+      status: job.status, 
+      last_message: job.lastMessage, 
+      active: job.active, 
+      interval_minutes: job.intervalMinutes, 
+      created_by: job.createdBy,
+      created_at: job.createdAt
+    };
     await supabase.from('crm_sync_jobs').upsert(payload);
   },
 

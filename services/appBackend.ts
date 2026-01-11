@@ -140,11 +140,13 @@ export const appBackend = {
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, interval_minutes: data.interval_minutes, createdByName: data.created_by_name };
+      // Fixed interval_minutes to intervalMinutes
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
       const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, interval_minutes: data.interval_minutes, createdByName: data.created_by_name };
+      // Fixed interval_minutes to intervalMinutes
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     }
   },
 
@@ -425,7 +427,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').not('target_type', 'is', null).order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, teamId: d.team_id, targetPipeline: d.target_pipeline, targetStage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id, targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active
+      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, teamId: d.team_id, targetPipeline: d.target_pipeline, targetStage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id, targetType: d.target_type, targetProductType: d.target_product_type, target_product_name: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active
     }));
   },
 
@@ -585,7 +587,7 @@ export const appBackend = {
       if (error) throw error;
       return { id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates, createdAt: data.created_at, registrationOpen: data.registration_open };
     } else {
-      const { data, error } = await supabase.from('crm_events').insert([payload]).select().single();
+      const { data, error = null } = await supabase.from('crm_events').insert([payload]).select().single();
       if (error) throw error;
       return { id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates, createdAt: data.created_at, registrationOpen: data.registration_open };
     }
@@ -610,7 +612,7 @@ export const appBackend = {
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
     } else {
-      const { data, error } = await supabase.from('crm_workshops').insert([payload]).select().single();
+      const { data, error = null } = await supabase.from('crm_workshops').insert([payload]).select().single();
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
     }
@@ -635,7 +637,7 @@ export const appBackend = {
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     } else {
-      const { data, error } = await supabase.from('crm_event_blocks').insert([payload]).select().single();
+      const { data, error = null } = await supabase.from('crm_event_blocks').insert([payload]).select().single();
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     }
@@ -658,7 +660,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, openInstallments: d.open_installments, totalNegotiatedValue: d.total_negotiated_value, totalInstallments: d.total_installments, dueDate: d.due_date, responsibleAgent: d.responsible_agent, identifierCode: d.identifier_code, fullName: d.full_name, productName: d.product_name, originalValue: d.original_value, paymentMethod: d.payment_method, observations: d.observations, status: d.status, team: d.team, voucherLink1: d.voucher_link1, testDate: d.test_date, voucherLink2: d.voucher_link2, voucherLink3: d.voucher_link3, boletosLink: d.boletos_link, negotiationReference: d.negotiation_reference, attachments: d.attachments, createdAt: d.created_at
+      id: d.id, openInstallments: d.open_installments, totalNegotiatedValue: d.total_negotiated_value, totalInstallments: d.total_installments, dueDate: d.due_date, responsibleAgent: d.responsible_agent, identifierCode: d.identifier_code, fullName: d.full_name, productName: d.product_name, originalValue: d.original_value, paymentMethod: d.payment_method, observations: d.observations, status: d.status, team: d.team, voucherLink1: d.voucher_link1, testDate: d.test_date, voucherLink2: d.voucher_link2, voucherLink3: d.voucher_link3, boletosLink: d.boletos_link, negotiation_reference: d.negotiation_reference, attachments: d.attachments, createdAt: d.created_at
     }));
   },
 
@@ -666,7 +668,7 @@ export const appBackend = {
     if (!isConfigured) return;
     // Fix: Corrected property name from neg.payment_method to neg.paymentMethod
     const payload = {
-      open_installments: neg.openInstallments, total_negotiated_value: neg.totalNegotiatedValue, total_installments: neg.totalInstallments, due_date: neg.dueDate, responsible_agent: neg.responsibleAgent, identifier_code: neg.identifierCode, full_name: neg.fullName, product_name: neg.productName, original_value: neg.originalValue, payment_method: neg.paymentMethod, observations: neg.observations, status: neg.status, team: neg.team, voucher_link1: neg.voucherLink1, test_date: neg.testDate, voucher_link2: neg.voucherLink2, voucher_link3: neg.voucherLink3, boletos_link: neg.boletosLink, negotiation_reference: neg.negotiationReference, attachments: neg.attachments
+      open_installments: neg.openInstallments, total_negotiated_value: neg.totalNegotiatedValue, total_installments: neg.totalInstallments, due_date: neg.dueDate, responsible_agent: neg.responsibleAgent, identifier_code: neg.identifierCode, full_name: neg.fullName, product_name: neg.productName, original_value: neg.originalValue, payment_method: neg.paymentMethod, observations: neg.observations, status: neg.status, team: neg.team, voucher_link1: neg.voucherLink1, test_date: neg.testDate, voucher_link2: neg.voucherLink2, voucher_link3: neg.voucherLink3, boletos_link: neg.boletosLink, negotiation_reference: neg.negotiation_reference, attachments: neg.attachments
     };
     if (neg.id) await supabase.from('crm_billing_negotiations').update(payload).eq('id', neg.id);
     else await supabase.from('crm_billing_negotiations').insert([payload]);
@@ -891,7 +893,7 @@ export const appBackend = {
       const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
       return (data || []).map((d: any) => ({
           id: d.id, title: d.title, backgroundData: d.background_data, backBackgroundData: d.back_background_data,
-          linkedProductId: d.linked_product_id, bodyText: d.body_text, layoutConfig: d.layout_config, createdAt: d.created_at
+          linkedProductId: d.linked_product_id, body_text: d.body_text, layoutConfig: d.layout_config, createdAt: d.created_at
       }));
   },
 

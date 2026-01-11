@@ -58,6 +58,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [isSavingCompany, setIsSavingCompany] = useState(false); 
   const [editingCompany, setEditingCompany] = useState<Partial<CompanySetting> | null>(null);
+  const [productSearch, setProductSearch] = useState('');
 
   const [instructorLevels, setInstructorLevels] = useState<InstructorLevel[]>([]);
   const [isLoadingLevels, setIsLoadingLevels] = useState(false);
@@ -66,6 +67,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [courseInfos, setCourseInfos] = useState<CourseInfo[]>([]);
   const [editingCourseInfo, setEditingCourseInfo] = useState<Partial<CourseInfo> | null>(null);
   const [isLoadingCourseInfo, setIsLoadingCourseInfo] = useState(false);
+  const [isSavingCourseInfo, setIsSavingCourseInfo] = useState(false);
 
   const [supportTags, setSupportTags] = useState<SupportTag[]>([]);
   const [isLoadingTags, setIsLoadingTags] = useState(false);
@@ -74,7 +76,10 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
+  // Connection Plug States
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [webhookTriggers, setWebhookTriggers] = useState<WebhookTrigger[]>([]);
+  const [editingTrigger, setEditingTrigger] = useState<Partial<WebhookTrigger> | null>(null);
   const [isLoadingTriggers, setIsLoadingTriggers] = useState(false);
 
   const PERMISSION_MODULES = [
@@ -104,12 +109,12 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       fetchGlobalSettings();
       if (activeTab === 'roles') fetchRoles();
       else if (activeTab === 'banners') fetchBanners();
-      else if (activeTab === 'company') fetchCompanies();
+      else if (activeTab === 'company') { fetchCompanies(); fetchUnifiedProducts(); }
       else if (activeTab === 'instructor_levels') fetchInstructorLevels();
       else if (activeTab === 'course_info') fetchCourseInfos();
       else if (activeTab === 'support_tags') fetchSupportTags();
       else if (activeTab === 'logs') fetchLogs();
-      else if (activeTab === 'connection_plug') fetchWebhookTriggers();
+      else if (activeTab === 'connection_plug') { fetchPipelines(); fetchWebhookTriggers(); }
   }, [activeTab]);
 
   const fetchGlobalSettings = async () => {
@@ -117,6 +122,10 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
     setSecurityMargin(margin);
     const logo = await appBackend.getAppLogo();
     setPreview(logo);
+  };
+
+  const fetchPipelines = async () => {
+      try { const data = await appBackend.getPipelines(); setPipelines(data); } catch (e) {}
   };
 
   const fetchWebhookTriggers = async () => {
@@ -139,24 +148,43 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       try { const data = await appBackend.getCompanies(); setCompanies(data); } catch(e) {} finally { setIsLoadingCompanies(false); }
   };
 
+  const fetchUnifiedProducts = async () => {
+      try {
+          const [digitalRes, eventsRes, classesRes] = await Promise.all([
+              appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
+              appBackend.client.from('crm_events').select('id, name'),
+              appBackend.client.from('crm_classes').select('course')
+          ]);
+
+          const unified: UnifiedProduct[] = [];
+          if (digitalRes.data) (digitalRes.data as any[]).forEach(p => unified.push({ id: String(p.id), name: String(p.name), type: 'Digital' }));
+          if (eventsRes.data) (eventsRes.data as any[]).forEach(e => unified.push({ id: String(e.id), name: String(e.name), type: 'Evento' }));
+          if (classesRes.data) {
+              const uniqueCourses = Array.from(new Set((classesRes.data as any[]).map(c => (c as any).course as string).filter(Boolean)));
+              uniqueCourses.forEach((c: any) => unified.push({ id: `course-${c}`, name: String(c), type: 'Presencial' }));
+          }
+          setAllProducts(unified.sort((a, b) => a.name.localeCompare(b.name)));
+      } catch (e) {}
+  };
+
   const fetchInstructorLevels = async () => {
       setIsLoadingLevels(true);
-      try { const data = await appBackend.getInstructorLevels(); setInstructorLevels(data); } catch(e) {} finally { setIsLoadingLevels(false); }
+      try { const data = await appBackend.getInstructorLevels(); setInstructorLevels(data); } catch (e) {} finally { setIsLoadingLevels(false); }
   };
 
   const fetchCourseInfos = async () => {
       setIsLoadingCourseInfo(true);
-      try { const data = await appBackend.getCourseInfos(); setCourseInfos(data); } catch(e) {} finally { setIsLoadingCourseInfo(false); }
+      try { const data = await appBackend.getCourseInfos(); setCourseInfos(data); } catch (e) {} finally { setIsLoadingCourseInfo(false); }
   };
 
   const fetchSupportTags = async () => {
       setIsLoadingTags(true);
-      try { const data = await appBackend.getSupportTags(); setSupportTags(data); } catch(e) {} finally { setIsLoadingTags(false); }
+      try { const data = await appBackend.getSupportTags(); setSupportTags(data); } catch (e) {} finally { setIsLoadingTags(false); }
   };
 
   const fetchLogs = async () => {
       setIsLoadingLogs(true);
-      try { const data = await appBackend.getActivityLogs(200); setLogs(data); } catch(e) {} finally { setIsLoadingLogs(false); }
+      try { const data = await appBackend.getActivityLogs(200); setLogs(data); } catch (e) {} finally { setIsLoadingLogs(false); }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -212,8 +240,53 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
     } catch (err) {} finally { setIsSavingCompany(false); }
   };
 
+  const handleSaveCourseInfo = async () => {
+      if (!editingCourseInfo?.courseName) return;
+      setIsSavingCourseInfo(true);
+      try {
+          await appBackend.saveCourseInfo(editingCourseInfo);
+          await fetchCourseInfos();
+          setEditingCourseInfo(null);
+      } finally { setIsSavingCourseInfo(false); }
+  };
+
+  const handleSaveTag = async () => {
+      if (!editingTag?.name) return;
+      await appBackend.saveSupportTag(editingTag);
+      await fetchSupportTags();
+      setEditingTag(null);
+  };
+
+  const handleSaveTrigger = async () => {
+      if (!editingTrigger?.pipelineName || !editingTrigger?.stageId) return;
+      await appBackend.saveWebhookTrigger(editingTrigger);
+      await fetchWebhookTriggers();
+      setEditingTrigger(null);
+  };
+
+  const toggleCompanyProductType = (type: string) => {
+      if (!editingCompany) return;
+      const currentTypes = editingCompany.productTypes || [];
+      const newTypes = currentTypes.includes(type) ? currentTypes.filter(t => t !== type) : [...currentTypes, type];
+      setEditingCompany({ ...editingCompany, productTypes: newTypes });
+  };
+
+  const toggleCompanyProductId = (id: string) => {
+      if (!editingCompany) return;
+      const currentIds = editingCompany.productIds || [];
+      const newIds = currentIds.includes(id) ? currentIds.filter(i => i !== id) : [...currentIds, id];
+      setEditingCompany({ ...editingCompany, productIds: newIds });
+  };
+
+  const filteredProductsBySelectedTypes = useMemo(() => {
+      if (!editingCompany) return [];
+      const selectedTypes = editingCompany.productTypes || [];
+      if (selectedTypes.length === 0) return [];
+      return allProducts.filter(p => selectedTypes.includes(p.type) && p.name.toLowerCase().includes(productSearch.toLowerCase()));
+  }, [allProducts, editingCompany, productSearch]);
+
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V43 (REPARO TOTAL)
+-- SCRIPT DE FUNDAÇÃO CRM V44 (REPARO TOTAL)
 CREATE TABLE IF NOT EXISTS public.crm_student_course_access (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     student_deal_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
@@ -233,16 +306,17 @@ NOTIFY pgrst, 'reload schema';
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h2 className="text-2xl font-bold text-slate-800">Configurações</h2>
-            <p className="text-slate-500 text-sm">Personalize o sistema e gerencie dados globais.</p>
+            <p className="text-slate-500 text-sm">Gerenciamento global do ecossistema VOLL.</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto shrink-0 max-w-full no-scrollbar">
             {[
                 { id: 'visual', label: 'Geral', color: 'text-slate-800' },
                 { id: 'company', label: 'Empresas', color: 'text-teal-700' },
                 { id: 'banners', label: 'Banners', color: 'text-orange-700' },
+                { id: 'connection_plug', label: 'Plug', color: 'text-indigo-700' },
                 { id: 'roles', label: 'Acessos', color: 'text-indigo-700' },
                 { id: 'instructor_levels', label: 'Níveis', color: 'text-rose-700' },
-                { id: 'course_info', label: 'Infos', color: 'text-blue-700' },
+                { id: 'course_info', label: 'Portal', color: 'text-blue-700' },
                 { id: 'support_tags', label: 'Tags', color: 'text-emerald-700' },
                 { id: 'logs', label: 'Logs', color: 'text-slate-600' },
                 { id: 'database', label: 'Banco', color: 'text-amber-700' }
@@ -256,7 +330,7 @@ NOTIFY pgrst, 'reload schema';
         {activeTab === 'visual' && (
             <div className="space-y-6">
                 <div className="bg-white rounded-xl border border-slate-200 p-8 space-y-6">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b pb-4"><Palette className="text-teal-600" size={20}/> Logomarca</h3>
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b pb-4"><Palette className="text-teal-600" size={20}/> Logomarca do Sistema</h3>
                     <div className="flex flex-col sm:flex-row items-center gap-8">
                         <div className="w-64 h-32 bg-slate-50 border rounded-lg flex items-center justify-center p-4">
                             {preview ? <img src={preview} alt="Logo" className="max-w-full max-h-full object-contain" /> : <ImageIcon className="text-slate-300" size={48} />}
@@ -277,7 +351,7 @@ NOTIFY pgrst, 'reload schema';
         {activeTab === 'company' && (
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold">Empresas de Faturamento</h3>
+                    <h3 className="text-lg font-bold">Empresas e Faturamento</h3>
                     <button onClick={() => setEditingCompany({ legalName: '', cnpj: '', productTypes: [], productIds: [] })} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Nova Empresa</button>
                 </div>
                 <div className="space-y-4">
@@ -314,6 +388,26 @@ NOTIFY pgrst, 'reload schema';
             </div>
         )}
 
+        {activeTab === 'connection_plug' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600"><Zap size={24}/></div>
+                        <div><h3 className="text-lg font-bold">Automação: Connection Plug</h3><p className="text-xs text-slate-500">Gatilhos de Webhook por etapa do Funil.</p></div>
+                    </div>
+                    <button onClick={() => setEditingTrigger({ pipelineName: 'Padrão', stageId: 'closed' })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Gatilho</button>
+                </div>
+                <div className="space-y-4">
+                    {webhookTriggers.map(t => (
+                        <div key={t.id} className="p-4 border rounded-xl flex items-center justify-between group">
+                            <div><p className="font-bold text-slate-800">{t.pipelineName} • {t.stageId}</p><p className="text-[10px] text-slate-400 uppercase">Gatilho de Disparo</p></div>
+                            <div className="flex gap-2"><button onClick={() => setEditingTrigger(t)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteWebhookTrigger(t.id!).then(fetchWebhookTriggers)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
         {activeTab === 'roles' && (
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
@@ -341,7 +435,41 @@ NOTIFY pgrst, 'reload schema';
                     {instructorLevels.map(lvl => (
                         <div key={lvl.id} className="p-4 border rounded-xl flex items-center justify-between">
                             <div><p className="font-bold">{lvl.name}</p><p className="text-xs text-emerald-600 font-bold">R$ {lvl.honorarium.toLocaleString()}</p></div>
-                            <div className="flex gap-1"><button onClick={() => setEditingLevel(lvl)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"><Edit2 size={14}/></button></div>
+                            <div className="flex gap-1"><button onClick={() => setEditingLevel(lvl)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"><Edit2 size={14}/></button><button onClick={() => appBackend.deleteInstructorLevel(lvl.id).then(fetchInstructorLevels)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={14}/></button></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'course_info' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold">Informações dos Cursos (Portal)</h3>
+                    <button onClick={() => setEditingCourseInfo({ courseName: '', details: '', materials: '', requirements: '' })} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Nova Info</button>
+                </div>
+                <div className="space-y-4">
+                    {courseInfos.map(info => (
+                        <div key={info.id} className="p-4 border rounded-xl flex items-center justify-between group">
+                            <span className="font-bold">{info.courseName}</span>
+                            <div className="flex gap-2"><button onClick={() => setEditingCourseInfo(info)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteCourseInfo(info.id).then(fetchCourseInfos)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'support_tags' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold">Categorias de Suporte (Tags)</h3>
+                    <button onClick={() => setEditingTag({ name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Nova Tag</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {supportTags.map(tag => (
+                        <div key={tag.id} className="p-4 border rounded-xl flex items-center justify-between group">
+                            <div><p className="font-bold">{tag.name}</p><p className="text-[10px] text-slate-400 uppercase">Público: {tag.role}</p></div>
+                            <div className="flex gap-2"><button onClick={() => setEditingTag(tag)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteSupportTag(tag.id).then(fetchSupportTags)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
                         </div>
                     ))}
                 </div>
@@ -366,8 +494,8 @@ NOTIFY pgrst, 'reload schema';
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold">Manutenção e Sincronização</h3></div>
-                <p className="text-sm text-slate-500 mb-6">Execute este reparo se notar erros de banco de dados ou colunas ausentes.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V43</button> : (
+                <p className="text-sm text-slate-500 mb-6">Execute este reparo se notar erros de banco de dados ou colunas ausentes na liberação de alunos.</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V44</button> : (
                     <div className="relative">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs">{sqlCopied ? 'Copiado!' : 'Copiar'}</button>
@@ -377,7 +505,7 @@ NOTIFY pgrst, 'reload schema';
         )}
       </div>
 
-      {/* MODAL EMPRESA */}
+      {/* MODAL EMPRESA (Restaurado com Mapeamento de Produtos) */}
       {editingCompany && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
@@ -389,6 +517,32 @@ NOTIFY pgrst, 'reload schema';
                       <div className="grid grid-cols-2 gap-4">
                           <input placeholder="Razão Social" className="w-full px-3 py-2 border rounded-lg" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} />
                           <input placeholder="CNPJ" className="w-full px-3 py-2 border rounded-lg" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} />
+                      </div>
+                      <input placeholder="Webhook URL (Connection Plug)" className="w-full px-3 py-2 border rounded-lg font-mono text-xs" value={editingCompany.webhookUrl} onChange={e => setEditingCompany({...editingCompany, webhookUrl: e.target.value})} />
+                      
+                      <div className="border-t pt-4">
+                          <p className="text-xs font-bold text-slate-400 uppercase mb-3">Atribuição por Tipo de Produto</p>
+                          <div className="flex gap-2">
+                              {['Digital', 'Presencial', 'Evento'].map(type => (
+                                  <button key={type} onClick={() => toggleCompanyProductType(type)} className={clsx("px-4 py-2 rounded-lg border-2 text-xs font-bold", editingCompany.productTypes?.includes(type) ? "bg-teal-50 border-teal-500 text-teal-700" : "bg-white border-slate-100")}>{type}</button>
+                              ))}
+                          </div>
+                      </div>
+
+                      <div className="border-t pt-4">
+                          <div className="flex justify-between items-center mb-3">
+                              <p className="text-xs font-bold text-slate-400 uppercase">Produtos Específicos</p>
+                              <div className="relative"><Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" placeholder="Filtrar produtos..." className="pl-7 pr-2 py-1 border rounded text-[10px] outline-none" value={productSearch} onChange={e => setProductSearch(e.target.value)} /></div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                              {filteredProductsBySelectedTypes.map(p => (
+                                  <label key={p.id} className={clsx("flex items-center gap-2 p-2 rounded border text-[10px] cursor-pointer transition-colors", editingCompany.productIds?.includes(p.id) ? "bg-teal-50 border-teal-200" : "hover:bg-slate-50")}>
+                                      <input type="checkbox" checked={editingCompany.productIds?.includes(p.id)} onChange={() => toggleCompanyProductId(p.id)} className="rounded text-teal-600" />
+                                      <span className="truncate font-bold">{p.name}</span>
+                                  </label>
+                              ))}
+                              {filteredProductsBySelectedTypes.length === 0 && <p className="text-[10px] text-slate-400 italic py-4 text-center">Selecione tipos acima para ver produtos.</p>}
+                          </div>
                       </div>
                   </div>
                   <div className="p-6 bg-slate-50 border-t flex justify-end">
@@ -409,6 +563,10 @@ NOTIFY pgrst, 'reload schema';
                   <div className="p-8 space-y-4">
                       <input placeholder="Título" className="w-full px-3 py-2 border rounded-lg" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} />
                       <input placeholder="Link" className="w-full px-3 py-2 border rounded-lg" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} />
+                      <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
+                          <option value="student">Público: Aluno</option>
+                          <option value="instructor">Público: Instrutor</option>
+                      </select>
                       <div className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer" onClick={() => bannerFileInputRef.current?.click()}>
                           {editingBanner.imageUrl ? <img src={editingBanner.imageUrl} className="h-20 mx-auto" /> : <p className="text-xs text-slate-400">Clique para enviar imagem</p>}
                           <input type="file" ref={bannerFileInputRef} className="hidden" accept="image/*" onChange={handleBannerImageUpload} />
@@ -416,6 +574,84 @@ NOTIFY pgrst, 'reload schema';
                   </div>
                   <div className="p-6 bg-slate-50 border-t flex justify-end">
                       <button onClick={handleSaveBanner} className="bg-orange-600 text-white px-8 py-2 rounded-lg font-bold">Salvar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL TAG SUPORTE */}
+      {editingTag && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 flex flex-col">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold">Configurar Categoria</h3>
+                      <button onClick={() => setEditingTag(null)}><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-4">
+                      <input placeholder="Nome da Tag" className="w-full px-3 py-2 border rounded-lg" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} />
+                      <select className="w-full px-3 py-2 border rounded-lg text-sm bg-white" value={editingTag.role} onChange={e => setEditingTag({...editingTag, role: e.target.value as any})}>
+                          <option value="all">Público: Todos</option>
+                          <option value="student">Público: Aluno</option>
+                          <option value="instructor">Público: Instrutor</option>
+                          <option value="studio">Público: Studio</option>
+                      </select>
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t flex justify-end">
+                      <button onClick={handleSaveTag} className="bg-emerald-600 text-white px-8 py-2 rounded-lg font-bold">Salvar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL INFOS PORTAL */}
+      {editingCourseInfo && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold">Configurar Infos do Curso</h3>
+                      <button onClick={() => setEditingCourseInfo(null)}><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-4">
+                      <input placeholder="Nome do Curso" className="w-full px-3 py-2 border rounded-lg font-bold" value={editingCourseInfo.courseName} onChange={e => setEditingCourseInfo({...editingCourseInfo, courseName: e.target.value})} />
+                      <textarea placeholder="Detalhes" className="w-full px-3 py-2 border rounded-lg h-24 resize-none" value={editingCourseInfo.details} onChange={e => setEditingCourseInfo({...editingCourseInfo, details: e.target.value})} />
+                      <textarea placeholder="Materiais" className="w-full px-3 py-2 border rounded-lg h-24 resize-none" value={editingCourseInfo.materials} onChange={e => setEditingCourseInfo({...editingCourseInfo, materials: e.target.value})} />
+                      <textarea placeholder="Requisitos" className="w-full px-3 py-2 border rounded-lg h-24 resize-none" value={editingCourseInfo.requirements} onChange={e => setEditingCourseInfo({...editingCourseInfo, requirements: e.target.value})} />
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t flex justify-end">
+                      <button onClick={handleSaveCourseInfo} disabled={isSavingCourseInfo} className="bg-blue-600 text-white px-8 py-2 rounded-lg font-bold">{isSavingCourseInfo ? 'Salvando...' : 'Salvar'}</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL GATILHO PLUG */}
+      {editingTrigger && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 flex flex-col">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold">Gatilho de Automação</h3>
+                      <button onClick={() => setEditingTrigger(null)}><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Funil de Vendas</label>
+                          <select className="w-full border rounded-lg px-3 py-2 text-sm bg-white" value={editingTrigger.pipelineName} onChange={e => setEditingTrigger({...editingTrigger, pipelineName: e.target.value})}>
+                              {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                          </select>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Etapa de Disparo</label>
+                          <select className="w-full border rounded-lg px-3 py-2 text-sm bg-white" value={editingTrigger.stageId} onChange={e => setEditingTrigger({...editingTrigger, stageId: e.target.value})}>
+                              {(pipelines.find(p => p.name === editingTrigger.pipelineName)?.stages || []).map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                          </select>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-400 uppercase mb-1">JSON Customizado (Opcional)</label>
+                          <textarea placeholder='{"venda": "{{deal_number}}"}' className="w-full border rounded-lg px-3 py-2 text-xs font-mono h-32 resize-none bg-slate-50" value={editingTrigger.payloadJson} onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} />
+                      </div>
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t flex justify-end">
+                      <button onClick={handleSaveTrigger} className="bg-indigo-600 text-white px-8 py-2 rounded-lg font-bold">Salvar Gatilho</button>
                   </div>
               </div>
           </div>

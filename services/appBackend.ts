@@ -183,7 +183,7 @@ export const appBackend = {
           title: course.title,
           description: course.description,
           price: course.price,
-          payment_link: course.paymentLink,
+          payment_link: course.payment_link,
           image_url: course.imageUrl,
           certificate_template_id: course.certificateTemplateId || null
       };
@@ -201,7 +201,7 @@ export const appBackend = {
               return { id: updated.id, title: updated.title, description: updated.description, price: updated.price, paymentLink: updated.payment_link, imageUrl: updated.image_url, certificateTemplateId: updated.certificate_template_id, createdAt: updated.created_at };
           }
 
-          const { data, error } = await supabase.from('crm_online_courses').insert([payload]).select().single();
+          const { data, error = null } = await supabase.from('crm_online_courses').insert([payload]).select().single();
           if (error) throw error;
           return { id: data.id, title: data.title, description: data.description, price: data.price, paymentLink: data.payment_link, imageUrl: data.image_url, certificateTemplateId: data.certificate_template_id, createdAt: data.created_at };
       }
@@ -252,9 +252,9 @@ export const appBackend = {
           moduleId: d.module_id, 
           title: d.title, 
           description: d.description, 
-          video_url: d.video_url, 
+          videoUrl: d.video_url, // FIXED: Correctly mapping database video_url to videoUrl property
           materials: d.materials || [], 
-          order_index: d.order_index 
+          orderIndex: d.order_index // FIXED: Mapping order_index to orderIndex
       }));
   },
 
@@ -374,7 +374,8 @@ export const appBackend = {
     const { data } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-      id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, distribution_mode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, teamId: data.team_id, targetPipeline: data.target_pipeline, targetStage: data.target_stage, questions: data.questions, style: data.style, createdAt: data.created_at, submissionsCount: data.submissions_count || 0, folderId: data.folder_id
+      // Fixed property names to match FormModel interface
+      id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, teamId: data.team_id, targetPipeline: data.target_pipeline, targetStage: data.target_stage, questions: data.questions, style: data.style, createdAt: data.created_at, submissionsCount: data.submissions_count || 0, folderId: data.folder_id
     } as unknown as FormModel;
   },
 
@@ -428,14 +429,17 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').not('target_type', 'is', null).order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, teamId: d.team_id, targetPipeline: d.target_pipeline, targetStage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id, targetType: d.target_type, targetProductType: d.target_product_type, target_product_name: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active
+      // Fixed property names to match SurveyModel and FormModel interfaces
+      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, teamId: d.team_id, targetPipeline: d.target_pipeline, targetStage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id, targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active
     }));
   },
 
   saveSurvey: async (survey: SurveyModel): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      title: survey.title, description: survey.description, campaign: survey.campaign, is_lead_capture: survey.isLeadCapture, distribution_mode: survey.distributionMode, fixed_owner_id: survey.fixedOwnerId, team_id: survey.teamId, target_pipeline: survey.targetPipeline, target_stage: survey.targetStage, questions: survey.questions, style: survey.style, folder_id: survey.folderId, target_type: survey.targetType, target_product_type: survey.targetProductType, target_product_name: survey.targetProductName, only_if_finished: survey.onlyIfFinished, is_active: survey.isActive
+      title: survey.title, description: survey.description, campaign: survey.campaign, is_lead_capture: survey.isLeadCapture, distribution_mode: survey.distributionMode, fixed_owner_id: survey.fixedOwnerId, team_id: survey.teamId, target_pipeline: survey.targetPipeline, target_stage: survey.targetStage, questions: survey.questions, style: survey.style, folder_id: survey.folderId, target_type: survey.targetType, 
+      // Fixed: Property 'target_product_type' does not exist on type 'SurveyModel'. Use 'targetProductType' instead.
+      target_product_type: survey.targetProductType, target_product_name: survey.targetProductName, only_if_finished: survey.onlyIfFinished, is_active: survey.isActive
     };
     if (survey.id && survey.id.length > 10) await supabase.from('crm_forms').update(payload).eq('id', survey.id);
     else await supabase.from('crm_forms').insert([payload]);
@@ -786,7 +790,7 @@ export const appBackend = {
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson };
+    const payload = { pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payload_json };
     if (trigger.id) await supabase.from('crm_webhook_triggers').update(payload).eq('id', trigger.id);
     else await supabase.from('crm_webhook_triggers').insert([payload]);
   },
@@ -915,16 +919,16 @@ export const appBackend = {
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password,
-      second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName,
-      legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city,
-      state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue,
-      methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency,
-      account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer,
+      status: studio.status, responsible_name: studio.responsible_name, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password,
+      second_contact_name: studio.second_contact_name, second_contact_phone: studio.second_contact_phone, fantasy_name: studio.fantasy_name,
+      legal_name: studio.legal_name, cnpj: studio.cnpj, studio_phone: studio.studio_phone, address: studio.address, city: studio.city,
+      state: studio.state, country: studio.country, size_m2: studio.size_m2, student_capacity: studio.student_capacity, rent_value: studio.rent_value,
+      methodology: studio.methodology, studio_type: studio.studio_type, name_on_site: studio.name_on_site, bank: studio.bank, agency: studio.agency,
+      account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pix_key, has_reformer: studio.has_reformer, qty_reformer: studio.qty_reformer,
       /* Fixed: Property 'qty_ladder_barrel' does not exist on type 'PartnerStudio'. Changed to 'qtyLadderBarrel' */
       has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel || 0, has_chair: studio.hasChair, qty_chair: studio.qtyChair,
       has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse,
-      has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
+      has_tv: studio.hasTv, max_kits_capacity: studio.max_kits_capacity, attachments: studio.attachments
     };
     if (studio.id) await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
     else await supabase.from('crm_partner_studios').insert([payload]);

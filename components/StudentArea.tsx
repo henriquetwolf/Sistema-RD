@@ -150,12 +150,30 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         return Math.round((completed / allLessons.length) * 100);
     }, [courseStructure, completedLessonIds, playingCourse]);
 
+    /**
+     * Otimizado para suportar diversos formatos de link do YouTube:
+     * - youtube.com/watch?v=ID
+     * - youtu.be/ID
+     * - youtube.com/embed/ID
+     * - youtube.com/live/ID
+     * - youtube.com/v/ID
+     */
     const getYouTubeEmbedUrl = (url: string) => {
-        if (!url) return '';
-        let id = '';
-        if (url.includes('v=')) id = url.split('v=')[1].split('&')[0];
-        else if (url.includes('youtu.be/')) id = url.split('youtu.be/')[1].split('?')[0];
-        return id ? `https://www.youtube.com/embed/${id}` : '';
+        if (!url || typeof url !== 'string') return '';
+        
+        let videoId = '';
+        const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+        const match = url.match(regex);
+        
+        if (match && match[1]) {
+            videoId = match[1];
+        } else {
+            // Fallback manual se o regex falhar mas for um ID simples de 11 dígitos
+            const cleanUrl = url.trim();
+            if (cleanUrl.length === 11) videoId = cleanUrl;
+        }
+
+        return videoId ? `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1` : '';
     };
 
     if (playingCourse && courseStructure) {
@@ -187,6 +205,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                             src={getYouTubeEmbedUrl(activeLesson.videoUrl)} 
                                             className="w-full h-full" 
                                             allowFullScreen 
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                                             title={activeLesson.title}
                                         />
                                     ) : (

@@ -141,13 +141,13 @@ export const appBackend = {
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
-      // Fixed interval_minutes to intervalMinutes
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      // Fixed interval_minutes to intervalMinutes and primary_key to primaryKey
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
       const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
-      // Fixed interval_minutes to intervalMinutes
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      // Fixed interval_minutes to intervalMinutes and primary_key to primaryKey
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     }
   },
 
@@ -186,7 +186,7 @@ export const appBackend = {
           // Fixed: Changed course.payment_link to course.paymentLink to match type definition
           payment_link: course.paymentLink,
           image_url: course.imageUrl,
-          certificate_template_id: course.certificateTemplateId || null
+          certificate_template_id: course.certificate_template_id || null
       };
 
       if (course.id) {
@@ -382,8 +382,20 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
     if (!isConfigured) return;
+    // Fixed: Updated payload to use correct camelCase properties from FormModel
     const payload = {
-      title: form.title, description: form.description, campaign: form.campaign, is_lead_capture: form.is_lead_capture, distribution_mode: form.distribution_mode, fixed_owner_id: form.fixed_owner_id, team_id: form.team_id, target_pipeline: form.target_pipeline, target_stage: form.target_stage, questions: form.questions, style: form.style, folder_id: form.folderId
+      title: form.title, 
+      description: form.description, 
+      campaign: form.campaign, 
+      is_lead_capture: form.isLeadCapture, 
+      distribution_mode: form.distributionMode, 
+      fixed_owner_id: form.fixedOwnerId, 
+      team_id: form.teamId, 
+      target_pipeline: form.targetPipeline, 
+      target_stage: form.targetStage, 
+      questions: form.questions, 
+      style: form.style, 
+      folder_id: form.folderId
     };
     if (form.id && form.id.length > 10) await supabase.from('crm_forms').update(payload).eq('id', form.id);
     else await supabase.from('crm_forms').insert([payload]);

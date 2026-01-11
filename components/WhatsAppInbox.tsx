@@ -231,14 +231,13 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
     if (!target.instanceUrl || !target.instanceName) return;
     try {
         let baseUrl = target.instanceUrl.trim();
-        if (!baseUrl.startsWith('http')) baseUrl = `https://${baseUrl}`;
+        if (!baseUrl.includes('://')) baseUrl = `https://${baseUrl}`;
         baseUrl = baseUrl.replace(/\/$/, "");
 
         const response = await fetch(`${baseUrl}/instance/connectionState/${target.instanceName.trim()}`, {
             headers: { 'apikey': target.apiKey.trim() }
         });
         const data = await response.json();
-        // Evolution API pode retornar state em 'instance.state' ou na raiz
         const state = data.instance?.state || data.state || 'closed';
         const connected = state === 'open';
         
@@ -293,7 +292,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
         const waId = result.key?.id || result.messageId; 
         await whatsappService.syncMessage(selectedChatId, signedMessage, 'agent', waId);
         
-        // Se o atendimento estava aberto ou pendente, muda para esperando cliente
         if (selectedChat.status === 'open' || selectedChat.status === 'pending') {
             await handleUpdateStage(selectedChatId, 'waiting');
         }
@@ -319,7 +317,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
   const handleSaveConfig = async () => {
       setIsSavingConfig(true);
       try {
-          // Garantir que a URL salva está limpa
           const sanitizedConfig = {
               ...config,
               instanceUrl: config.instanceUrl.trim().replace(/\/$/, ""),
@@ -360,19 +357,28 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
           if (!config.instanceUrl || !config.instanceName) throw new Error("Preencha os dados da instância.");
           
           let baseUrl = config.instanceUrl.trim();
-          if (!baseUrl.startsWith('http')) baseUrl = `https://${baseUrl}`;
+          if (!baseUrl.includes('://')) baseUrl = `https://${baseUrl}`;
           baseUrl = baseUrl.replace(/\/$/, "");
 
           if (config.evolutionMethod === 'code') {
               const cleanNumber = config.pairingNumber.replace(/\D/g, '');
               if (!cleanNumber) throw new Error("Número de pareamento é obrigatório para este método.");
               
-              const response = await fetch(`${baseUrl}/instance/connect/pairingCode/${config.instanceName.trim()}?number=${cleanNumber}`, {
+              // Tenta primeiro o padrão hifenizado (v2)
+              let response = await fetch(`${baseUrl}/instance/connect/pairing-code/${config.instanceName.trim()}?number=${cleanNumber}`, {
                   headers: { 'apikey': config.apiKey.trim() }
               });
+              
+              // Se falhar (404), tenta o padrão camelCase (v1/legado)
+              if (!response.ok && response.status === 404) {
+                  response = await fetch(`${baseUrl}/instance/connect/pairingCode/${config.instanceName.trim()}?number=${cleanNumber}`, {
+                      headers: { 'apikey': config.apiKey.trim() }
+                  });
+              }
+
               const data = await response.json();
               if (!response.ok) throw new Error(data.message || "Erro no pareamento por código.");
-              setPairingCodeValue(data.code);
+              setPairingCodeValue(data.code || data.pairingCode);
           } else {
               const response = await fetch(`${baseUrl}/instance/connect/${config.instanceName.trim()}`, {
                   headers: { 'apikey': config.apiKey.trim() }
@@ -471,7 +477,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                 </div>
             </div>
 
-            {/* FILTROS DE BUSCA */}
             <div className="space-y-2 animate-in slide-in-from-top-2">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
@@ -508,7 +513,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={12}/>
                     </div>
                     
-                    {/* MULTI-SELECT STATUS FILTER */}
                     <div className="flex flex-wrap gap-1">
                         {ATTENDANCE_STAGES.map(s => (
                             <button

@@ -1,15 +1,15 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, Award, ExternalLink, Calendar, MapPin, 
     Video, Download, Loader2, CheckCircle, Clock, X, Info, Layers, 
     PieChart, Send, ArrowRight, Sparkles, Bell, Trophy, ChevronRight, Book, ListTodo, LifeBuoy,
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
-    Mic, RefreshCw
+    Mic, RefreshCw, FileSignature
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
+import { ContractSigning } from './ContractSigning';
 import clsx from 'clsx';
 
 interface StudentAreaProps {
@@ -18,10 +18,12 @@ interface StudentAreaProps {
 }
 
 export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) => {
-    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events'>('classes');
+    const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts'>('classes');
     const [classes, setClasses] = useState<any[]>([]);
     const [certificates, setCertificates] = useState<any[]>([]);
     const [banners, setBanners] = useState<Banner[]>([]);
+    const [pendingContracts, setPendingContracts] = useState<Contract[]>([]);
+    const [signingContract, setSigningContract] = useState<Contract | null>(null);
     
     // Online Courses State
     const [allCourses, setAllCourses] = useState<OnlineCourse[]>([]);
@@ -44,14 +46,30 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         loadBanners();
         loadOnlineCourses();
         fetchSupportNotifications();
+        fetchPendingContracts();
     }, [student]);
 
-    // Sempre que o aluno abrir a aba de certificados ou o componente carregar, buscamos os dados mais recentes do banco
     useEffect(() => {
         if (activeTab === 'certificates') {
             loadCertificates();
         }
+        if (activeTab === 'contracts') {
+            fetchPendingContracts();
+        }
     }, [activeTab]);
+
+    const fetchPendingContracts = async () => {
+        try {
+            const contracts = await appBackend.getPendingContractsByEmail(student.email);
+            setPendingContracts(contracts);
+            // Se tiver contratos pendentes e não estiver em uma aba crítica, sugere a aba de contratos
+            if (contracts.length > 0 && activeTab === 'classes') {
+                // Notificação visual apenas
+            }
+        } catch (e) {
+            console.error("Erro ao carregar contratos pendentes:", e);
+        }
+    };
 
     const fetchSupportNotifications = async () => {
         if (!mainDealId) return;
@@ -334,6 +352,27 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-6 space-y-8">
                 
+                {/* Notificação de Contratos Pendentes */}
+                {pendingContracts.length > 0 && (
+                    <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 animate-bounce-subtle shadow-lg shadow-amber-500/10">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-lg">
+                                <FileSignature size={28} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-amber-900">Você tem {pendingContracts.length} contrato(s) pendente(s)</h3>
+                                <p className="text-sm text-amber-700 font-medium">Por favor, realize a assinatura digital para darmos continuidade ao seu processo.</p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => setActiveTab('contracts')}
+                            className="bg-amber-600 hover:bg-amber-700 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-md transition-all active:scale-95"
+                        >
+                            Ver e Assinar Agora
+                        </button>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <section className="bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden group flex flex-col justify-between min-h-[250px]">
                         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
@@ -364,11 +403,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         { id: 'classes', label: 'Formações Presenciais', icon: GraduationCap, color: 'text-purple-600' },
                         { id: 'online_courses', label: 'Meus Cursos Online', icon: MonitorPlay, color: 'text-indigo-600' },
                         { id: 'events', label: 'Eventos', icon: Mic, color: 'text-amber-600' },
-                        { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' }
+                        { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
+                        { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length }
                     ].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("flex-1 min-w-[140px] py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("flex-1 min-w-[140px] py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
                             {tab.label}
+                            {tab.badge ? (
+                                <span className="absolute top-2 right-2 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">{tab.badge}</span>
+                            ) : null}
                         </button>
                     ))}
                 </nav>
@@ -470,8 +513,55 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                             ))}
                         </div>
                     )}
+
+                    {activeTab === 'contracts' && (
+                        <div className="space-y-6">
+                            {pendingContracts.length === 0 ? (
+                                <div className="py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300">
+                                    <CheckCircle size={48} className="mb-4 opacity-20"/> 
+                                    <p className="font-bold">Você não possui assinaturas pendentes.</p>
+                                    <p className="text-sm mt-1">Todos os seus contratos estão em dia.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {pendingContracts.map(c => (
+                                        <div key={c.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all flex flex-col border-l-8 border-l-amber-500">
+                                            <h3 className="text-xl font-black text-slate-800 mb-2">{c.title}</h3>
+                                            <p className="text-xs text-slate-400 font-bold uppercase mb-6">Pendente desde {new Date(c.createdAt).toLocaleDateString()}</p>
+                                            <button 
+                                                onClick={() => setSigningContract(c)}
+                                                className="mt-auto bg-amber-600 hover:bg-amber-700 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-amber-600/20"
+                                            >
+                                                <FileSignature size={18}/> Assinar Documento
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </main>
+            
+            {/* Modal de Assinatura Interno */}
+            {signingContract && (
+                <div className="fixed inset-0 z-[300] bg-white overflow-y-auto">
+                    <div className="bg-slate-50 border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+                        <button onClick={() => setSigningContract(null)} className="flex items-center gap-2 text-slate-500 font-bold hover:text-slate-800">
+                            <ChevronLeft size={20}/> Cancelar Assinatura
+                        </button>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assinatura Digital Segura</span>
+                    </div>
+                    <ContractSigning 
+                        contract={signingContract} 
+                        onFinish={() => {
+                            setSigningContract(null);
+                            fetchPendingContracts();
+                        }}
+                    />
+                </div>
+            )}
+
             <SupportTicketModal isOpen={showSupportModal} onClose={() => { setShowSupportModal(false); fetchSupportNotifications(); }} senderId={mainDealId || 'guest'} senderName={student.name} senderEmail={student.email} senderRole="student" />
         </div>
     );

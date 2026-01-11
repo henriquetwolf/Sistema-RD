@@ -6,9 +6,10 @@ import clsx from 'clsx';
 
 interface ContractSigningProps {
   contract: Contract;
+  onFinish?: () => void;
 }
 
-export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: initialContract }) => {
+export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: initialContract, onFinish }) => {
   const [contract, setContract] = useState<Contract>(initialContract);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
@@ -189,6 +190,10 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
         setCurrentSignerId(null); // Reset selection
         setHasSignature(false);
 
+        if (onFinish && nowAllSigned) {
+            onFinish();
+        }
+
     } catch (e) {
         alert("Erro ao salvar assinatura. Tente novamente.");
     } finally {
@@ -218,7 +223,7 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
             
             {/* Step 1: Select Signer (if not all signed and no one selected) */}
             {!allSigned && !currentSignerId && (
-                <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl text-center">
+                <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl text-center animate-in fade-in zoom-in-95">
                     <h3 className="font-bold text-indigo-900 text-lg mb-2">Quem está assinando?</h3>
                     <p className="text-indigo-700 text-sm mb-6">Por favor, selecione seu nome na lista abaixo para prosseguir com a assinatura.</p>
                     
@@ -370,6 +375,18 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract: init
                     </div>
                 )}
             </div>
+
+            {/* Callback para fechar em portais internos quando finalizado */}
+            {allSigned && onFinish && (
+                <div className="mt-8 text-center animate-in fade-in">
+                    <button 
+                        onClick={onFinish}
+                        className="bg-slate-800 text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-900 transition-all"
+                    >
+                        Concluir e Voltar
+                    </button>
+                </div>
+            )}
         </div>
         
         <div className="mt-8 text-center text-slate-400 text-xs pb-10">

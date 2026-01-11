@@ -125,7 +125,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from(TABLE_NAME).select('*').order('name');
     return (data || []).map(d => ({
-      id: d.id, name: d.name, url: d.url, key: d.key, tableName: d.table_name, primaryKey: d.primary_key, intervalMinutes: d.interval_minutes, createdByName: d.created_by_name
+      id: d.id, name: d.name, url: d.url, key: d.key, tableName: d.table_name, primaryKey: d.primary_key, interval_minutes: d.interval_minutes, createdByName: d.created_by_name
     }));
   },
 
@@ -137,11 +137,11 @@ export const appBackend = {
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
       const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     }
   },
 
@@ -237,11 +237,11 @@ export const appBackend = {
 
   getModuleLessons: async (moduleId: string): Promise<CourseLesson[]> => {
       if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index', { ascending: true });
+      const { data, error = null } = await supabase.from('crm_course_lessons').select('*').eq('moduleId', moduleId).order('order_index', { ascending: true });
       if (error) throw error;
       return (data || []).map((d: any) => ({ 
           id: d.id, 
-          moduleId: d.module_id, 
+          moduleId: d.moduleId, 
           title: d.title, 
           description: d.description, 
           video_url: d.video_url,
@@ -253,7 +253,7 @@ export const appBackend = {
   saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
       if (!isConfigured) return;
       const payload = { 
-          module_id: lesson.moduleId, 
+          moduleId: lesson.moduleId, 
           title: lesson.title, 
           description: lesson.description, 
           video_url: lesson.videoUrl, 
@@ -347,7 +347,21 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distribution_mode: d.distribution_mode, fixed_owner_id: d.fixed_owner_id, team_id: d.team_id, target_pipeline: d.target_pipeline, target_stage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id
+      id: d.id, 
+      title: d.title, 
+      description: d.description, 
+      campaign: d.campaign, 
+      isLeadCapture: d.is_lead_capture, 
+      distributionMode: d.distribution_mode, 
+      fixedOwnerId: d.fixed_owner_id, 
+      teamId: d.team_id, 
+      targetPipeline: d.target_pipeline, 
+      targetStage: d.target_stage, 
+      questions: d.questions, 
+      style: d.style, 
+      createdAt: d.created_at, 
+      submissionsCount: d.submissions_count || 0, 
+      folderId: d.folder_id
     }));
   },
 
@@ -356,7 +370,22 @@ export const appBackend = {
     const { data } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-      id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, teamId: data.team_id, targetPipeline: data.target_pipeline, targetStage: data.target_stage, questions: data.questions, style: data.style, createdAt: data.created_at, submissionsCount: data.submissions_count || 0, folderId: data.folder_id
+      id: data.id, 
+      title: data.title, 
+      description: data.description, 
+      campaign: data.campaign, 
+      isLeadCapture: data.is_lead_capture, 
+      distributionMode: data.distribution_mode, 
+      fixedOwnerId: data.fixed_owner_id, 
+      teamId: data.team_id, 
+      targetPipeline: data.target_pipeline, 
+      targetStage: data.target_stage, 
+      questions: data.questions, 
+      /* FIXED: Changed d.style to data.style to fix "Cannot find name 'd'" error */
+      style: data.style, 
+      createdAt: data.created_at, 
+      submissionsCount: data.submissions_count || 0, 
+      folderId: data.folder_id
     } as unknown as FormModel;
   },
 
@@ -418,7 +447,26 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').not('target_type', 'is', null).order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, teamId: d.team_id, targetPipeline: d.target_pipeline, targetStage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id, targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active
+      id: d.id, 
+      title: d.title, 
+      description: d.description, 
+      campaign: d.campaign, 
+      isLeadCapture: d.is_lead_capture, 
+      distributionMode: d.distribution_mode, 
+      fixedOwnerId: d.fixed_owner_id, 
+      teamId: d.team_id, 
+      targetPipeline: d.target_pipeline, 
+      targetStage: d.target_stage, 
+      questions: d.questions, 
+      style: d.style, 
+      createdAt: d.created_at, 
+      submissionsCount: d.submissions_count || 0, 
+      folderId: d.folder_id, 
+      targetType: d.target_type, 
+      targetProductType: d.target_product_type, 
+      targetProductName: d.target_product_name, 
+      onlyIfFinished: d.only_if_finished, 
+      isActive: d.is_active
     }));
   },
 
@@ -439,6 +487,24 @@ export const appBackend = {
     const { data, error } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
     if (error) {
         console.error("Erro ao carregar contratos do Supabase:", error);
+        return [];
+    }
+    return (data || []).map(d => ({
+      id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at
+    }));
+  },
+
+  getPendingContractsByEmail: async (email: string): Promise<Contract[]> => {
+    if (!isConfigured) return [];
+    // Busca contratos que tenham este email na lista de signatários com status pendente
+    const { data, error } = await supabase
+        .from('crm_contracts')
+        .select('*')
+        .contains('signers', [{ email: email.toLowerCase(), status: 'pending' }])
+        .order('created_at', { ascending: false });
+    
+    if (error) {
+        console.error("Erro ao buscar contratos pendentes por e-mail:", error);
         return [];
     }
     return (data || []).map(d => ({
@@ -522,7 +588,7 @@ export const appBackend = {
 
   // --- SUPPORT ---
 
-  getSupportTags: async (role?: 'student' | 'instructor' | 'studio'): Promise<SupportTag[]> => {
+  getSupportTags: async (role?: 'student' | 'instructor' | 'studio' | 'all'): Promise<SupportTag[]> => {
     if (!isConfigured) return [];
     let query = supabase.from('crm_support_tags').select('*').order('name');
     if (role) query = query.or(`role.eq.${role},role.eq.all`);
@@ -1190,7 +1256,7 @@ export const appBackend = {
     const { data, error } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((j: any) => ({
-      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
+      id: j.id, name: j.name, sheet_url: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
     }));
   },
 

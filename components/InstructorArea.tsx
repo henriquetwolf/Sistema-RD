@@ -1,17 +1,17 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LogOut, Calendar, MapPin, Loader2, BookOpen, User, 
   ChevronRight, Users, ExternalLink, GraduationCap,
   Newspaper, Bell, Sparkles, X, Clock, Image as ImageIcon,
   ArrowRight, Info, Plane, Coffee, Bed, Map, DollarSign, Package, Monitor,
-  FileCheck, LayoutDashboard, FileText, CheckCircle, LifeBuoy
+  FileCheck, LayoutDashboard, FileText, CheckCircle, LifeBuoy, FileSignature, ChevronLeft
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
 import { Teacher } from './TeachersManager';
 import { Banner, TeacherNews, Contract, SupportTicket } from '../types';
 import { SupportTicketModal } from './SupportTicketModal';
+import { ContractSigning } from './ContractSigning';
 import clsx from 'clsx';
 
 interface InstructorAreaProps {
@@ -20,11 +20,13 @@ interface InstructorAreaProps {
 }
 
 export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLogout }) => {
-  const [activeViewTab, setActiveViewTab] = useState<'dashboard' | 'contracts'>('dashboard');
+  const [activeViewTab, setActiveViewTab] = useState<'dashboard' | 'contracts' | 'pending_contracts'>('dashboard');
   const [classes, setClasses] = useState<any[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [news, setNews] = useState<TeacherNews[]>([]);
   const [myContracts, setMyContracts] = useState<Contract[]>([]);
+  const [pendingContracts, setPendingContracts] = useState<Contract[]>([]);
+  const [signingContract, setSigningContract] = useState<Contract | null>(null);
   const [seenNewsIds, setSeenNewsIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedClass, setSelectedClass] = useState<any | null>(null);
@@ -39,6 +41,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
     fetchBanners();
     fetchNews();
     fetchMyContracts();
+    fetchPendingContracts();
     fetchSupportNotifications();
     
     const saved = localStorage.getItem(`seen_news_${instructor.id}`);
@@ -51,11 +54,18 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
     }
   }, [instructor]);
 
+  const fetchPendingContracts = async () => {
+      try {
+          const contracts = await appBackend.getPendingContractsByEmail(instructor.email);
+          setPendingContracts(contracts);
+      } catch (e) {
+          console.error("Erro ao buscar contratos pendentes:", e);
+      }
+  };
+
   const fetchSupportNotifications = async () => {
       try {
-          // Busca chamados onde o instrutor é o remetente ou o alvo (mensagens da ADM)
           const tickets = await appBackend.getSupportTicketsBySender(instructor.id);
-          // Chamados pendentes são aqueles onde o status é 'pending' (resposta do admin ou novo chamado admin -> user)
           const pending = tickets.filter(t => t.status === 'pending').length;
           setPendingTicketsCount(pending);
       } catch (e) {
@@ -174,24 +184,57 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
 
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 space-y-8">
         
-        <div className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 w-fit mx-auto md:mx-0">
+        {/* Notificação de Contratos Pendentes */}
+        {pendingContracts.length > 0 && (
+            <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-lg shadow-amber-500/10 animate-in slide-in-from-top-4">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-md">
+                        <FileSignature size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-black text-amber-900">Assinaturas Pendentes</h3>
+                        <p className="text-sm text-amber-700 font-medium">Existem {pendingContracts.length} documentos aguardando sua assinatura digital.</p>
+                    </div>
+                </div>
+                <button 
+                    onClick={() => setActiveViewTab('pending_contracts')}
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-md transition-all active:scale-95"
+                >
+                    Assinar Agora
+                </button>
+            </div>
+        )}
+
+        <div className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 w-fit mx-auto md:mx-0 overflow-x-auto no-scrollbar">
             <button 
                 onClick={() => setActiveViewTab('dashboard')}
                 className={clsx(
-                    "px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all",
+                    "px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap",
                     activeViewTab === 'dashboard' ? "bg-white text-orange-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600"
                 )}
             >
                 <LayoutDashboard size={18} /> Dashboard
             </button>
             <button 
+                onClick={() => setActiveViewTab('pending_contracts')}
+                className={clsx(
+                    "px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap relative",
+                    activeViewTab === 'pending_contracts' ? "bg-white text-orange-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600"
+                )}
+            >
+                <FileSignature size={18} /> Assinar
+                {pendingContracts.length > 0 && (
+                    <span className="absolute top-1 right-2 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white shadow-sm">{pendingContracts.length}</span>
+                )}
+            </button>
+            <button 
                 onClick={() => setActiveViewTab('contracts')}
                 className={clsx(
-                    "px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all",
+                    "px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap",
                     activeViewTab === 'contracts' ? "bg-white text-orange-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600"
                 )}
             >
-                <FileCheck size={18} /> Contratos Assinados
+                <FileCheck size={18} /> Histórico
                 {myContracts.length > 0 && (
                     <span className="ml-1 bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md text-[9px]">{myContracts.length}</span>
                 )}
@@ -357,6 +400,34 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                     )}
                 </div>
             </div>
+        ) : activeViewTab === 'pending_contracts' ? (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 px-2">
+                    <FileSignature size={24} className="text-amber-500" /> Contratos Aguardando Assinatura
+                </h2>
+                {pendingContracts.length === 0 ? (
+                    <div className="bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 p-16 text-center shadow-inner">
+                        <CheckCircle size={40} className="mx-auto text-green-500 opacity-20 mb-4" />
+                        <h3 className="text-lg font-black text-slate-700">Tudo em dia!</h3>
+                        <p className="text-slate-500 text-sm font-medium">Não há documentos pendentes para você no momento.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {pendingContracts.map(c => (
+                            <div key={c.id} className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all border-l-8 border-l-amber-500">
+                                <h3 className="text-xl font-black text-slate-800 mb-2">{c.title}</h3>
+                                <p className="text-xs text-slate-400 font-bold uppercase mb-8">Pendente desde {new Date(c.createdAt).toLocaleDateString()}</p>
+                                <button 
+                                    onClick={() => setSigningContract(c)}
+                                    className="bg-amber-600 hover:bg-amber-700 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-amber-600/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                    <FileSignature size={18}/> Assinar Documento Agora
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
         ) : (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                 <div className="flex items-center justify-between px-2">
@@ -408,6 +479,27 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
             </div>
         )}
       </main>
+
+      {/* Modal de Assinatura Interno */}
+      {signingContract && (
+          <div className="fixed inset-0 z-[400] bg-white overflow-y-auto animate-in zoom-in-95">
+              <div className="bg-slate-50 border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+                  <button onClick={() => setSigningContract(null)} className="flex items-center gap-2 text-slate-500 font-bold hover:text-slate-800">
+                      <ChevronLeft size={20}/> Cancelar Assinatura
+                  </button>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assinatura Digital Segura</span>
+              </div>
+              <ContractSigning 
+                  contract={signingContract} 
+                  onFinish={() => {
+                      setSigningContract(null);
+                      fetchPendingContracts();
+                      fetchMyContracts();
+                      setActiveViewTab('contracts');
+                  }}
+              />
+          </div>
+      )}
 
       {selectedClass && (
           <ClassStudentsViewer 

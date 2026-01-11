@@ -1,13 +1,13 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LogOut, Calendar, MapPin, Loader2, Package, Building2, 
   ChevronRight, Inbox, Truck, Clock, CheckCircle2, User, Info,
-  CheckSquare, Save, X, MessageSquare, TrendingDown, History, AlertCircle, LifeBuoy
+  CheckSquare, Save, X, MessageSquare, TrendingDown, History, AlertCircle, LifeBuoy, FileSignature, ChevronLeft
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { PartnerStudioSession, InventoryRecord, SupportTicket } from '../types';
+import { PartnerStudioSession, InventoryRecord, SupportTicket, Contract } from '../types';
 import { SupportTicketModal } from './SupportTicketModal';
+import { ContractSigning } from './ContractSigning';
 import clsx from 'clsx';
 
 interface PartnerStudioAreaProps {
@@ -16,9 +16,11 @@ interface PartnerStudioAreaProps {
 }
 
 export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, onLogout }) => {
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'classes'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'classes' | 'contracts'>('dashboard');
     const [movements, setMovements] = useState<InventoryRecord[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
+    const [pendingContracts, setPendingContracts] = useState<Contract[]>([]);
+    const [signingContract, setSigningContract] = useState<Contract | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isSavingMove, setIsSavingMove] = useState<string | null>(null);
     const [showSupportModal, setShowSupportModal] = useState(false);
@@ -27,7 +29,17 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
     useEffect(() => {
         fetchData();
         fetchSupportNotifications();
+        fetchPendingContracts();
     }, [studio]);
+
+    const fetchPendingContracts = async () => {
+        try {
+            const contracts = await appBackend.getPendingContractsByEmail(studio.email);
+            setPendingContracts(contracts);
+        } catch (e) {
+            console.error("Erro ao buscar contratos pendentes:", e);
+        }
+    };
 
     const fetchSupportNotifications = async () => {
         try {
@@ -112,9 +124,37 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
             </header>
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 space-y-8">
-                <div className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 w-fit mx-auto md:mx-0">
-                    <button onClick={() => setActiveTab('dashboard')} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === 'dashboard' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>Destaques</button>
-                    <button onClick={() => setActiveTab('inventory')} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === 'inventory' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>Logística</button>
+                
+                {/* Notificação de Contratos Pendentes */}
+                {pendingContracts.length > 0 && (
+                    <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-lg shadow-amber-500/10 animate-in slide-in-from-top-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-md">
+                                <FileSignature size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-amber-900">Documentação Pendente</h3>
+                                <p className="text-sm text-amber-700 font-medium">Existem {pendingContracts.length} contrato(s) aguardando assinatura do responsável.</p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => setActiveTab('contracts')}
+                            className="bg-amber-600 hover:bg-amber-700 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-md transition-all active:scale-95"
+                        >
+                            Ver Documentos
+                        </button>
+                    </div>
+                )}
+
+                <div className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 w-fit mx-auto md:mx-0 overflow-x-auto no-scrollbar gap-1">
+                    <button onClick={() => setActiveTab('dashboard')} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'dashboard' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>Destaques</button>
+                    <button onClick={() => setActiveTab('inventory')} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'inventory' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>Logística</button>
+                    <button onClick={() => setActiveTab('contracts')} className={clsx("px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap relative", activeTab === 'contracts' ? "bg-white text-teal-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600")}>
+                        Contratos
+                        {pendingContracts.length > 0 && (
+                            <span className="absolute top-1 right-2 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white shadow-sm">{pendingContracts.length}</span>
+                        )}
+                    </button>
                 </div>
 
                 {activeTab === 'dashboard' ? (
@@ -163,7 +203,7 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                             )}
                         </section>
                     </div>
-                ) : (
+                ) : activeTab === 'inventory' ? (
                     <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
                         <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 px-2"><Truck className="text-teal-600"/> Remessas da Matriz</h3>
                         {movements.length === 0 ? (
@@ -202,8 +242,50 @@ export const PartnerStudioArea: React.FC<PartnerStudioAreaProps> = ({ studio, on
                             </div>
                         )}
                     </div>
+                ) : (
+                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                        <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 px-2"><FileSignature className="text-teal-600"/> Contratos Pendentes</h3>
+                        {pendingContracts.length === 0 ? (
+                            <div className="bg-white rounded-[2rem] p-20 text-center border-2 border-dashed border-slate-200 text-slate-400">Nenhum contrato pendente no momento.</div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {pendingContracts.map(c => (
+                                    <div key={c.id} className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all flex flex-col border-l-8 border-l-teal-500">
+                                        <h3 className="text-xl font-black text-slate-800 mb-2">{c.title}</h3>
+                                        <p className="text-xs text-slate-400 font-bold uppercase mb-8">Emitido em {new Date(c.createdAt).toLocaleDateString()}</p>
+                                        <button 
+                                            onClick={() => setSigningContract(c)}
+                                            className="mt-auto bg-teal-600 hover:bg-teal-700 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-teal-600/20"
+                                        >
+                                            <FileSignature size={18}/> Assinar Agora
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 )}
             </main>
+
+            {/* Modal de Assinatura Interno */}
+            {signingContract && (
+                <div className="fixed inset-0 z-[400] bg-white overflow-y-auto animate-in zoom-in-95">
+                    <div className="bg-slate-50 border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+                        <button onClick={() => setSigningContract(null)} className="flex items-center gap-2 text-slate-500 font-bold hover:text-slate-800">
+                            <ChevronLeft size={20}/> Voltar ao Portal
+                        </button>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Processo de Assinatura Segura</span>
+                    </div>
+                    <ContractSigning 
+                        contract={signingContract} 
+                        onFinish={() => {
+                            setSigningContract(null);
+                            fetchPendingContracts();
+                            setActiveTab('dashboard');
+                        }}
+                    />
+                </div>
+            )}
 
             <SupportTicketModal 
                 isOpen={showSupportModal} 

@@ -1,5 +1,8 @@
 {
   "name": "Sistema VOLL Pilates Group",
-  "description": "A robust utility to parse multiple CSV files and batch upload/upsert records into a Supabase database.",
-  "requestFramePermissions": []
+  "description": "Plataforma avançada de gestão ERP e CRM com área de membros integrada.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
 }

@@ -92,6 +92,54 @@ export interface CourseInfo {
   updatedAt: string;
 }
 
+// --- NOVOS TIPOS PARA CURSOS ONLINE ---
+
+export interface OnlineCourse {
+    id: string;
+    title: string;
+    description: string;
+    price: number;
+    paymentLink: string;
+    imageUrl: string;
+    certificateTemplateId?: string;
+    createdAt: string;
+    modules?: CourseModule[];
+}
+
+export interface CourseModule {
+    id: string;
+    courseId: string;
+    title: string;
+    orderIndex: number;
+    lessons?: CourseLesson[];
+}
+
+export interface CourseLesson {
+    id: string;
+    moduleId: string;
+    title: string;
+    description: string;
+    videoUrl: string; // YouTube
+    materials: { name: string, url: string }[];
+    orderIndex: number;
+}
+
+export interface StudentCourseAccess {
+    id: string;
+    studentDealId: string;
+    courseId: string;
+    unlockedAt: string;
+}
+
+export interface StudentLessonProgress {
+    id: string;
+    studentDealId: string;
+    lessonId: string;
+    completedAt: string;
+}
+
+// --------------------------------------
+
 export interface Franchise {
   id: string;
   saleNumber: string;

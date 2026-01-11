@@ -6,7 +6,7 @@ import {
   EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, 
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
-  CompanySetting, Pipeline, WebhookTrigger, SupportTag
+  CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress
 } from '../types';
 
 /**
@@ -120,6 +120,127 @@ export const appBackend = {
       return (data || []).map(d => ({
           id: d.id, userName: d.user_name, action: d.action as any, module: d.module, details: d.details, recordId: d.record_id, createdAt: d.created_at
       }));
+  },
+
+  // --- ONLINE COURSES ---
+
+  getOnlineCourses: async (): Promise<OnlineCourse[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          description: d.description,
+          price: d.price,
+          paymentLink: d.payment_link,
+          imageUrl: d.image_url,
+          certificateTemplateId: d.certificate_template_id,
+          createdAt: d.created_at
+      }));
+  },
+
+  saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<OnlineCourse> => {
+      if (!isConfigured) throw new Error("Backend not configured");
+      const payload = {
+          title: course.title,
+          description: course.description,
+          price: course.price,
+          payment_link: course.paymentLink,
+          image_url: course.imageUrl,
+          certificate_template_id: course.certificateTemplateId || null
+      };
+
+      if (course.id) {
+          const { data, error } = await supabase.from('crm_online_courses').update(payload).eq('id', course.id).select().single();
+          if (error) throw error;
+          return { id: data.id, title: data.title, description: data.description, price: data.price, paymentLink: data.payment_link, imageUrl: data.image_url, certificateTemplateId: data.certificate_template_id, createdAt: data.created_at };
+      } else {
+          const { data, error } = await supabase.from('crm_online_courses').insert([payload]).select().single();
+          if (error) throw error;
+          return { id: data.id, title: data.title, description: data.description, price: data.price, paymentLink: data.payment_link, imageUrl: data.image_url, certificateTemplateId: data.certificate_template_id, createdAt: data.created_at };
+      }
+  },
+
+  deleteOnlineCourse: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_online_courses').delete().eq('id', id);
+      if (error) throw error;
+  },
+
+  getCourseModules: async (courseId: string): Promise<CourseModule[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_course_modules').select('*').eq('course_id', courseId).order('order_index', { ascending: true });
+      if (error) throw error;
+      return (data || []).map((d: any) => ({ id: d.id, courseId: d.course_id, title: d.title, orderIndex: d.order_index }));
+  },
+
+  saveCourseModule: async (mod: Partial<CourseModule>): Promise<void> => {
+      if (!isConfigured) return;
+      const payload = { course_id: mod.courseId, title: mod.title, order_index: mod.orderIndex };
+      if (mod.id) {
+          await supabase.from('crm_course_modules').update(payload).eq('id', mod.id);
+      } else {
+          await supabase.from('crm_course_modules').insert([payload]);
+      }
+  },
+
+  deleteCourseModule: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_course_modules').delete().eq('id', id);
+  },
+
+  getModuleLessons: async (moduleId: string): Promise<CourseLesson[]> => {
+      if (!isConfigured) return [];
+      const { data, error } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index', { ascending: true });
+      if (error) throw error;
+      return (data || []).map((d: any) => ({ id: d.id, moduleId: d.module_id, title: d.title, description: d.description, video_url: d.video_url, materials: d.materials || [], order_index: d.order_index }));
+  },
+
+  saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
+      if (!isConfigured) return;
+      const payload = { module_id: lesson.moduleId, title: lesson.title, description: lesson.description, video_url: lesson.videoUrl, materials: lesson.materials, order_index: lesson.orderIndex };
+      if (lesson.id) {
+          await supabase.from('crm_course_lessons').update(payload).eq('id', lesson.id);
+      } else {
+          await supabase.from('crm_course_lessons').insert([payload]);
+      }
+  },
+
+  deleteCourseLesson: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_course_lessons').delete().eq('id', id);
+  },
+
+  getStudentCourseAccess: async (studentDealId: string): Promise<string[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_student_course_access').select('course_id').eq('student_deal_id', studentDealId);
+      return (data || []).map(d => d.course_id);
+  },
+
+  grantCourseAccess: async (studentDealId: string, courseId: string, unlockedAt: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_student_course_access').upsert({ student_deal_id: studentDealId, course_id: courseId, unlocked_at: unlockedAt });
+  },
+
+  revokeCourseAccess: async (studentDealId: string, courseId: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_student_course_access').delete().eq('student_deal_id', studentDealId).eq('course_id', courseId);
+  },
+
+  getStudentLessonProgress: async (studentDealId: string): Promise<string[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_student_lesson_progress').select('lesson_id').eq('student_deal_id', studentDealId);
+      return (data || []).map(d => d.lesson_id);
+  },
+
+  toggleLessonProgress: async (studentDealId: string, lessonId: string, completed: boolean): Promise<void> => {
+      if (!isConfigured) return;
+      if (completed) {
+          await supabase.from('crm_student_lesson_progress').upsert({ student_deal_id: studentDealId, lesson_id: lessonId });
+      } else {
+          await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', studentDealId).eq('lesson_id', lessonId);
+      }
   },
 
   // --- SUPORTE INTERNO ---
@@ -482,6 +603,7 @@ export const appBackend = {
 
   saveBanner: async (banner: Banner): Promise<void> => {
     if (!isConfigured) return;
+    /* FIX: Changed target_audience: banner.target_audience to target_audience: banner.targetAudience to match the Banner interface in types.ts */
     const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.linkUrl, target_audience: banner.targetAudience, active: banner.active };
     if (banner.id) {
         const { error } = await supabase.from('app_banners').update(payload).eq('id', banner.id);
@@ -533,7 +655,6 @@ export const appBackend = {
       pixKey: d.pix_key, 
       hasReformer: d.has_reformer, 
       qtyReformer: d.qty_reformer, 
-      /* FIXED: Corrected mapping of quantity fields from database (snake_case) to interface (camelCase) */
       hasLadderBarrel: d.has_ladder_barrel, 
       qtyLadderBarrel: d.qty_ladder_barrel, 
       hasChair: d.has_chair, 
@@ -551,7 +672,6 @@ export const appBackend = {
     if (!isConfigured) return;
     const payload = {
       status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, 
-      /* FIXED: Corrected reference to property names on studio object (camelCase) for payload mapping */
       qty_ladder_barrel: studio.qtyLadderBarrel, 
       has_chair: studio.hasChair, 
       qty_chair: studio.qtyChair, 
@@ -665,7 +785,6 @@ export const appBackend = {
       const payload = { 
           id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, 
           questions: form.questions, style: form.style, team_id: form.teamId || null, 
-          // FIX: Accessing FormModel properties using camelCase
           distribution_mode: form.distributionMode || 'fixed', 
           fixed_owner_id: form.fixedOwnerId || null, 
           target_pipeline: form.targetPipeline || 'Padrão', 
@@ -900,6 +1019,7 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
+    /* FIX: Changed body_text: cert.body_text to body_text: cert.bodyText to match the CertificateModel interface in types.ts */
     const { error } = await supabase.from('crm_certificates').upsert({ 
       id: cert.id || undefined, 
       title: cert.title, 

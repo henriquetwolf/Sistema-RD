@@ -135,6 +135,7 @@ export const appBackend = {
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
     const payload = {
+      /* Fixed: Property 'interval_minutes' does not exist on type 'Partial<SavedPreset>'. Changed to 'intervalMinutes' */
       name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
@@ -143,7 +144,7 @@ export const appBackend = {
       // Fixed interval_minutes to intervalMinutes
       return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
-      const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
+      const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
       // Fixed interval_minutes to intervalMinutes
       return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
@@ -560,7 +561,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
     return (data || []).map(d => ({
-      id: d.id, ticketId: d.ticket_id, senderId: d.sender_id, senderName: d.sender_name, senderRole: d.sender_role, content: d.content, attachmentUrl: d.attachment_url, attachmentName: d.attachment_name, createdAt: d.created_at
+      id: d.id, ticketId: d.ticket_id, senderId: d.sender_id, senderName: d.sender_name, senderRole: d.sender_role, content: d.content, attachment_url: d.attachment_url, attachmentName: d.attachment_name, createdAt: d.created_at
     }));
   },
 
@@ -635,10 +636,12 @@ export const appBackend = {
     if (blk.id && blk.id.length > 10) {
       const { data, error } = await supabase.from('crm_event_blocks').update(payload).eq('id', blk.id).select().single();
       if (error) throw error;
+      /* Fixed: Property 'max_selections' does not exist in type 'EventBlock'. Changed to 'maxSelections' */
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     } else {
       const { data, error = null } = await supabase.from('crm_event_blocks').insert([payload]).select().single();
       if (error) throw error;
+      /* Fixed: Property 'max_selections' does not exist in type 'EventBlock'. Changed to 'maxSelections' */
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     }
   },
@@ -660,7 +663,30 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, openInstallments: d.open_installments, totalNegotiatedValue: d.total_negotiated_value, totalInstallments: d.total_installments, dueDate: d.due_date, responsibleAgent: d.responsible_agent, identifierCode: d.identifier_code, fullName: d.full_name, productName: d.product_name, originalValue: d.original_value, paymentMethod: d.payment_method, observations: d.observations, status: d.status, team: d.team, voucherLink1: d.voucher_link1, testDate: d.test_date, voucherLink2: d.voucher_link2, voucherLink3: d.voucher_link3, boletosLink: d.boletos_link, negotiation_reference: d.negotiation_reference, attachments: d.attachments, createdAt: d.created_at
+      id: d.id, 
+      openInstallments: d.open_installments, 
+      // Corrected property names to match BillingNegotiation interface
+      totalNegotiatedValue: d.total_negotiated_value, 
+      totalInstallments: d.total_installments, 
+      dueDate: d.due_date, 
+      responsibleAgent: d.responsible_agent, 
+      identifierCode: d.identifier_code, 
+      fullName: d.full_name, 
+      productName: d.product_name, 
+      originalValue: d.original_value, 
+      paymentMethod: d.payment_method, 
+      observations: d.observations, 
+      status: d.status, 
+      team: d.team, 
+      voucherLink1: d.voucher_link1, 
+      testDate: d.test_date, 
+      voucherLink2: d.voucher_link2, 
+      voucherLink3: d.voucher_link3, 
+      boletosLink: d.boletos_link, 
+      // Corrected negotiation_reference to negotiationReference
+      negotiationReference: d.negotiation_reference, 
+      attachments: d.attachments, 
+      createdAt: d.created_at
     }));
   },
 
@@ -668,7 +694,27 @@ export const appBackend = {
     if (!isConfigured) return;
     // Fix: Corrected property name from neg.payment_method to neg.paymentMethod
     const payload = {
-      open_installments: neg.openInstallments, total_negotiated_value: neg.totalNegotiatedValue, total_installments: neg.totalInstallments, due_date: neg.dueDate, responsible_agent: neg.responsibleAgent, identifier_code: neg.identifierCode, full_name: neg.fullName, product_name: neg.productName, original_value: neg.originalValue, payment_method: neg.paymentMethod, observations: neg.observations, status: neg.status, team: neg.team, voucher_link1: neg.voucherLink1, test_date: neg.testDate, voucher_link2: neg.voucherLink2, voucher_link3: neg.voucherLink3, boletos_link: neg.boletosLink, negotiation_reference: neg.negotiation_reference, attachments: neg.attachments
+      open_installments: neg.openInstallments, 
+      total_negotiated_value: neg.totalNegotiatedValue, 
+      total_installments: neg.totalInstallments, 
+      due_date: neg.dueDate, 
+      responsible_agent: neg.responsibleAgent, 
+      identifier_code: neg.identifierCode, 
+      full_name: neg.fullName, 
+      product_name: neg.productName, 
+      original_value: neg.originalValue, 
+      payment_method: neg.paymentMethod, 
+      observations: neg.observations, 
+      status: neg.status, 
+      team: neg.team, 
+      voucher_link1: neg.voucherLink1, 
+      test_date: neg.testDate, 
+      voucher_link2: neg.voucherLink2, 
+      voucher_link3: neg.voucherLink3, 
+      boletos_link: neg.boletosLink, 
+      // Fix: negotiation_reference mapping from neg.negotiationReference
+      negotiation_reference: neg.negotiationReference, 
+      attachments: neg.attachments
     };
     if (neg.id) await supabase.from('crm_billing_negotiations').update(payload).eq('id', neg.id);
     else await supabase.from('crm_billing_negotiations').insert([payload]);
@@ -771,7 +817,7 @@ export const appBackend = {
     let query = supabase.from('crm_banners').select('*').order('created_at', { ascending: false });
     if (audience) query = query.eq('target_audience', audience).eq('active', true);
     const { data } = await query;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, linkUrl: d.link_url, targetAudience: d.target_audience, active: d.active, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, link_url: d.link_url, targetAudience: d.target_audience, active: d.active, createdAt: d.created_at }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -860,7 +906,7 @@ export const appBackend = {
       sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology,
       studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account,
       beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: !!d.has_reformer, qtyReformer: d.qty_reformer || 0,
-      hasLadderBarrel: !!d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel || 0, hasChair: !!d.has_chair, qtyChair: d.qty_chair || 0,
+      hasLadderBarrel: !!d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel || 0, has_chair: !!d.has_chair, qtyChair: d.qty_chair || 0,
       hasCadillac: !!d.has_cadillac, qtyCadillac: d.qty_cadillac || 0, hasChairsForCourse: !!d.has_chairs_for_course,
       hasTv: !!d.has_tv, maxKitsCapacity: d.max_kits_capacity, attachments: d.attachments
     }));
@@ -875,7 +921,8 @@ export const appBackend = {
       state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue,
       methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency,
       account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer,
-      has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair,
+      /* Fixed: Property 'qty_ladder_barrel' does not exist on type 'PartnerStudio'. Changed to 'qtyLadderBarrel' */
+      has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel || 0, has_chair: studio.hasChair, qty_chair: studio.qtyChair,
       has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse,
       has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
@@ -893,7 +940,8 @@ export const appBackend = {
       const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
       return (data || []).map((d: any) => ({
           id: d.id, title: d.title, backgroundData: d.background_data, backBackgroundData: d.back_background_data,
-          linkedProductId: d.linked_product_id, body_text: d.body_text, layoutConfig: d.layout_config, createdAt: d.created_at
+          // Corrected bodyText property name
+          linkedProductId: d.linked_product_id, bodyText: d.body_text, layoutConfig: d.layout_config, createdAt: d.created_at
       }));
   },
 
@@ -937,7 +985,8 @@ export const appBackend = {
           studentCity: d.course_city || 'Sede VOLL',
           template: {
               id: t.id, title: t.title, backgroundData: t.background_data, backBackgroundData: t.back_background_data,
-              linked_product_id: t.linked_product_id, body_text: t.body_text, layout_config: t.layout_config
+              // Corrected bodyText property name
+              linked_product_id: t.linked_product_id, bodyText: t.body_text, layout_config: t.layout_config
           },
           issuedAt: cert.issued_at
       };

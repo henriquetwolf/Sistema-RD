@@ -286,7 +286,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   }, [allProducts, editingCompany, productSearch]);
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V48 (FIX TOTAL RELACIONAMENTOS E RLS)
+-- SCRIPT DE FUNDAÇÃO CRM V49 (LIMPEZA DE ÓRFÃOS E FIX DE RELACIONAMENTOS)
 -- 1. Garante que as tabelas existem
 CREATE TABLE IF NOT EXISTS public.crm_certificates (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -307,7 +307,16 @@ CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
     issued_at timestamp with time zone DEFAULT now()
 );
 
--- 2. RECONSTRÓI RELACIONAMENTOS (Crucial para o .select() do Supabase)
+-- 2. LIMPEZA DE REGISTROS ÓRFÃOS (Evita o erro 23503)
+-- Remove certificados que apontam para deals (alunos) que não existem mais
+DELETE FROM public.crm_student_certificates 
+WHERE student_deal_id NOT IN (SELECT id FROM public.crm_deals);
+
+-- Remove certificados que apontam para modelos que não existem mais
+DELETE FROM public.crm_student_certificates 
+WHERE certificate_template_id NOT IN (SELECT id FROM public.crm_certificates);
+
+-- 3. RECONSTRÓI RELACIONAMENTOS
 ALTER TABLE public.crm_student_certificates 
 DROP CONSTRAINT IF EXISTS crm_student_certificates_student_deal_id_fkey;
 
@@ -322,7 +331,7 @@ ALTER TABLE public.crm_student_certificates
 ADD CONSTRAINT crm_student_certificates_certificate_template_id_fkey 
 FOREIGN KEY (certificate_template_id) REFERENCES public.crm_certificates(id) ON DELETE CASCADE;
 
--- 3. POLÍTICAS DE ACESSO (Liberando leitura pública via Hash)
+-- 4. POLÍTICAS DE ACESSO (Leitura Pública via Hash)
 ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_student_certificates ENABLE ROW LEVEL SECURITY;
 
@@ -338,7 +347,7 @@ CREATE POLICY "Escrita Admin Certificados" ON public.crm_certificates FOR ALL TO
 DROP POLICY IF EXISTS "Escrita Admin Diplomas" ON public.crm_student_certificates;
 CREATE POLICY "Escrita Admin Diplomas" ON public.crm_student_certificates FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- 4. Permissões de Rede
+-- 5. Permissões de Rede
 GRANT ALL ON public.crm_certificates TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_student_certificates TO anon, authenticated, service_role;
 
@@ -541,7 +550,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold">Manutenção e Sincronização</h3></div>
                 <p className="text-sm text-slate-500 mb-6">Execute este reparo se notar erros de banco de dados ou colunas ausentes na liberação de alunos.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V48</button> : (
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V49</button> : (
                     <div className="relative">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs">{sqlCopied ? 'Copiado!' : 'Copiar'}</button>

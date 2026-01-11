@@ -266,7 +266,7 @@ export const appBackend = {
           const { error } = await supabase.from('crm_course_lessons').update(payload).eq('id', lesson.id);
           if (error) throw error;
       } else {
-          const { error } = await supabase.from('crm_course_lessons').insert([payload]);
+          const { error = null } = await supabase.from('crm_course_lessons').insert([payload]);
           if (error) throw error;
       }
   },
@@ -1063,65 +1063,62 @@ export const appBackend = {
 
   getStudentCertificate: async (hash: string): Promise<any> => {
       if (!isConfigured) return null;
-      // Realizamos um join explícito forçando as Foreign Keys
-      // O Supabase usa os nomes das tabelas para inferir as relações
-      const { data: cert, error } = await supabase
+      
+      // Realizamos um fetch inicial apenas do registro principal para logar erros se necessário
+      const { data: cert, error: certError } = await supabase
         .from('crm_student_certificates')
-        .select(`
-            *, 
-            crm_deals ( company_name, contact_name, course_city ), 
-            crm_certificates ( * )
-        `)
+        .select('*')
         .eq('hash', hash)
         .maybeSingle();
 
-      if (error) {
-          console.error("Erro técnico ao buscar certificado (V48):", error);
+      if (certError) {
+          console.error("Erro ao localizar registro de certificado por hash:", certError);
           return null;
       }
 
       if (!cert) {
-          console.warn("Certificado não localizado para o hash informado.");
+          console.warn("Nenhum registro de certificado encontrado para o hash:", hash);
           return null;
       }
 
-      // Supabase pode retornar os joins como objetos únicos ou arrays
-      const dealData = Array.isArray(cert.crm_deals) ? cert.crm_deals[0] : cert.crm_deals;
-      const certTemplateData = Array.isArray(cert.crm_certificates) ? cert.crm_certificates[0] : cert.crm_certificates;
-      
-      // Se não encontrou o modelo de certificado, tentamos uma busca manual pelo ID do template para garantir
-      let finalTemplate = certTemplateData;
-      if (!finalTemplate && cert.certificate_template_id) {
-          const { data: manualTemplate } = await supabase.from('crm_certificates').select('*').eq('id', cert.certificate_template_id).maybeSingle();
-          if (manualTemplate) finalTemplate = manualTemplate;
-      }
+      // Realizamos buscas paralelas manuais para garantir os dados, ignorando falhas de Join implícito
+      try {
+          const [dealRes, templateRes] = await Promise.all([
+              supabase.from('crm_deals').select('company_name, contact_name, course_city').eq('id', cert.student_deal_id).maybeSingle(),
+              supabase.from('crm_certificates').select('*').eq('id', cert.certificate_template_id).maybeSingle()
+          ]);
 
-      // Se não encontrou o aluno, tentamos busca manual pelo deal_id
-      let finalDeal = dealData;
-      if (!finalDeal && cert.student_deal_id) {
-          const { data: manualDeal } = await supabase.from('crm_deals').select('company_name, contact_name, course_city').eq('id', cert.student_deal_id).maybeSingle();
-          if (manualDeal) finalDeal = manualDeal;
-      }
+          const finalDeal = dealRes.data;
+          const finalTemplate = templateRes.data;
 
-      if (!finalDeal || !finalTemplate) {
-          console.warn("Falha crítica no mapeamento: Dados vinculados não localizados mesmo com busca manual.");
+          if (!finalDeal) {
+              console.warn(`Aluno (Deal ID ${cert.student_deal_id}) não localizado no banco.`);
+              return null;
+          }
+
+          if (!finalTemplate) {
+              console.warn(`Modelo de Certificado (ID ${cert.certificate_template_id}) não localizado no banco.`);
+              return null;
+          }
+
+          return {
+              studentName: finalDeal.company_name || finalDeal.contact_name,
+              studentCity: finalDeal.course_city || 'Sede VOLL',
+              template: {
+                  id: finalTemplate.id, 
+                  title: finalTemplate.title, 
+                  backgroundData: finalTemplate.background_data, 
+                  backBackgroundData: finalTemplate.back_background_data,
+                  linkedProductId: finalTemplate.linked_product_id, 
+                  bodyText: finalTemplate.body_text, 
+                  layoutConfig: finalTemplate.layout_config
+              },
+              issuedAt: cert.issued_at
+          };
+      } catch (err) {
+          console.error("Erro crítico ao processar mapeamento de dados do certificado:", err);
           return null;
       }
-
-      return {
-          studentName: finalDeal.company_name || finalDeal.contact_name,
-          studentCity: finalDeal.course_city || 'Sede VOLL',
-          template: {
-              id: finalTemplate.id, 
-              title: finalTemplate.title, 
-              backgroundData: finalTemplate.background_data, 
-              backBackgroundData: finalTemplate.back_background_data,
-              linkedProductId: finalTemplate.linked_product_id, 
-              bodyText: finalTemplate.body_text, 
-              layoutConfig: finalTemplate.layout_config
-          },
-          issuedAt: cert.issued_at
-      };
   },
 
   getAppLogo: async (): Promise<string | null> => {

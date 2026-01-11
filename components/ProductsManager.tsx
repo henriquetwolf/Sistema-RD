@@ -62,36 +62,42 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       setSyncError(null);
       try {
           await fetchCertificates();
-          const loadedCourses = await fetchOnlineCourses();
-          const loadedProducts = await fetchProducts();
-          
-          if (loadedCourses.length > 0) {
-              let syncPerformed = false;
-              for (const course of loadedCourses) {
-                  const exists = loadedProducts.some(p => (p.name || '').trim().toLowerCase() === (course.title || '').trim().toLowerCase());
-                  
-                  if (!exists && course.title) {
-                      syncPerformed = true;
-                      try {
-                          await appBackend.client.from('crm_products').insert([{
-                              name: course.title,
-                              category: 'Curso Online',
-                              price: course.price || 0,
-                              status: 'active',
-                              platform: 'Plataforma Própria',
-                              image_url: course.imageUrl,
-                              description: course.description
-                          }]);
-                      } catch (err) {
-                          console.error("Erro ao sincronizar curso:", course.title, err);
-                      }
-                  }
-              }
-              if (syncPerformed) await fetchProducts();
-          }
+          await fetchOnlineCourses();
+          await fetchProducts();
       } catch (e: any) {
           console.error("Erro no carregamento de produtos:", e);
           setSyncError("Não foi possível carregar o catálogo completo.");
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const forceSyncPortal = async () => {
+      setIsLoading(true);
+      try {
+          const loadedProducts = await fetchProducts();
+          const loadedCourses = await fetchOnlineCourses();
+          
+          let syncCount = 0;
+          for (const prod of loadedProducts) {
+              if (prod.category === 'Curso Online') {
+                  const hasTechnical = loadedCourses.some(c => (c.title || '').trim().toLowerCase() === (prod.name || '').trim().toLowerCase());
+                  if (!hasTechnical) {
+                      await appBackend.saveOnlineCourse({
+                          title: prod.name,
+                          description: prod.description,
+                          price: prod.price,
+                          paymentLink: prod.url,
+                          imageUrl: (prod as any).image_url || (prod as any).imageUrl
+                      });
+                      syncCount++;
+                  }
+              }
+          }
+          if (syncCount > 0) await fetchOnlineCourses();
+          alert(`${syncCount} cursos sincronizados com o portal técnico.`);
+      } catch (e: any) {
+          alert(`Erro na sincronização: ${e.message}`);
       } finally {
           setIsLoading(false);
       }
@@ -160,10 +166,12 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           await appBackend.saveCourseModule({ courseId: editingCourse.id, title, orderIndex: courseModules.length });
           handleOpenCourseBuilder(editingCourse);
       } catch (e: any) { 
-          if (e.message?.includes('RLS')) {
+          if (e.message?.includes('foreign key')) {
+              alert("Erro Crítico: Este curso perdeu o vínculo com o banco de dados. \n\nSolução: Volte, clique no botão 'Sincronizar' no topo da tela e tente novamente.");
+          } else if (e.message?.includes('RLS')) {
               alert("Erro de Permissão: Você precisa rodar o script de reparo do Banco de Dados em 'Configurações'.");
           } else {
-              alert(e.message); 
+              alert(`Erro: ${e.message}`); 
           }
       }
   };
@@ -279,7 +287,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                     </div>
                     <div className="flex gap-2">
                         <button 
-                            onClick={initData} 
+                            onClick={forceSyncPortal} 
                             disabled={isLoading}
                             className="p-2.5 bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-xl transition-all shadow-sm flex items-center gap-2 font-bold text-xs"
                         >
@@ -348,10 +356,16 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                     
                                     {product.category === 'Curso Online' && (
                                         <button 
-                                            onClick={() => {
-                                                const course = courses.find(c => (c.title || '').toLowerCase() === (product.name || '').toLowerCase());
+                                            onClick={async () => {
+                                                let course = courses.find(c => (c.title || '').toLowerCase() === (product.name || '').toLowerCase());
+                                                if (!course) {
+                                                    await forceSyncPortal();
+                                                    const updatedCourses = await fetchOnlineCourses();
+                                                    course = updatedCourses.find(c => (c.title || '').toLowerCase() === (product.name || '').toLowerCase());
+                                                }
+
                                                 if (course) handleOpenCourseBuilder(course);
-                                                else alert("Erro: Registro técnico não sincronizado. Clique em sincronizar catálogo.");
+                                                else alert("Erro: Registro técnico não sincronizado. Clique no botão 'Sincronizar' no topo.");
                                             }}
                                             className="mt-auto w-full py-3 bg-slate-900 text-white hover:bg-indigo-600 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
                                         >

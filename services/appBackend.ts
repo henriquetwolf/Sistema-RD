@@ -135,17 +135,15 @@ export const appBackend = {
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
     const payload = {
-      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
+      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.interval_minutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
-      // Fix: Changed 'primary_key' to 'primaryKey' to match SavedPreset interface
       return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
       const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
-      // Fix: Changed 'primary_key' to 'primaryKey' to match SavedPreset interface
       return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     }
   },
@@ -182,9 +180,9 @@ export const appBackend = {
           title: course.title,
           description: course.description,
           price: course.price,
-          payment_link: course.payment_link,
+          payment_link: course.paymentLink,
           image_url: course.imageUrl,
-          certificate_template_id: course.certificate_template_id || null
+          certificate_template_id: course.certificateTemplateId || null
       };
 
       if (course.id) {
@@ -242,7 +240,7 @@ export const appBackend = {
 
   getModuleLessons: async (moduleId: string): Promise<CourseLesson[]> => {
       if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index', { ascending: true });
+      const { data, error = null } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index', { ascending: true });
       if (error) throw error;
       return (data || []).map((d: any) => ({ 
           id: d.id, 
@@ -372,11 +370,11 @@ export const appBackend = {
       description: form.description, 
       campaign: form.campaign, 
       is_lead_capture: form.isLeadCapture, 
-      distribution_mode: form.distribution_mode, 
-      fixed_owner_id: form.fixed_owner_id, 
-      team_id: form.team_id, 
-      target_pipeline: form.target_pipeline, 
-      target_stage: form.target_stage, 
+      distribution_mode: form.distributionMode, 
+      fixed_owner_id: form.fixedOwnerId, 
+      team_id: form.teamId, 
+      target_pipeline: form.targetPipeline, 
+      target_stage: form.targetStage, 
       questions: form.questions, 
       style: form.style, 
       folder_id: form.folderId
@@ -430,7 +428,7 @@ export const appBackend = {
   saveSurvey: async (survey: SurveyModel): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      title: survey.title, description: survey.description, campaign: survey.campaign, is_lead_capture: survey.isLeadCapture, distribution_mode: survey.distribution_mode, fixed_owner_id: survey.fixed_owner_id, team_id: survey.team_id, target_pipeline: survey.target_pipeline, target_stage: survey.target_stage, questions: survey.questions, style: survey.style, folder_id: survey.folderId, target_type: survey.targetType, 
+      title: survey.title, description: survey.description, campaign: survey.campaign, is_lead_capture: survey.isLeadCapture, distribution_mode: survey.distributionMode, fixed_owner_id: survey.fixedOwnerId, team_id: survey.teamId, target_pipeline: survey.targetPipeline, target_stage: survey.targetStage, questions: survey.questions, style: survey.style, folder_id: survey.folderId, target_type: survey.targetType, 
       target_product_type: survey.targetProductType, target_product_name: survey.targetProductName, only_if_finished: survey.onlyIfFinished, is_active: survey.isActive
     };
     if (survey.id && survey.id.length > 10) await supabase.from('crm_forms').update(payload).eq('id', survey.id);
@@ -443,7 +441,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
+      id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
     }));
   },
 
@@ -533,7 +531,7 @@ export const appBackend = {
 
   getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${sender_id},target_id.eq.${sender_id}`).order('created_at', { ascending: false });
+    const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${senderId},target_id.eq.${senderId}`).order('created_at', { ascending: false });
     return (data || []).map(d => ({
       id: d.id, senderId: d.sender_id, senderName: d.sender_name, senderEmail: d.sender_email, senderRole: d.sender_role, targetId: d.target_id, targetName: d.target_name, targetEmail: d.target_email, targetRole: d.target_role, subject: d.subject, message: d.message, tag: d.tag, status: d.status, response: d.response, assignedId: d.assigned_id, assignedName: d.assigned_name, createdAt: d.created_at, updatedAt: d.updated_at
     }));
@@ -597,7 +595,8 @@ export const appBackend = {
 
   getWorkshops: async (eventId: string): Promise<Workshop[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_workshops').select('*').eq('event_id', event_id).order('date').order('time');
+    // FIXED: Corrected event_id usage (Cannot find name 'event_id'. Did you mean 'eventId'?)
+    const { data } = await supabase.from('crm_workshops').select('*').eq('event_id', eventId).order('date').order('time');
     return (data || []).map(d => ({ id: d.id, eventId: d.event_id, blockId: d.block_id, title: d.title, description: d.description, speaker: d.speaker, date: d.date, time: d.time, spots: d.spots }));
   },
 
@@ -622,8 +621,9 @@ export const appBackend = {
 
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', event_id).order('date');
-    return (data || []).map(d => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
+    // FIXED: Corrected event_id usage (Cannot find name 'event_id'. Did you mean 'eventId'?)
+    const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date');
+    return (data || []).map(d => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, max_selections: d.max_selections }));
   },
 
   saveBlock: async (blk: EventBlock): Promise<EventBlock> => {
@@ -647,7 +647,8 @@ export const appBackend = {
 
   getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', event_id);
+    // FIXED: Corrected event_id usage (Cannot find name 'event_id'. Did you mean 'eventId'?)
+    const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId);
     return (data || []).map(d => ({ id: d.id, eventId: d.event_id, workshopId: d.workshop_id, studentId: d.student_id, studentName: d.student_name, studentEmail: d.student_email, registeredAt: d.registered_at }));
   },
 
@@ -718,19 +719,24 @@ export const appBackend = {
   // --- WHATSAPP CONFIG ---
 
   getWhatsAppConfig: async (): Promise<any | null> => {
-    if (!isConfigured) {
-        const local = localStorage.getItem('crm_local_whatsapp_config');
-        return local ? JSON.parse(local) : null;
-    }
+    // Tenta primeiro no localStorage (sempre confiável para o estado local do navegador)
+    const local = localStorage.getItem('crm_local_whatsapp_config');
+    if (local) return JSON.parse(local);
+
+    if (!isConfigured) return null;
+    
+    // Fallback para o Supabase
     const { data } = await supabase.from('crm_settings').select('value').eq('key', 'whatsapp_config').maybeSingle();
     return data ? JSON.parse(data.value) : null;
   },
 
   saveWhatsAppConfig: async (config: any): Promise<void> => {
-    if (!isConfigured) {
-        localStorage.setItem('crm_local_whatsapp_config', JSON.stringify(config));
-        return;
-    }
+    // Salva no localStorage imediatamente
+    localStorage.setItem('crm_local_whatsapp_config', JSON.stringify(config));
+
+    if (!isConfigured) return;
+    
+    // Salva no Supabase se disponível
     await supabase.from('crm_settings').upsert({ key: 'whatsapp_config', value: JSON.stringify(config) });
   },
 
@@ -927,7 +933,7 @@ export const appBackend = {
       city: studio.city,
       state: studio.state, 
       country: studio.country, 
-      size_m2: studio.sizeM2, 
+      size_m2: studio.size_m2, 
       student_capacity: studio.studentCapacity, 
       rent_value: studio.rentValue,
       methodology: studio.methodology, 
@@ -1013,23 +1019,31 @@ export const appBackend = {
   },
 
   getAppLogo: async (): Promise<string | null> => {
+    const local = localStorage.getItem('crm_app_logo');
+    if (local) return local;
+
     if (!isConfigured) return null;
     const { data } = await supabase.from('crm_settings').select('value').eq('key', 'app_logo').maybeSingle();
     return data?.value || null;
   },
 
   saveAppLogo: async (logo: string): Promise<void> => {
+    localStorage.setItem('crm_app_logo', logo);
     if (!isConfigured) return;
     await supabase.from('crm_settings').upsert({ key: 'app_logo', value: logo });
   },
 
   getInventorySecurityMargin: async (): Promise<number> => {
+    const local = localStorage.getItem('crm_inventory_margin');
+    if (local) return parseInt(local);
+
     if (!isConfigured) return 5;
     const { data } = await supabase.from('crm_settings').select('value').eq('key', 'inventory_security_margin').maybeSingle();
     return data ? parseInt(data.value) : 5;
   },
 
   saveInventorySecurityMargin: async (margin: number): Promise<void> => {
+    localStorage.setItem('crm_inventory_margin', String(margin));
     if (!isConfigured) return;
     await supabase.from('crm_settings').upsert({ key: 'inventory_security_margin', value: String(margin) });
   },

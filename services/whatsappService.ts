@@ -263,36 +263,49 @@ export const whatsappService = {
     },
 
     sendTextMessage: async (chat: any, text: string) => {
+        // Pega a configuração sempre atualizada do backend (que agora usa localStorage como primário)
         const config = await appBackend.getWhatsAppConfig();
-        if (!config || !config.instanceUrl) throw new Error("WhatsApp não configurado. Vá em configurações.");
+        
+        if (!config || !config.instanceUrl || !config.instanceName) {
+            throw new Error("WhatsApp não configurado. Vá em configurações e salve os dados da instância.");
+        }
         
         const target = chat.contact_phone && !whatsappService.isLid(chat.contact_phone) 
             ? chat.contact_phone 
             : chat.wa_id;
 
-        // Sanitização rigorosa da URL - não força HTTPS se já tiver HTTP
+        // Sanitização robusta da URL
         let baseUrl = config.instanceUrl.trim();
-        if (!baseUrl.includes('://')) baseUrl = `https://${baseUrl}`;
+        if (!baseUrl.includes('://')) {
+            baseUrl = `https://${baseUrl}`;
+        }
         baseUrl = baseUrl.replace(/\/$/, "");
 
         const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;
         
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 
-                'apikey': config.apiKey.trim(), 
-                'Content-Type': 'application/json' 
-            },
-            body: JSON.stringify({ 
-                number: target, 
-                options: { delay: 1200, presence: "composing" }, 
-                text: text 
-            })
-        });
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 
+                    'apikey': config.apiKey.trim(), 
+                    'Content-Type': 'application/json' 
+                },
+                body: JSON.stringify({ 
+                    number: target, 
+                    options: { delay: 1200, presence: "composing" }, 
+                    text: text 
+                })
+            });
 
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || "Erro na Evolution API. Verifique a instância.");
-        return data;
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || "Erro na Evolution API. Verifique se a instância está online.");
+            return data;
+        } catch (err: any) {
+            if (err.message.includes('Failed to fetch')) {
+                throw new Error("Não foi possível conectar à URL da API. Verifique se o endereço está correto e se o SSL (HTTPS) é válido.");
+            }
+            throw err;
+        }
     },
 
     syncMessage: async (chatId: string, text: string, senderType: 'user' | 'agent' | 'system', waMessageId?: string) => {

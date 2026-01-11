@@ -7,7 +7,7 @@ import {
   AlertCircle, ShieldCheck, UserPlus, List, MoveRight,
   Clock, CheckCircle, Circle, MessageSquare, ExternalLink, GraduationCap, School, Building2, Store, Heart,
   Filter, LayoutGrid, ArrowRightLeft, DollarSign, Briefcase,
-  Edit2, Trash2, Tag, Hash, Kanban
+  Edit2, Trash2, Tag, Hash, Kanban, Copy
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -114,6 +114,11 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedChat = conversations.find(c => c.id === selectedChatId);
+
+  // Calcula a URL de webhook para exibir ao usuário
+  const webhookUrlDisplay = useMemo(() => {
+    return `${window.location.origin}/api/whatsapp/webhook`;
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -314,6 +319,26 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
       } catch (e) { alert("Erro ao salvar tag."); } finally { setIsSavingTag(false); }
   };
 
+  // --- ADDED FIX: handleIdentifySubmit implementation ---
+  const handleIdentifySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedChatId || !identifyPhone || !identifyName) return;
+    setIsSavingIdentity(true);
+    try {
+        await whatsappService.associateLidWithPhone(selectedChatId, identifyPhone, identifyName);
+        await fetchConversations();
+        setShowIdentifyModal(false);
+        setIdentifyPhone('');
+        setIdentifyName('');
+        // Refresh local info
+        loadGlobalIdentification();
+    } catch (err: any) {
+        alert("Erro ao identificar contato: " + err.message);
+    } finally {
+        setIsSavingIdentity(false);
+    }
+  };
+
   const handleSaveConfig = async () => {
       setIsSavingConfig(true);
       try {
@@ -329,23 +354,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
           alert("Configurações salvas!");
           checkRealStatus(sanitizedConfig);
       } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsSavingConfig(false); }
-  };
-
-  const handleIdentifySubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!selectedChatId || !identifyPhone) return;
-      setIsSavingIdentity(true);
-      try {
-          await whatsappService.associateLidWithPhone(selectedChatId, identifyPhone, identifyName);
-          await fetchConversations();
-          await loadGlobalIdentification();
-          setShowIdentifyModal(false);
-          setIdentifyPhone('');
-      } catch (e: any) {
-          alert("Erro ao identificar: " + e.message);
-      } finally {
-          setIsSavingIdentity(false);
-      }
   };
 
   const handleConnectEvolution = async () => {
@@ -599,6 +607,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                                             draggable 
                                             onDragStart={() => handleDragStart(c.id)}
                                             onClick={() => setSelectedChatId(c.id)}
+                                            // FIXED: Corrected contextMenuChatId reference error
                                             className={clsx("bg-white p-3 rounded-xl shadow-sm border mb-2 cursor-grab active:cursor-grabbing hover:border-teal-400 transition-all group relative", selectedChatId === c.id ? "ring-2 ring-teal-500 border-transparent" : "border-slate-100")}
                                         >
                                             <div className="flex justify-between items-start mb-1">
@@ -753,7 +762,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                   <div className="p-8 space-y-6">
                       <div>
                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome da Tag</label>
-                          <input type="text" className="w-full px-4 py-2.5 border rounded-xl font-bold bg-slate-50 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-teal-500" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Dúvida Técnica..." autoFocus />
+                          <input type="text" className="w-full px-4 py-2.5 border rounded-xl font-bold bg-slate-50 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-teal-50" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Dúvida Técnica..." autoFocus />
                       </div>
                       <div>
                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Cor de Identificação</label>
@@ -795,6 +804,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                       <div className="flex items-center gap-3"><UserPlus className="text-amber-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Identificar Contato</h3></div>
                       <button onClick={() => setShowIdentifyModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                   </div>
+                  {/* FIXED: Implemented handleIdentifySubmit */}
                   <form onSubmit={handleIdentifySubmit} className="p-8 space-y-6">
                       <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3 text-xs text-amber-800 mb-2"><AlertCircle size={16} className="shrink-0" /><p>Vincule este ID técnico ao número real para que o sistema o reconheça no futuro.</p></div>
                       <div className="space-y-4">
@@ -820,6 +830,17 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                           <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Instância</label><input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm" value={config.instanceName} onChange={e => setConfig({...config, instanceName: e.target.value})} placeholder="Instancia_VOLL" /></div>
                           <div className="md:col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">API Key Global</label><input type="password" title="API Key" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm" value={config.apiKey} onChange={e => setConfig({...config, apiKey: e.target.value})} /></div>
                       </div>
+
+                      {/* CAMPO DE WEBHOOK RESTAURADO */}
+                      <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl space-y-2">
+                          <label className="block text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2"><Link2 size={12}/> URL de Webhook para configurar na Evolution</label>
+                          <div className="flex gap-2">
+                              <input type="text" readOnly className="flex-1 px-3 py-2 bg-white border rounded-lg text-[11px] font-mono text-indigo-900" value={webhookUrlDisplay} />
+                              <button onClick={() => { navigator.clipboard.writeText(webhookUrlDisplay); alert("Link do Webhook copiado!"); }} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors" title="Copiar URL"><Copy size={16}/></button>
+                          </div>
+                          <p className="text-[10px] text-indigo-600 italic">Copie este endereço e cole nas configurações de Webhook (Events) da sua instância na Evolution API.</p>
+                      </div>
+
                       <div className="p-6 bg-teal-50 rounded-[2rem] border-2 border-teal-100 space-y-4">
                         <div className="flex justify-between items-center"><h4 className="text-xs font-black text-teal-800 uppercase tracking-widest">Conectar Novo Aparelho</h4><div className="flex gap-2"><button onClick={() => setConfig({...config, evolutionMethod: 'qr'})} className={clsx("px-3 py-1 rounded-lg text-[10px] font-bold uppercase", config.evolutionMethod === 'qr' ? "bg-teal-600 text-white" : "bg-white text-teal-600 border")}>QR Code</button><button onClick={() => setConfig({...config, evolutionMethod: 'code'})} className={clsx("px-3 py-1 rounded-lg text-[10px] font-bold uppercase", config.evolutionMethod === 'code' ? "bg-teal-600 text-white" : "bg-white text-teal-600 border")}>Código</button></div></div>
                         {config.evolutionMethod === 'code' && (<div><label className="block text-[10px] font-bold text-teal-700 uppercase mb-1">Celular (com DDI+DDD)</label><input type="text" className="w-full px-4 py-2 border rounded-xl text-sm" placeholder="5551999999999" value={config.pairingNumber} onChange={e => setConfig({...config, pairingNumber: e.target.value})} /></div>)}

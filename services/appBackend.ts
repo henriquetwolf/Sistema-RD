@@ -122,6 +122,872 @@ export const appBackend = {
       }));
   },
 
+  // --- PRESETS ---
+  /* Fixes property not found errors in ConfigPanel.tsx */
+  getPresets: async (): Promise<SavedPreset[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_presets').select('*').order('name');
+    if (error) throw error;
+    return (data || []).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      url: p.url,
+      key: p.key,
+      tableName: p.table_name,
+      primaryKey: p.primary_key,
+      intervalMinutes: p.interval_minutes,
+      createdByName: p.created_by_name
+    }));
+  },
+  savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+    const payload = {
+      name: preset.name,
+      url: preset.url,
+      key: preset.key,
+      table_name: preset.tableName,
+      primary_key: preset.primaryKey,
+      interval_minutes: preset.intervalMinutes,
+      created_by_name: preset.createdByName
+    };
+    const { data, error } = await supabase.from('crm_presets').insert([payload]).select().single();
+    if (error) throw error;
+    return {
+      id: data.id,
+      name: data.name,
+      url: data.url,
+      key: data.key,
+      tableName: data.table_name,
+      primaryKey: data.primary_key,
+      intervalMinutes: data.interval_minutes,
+      createdByName: data.created_by_name
+    };
+  },
+  deletePreset: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_presets').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // --- SETTINGS (LOGO & MARGIN) ---
+  /* Fixes property not found errors in App.tsx and SettingsManager.tsx */
+  getAppLogo: async (): Promise<string | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('crm_settings').select('value').eq('key', 'app_logo').maybeSingle();
+    return data?.value || null;
+  },
+  saveAppLogo: async (logo: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_settings').upsert({ key: 'app_logo', value: logo });
+  },
+  getInventorySecurityMargin: async (): Promise<number> => {
+    if (!isConfigured) return 5;
+    const { data } = await supabase.from('crm_settings').select('value').eq('key', 'inventory_security_margin').maybeSingle();
+    return data ? parseInt(data.value) : 5;
+  },
+  saveInventorySecurityMargin: async (margin: number): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_settings').upsert({ key: 'inventory_security_margin', value: String(margin) });
+  },
+
+  // --- FORMS & SURVEYS ---
+  /* Fixes property not found errors in App.tsx, FormsManager.tsx, SurveyManager.tsx */
+  getForms: async (): Promise<FormModel[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((f: any) => ({
+      id: f.id,
+      title: f.title,
+      description: f.description,
+      campaign: f.campaign,
+      isLeadCapture: f.is_lead_capture,
+      teamId: f.team_id,
+      distributionMode: f.distribution_mode,
+      fixedOwnerId: f.fixed_owner_id,
+      targetPipeline: f.target_pipeline,
+      targetStage: f.target_stage,
+      questions: f.questions || [],
+      style: f.style,
+      createdAt: f.created_at,
+      submissionsCount: f.submissions_count || 0,
+      folderId: f.folder_id
+    }));
+  },
+  getSurveys: async (): Promise<SurveyModel[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_surveys').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((f: any) => ({
+      id: f.id,
+      title: f.title,
+      description: f.description,
+      isLeadCapture: f.is_lead_capture,
+      questions: f.questions || [],
+      style: f.style,
+      createdAt: f.created_at,
+      submissionsCount: f.submissions_count || 0,
+      targetType: f.target_type,
+      targetProductType: f.target_product_type,
+      targetProductName: f.target_product_name,
+      onlyIfFinished: f.only_if_finished,
+      isActive: f.is_active,
+      folderId: f.folder_id
+    }));
+  },
+  getFormById: async (id: string): Promise<FormModel | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
+    if (!data) {
+        const { data: surveyData } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
+        if (surveyData) return { ...surveyData, isLeadCapture: false } as any;
+        return null;
+    }
+    return {
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      campaign: data.campaign,
+      isLeadCapture: data.is_lead_capture,
+      teamId: data.team_id,
+      distributionMode: data.distribution_mode,
+      fixedOwnerId: data.fixed_owner_id,
+      targetPipeline: data.target_pipeline,
+      targetStage: data.target_stage,
+      questions: data.questions || [],
+      style: data.style,
+      createdAt: data.created_at,
+      submissionsCount: data.submissions_count || 0,
+      folderId: data.folder_id
+    };
+  },
+  saveForm: async (form: FormModel): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      title: form.title,
+      description: form.description,
+      campaign: form.campaign,
+      is_lead_capture: form.isLeadCapture,
+      team_id: form.teamId,
+      distribution_mode: form.distributionMode,
+      fixed_owner_id: form.fixedOwnerId,
+      target_pipeline: form.targetPipeline,
+      target_stage: form.targetStage,
+      questions: form.questions,
+      style: form.style,
+      folder_id: form.folderId
+    };
+    if (form.id && form.id.length > 10) {
+        await supabase.from('crm_forms').update(payload).eq('id', form.id);
+    } else {
+        await supabase.from('crm_forms').insert([{ ...payload, id: form.id || crypto.randomUUID() }]);
+    }
+  },
+  saveSurvey: async (survey: SurveyModel): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      title: survey.title,
+      description: survey.description,
+      questions: survey.questions,
+      style: survey.style,
+      target_type: survey.targetType,
+      target_product_type: survey.targetProductType,
+      target_product_name: survey.targetProductName,
+      only_if_finished: survey.onlyIfFinished,
+      is_active: survey.isActive,
+      folder_id: survey.folderId
+    };
+    if (survey.id && survey.id.length > 10) {
+        await supabase.from('crm_surveys').update(payload).eq('id', survey.id);
+    } else {
+        await supabase.from('crm_surveys').insert([{ ...payload, id: survey.id || crypto.randomUUID() }]);
+    }
+  },
+  deleteForm: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_forms').delete().eq('id', id);
+    await supabase.from('crm_surveys').delete().eq('id', id);
+  },
+  getFormFolders: async (): Promise<FormFolder[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_form_folders').select('*').order('name');
+    return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
+  },
+  saveFormFolder: async (folder: FormFolder): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_form_folders').upsert({ id: folder.id, name: folder.name });
+  },
+  deleteFormFolder: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_form_folders').delete().eq('id', id);
+  },
+  submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_form_submissions').insert([{
+          form_id: formId,
+          answers: answers,
+          student_id: studentId
+      }]);
+      if (error) throw error;
+      await supabase.rpc('increment_form_submissions', { f_id: formId });
+      if (isLeadCapture) {
+          const { data: form } = await supabase.from('crm_forms').select('*').eq('id', formId).single();
+          if (form) {
+              const dealData: any = {
+                  title: `Lead via ${form.title}`,
+                  pipeline: form.target_pipeline || 'Padrão',
+                  stage: form.target_stage || 'new',
+                  campaign: form.campaign,
+                  source: 'Formulário Online',
+                  owner_id: form.fixed_owner_id,
+                  deal_number: generateInternalDealNumber()
+              };
+              answers.forEach(ans => {
+                  const question = (form.questions as any[]).find(q => q.id === ans.questionId);
+                  if (question && question.crmMapping) {
+                      dealData[question.crmMapping] = ans.value;
+                  }
+              });
+              if (form.distribution_mode === 'round-robin' && form.team_id) {
+                  const { data: team } = await supabase.from('crm_teams').select('members').eq('id', form.team_id).single();
+                  if (team && team.members && team.members.length > 0) {
+                      dealData.owner_id = team.members[Math.floor(Math.random() * team.members.length)];
+                  }
+              }
+              await supabase.from('crm_deals').insert([dealData]);
+          }
+      }
+  },
+  getFormSubmissions: async (formId: string): Promise<any[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_form_submissions').select('*').eq('form_id', formId).order('created_at', { ascending: false });
+      return data || [];
+  },
+
+  // --- SYNC JOBS ---
+  /* Fixes property not found errors in App.tsx */
+  getSyncJobs: async (): Promise<SyncJob[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((j: any) => ({
+      id: j.id,
+      name: j.name,
+      sheetUrl: j.sheet_url,
+      config: j.config,
+      lastSync: j.last_sync,
+      status: j.status,
+      lastMessage: j.last_message,
+      active: j.active,
+      intervalMinutes: j.interval_minutes,
+      createdBy: j.created_by,
+      createdAt: j.created_at
+    }));
+  },
+  saveSyncJob: async (job: SyncJob): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      id: job.id,
+      name: job.name,
+      sheet_url: job.sheetUrl,
+      config: job.config,
+      last_sync: job.lastSync,
+      status: job.status,
+      last_message: job.lastMessage,
+      active: job.active,
+      interval_minutes: job.intervalMinutes,
+      created_by: job.createdBy
+    };
+    await supabase.from('crm_sync_jobs').upsert(payload);
+  },
+  deleteSyncJob: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_sync_jobs').delete().eq('id', id);
+  },
+  updateJobStatus: async (id: string, status: string, lastSync: string, lastMessage: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_sync_jobs').update({ status, last_sync: lastSync, last_message: lastMessage }).eq('id', id);
+  },
+
+  // --- PIPELINES ---
+  /* Fixes property not found errors in CrmBoard.tsx, FormsManager.tsx, SettingsManager.tsx */
+  getPipelines: async (): Promise<Pipeline[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_pipelines').select('*').order('name');
+    if (error) throw error;
+    return data || [];
+  },
+  savePipeline: async (pipeline: Pipeline): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_pipelines').upsert(pipeline);
+  },
+  deletePipeline: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_pipelines').delete().eq('id', id);
+  },
+
+  // --- COMPANIES ---
+  /* Fixes property not found errors in CrmBoard.tsx, SettingsManager.tsx */
+  getCompanies: async (): Promise<CompanySetting[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_companies').select('*').order('legal_name');
+    if (error) throw error;
+    return (data || []).map((c: any) => ({
+      id: c.id,
+      legalName: c.legal_name,
+      cnpj: c.cnpj,
+      webhookUrl: c.webhook_url,
+      productTypes: c.product_types || [],
+      productIds: c.product_ids || []
+    }));
+  },
+  saveCompany: async (company: CompanySetting): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      legal_name: company.legalName,
+      cnpj: company.cnpj,
+      webhook_url: company.webhookUrl,
+      product_types: company.productTypes,
+      product_ids: company.productIds
+    };
+    if (company.id) {
+        await supabase.from('crm_companies').update(payload).eq('id', company.id);
+    } else {
+        await supabase.from('crm_companies').insert([payload]);
+    }
+  },
+  deleteCompany: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_companies').delete().eq('id', id);
+  },
+
+  // --- WEBHOOK TRIGGERS ---
+  /* Fixes property not found errors in CrmBoard.tsx, SettingsManager.tsx */
+  getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_webhook_triggers').select('*');
+    return (data || []).map((t: any) => ({
+      id: t.id,
+      pipelineName: t.pipeline_name,
+      stageId: t.stage_id,
+      payloadJson: t.payload_json,
+      createdAt: t.created_at
+    }));
+  },
+  saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      pipeline_name: trigger.pipelineName,
+      stage_id: trigger.stageId,
+      payload_json: trigger.payloadJson
+    };
+    if (trigger.id) {
+        await supabase.from('crm_webhook_triggers').update(payload).eq('id', trigger.id);
+    } else {
+        await supabase.from('crm_webhook_triggers').insert([payload]);
+    }
+  },
+  deleteWebhookTrigger: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_webhook_triggers').delete().eq('id', id);
+  },
+
+  // --- SUPPORT ---
+  /* Fixes property not found errors across support components */
+  saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<SupportTicket> => {
+    if (!isConfigured) throw new Error("Backend not configured");
+    const payload = {
+      id: ticket.id || crypto.randomUUID(),
+      sender_id: ticket.senderId,
+      sender_name: ticket.senderName,
+      sender_email: ticket.senderEmail,
+      sender_role: ticket.senderRole,
+      target_id: ticket.targetId,
+      target_name: ticket.targetName,
+      target_email: ticket.targetEmail,
+      target_role: ticket.targetRole,
+      subject: ticket.subject,
+      message: ticket.message,
+      tag: ticket.tag,
+      status: ticket.status,
+      assigned_id: ticket.assignedId,
+      assigned_name: ticket.assignedName,
+      updated_at: new Date().toISOString()
+    };
+    const { data, error } = await supabase.from('crm_support_tickets').upsert(payload).select().single();
+    if (error) throw error;
+    return {
+      id: data.id, senderId: data.sender_id, senderName: data.sender_name, senderEmail: data.sender_email, senderRole: data.sender_role,
+      targetId: data.target_id, targetName: data.target_name, targetEmail: data.target_email, targetRole: data.target_role,
+      subject: data.subject, message: data.message, tag: data.tag, status: data.status,
+      assignedId: data.assigned_id, assignedName: data.assigned_name, createdAt: data.created_at, updatedAt: data.updated_at
+    };
+  },
+  getSupportTickets: async (): Promise<SupportTicket[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_support_tickets').select('*').order('created_at', { ascending: false });
+    return (data || []).map((t: any) => ({
+      id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role,
+      targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role,
+      subject: t.subject, message: t.message, tag: t.tag, status: t.status,
+      assignedId: t.assigned_id, assignedName: t.assigned_name, createdAt: t.created_at, updatedAt: t.updated_at
+    }));
+  },
+  getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${senderId},target_id.eq.${senderId}`).order('created_at', { ascending: false });
+    return (data || []).map((t: any) => ({
+      id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role,
+      targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role,
+      subject: t.subject, message: t.message, tag: t.tag, status: t.status,
+      assignedId: t.assigned_id, assignedName: t.assigned_name, createdAt: t.created_at, updatedAt: t.updated_at
+    }));
+  },
+  getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
+      return (data || []).map((m: any) => ({
+          id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role,
+          content: m.content, attachmentUrl: m.attachment_url, attachmentName: m.attachment_name, createdAt: m.created_at
+      }));
+  },
+  addSupportMessage: async (msg: Partial<SupportMessage>): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_support_messages').insert([{
+          ticket_id: msg.ticketId,
+          sender_id: msg.senderId,
+          sender_name: msg.senderName,
+          sender_role: msg.senderRole,
+          content: msg.content,
+          attachment_url: msg.attachmentUrl,
+          attachment_name: msg.attachmentName
+      }]);
+  },
+  deleteSupportTicket: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_support_tickets').delete().eq('id', id);
+  },
+  getSupportTags: async (role?: 'student' | 'instructor' | 'studio'): Promise<SupportTag[]> => {
+      if (!isConfigured) return [];
+      let query = supabase.from('crm_support_tags').select('*').order('name');
+      if (role) query = query.or(`role.eq.${role},role.eq.all`);
+      const { data } = await query;
+      return (data || []).map((t: any) => ({ id: t.id, name: t.name, role: t.role, createdAt: t.created_at }));
+  },
+  saveSupportTag: async (tag: Partial<SupportTag>): Promise<void> => {
+      if (!isConfigured) return;
+      const payload = { name: tag.name, role: tag.role };
+      if (tag.id) await supabase.from('crm_support_tags').update(payload).eq('id', tag.id);
+      else await supabase.from('crm_support_tags').insert([payload]);
+  },
+  deleteSupportTag: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_support_tags').delete().eq('id', id);
+  },
+
+  // --- ROLES ---
+  /* Fixes property not found errors in CollaboratorsManager.tsx, SettingsManager.tsx */
+  getRoles: async (): Promise<Role[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_roles').select('*').order('name');
+    return data || [];
+  },
+  saveRole: async (role: Role): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_roles').upsert(role);
+  },
+  deleteRole: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_roles').delete().eq('id', id);
+  },
+
+  // --- PARTNER STUDIOS ---
+  /* Fixes property not found errors in ClassesManager.tsx, InventoryManager.tsx, PartnerStudioArea.tsx, PartnerStudiosManager.tsx */
+  getPartnerStudios: async (): Promise<PartnerStudio[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
+    return (data || []).map((d: any) => ({
+      id: d.id, status: d.status, responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password,
+      secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name,
+      cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country,
+      sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology,
+      studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account,
+      beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: !!d.has_reformer, qtyReformer: d.qty_reformer || 0,
+      hasLadderBarrel: !!d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel || 0, hasChair: !!d.has_chair, qtyChair: d.qty_chair || 0,
+      hasCadillac: !!d.has_cadillac, qtyCadillac: d.qty_cadillac || 0, hasChairsForCourse: !!d.has_chairs_for_course,
+      hasTv: !!d.has_tv, maxKitsCapacity: d.max_kits_capacity, attachments: d.attachments
+    }));
+  },
+  savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password,
+      second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName,
+      legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city,
+      state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue,
+      methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency,
+      account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer,
+      has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair,
+      has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse,
+      has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
+    };
+    if (studio.id) await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
+    else await supabase.from('crm_partner_studios').insert([payload]);
+  },
+  deletePartnerStudio: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_partner_studios').delete().eq('id', id);
+  },
+
+  // --- INSTRUCTOR LEVELS ---
+  /* Fixes property not found errors in TeachersManager.tsx, SettingsManager.tsx */
+  getInstructorLevels: async (): Promise<InstructorLevel[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_instructor_levels').select('*').order('name');
+    return (data || []).map((d: any) => ({ id: d.id, name: d.name, honorarium: d.honorarium, observations: d.observations, createdAt: d.created_at }));
+  },
+  saveInstructorLevel: async (level: InstructorLevel): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = { name: level.name, honorarium: level.honorarium, observations: level.observations };
+    if (level.id) await supabase.from('crm_instructor_levels').update(payload).eq('id', level.id);
+    else await supabase.from('crm_instructor_levels').insert([payload]);
+  },
+  deleteInstructorLevel: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_instructor_levels').delete().eq('id', id);
+  },
+
+  // --- BANNERS ---
+  /* Fixes property not found errors in SettingsManager.tsx, InstructorArea.tsx, StudentArea.tsx */
+  getBanners: async (audience?: 'student' | 'instructor'): Promise<Banner[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('crm_banners').select('*').order('created_at', { ascending: false });
+    if (audience) query = query.eq('target_audience', audience).eq('active', true);
+    const { data } = await query;
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, linkUrl: d.link_url, targetAudience: d.target_audience, active: d.active, createdAt: d.created_at }));
+  },
+  saveBanner: async (banner: Banner): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.linkUrl, target_audience: banner.targetAudience, active: banner.active };
+    if (banner.id) await supabase.from('crm_banners').update(payload).eq('id', banner.id);
+    else await supabase.from('crm_banners').insert([payload]);
+  },
+  deleteBanner: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_banners').delete().eq('id', id);
+  },
+
+  // --- TEACHER NEWS ---
+  /* Fixes property not found errors in TeachersManager.tsx, InstructorArea.tsx */
+  getTeacherNews: async (): Promise<TeacherNews[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, imageUrl: d.image_url, createdAt: d.created_at }));
+  },
+  saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = { title: news.title, content: news.content, image_url: news.imageUrl };
+    if (news.id) await supabase.from('crm_teacher_news').update(payload).eq('id', news.id);
+    else await supabase.from('crm_teacher_news').insert([payload]);
+  },
+  deleteTeacherNews: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_teacher_news').delete().eq('id', id);
+  },
+
+  // --- INVENTORY ---
+  /* Fixes property not found errors in SettingsManager.tsx, InventoryManager.tsx, PartnerStudioArea.tsx */
+  getInventory: async (): Promise<InventoryRecord[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
+    return (data || []).map((d: any) => ({
+      id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico,
+      itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date,
+      studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date,
+      attachments: d.attachments, createdAt: d.created_at
+    }));
+  },
+  saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico,
+      item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate,
+      studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations,
+      conference_date: record.conferenceDate || null, attachments: record.attachments
+    };
+    if (record.id) await supabase.from('crm_inventory').update(payload).eq('id', record.id);
+    else await supabase.from('crm_inventory').insert([payload]);
+  },
+  deleteInventoryRecord: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_inventory').delete().eq('id', id);
+  },
+
+  // --- BILLING NEGOTIATIONS ---
+  /* Fixes property not found errors in BillingManager.tsx */
+  getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
+    return (data || []).map((d: any) => ({
+      id: d.id, openInstallments: d.open_installments, totalNegotiatedValue: d.total_negotiated_value, totalInstallments: d.total_installments,
+      dueDate: d.due_date, responsibleAgent: d.responsible_agent, identifierCode: d.identifier_code, fullName: d.full_name,
+      productName: d.product_name, originalValue: d.original_value, paymentMethod: d.payment_method, observations: d.observations,
+      status: d.status, team: d.team, voucher_link_1: d.voucherLink1, test_date: d.testDate, voucher_link_2: d.voucherLink2,
+      voucher_link_3: d.voucherLink3, boletos_link: d.boletosLink, negotiation_reference: d.negotiationReference,
+      attachments: d.attachments, createdAt: d.created_at
+    }));
+  },
+  saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      open_installments: neg.openInstallments, total_negotiated_value: neg.totalNegotiatedValue, total_installments: neg.totalInstallments,
+      due_date: neg.dueDate || null, responsible_agent: neg.responsibleAgent, identifier_code: neg.identifierCode, full_name: neg.fullName,
+      product_name: neg.productName, original_value: neg.originalValue, payment_method: neg.paymentMethod, observations: neg.observations,
+      status: neg.status, team: neg.team, voucher_link_1: neg.voucherLink1, test_date: neg.testDate, voucher_link_2: neg.voucherLink2,
+      voucher_link_3: neg.voucherLink3, boletos_link: neg.boletosLink, negotiation_reference: neg.negotiationReference, attachments: neg.attachments
+    };
+    if (neg.id) await supabase.from('crm_billing_negotiations').update(payload).eq('id', neg.id);
+    else await supabase.from('crm_billing_negotiations').insert([payload]);
+  },
+  deleteBillingNegotiation: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_billing_negotiations').delete().eq('id', id);
+  },
+
+  // --- CONTRACTS ---
+  /* Fixes property not found errors in App.tsx, ContractsManager.tsx, InstructorArea.tsx, ContractSigning.tsx */
+  getContracts: async (): Promise<Contract[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
+    return (data || []).map((d: any) => ({
+      id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date,
+      status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at
+    }));
+  },
+  getContractById: async (id: string): Promise<Contract | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
+    if (!data) return null;
+    return {
+      id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date,
+      status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at
+    };
+  },
+  saveContract: async (contract: Contract): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      id: contract.id, title: contract.title, content: contract.content, city: contract.city,
+      contract_date: contract.contractDate, status: contract.status, folder_id: contract.folderId, signers: contract.signers
+    };
+    await supabase.from('crm_contracts').upsert(payload);
+  },
+  deleteContract: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_contracts').delete().eq('id', id);
+  },
+  signContract: async (contractId: string, signerId: string, signatureData: string): Promise<void> => {
+      if (!isConfigured) return;
+      const { data: contract } = await supabase.from('crm_contracts').select('signers').eq('id', contractId).single();
+      if (!contract) return;
+      const updatedSigners = (contract.signers as any[]).map(s => {
+          if (s.id === signerId) {
+              return { ...s, status: 'signed', signatureData, signedAt: new Date().toISOString() };
+          }
+          return s;
+      });
+      const allSigned = updatedSigners.every(s => s.status === 'signed');
+      await supabase.from('crm_contracts').update({ 
+          signers: updatedSigners, 
+          status: allSigned ? 'signed' : 'sent' 
+      }).eq('id', contractId);
+  },
+  getFolders: async (): Promise<ContractFolder[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_contract_folders').select('*').order('name');
+      return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
+  },
+  saveFolder: async (folder: ContractFolder): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_contract_folders').upsert({ id: folder.id, name: folder.name });
+  },
+  deleteFolder: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_contract_folders').delete().eq('id', id);
+  },
+
+  // --- CERTIFICATES ---
+  /* Fixes property not found errors in ProductsManager.tsx, CertificatesManager.tsx, CertificateViewer.tsx, ClassStudentsViewer.tsx, StudentsManager.tsx, StudentArea.tsx */
+  getCertificates: async (): Promise<CertificateModel[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
+      return (data || []).map((d: any) => ({
+          id: d.id, title: d.title, backgroundData: d.background_data, backBackgroundData: d.back_background_data,
+          linkedProductId: d.linked_product_id, bodyText: d.body_text, layoutConfig: d.layout_config, createdAt: d.created_at
+      }));
+  },
+  saveCertificate: async (cert: CertificateModel): Promise<void> => {
+      if (!isConfigured) return;
+      const payload = {
+          id: cert.id, title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData,
+          linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig
+      };
+      await supabase.from('crm_certificates').upsert(payload);
+  },
+  deleteCertificate: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_certificates').delete().eq('id', id);
+  },
+  issueCertificate: async (studentDealId: string, templateId: string): Promise<string> => {
+      if (!isConfigured) return 'mock-hash';
+      const hash = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      await supabase.from('crm_student_certificates').insert([{
+          student_deal_id: studentDealId,
+          certificate_template_id: templateId,
+          hash: hash,
+          issued_at: new Date().toISOString()
+      }]);
+      return hash;
+  },
+  getStudentCertificate: async (hash: string): Promise<any> => {
+      if (!isConfigured) return null;
+      const { data: cert } = await supabase.from('crm_student_certificates').select('*, crm_deals(company_name, contact_name, course_city), crm_certificates(*)').eq('hash', hash).single();
+      if (!cert) return null;
+      const d = cert.crm_deals;
+      const t = cert.crm_certificates;
+      return {
+          studentName: d.company_name || d.contact_name,
+          studentCity: d.course_city || 'Sede VOLL',
+          template: {
+              id: t.id, title: t.title, backgroundData: t.background_data, backBackgroundData: t.back_background_data,
+              linkedProductId: t.linked_product_id, bodyText: t.body_text, layoutConfig: t.layout_config
+          },
+          issuedAt: cert.issued_at
+      };
+  },
+
+  // --- WHATSAPP CONFIG ---
+  /* Fixes property not found errors in WhatsAppInbox.tsx */
+  getWhatsAppConfig: async (): Promise<any> => {
+      if (!isConfigured) return null;
+      const { data } = await supabase.from('crm_whatsapp_config').select('*').limit(1).maybeSingle();
+      if (!data) return null;
+      return {
+          instanceUrl: data.instance_url,
+          instanceName: data.instance_name,
+          apiKey: data.api_key,
+          pairingNumber: data.pairing_number,
+          mode: data.mode
+      };
+  },
+  saveWhatsAppConfig: async (config: any): Promise<void> => {
+      if (!isConfigured) return;
+      const payload = {
+          instance_url: config.instanceUrl,
+          instance_name: config.instanceName,
+          api_key: config.apiKey,
+          pairing_number: config.pairingNumber,
+          mode: config.mode || 'evolution'
+      };
+      const { data: existing } = await supabase.from('crm_whatsapp_config').select('id').limit(1).maybeSingle();
+      if (existing) {
+          await supabase.from('crm_whatsapp_config').update(payload).eq('id', existing.id);
+      } else {
+          await supabase.from('crm_whatsapp_config').insert([payload]);
+      }
+  },
+
+  // --- COURSE INFO ---
+  /* Fixes property not found errors in SettingsManager.tsx */
+  getCourseInfos: async (): Promise<CourseInfo[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_course_infos').select('*').order('course_name');
+      return (data || []).map((d: any) => ({
+          id: d.id, courseName: d.course_name, details: d.details, materials: d.materials, requirements: d.requirements, updatedAt: d.updated_at
+      }));
+  },
+  saveCourseInfo: async (info: Partial<CourseInfo>): Promise<void> => {
+      if (!isConfigured) return;
+      const payload = { course_name: info.courseName, details: info.details, materials: info.materials, requirements: info.requirements, updated_at: new Date().toISOString() };
+      if (info.id) await supabase.from('crm_course_infos').update(payload).eq('id', info.id);
+      else await supabase.from('crm_course_infos').insert([payload]);
+  },
+  deleteCourseInfo: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_course_infos').delete().eq('id', id);
+  },
+
+  // --- EVENTS ---
+  /* Fixes property not found errors in EventsManager.tsx */
+  getEvents: async (): Promise<EventModel[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
+      return (data || []).map((d: any) => ({
+          id: d.id, name: d.name, description: d.description, location: d.location, dates: d.dates || [], createdAt: d.created_at, registrationOpen: d.registration_open
+      }));
+  },
+  saveEvent: async (evt: EventModel): Promise<EventModel> => {
+      if (!isConfigured) throw new Error("Backend not configured");
+      const payload = { name: evt.name, description: evt.description, location: evt.location, dates: evt.dates, registration_open: evt.registrationOpen };
+      const { data, error } = evt.id && evt.id.length > 10 
+          ? await supabase.from('crm_events').update(payload).eq('id', evt.id).select().single()
+          : await supabase.from('crm_events').insert([payload]).select().single();
+      if (error) throw error;
+      return { id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates || [], createdAt: data.created_at, registrationOpen: data.registration_open };
+  },
+  deleteEvent: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_events').delete().eq('id', id);
+  },
+  getWorkshops: async (eventId: string): Promise<Workshop[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_event_workshops').select('*').eq('event_id', eventId).order('date').order('time');
+      return (data || []).map((d: any) => ({
+          id: d.id, eventId: d.event_id, blockId: d.block_id, title: d.title, description: d.description, speaker: d.speaker, date: d.date, time: d.time, spots: d.spots
+      }));
+  },
+  saveWorkshop: async (ws: Workshop): Promise<Workshop> => {
+      if (!isConfigured) throw new Error("Backend not configured");
+      const payload = {
+          event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots
+      };
+      const { data, error } = ws.id 
+          ? await supabase.from('crm_event_workshops').update(payload).eq('id', ws.id).select().single()
+          : await supabase.from('crm_event_workshops').insert([payload]).select().single();
+      if (error) throw error;
+      return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
+  },
+  deleteWorkshop: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_event_workshops').delete().eq('id', id);
+  },
+  getBlocks: async (eventId: string): Promise<EventBlock[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date').order('title');
+      return (data || []).map((d: any) => ({
+          id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections
+      }));
+  },
+  saveBlock: async (block: EventBlock): Promise<EventBlock> => {
+      if (!isConfigured) throw new Error("Backend not configured");
+      const payload = { event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
+      const { data, error } = block.id 
+          ? await supabase.from('crm_event_blocks').update(payload).eq('id', block.id).select().single()
+          : await supabase.from('crm_event_blocks').insert([payload]).select().single();
+      if (error) throw error;
+      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
+  },
+  deleteBlock: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_event_blocks').delete().eq('id', id);
+  },
+  getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId).order('registered_at', { ascending: false });
+      return (data || []).map((d: any) => ({
+          id: d.id, eventId: d.event_id, workshopId: d.workshop_id, studentId: d.student_id, studentName: d.student_name, studentEmail: d.student_email, registeredAt: d.registered_at
+      }));
+  },
+
   // --- ONLINE COURSES ---
 
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
@@ -179,9 +1045,11 @@ export const appBackend = {
       if (!isConfigured) return;
       const payload = { course_id: mod.courseId, title: mod.title, order_index: mod.orderIndex };
       if (mod.id) {
-          await supabase.from('crm_course_modules').update(payload).eq('id', mod.id);
+          const { error } = await supabase.from('crm_course_modules').update(payload).eq('id', mod.id);
+          if (error) throw error;
       } else {
-          await supabase.from('crm_course_modules').insert([payload]);
+          const { error } = await supabase.from('crm_course_modules').insert([payload]);
+          if (error) throw error;
       }
   },
 
@@ -194,16 +1062,33 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index', { ascending: true });
       if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, moduleId: d.module_id, title: d.title, description: d.description, video_url: d.video_url, materials: d.materials || [], order_index: d.order_index }));
+      return (data || []).map((d: any) => ({ 
+          id: d.id, 
+          moduleId: d.module_id, 
+          title: d.title, 
+          description: d.description, 
+          videoUrl: d.video_url, 
+          materials: d.materials || [], 
+          orderIndex: d.order_index 
+      }));
   },
 
   saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
       if (!isConfigured) return;
-      const payload = { module_id: lesson.moduleId, title: lesson.title, description: lesson.description, video_url: lesson.videoUrl, materials: lesson.materials, order_index: lesson.orderIndex };
+      const payload = { 
+          module_id: lesson.moduleId, 
+          title: lesson.title, 
+          description: lesson.description, 
+          video_url: lesson.videoUrl, 
+          materials: lesson.materials || [], 
+          order_index: lesson.orderIndex 
+      };
       if (lesson.id) {
-          await supabase.from('crm_course_lessons').update(payload).eq('id', lesson.id);
+          const { error } = await supabase.from('crm_course_lessons').update(payload).eq('id', lesson.id);
+          if (error) throw error;
       } else {
-          await supabase.from('crm_course_lessons').insert([payload]);
+          const { error } = await supabase.from('crm_course_lessons').insert([payload]);
+          if (error) throw error;
       }
   },
 
@@ -218,9 +1103,13 @@ export const appBackend = {
       return (data || []).map(d => d.course_id);
   },
 
-  grantCourseAccess: async (studentDealId: string, courseId: string, unlockedAt: string): Promise<void> => {
+  grantCourseAccess: async (studentDealId: string, courseId: string): Promise<void> => {
       if (!isConfigured) return;
-      await supabase.from('crm_student_course_access').upsert({ student_deal_id: studentDealId, course_id: courseId, unlocked_at: unlockedAt });
+      await supabase.from('crm_student_course_access').upsert({ 
+          student_deal_id: studentDealId, 
+          course_id: courseId,
+          unlocked_at: new Date().toISOString()
+      });
   },
 
   revokeCourseAccess: async (studentDealId: string, courseId: string): Promise<void> => {
@@ -237,999 +1126,13 @@ export const appBackend = {
   toggleLessonProgress: async (studentDealId: string, lessonId: string, completed: boolean): Promise<void> => {
       if (!isConfigured) return;
       if (completed) {
-          await supabase.from('crm_student_lesson_progress').upsert({ student_deal_id: studentDealId, lesson_id: lessonId });
+          await supabase.from('crm_student_lesson_progress').upsert({ 
+              student_deal_id: studentDealId, 
+              lesson_id: lessonId,
+              completed_at: new Date().toISOString()
+          });
       } else {
           await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', studentDealId).eq('lesson_id', lessonId);
       }
-  },
-
-  // --- SUPORTE INTERNO ---
-  getSupportTickets: async (): Promise<SupportTicket[]> => {
-    if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((t: any) => ({
-      id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role,
-      targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role,
-      subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, createdAt: t.created_at, updatedAt: t.updated_at,
-      assignedId: t.assigned_id, assignedName: t.assigned_name
-    }));
-  },
-
-  getSupportTicketsBySender: async (id: string): Promise<SupportTicket[]> => {
-    if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_support_tickets')
-        .select('*')
-        .or(`sender_id.eq.${id},target_id.eq.${id}`)
-        .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return (data || []).map((t: any) => ({
-      id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role,
-      targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role,
-      subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, createdAt: t.created_at, updatedAt: t.updated_at,
-      assignedId: t.assigned_id, assignedName: t.assigned_name
-    }));
-  },
-
-  getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
-      if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-      if (error) throw error;
-      return (data || []).map((m: any) => ({
-          id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role,
-          content: m.content, createdAt: m.created_at, attachmentUrl: m.attachment_url, attachmentName: m.attachment_name
-      }));
-  },
-
-  saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
-    if (!isConfigured) return;
-    const payload: any = {
-      sender_id: ticket.senderId,
-      sender_name: ticket.senderName,
-      sender_email: ticket.senderEmail,
-      sender_role: ticket.senderRole,
-      target_id: ticket.targetId,
-      target_name: ticket.targetName,
-      target_email: ticket.targetEmail,
-      target_role: ticket.targetRole,
-      subject: ticket.subject,
-      message: ticket.message,
-      tag: ticket.tag,
-      status: ticket.status || 'open',
-      response: ticket.response,
-      assigned_id: ticket.assignedId,
-      assigned_name: ticket.assignedName,
-      updated_at: new Date().toISOString()
-    };
-
-    if (ticket.id) {
-        payload.id = ticket.id;
-        const { error } = await supabase.from('crm_support_tickets').upsert(payload);
-        if (error) throw error;
-    } else {
-        const { error } = await supabase.from('crm_support_tickets').insert([{ 
-            ...payload, 
-            id: crypto.randomUUID(), 
-            created_at: new Date().toISOString() 
-        }]);
-        if (error) throw error;
-    }
-  },
-
-  addSupportMessage: async (msg: Omit<SupportMessage, 'id' | 'createdAt'>): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_support_messages').insert([{
-          id: crypto.randomUUID(),
-          ticket_id: (msg as any).ticketId,
-          sender_id: msg.senderId,
-          sender_name: msg.senderName,
-          sender_role: msg.senderRole,
-          content: msg.content,
-          attachment_url: (msg as any).attachmentUrl,
-          attachment_name: (msg as any).attachmentName,
-          created_at: new Date().toISOString()
-      }]);
-      if (error) throw error;
-
-      const updates: any = { updated_at: new Date().toISOString() };
-      if (msg.senderRole === 'admin') updates.status = 'pending';
-      else updates.status = 'open';
-      
-      await supabase.from('crm_support_tickets').update(updates).eq('id', (msg as any).ticketId);
-  },
-
-  deleteSupportTicket: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_support_tickets').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  // --- SUPPORT TAGS ---
-  getSupportTags: async (role?: SupportTag['role']): Promise<SupportTag[]> => {
-    if (!isConfigured) return [];
-    let query = supabase.from('crm_support_tags').select('*').order('name');
-    if (role && role !== 'all') {
-      query = query.or(`role.eq.${role},role.eq.all`);
-    }
-    const { data, error } = await query;
-    if (error) throw error;
-    return (data || []).map((d: any) => ({
-        id: d.id,
-        role: d.role,
-        name: d.name,
-        createdAt: d.created_at
-    }));
-  },
-
-  saveSupportTag: async (tag: Partial<SupportTag>): Promise<void> => {
-    if (!isConfigured) return;
-    const payload = {
-        role: tag.role,
-        name: tag.name
-    };
-    if (tag.id) {
-        const { error } = await supabase.from('crm_support_tags').update(payload).eq('id', tag.id);
-        if (error) throw error;
-    } else {
-        const { error } = await supabase.from('crm_support_tags').insert([{ ...payload, id: crypto.randomUUID() }]);
-        if (error) throw error;
-    }
-  },
-
-  deleteSupportTag: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_support_tags').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  // --- OUTROS MÉTODOS CRM ---
-  getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((row: any) => ({
-      id: row.id, openInstallments: row.open_installments, totalNegotiatedValue: row.total_negotiated_value, totalInstallments: row.total_installments,
-      dueDate: row.due_date, responsibleAgent: row.responsible_agent, identifier_code: row.identifier_code, fullName: row.full_name,
-      productName: row.product_name, originalValue: row.original_value, paymentMethod: row.payment_method, observations: row.observations,
-      status: row.status, team: row.team, voucherLink1: row.voucher_link_1, testDate: row.test_date, voucherLink2: row.voucher_link_2,
-      voucherLink3: row.voucher_link_3, boletosLink: row.boletos_link, negotiationReference: row.negotiation_reference, attachments: row.attachments, createdAt: row.created_at
-    }));
-  },
-
-  saveBillingNegotiation: async (negotiation: Partial<BillingNegotiation>): Promise<void> => {
-    if (!isConfigured) return;
-    const payload = {
-      open_installments: negotiation.openInstallments, total_negotiated_value: negotiation.totalNegotiatedValue, total_installments: negotiation.totalInstallments,
-      due_date: negotiation.dueDate, responsible_agent: negotiation.responsibleAgent, identifier_code: negotiation.identifierCode,
-      full_name: negotiation.fullName, product_name: negotiation.productName, original_value: negotiation.originalValue,
-      payment_method: negotiation.paymentMethod, observations: negotiation.observations, status: negotiation.status, team: negotiation.team,
-      voucher_link_1: negotiation.voucherLink1, test_date: negotiation.testDate, voucher_link_2: negotiation.voucherLink2,
-      voucher_link_3: negotiation.voucherLink3, boletos_link: negotiation.boletosLink, negotiation_reference: negotiation.negotiationReference, attachments: negotiation.attachments
-    };
-    if (negotiation.id) {
-        const { error } = await supabase.from('crm_billing_negotiations').update(payload).eq('id', negotiation.id);
-        if (error) throw error;
-    } else {
-        const { error } = await supabase.from('crm_billing_negotiations').insert([{ ...payload, id: crypto.randomUUID() }]);
-        if (error) throw error;
-    }
-  },
-
-  deleteBillingNegotiation: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_billing_negotiations').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  getPipelines: async (): Promise<Pipeline[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_pipelines').select('*').order('created_at', { ascending: true });
-    if (error) throw error;
-    return (data || []).map((p: any) => ({ id: p.id, name: p.name, stages: p.stages || [] }));
-  },
-
-  savePipeline: async (pipeline: Pipeline): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_pipelines').upsert({ id: pipeline.id || undefined, name: pipeline.name, stages: pipeline.stages });
-    if (error) throw error;
-  },
-
-  deletePipeline: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_pipelines').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
-      if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('crm_webhook_triggers').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []).map((t: any) => ({ id: t.id, pipelineName: t.pipeline_name, stageId: t.stage_id, payloadJson: t.payload_json, createdAt: t.created_at }));
-  },
-
-  saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || undefined, pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson });
-      if (error) throw error;
-  },
-
-  deleteWebhookTrigger: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_webhook_triggers').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  getSyncJobs: async (): Promise<SyncJob[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((row: any) => ({
-      id: row.id, name: row.name, sheetUrl: row.sheet_url, config: row.config, lastSync: row.last_sync, status: row.status, lastMessage: row.last_message, active: row.active, interval_minutes: row.interval_minutes, createdBy: row.created_by_name, createdAt: row.created_at
-    }));
-  },
-
-  saveSyncJob: async (job: SyncJob): Promise<void> => {
-    if (!isConfigured) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    const payload = {
-      id: job.id, user_id: user?.id, name: job.name, sheet_url: job.sheetUrl, config: job.config, active: job.active,
-      interval_minutes: job.intervalMinutes, last_sync: job.lastSync, status: job.status, last_message: job.lastMessage,
-      created_by_name: job.createdBy, created_at: job.createdAt
-    };
-    const { error } = await supabase.from('crm_sync_jobs').upsert(payload);
-    if (error) throw error;
-  },
-
-  updateJobStatus: async (jobId: string, status: string, lastSync: string | null, message: string | null): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_sync_jobs').update({ status, last_sync: lastSync, last_message: message }).eq('id', jobId);
-    if (error) throw error;
-  },
-
-  deleteSyncJob: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_sync_jobs').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  getPresets: async (): Promise<any[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from(TABLE_NAME).select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((row: any) => ({
-      id: row.id, name: row.name, url: row.project_url, key: row.api_key, tableName: row.target_table_name, primaryKey: row.target_primary_key || '', intervalMinutes: row.interval_minutes || 5, createdByName: row.created_by_name || ''
-    }));
-  },
-
-  savePreset: async (preset: Omit<any, 'id'>): Promise<any> => {
-    if (!isConfigured) throw new Error("Backend not configured.");
-    const { data: { user } } = await supabase.auth.getUser();
-    const payload = { user_id: user?.id, name: preset.name, project_url: preset.url, api_key: preset.key, target_table_name: preset.tableName, target_primary_key: preset.primaryKey || null, interval_minutes: preset.interval_minutes || 5, created_by_name: preset.createdByName || null };
-    const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
-    if (error) throw error;
-    return {
-      id: data.id, name: data.name, url: data.project_url, key: data.api_key, tableName: data.target_table_name, primaryKey: data.target_primary_key || '', intervalMinutes: data.interval_minutes || 5, createdByName: data.created_by_name || ''
-    };
-  },
-
-  deletePreset: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from(TABLE_NAME).delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  getAppSetting: async (key: string): Promise<any | null> => {
-    if (!isConfigured) return null;
-    const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
-    return data ? data.value : null;
-  },
-
-  saveAppSetting: async (key: string, value: any): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() });
-    if (error) throw error;
-  },
-
-  getAppLogo: async (): Promise<string | null> => await appBackend.getAppSetting('app_logo_url'),
-  saveAppLogo: async (url: string) => await appBackend.saveAppSetting('app_logo_url', url),
-  getInventorySecurityMargin: async (): Promise<number> => {
-    const val = await appBackend.getAppSetting('inventory_security_margin');
-    return val !== null ? parseInt(val) : 5;
-  },
-  saveInventorySecurityMargin: async (val: number) => await appBackend.saveAppSetting('inventory_security_margin', val),
-  getWhatsAppConfig: async (): Promise<any | null> => await appBackend.getAppSetting('whatsapp_config'),
-  saveWhatsAppConfig: async (config: any) => await appBackend.saveAppSetting('whatsapp_config', config),
-
-  getCompanies: async (): Promise<CompanySetting[]> => {
-      if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_companies').select('*').order('created_at', { ascending: true });
-      if (error) throw error;
-      return (data || []).map((c: any) => ({ id: c.id, legalName: c.legal_name, cnpj: c.cnpj, webhookUrl: c.webhook_url, productTypes: c.product_types || [], productIds: c.product_ids || [] }));
-  },
-
-  saveCompany: async (company: Partial<CompanySetting>): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_companies').upsert({ 
-          id: company.id || undefined, 
-          legal_name: company.legalName, 
-          cnpj: company.cnpj, 
-          webhook_url: company.webhookUrl, 
-          product_types: company.productTypes, 
-          product_ids: company.productIds 
-      });
-      if (error) throw error;
-  },
-
-  deleteCompany: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_companies').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  getRoles: async (): Promise<Role[]> => {
-    if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_roles').select('*').order('name', { ascending: true });
-    if (error) throw error;
-    return (data || []).map((r: any) => ({ id: r.id, name: r.name, permissions: r.permissions || {}, created_at: r.created_at }));
-  },
-
-  saveRole: async (role: Role): Promise<void> => {
-    if (!isConfigured) return;
-    const payload = { name: role.name, permissions: role.permissions };
-    if (role.id) {
-        const { error } = await supabase.from('crm_roles').update(payload).eq('id', role.id);
-        if (error) throw error;
-    } else {
-        const { error } = await supabase.from('crm_roles').insert([payload]);
-        if (error) throw error;
-    }
-  },
-
-  deleteRole: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_roles').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  getBanners: async (audience?: 'student' | 'instructor'): Promise<Banner[]> => {
-    if (!isConfigured) return [];
-    let query = supabase.from('app_banners').select('*').order('created_at', { ascending: false });
-    if (audience) query = query.eq('target_audience', audience);
-    const { data, error } = await query;
-    if (error) throw error;
-    return (data || []).map((b: any) => ({ id: b.id, title: b.title, imageUrl: b.image_url, link_url: b.link_url, targetAudience: b.target_audience, active: b.active }));
-  },
-
-  saveBanner: async (banner: Banner): Promise<void> => {
-    if (!isConfigured) return;
-    /* FIX: Changed target_audience: banner.target_audience to target_audience: banner.targetAudience to match the Banner interface in types.ts */
-    const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.linkUrl, target_audience: banner.targetAudience, active: banner.active };
-    if (banner.id) {
-        const { error } = await supabase.from('app_banners').update(payload).eq('id', banner.id);
-        if (error) throw error;
-    } else {
-        const { error } = await supabase.from('app_banners').insert([payload]);
-        if (error) throw error;
-    }
-  },
-
-  deleteBanner: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('app_banners').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  getPartnerStudios: async (): Promise<PartnerStudio[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name', { ascending: true });
-    if (error) throw error;
-    return (data || []).map((d: any) => ({
-      id: d.id, 
-      status: d.status || 'active', 
-      responsibleName: d.responsible_name, 
-      cpf: d.cpf, 
-      phone: d.phone, 
-      email: d.email, 
-      password: d.password || '', 
-      secondContactName: d.second_contact_name, 
-      secondContactPhone: d.second_contact_phone, 
-      fantasyName: d.fantasy_name, 
-      legalName: d.legal_name, 
-      cnpj: d.cnpj, 
-      studioPhone: d.studio_phone, 
-      address: d.address, 
-      city: d.city, 
-      state: d.state, 
-      country: d.country, 
-      sizeM2: d.size_m2, 
-      studentCapacity: d.student_capacity, 
-      rentValue: d.rent_value, 
-      methodology: d.methodology, 
-      studioType: d.studio_type, 
-      nameOnSite: d.name_on_site, 
-      bank: d.bank, 
-      agency: d.agency, 
-      account: d.account, 
-      beneficiary: d.beneficiary, 
-      pixKey: d.pix_key, 
-      hasReformer: d.has_reformer, 
-      qtyReformer: d.qty_reformer, 
-      hasLadderBarrel: d.has_ladder_barrel, 
-      qtyLadderBarrel: d.qty_ladder_barrel, 
-      hasChair: d.has_chair, 
-      qtyChair: d.qty_chair, 
-      hasCadillac: d.has_cadillac, 
-      qtyCadillac: d.qty_cadillac, 
-      hasChairsForCourse: d.has_chairs_for_course, 
-      hasTv: d.has_tv, 
-      maxKitsCapacity: d.max_kits_capacity, 
-      attachments: d.attachments
-    }));
-  },
-
-  savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
-    if (!isConfigured) return;
-    const payload = {
-      status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, 
-      qty_ladder_barrel: studio.qtyLadderBarrel, 
-      has_chair: studio.hasChair, 
-      qty_chair: studio.qtyChair, 
-      has_cadillac: studio.hasCadillac, 
-      qty_cadillac: studio.qtyCadillac, 
-      has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
-    };
-    if (studio.id) {
-        const { error } = await supabase.from('crm_partner_studios').update(payload).eq('id', studio.id);
-        if (error) throw error;
-    } else {
-        const { error } = await supabase.from('crm_partner_studios').insert([payload]);
-        if (error) throw error;
-    }
-  },
-
-  deletePartnerStudio: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_partner_studios').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  getInstructorLevels: async (): Promise<InstructorLevel[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_instructor_levels').select('*').order('name', { ascending: true });
-    if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, honorarium: Number(d.honorarium || 0), observations: d.observations || '', createdAt: d.created_at }));
-  },
-
-  saveInstructorLevel: async (level: InstructorLevel): Promise<void> => {
-    if (!isConfigured) return;
-    const payload = { name: level.name, honorarium: level.honorarium, observations: level.observations };
-    if (level.id) {
-        const { error } = await supabase.from('crm_instructor_levels').update(payload).eq('id', level.id);
-        if (error) throw error;
-    } else {
-        const { error } = await supabase.from('crm_instructor_levels').insert([payload]);
-        if (error) throw error;
-    }
-  },
-
-  deleteInstructorLevel: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_instructor_levels').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  getTeacherNews: async (): Promise<TeacherNews[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, imageUrl: d.image_url, createdAt: d.created_at }));
-  },
-
-  saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
-    if (!isConfigured) return;
-    const payload = { title: news.title, content: news.content, image_url: news.imageUrl };
-    if (news.id) {
-        const { error } = await supabase.from('crm_teacher_news').update(payload).eq('id', news.id);
-        if (error) throw error;
-    } else {
-        const { error } = await supabase.from('crm_teacher_news').insert([{ ...payload, id: crypto.randomUUID() }]);
-        if (error) throw error;
-    }
-  },
-
-  deleteTeacherNews: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_teacher_news').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  getFormFolders: async (): Promise<FormFolder[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_form_folders').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
-  },
-
-  saveFormFolder: async (folder: FormFolder): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_form_folders').upsert({ id: folder.id, name: folder.name });
-    if (error) throw error;
-  },
-
-  deleteFormFolder: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_form_folders').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  getFormById: async (id: string): Promise<FormModel | SurveyModel | null> => {
-    if (!isConfigured) return null;
-    const { data: form } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
-    if (form) return { 
-        id: form.id, title: form.title, description: form.description, campaign: form.campaign, isLeadCapture: form.is_lead_capture, teamId: form.team_id, 
-        distributionMode: form.distribution_mode, fixedOwnerId: form.fixed_owner_id || null, targetPipeline: form.target_pipeline, targetStage: form.target_stage,
-        questions: form.questions || [], style: form.style || {}, createdAt: form.created_at, submissionsCount: form.submissions_count || 0, folderId: form.folder_id
-    };
-    const { data: survey } = await supabase.from('crm_surveys').select('*').eq('id', id).maybeSingle();
-    if (survey) return { 
-        id: survey.id, title: survey.title, description: survey.description, isLeadCapture: survey.is_lead_capture, questions: survey.questions || [], 
-        style: survey.style || {}, targetType: survey.target_type, targetProductType: survey.target_product_type, targetProductName: survey.target_product_name,
-        onlyIfFinished: survey.only_if_finished, isActive: survey.is_active, createdAt: survey.created_at, submissionsCount: survey.submissions_count || 0 
-    };
-    return null;
-  },
-
-  saveForm: async (form: FormModel): Promise<void> => {
-      if (!isConfigured) return;
-      const payload = { 
-          id: form.id || undefined, title: form.title, description: form.description, campaign: form.campaign || null, is_lead_capture: form.isLeadCapture, 
-          questions: form.questions, style: form.style, team_id: form.teamId || null, 
-          distribution_mode: form.distributionMode || 'fixed', 
-          fixed_owner_id: form.fixedOwnerId || null, 
-          target_pipeline: form.targetPipeline || 'Padrão', 
-          target_stage: form.targetStage || 'new',
-          submissions_count: form.submissionsCount || 0, folder_id: form.folderId || null
-      };
-      const { error } = await supabase.from('crm_forms').upsert(payload);
-      if (error) throw error;
-  },
-
-  getForms: async (): Promise<FormModel[]> => {
-      if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []).map((d: any) => ({ 
-          id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, teamId: d.team_id, 
-          distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id || null, targetPipeline: d.target_pipeline, targetStage: d.target_stage,
-          questions: d.questions || [], style: d.style || {}, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id
-      }));
-  },
-
-  saveSurvey: async (survey: SurveyModel): Promise<void> => {
-      if (!isConfigured) return;
-      const payload = { 
-          id: survey.id || undefined, title: survey.title, description: survey.description, is_lead_capture: survey.isLeadCapture, questions: survey.questions, 
-          style: survey.style, target_type: survey.targetType, target_product_type: survey.targetProductType || null, target_product_name: survey.targetProductName || null,
-          only_if_finished: survey.onlyIfFinished, is_active: survey.isActive, submissions_count: survey.submissionsCount || 0 
-      };
-      const { error } = await supabase.from('crm_surveys').upsert(payload);
-      if (error) throw error;
-  },
-
-  getSurveys: async (): Promise<SurveyModel[]> => {
-      if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('crm_surveys').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []).map((d: any) => ({ 
-          id: d.id, title: d.title, description: d.description, isLeadCapture: d.is_lead_capture, questions: d.questions || [], style: d.style || {}, 
-          targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished,
-          isActive: d.is_active, createdAt: d.created_at, submissionsCount: d.submissions_count || 0 
-      }));
-  },
-
-  getEligibleSurveysForStudent: async (studentDealId: string): Promise<SurveyModel[]> => {
-      if (!isConfigured) return [];
-      const { data: deal } = await supabase.from('crm_deals').select('*').eq('id', studentDealId).single();
-      if (!deal) return [];
-      const { data: surveys } = await supabase.from('crm_surveys').select('*').eq('is_active', true);
-      if (!surveys || surveys.length === 0) return [];
-      const { data: answered } = await supabase.from('crm_form_submissions').select('form_id').eq('student_id', studentDealId);
-      const answeredIds = new Set((answered || []).map(a => a.form_id));
-      const eligible = surveys.filter((survey: any) => {
-          if (answeredIds.has(survey.id)) return false;
-          let matchesProduct = false;
-          if (survey.target_type === 'all') matchesProduct = true;
-          else {
-              const typeMatch = survey.target_type === 'product_type' && deal.product_type === survey.target_product_type;
-              const specificMatch = survey.target_type === 'specific_product' && deal.product_name === survey.target_product_name;
-              matchesProduct = typeMatch || specificMatch;
-          }
-          if (!matchesProduct) return false;
-          if (survey.only_if_finished) {
-              if (deal.product_type === 'Presencial') return deal.stage === 'closed';
-              return true; 
-          }
-          return true;
-      });
-      return eligible.map((d: any) => ({
-          id: d.id, title: d.title, description: d.description, isLeadCapture: d.is_lead_capture, questions: d.questions || [], style: d.style || {}, 
-          targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished,
-          isActive: d.is_active, createdAt: d.created_at, submissionsCount: d.submissions_count || 0
-      }));
-  },
-
-  deleteForm: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      await supabase.from('crm_forms').delete().eq('id', id);
-      await supabase.from('crm_surveys').delete().eq('id', id);
-  },
-
-  submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
-      const formResource = await appBackend.getFormById(formId);
-      if (!formResource) throw new Error("Formulário não encontrado.");
-      
-      const form = formResource as FormModel;
-
-      if (isConfigured) {
-          const cleanStudentId = (studentId && typeof studentId === 'string' && studentId.trim() !== '') ? studentId : null;
-          
-          // 1. Salvar a submissão bruta
-          const { error } = await supabase.from('crm_form_submissions').insert([{ form_id: formId, answers: answers, student_id: cleanStudentId }]);
-          if (error) throw error;
-          
-          // 2. Se for Lead Capture, criar o card no CRM
-          if (isLeadCapture) {
-              const dealPayload: any = {
-                  deal_number: generateInternalDealNumber(),
-                  title: form.title || "Novo Lead via Formulário",
-                  stage: form.targetStage || 'new',
-                  pipeline: form.targetPipeline || 'Padrão',
-                  campaign: form.campaign || 'Webform',
-                  status: 'warm',
-                  created_at: new Date().toISOString()
-              };
-
-              // Mapeamento dinâmico baseado no crmMapping de cada pergunta
-              form.questions.forEach(q => {
-                  const ans = answers.find(a => a.questionId === q.id);
-                  if (ans && q.crmMapping) {
-                      const value = ans.value;
-                      
-                      // Tratamento especial para o campo 'value' (moeda/número)
-                      if (q.crmMapping === 'value') {
-                          dealPayload[q.crmMapping] = parseFloat(value.replace(/[^\d.-]/g, '')) || 0;
-                      } else {
-                          dealPayload[q.crmMapping] = value;
-                      }
-
-                      // Melhoria de UX: Se mapeou 'contact_name', usa no Título do card e 'company_name' para consistência visual
-                      if (q.crmMapping === 'contact_name') {
-                          dealPayload.title = value;
-                          if (!dealPayload.company_name) dealPayload.company_name = value;
-                      }
-                      
-                      // Melhoria de UX: Se mapeou 'company_name', e não tem título, usa
-                      if (q.crmMapping === 'company_name' && dealPayload.title === form.title) {
-                          dealPayload.title = value;
-                      }
-                  }
-              });
-
-              // Definir dono (Owner) baseado nas regras de distribuição
-              if (form.distributionMode === 'fixed' && form.fixedOwnerId) {
-                  dealPayload.owner_id = form.fixedOwnerId;
-              } else if (form.distributionMode === 'round-robin' && form.teamId) {
-                  const { data: teamData } = await supabase.from('crm_teams').select('members').eq('id', form.teamId).single();
-                  if (teamData?.members?.length > 0) {
-                      const randomIndex = Math.floor(Math.random() * teamData.members.length);
-                      dealPayload.owner_id = teamData.members[randomIndex];
-                  }
-              }
-
-              // Inserir na tabela de negociações
-              await supabase.from('crm_deals').insert([dealPayload]);
-          }
-
-          // 3. Atualizar contagem
-          await supabase.from('crm_surveys').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
-          await supabase.from('crm_forms').update({ submissions_count: (form.submissionsCount || 0) + 1 }).eq('id', formId);
-      }
-  },
-
-  getFormSubmissions: async (formId: string): Promise<any[]> => {
-      if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('crm_form_submissions').select('*').eq('form_id', formId).order('created_at', { ascending: false });
-      if (error) throw error;
-      return data || [];
-  },
-
-  getFolders: async (): Promise<ContractFolder[]> => {
-      if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('app_contract_folders').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
-  },
-
-  saveFolder: async (folder: ContractFolder): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('app_contract_folders').upsert({ id: folder.id, name: folder.name });
-      if (error) throw error;
-  },
-
-  deleteFolder: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('app_contract_folders').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  getContracts: async (): Promise<Contract[]> => {
-      if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('app_contracts').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
-  },
-
-  getContractById: async (id: string): Promise<Contract | null> => {
-      if (!isConfigured) return null;
-      const { data, error = null } = await supabase.from('app_contracts').select('*').eq('id', id).maybeSingle();
-      if (error || !data) return null;
-      return { id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
-  },
-
-  saveContract: async (contract: Contract): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('app_contracts').upsert({ id: contract.id, title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contractDate, status: contract.status, folder_id: contract.folderId || null, signers: contract.signers });
-      if (error) throw error;
-  },
-
-  deleteContract: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('app_contracts').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  signContract: async (contractId: string, signerId: string, signatureBase64: string): Promise<void> => {
-      const contract = await appBackend.getContractById(contractId);
-      if (!contract) throw new Error("Contrato não encontrado.");
-      const signerIdx = contract.signers.findIndex(s => s.id === signerId);
-      if (signerIdx === -1) throw new Error("Signatário não encontrado.");
-      contract.signers[signerIdx].status = 'signed';
-      contract.signers[signerIdx].signatureData = signatureBase64;
-      contract.signers[signerIdx].signedAt = new Date().toISOString();
-      if (contract.signers.every(s => s.status === 'signed')) contract.status = 'signed';
-      await appBackend.saveContract(contract);
-  },
-
-  getCertificates: async (): Promise<CertificateModel[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((d: any) => ({ 
-      id: d.id, 
-      title: d.title, 
-      backgroundData: d.background_base_64, 
-      backBackgroundData: d.back_background_base_64, 
-      linkedProductId: d.linked_product_id, 
-      bodyText: d.body_text, 
-      layoutConfig: d.layout_config, 
-      createdAt: d.created_at 
-    }));
-  },
-
-  saveCertificate: async (cert: CertificateModel): Promise<void> => {
-    if (!isConfigured) return;
-    /* FIX: Changed body_text: cert.body_text to body_text: cert.bodyText to match the CertificateModel interface in types.ts */
-    const { error } = await supabase.from('crm_certificates').upsert({ 
-      id: cert.id || undefined, 
-      title: cert.title, 
-      background_base_64: cert.backgroundData, 
-      back_background_base_64: cert.backBackgroundData, 
-      linked_product_id: cert.linkedProductId, 
-      body_text: cert.bodyText, 
-      layout_config: cert.layoutConfig 
-    });
-    if (error) throw error;
-  },
-
-  deleteCertificate: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_certificates').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  getEvents: async (): Promise<EventModel[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, description: d.description, location: d.location, dates: d.dates || [], createdAt: d.created_at, registrationOpen: d.registration_open || false }));
-  },
-
-  saveEvent: async (event: EventModel): Promise<EventModel> => {
-    if (!isConfigured) throw new Error("Backend not configured");
-    const { data, error = null } = await supabase.from('crm_events').upsert({ id: event.id, name: event.name, description: event.description, location: event.location, dates: event.dates, registration_open: event.registrationOpen }).select().single();
-    if (error) throw error;
-    return { id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates || [], createdAt: data.created_at, registrationOpen: data.registration_open || false };
-  },
-
-  deleteEvent: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_events').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  getInventory: async (): Promise<InventoryRecord[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico, itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date, studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conference_date: d.conference_date, attachments: d.attachments, createdAt: d.created_at }));
-  },
-
-  getCourseInfos: async (): Promise<CourseInfo[]> => {
-      if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('crm_course_info').select('*').order('course_name', { ascending: true });
-      if (error) throw error;
-      return (data || []).map((d: any) => ({ id: d.id, courseName: d.course_name, details: d.details || '', materials: d.materials || '', requirements: d.requirements || '', updatedAt: d.updated_at }));
-  },
-
-  saveCourseInfo: async (info: Partial<CourseInfo>): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_course_info').upsert({
-          id: info.id || undefined,
-          course_name: info.courseName,
-          details: info.details,
-          materials: info.materials,
-          requirements: info.requirements,
-          updated_at: new Date().toISOString()
-      });
-      if (error) throw error;
-  },
-
-  deleteCourseInfo: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_course_info').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  issueCertificate: async (studentDealId: string, templateId: string): Promise<string> => {
-      if (!isConfigured) return 'mock-hash';
-      const hash = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      const { error } = await supabase.from('crm_student_certificates').insert([{
-          student_deal_id: studentDealId,
-          certificate_template_id: templateId,
-          hash: hash,
-          issued_at: new Date().toISOString()
-      }]);
-      if (error) throw error;
-      return hash;
-  },
-
-  getStudentCertificate: async (hash: string): Promise<{ studentName: string; studentCity: string; template: CertificateModel; issuedAt: string; } | null> => {
-      if (!isConfigured) return null;
-      const { data: cert, error } = await supabase.from('crm_student_certificates').select('*, crm_deals(company_name, contact_name, course_city), crm_certificates(*)').eq('hash', hash).maybeSingle();
-      if (error || !cert) return null;
-      
-      const templateData = cert.crm_certificates;
-      const dealData = cert.crm_deals;
-
-      return {
-          studentName: dealData.company_name || dealData.contact_name,
-          studentCity: dealData.course_city || 'Voll Pilates',
-          issuedAt: cert.issued_at,
-          template: {
-              id: templateData.id,
-              title: templateData.title,
-              backgroundData: templateData.background_base_64,
-              backBackgroundData: templateData.back_background_base_64,
-              linkedProductId: templateData.linked_product_id,
-              bodyText: templateData.body_text,
-              layoutConfig: templateData.layout_config,
-              createdAt: templateData.created_at
-          }
-      };
-  },
-
-  deleteStudentCertificate: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_student_certificates').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  getWorkshops: async (eventId: string): Promise<Workshop[]> => {
-      if (!isConfigured) return [];
-      const { data, error } = await supabase.from('crm_event_workshops').select('*').eq('event_id', eventId).order('date').order('time');
-      if (error) throw error;
-      return (data || []).map((w: any) => ({
-          id: w.id, eventId: w.event_id, blockId: w.block_id, title: w.title, description: w.description, speaker: w.speaker, date: w.date, time: w.time, spots: w.spots
-      }));
-  },
-
-  getBlocks: async (eventId: string): Promise<EventBlock[]> => {
-      if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date').order('title');
-      if (error) throw error;
-      return (data || []).map((b: any) => ({
-          id: b.id, eventId: b.event_id, date: b.date, title: b.title, max_selections: b.max_selections
-      }));
-  },
-
-  getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
-      if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId).order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []).map((r: any) => ({
-          id: r.id, eventId: r.event_id, workshopId: r.workshop_id, studentId: r.student_id, studentName: r.student_name, studentEmail: r.student_email, registeredAt: r.created_at
-      }));
-  },
-
-  saveBlock: async (block: EventBlock): Promise<EventBlock> => {
-      if (!isConfigured) throw new Error("Backend not configured");
-      const { data, error } = await supabase.from('crm_event_blocks').upsert({
-          id: block.id || undefined,
-          event_id: block.eventId,
-          date: block.date,
-          title: block.title,
-          max_selections: block.maxSelections
-      }).select().single();
-      if (error) throw error;
-      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
-  },
-
-  deleteBlock: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_event_blocks').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  saveWorkshop: async (workshop: Workshop): Promise<Workshop> => {
-      if (!isConfigured) throw new Error("Backend not configured");
-      const { data, error = null } = await supabase.from('crm_event_workshops').upsert({
-          id: workshop.id || undefined,
-          event_id: workshop.eventId,
-          block_id: workshop.blockId,
-          title: workshop.title,
-          description: workshop.description,
-          speaker: workshop.speaker,
-          date: workshop.date,
-          time: workshop.time,
-          spots: workshop.spots
-      }).select().single();
-      if (error) throw error;
-      return { 
-          id: data.id, eventId: data.event_id, blockId: data.block_id, 
-          title: data.title, description: data.description, speaker: data.speaker, 
-          date: data.date, time: data.time, spots: data.spots 
-      };
-  },
-
-  deleteWorkshop: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error = null } = await supabase.from('crm_event_workshops').delete().eq('id', id);
-      if (error) throw error;
-  },
-
-  saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_inventory').upsert({
-          id: record.id || undefined,
-          type: record.type,
-          item_apostila_nova: record.itemApostilaNova,
-          item_apostila_classico: record.itemApostilaClassico,
-          item_sacochila: record.itemSacochila,
-          item_lapis: record.itemLapis,
-          registration_date: record.registrationDate,
-          studio_id: record.studioId,
-          tracking_code: record.trackingCode,
-          observations: record.observations,
-          conference_date: record.conferenceDate,
-          attachments: record.attachments
-      });
-      if (error) throw error;
-  },
-
-  deleteInventoryRecord: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      const { error } = await supabase.from('crm_inventory').delete().eq('id', id);
-      if (error) throw error;
   }
 };

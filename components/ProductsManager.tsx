@@ -85,6 +85,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           setModuleLessons(lessonsMap);
       } catch (e) {
           console.error(e);
+          alert("Erro ao carregar conteúdo do curso. Verifique as tabelas do banco.");
       } finally {
           setIsLoadingBuilder(false);
       }
@@ -95,24 +96,36 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       const title = prompt("Título do Módulo:");
       if (!title) return;
       const newIndex = courseModules.length;
-      await appBackend.saveCourseModule({ courseId: editingCourse.id, title, orderIndex: newIndex });
-      handleOpenCourseBuilder(editingCourse);
+      try {
+          await appBackend.saveCourseModule({ courseId: editingCourse.id, title, orderIndex: newIndex });
+          handleOpenCourseBuilder(editingCourse);
+      } catch (e: any) {
+          alert(`Erro ao criar módulo: ${e.message}`);
+      }
   };
 
   const handleAddLesson = async (moduleId: string) => {
       const title = prompt("Título da Aula:");
       if (!title) return;
       const newIndex = (moduleLessons[moduleId] || []).length;
-      await appBackend.saveCourseLesson({ moduleId, title, orderIndex: newIndex, description: '', videoUrl: '' });
-      handleOpenCourseBuilder(editingCourse!);
+      try {
+          await appBackend.saveCourseLesson({ moduleId, title, orderIndex: newIndex, description: '', videoUrl: '' });
+          handleOpenCourseBuilder(editingCourse!);
+      } catch (e: any) {
+          alert(`Erro ao criar aula: ${e.message}`);
+      }
   };
 
   const handleEditLesson = async (lesson: CourseLesson) => {
       const newTitle = prompt("Novo título:", lesson.title);
       const newVideo = prompt("URL YouTube:", lesson.videoUrl);
       if (newTitle === null) return;
-      await appBackend.saveCourseLesson({ ...lesson, title: newTitle, videoUrl: newVideo || '' });
-      handleOpenCourseBuilder(editingCourse!);
+      try {
+          await appBackend.saveCourseLesson({ ...lesson, title: newTitle, videoUrl: newVideo || '' });
+          handleOpenCourseBuilder(editingCourse!);
+      } catch (e) {
+          alert("Erro ao editar aula.");
+      }
   };
 
   const handleDeleteLesson = async (id: string) => {
@@ -130,7 +143,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           if (formData.id) await appBackend.client.from('crm_products').update(payload).eq('id', formData.id);
           else await appBackend.client.from('crm_products').insert([payload]);
           
-          // Se for categoria Curso Online e não existir na tabela de cursos, criamos o esqueleto
           if (formData.category === 'Curso Online') {
               await appBackend.saveOnlineCourse({
                   title: formData.name,
@@ -155,7 +167,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       }
   };
 
-  /* FIXED: Added handleEdit and handleOpenNew inside component scope */
   const handleEdit = (product: Product) => {
       setFormData(product);
       setShowModal(true);
@@ -246,7 +257,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                             <div className="text-center py-20 bg-white border-2 border-dashed rounded-[2rem] text-slate-400">
                                 <LayoutTemplate size={64} className="mx-auto mb-4 opacity-10"/>
                                 <p className="font-bold text-lg">Este curso ainda não tem conteúdo</p>
-                                <p className="text-sm">Comece criando the primeiro módulo acima.</p>
+                                <p className="text-sm">Comece criando o primeiro módulo acima.</p>
                             </div>
                         ) : courseModules.map(mod => (
                             <div key={mod.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">

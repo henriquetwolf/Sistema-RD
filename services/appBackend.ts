@@ -60,13 +60,12 @@ export const appBackend = {
   client: supabase,
 
   auth: {
+    // Fix: Ensure signIn always returns { data, error } structure for consistent type checking in consumers
     signIn: async (email: string, password: string) => {
       if (!isConfigured) {
-        return { data: { user: MOCK_SESSION.user, session: MOCK_SESSION }, error: null };
+        return { data: { user: MOCK_SESSION.user as any, session: MOCK_SESSION as any }, error: null };
       }
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      return data;
+      return await supabase.auth.signInWithPassword({ email, password });
     },
     signOut: async () => {
       if (!isConfigured) {
@@ -134,8 +133,9 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
+    // Fix: Use intervalMinutes property from the preset object (was interval_minutes)
     const payload = {
-      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.interval_minutes, created_by_name: preset.createdByName
+      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
@@ -441,7 +441,8 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, title: d.title, content: d.content, city: d.city, contract_date: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
+      // Fix: Use contractDate property from the Contract interface (was contract_date)
+      id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
     }));
   },
 
@@ -623,7 +624,8 @@ export const appBackend = {
     if (!isConfigured) return [];
     // FIXED: Corrected event_id usage (Cannot find name 'event_id'. Did you mean 'eventId'?)
     const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date');
-    return (data || []).map(d => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, max_selections: d.max_selections }));
+    // Fix: Use maxSelections property from the EventBlock interface (was max_selections)
+    return (data || []).map(d => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
   },
 
   saveBlock: async (blk: EventBlock): Promise<EventBlock> => {
@@ -674,8 +676,9 @@ export const appBackend = {
       team: d.team, 
       voucherLink1: d.voucher_link1, 
       testDate: d.test_date, 
-      voucher_link2: d.voucher_link2, 
-      voucher_link3: d.voucher_link3, 
+      // Fix: Use camelCase property names from the BillingNegotiation interface (was voucher_link2, voucher_link3)
+      voucherLink2: d.voucher_link2, 
+      voucherLink3: d.voucher_link3, 
       boletosLink: d.boletos_link, 
       negotiationReference: d.negotiation_reference, 
       attachments: d.attachments, 
@@ -819,7 +822,8 @@ export const appBackend = {
     let query = supabase.from('crm_banners').select('*').order('created_at', { ascending: false });
     if (audience) query = query.eq('target_audience', audience).eq('active', true);
     const { data } = await query;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, link_url: d.link_url, targetAudience: d.target_audience, active: d.active, createdAt: d.created_at }));
+    // Fix: Use linkUrl property from the Banner interface (was link_url)
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, linkUrl: d.link_url, targetAudience: d.target_audience, active: d.active, createdAt: d.created_at }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -933,7 +937,8 @@ export const appBackend = {
       city: studio.city,
       state: studio.state, 
       country: studio.country, 
-      size_m2: studio.size_m2, 
+      // Fix: Use sizeM2 property from the PartnerStudio interface (was size_m2)
+      size_m2: studio.sizeM2, 
       student_capacity: studio.studentCapacity, 
       rent_value: studio.rentValue,
       methodology: studio.methodology, 
@@ -970,8 +975,8 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
       return (data || []).map((d: any) => ({
-          id: d.id, title: d.title, backgroundData: d.background_data, backBackgroundData: d.back_background_data,
-          linkedProductId: d.linked_product_id, bodyText: d.body_text, layoutConfig: d.layout_config, createdAt: d.created_at
+          id: d.id, title: d.title, background_data: d.background_data, backBackgroundData: d.back_background_data,
+          linked_product_id: d.linked_product_id, body_text: d.body_text, layout_config: d.layout_config, createdAt: d.created_at
       }));
   },
 

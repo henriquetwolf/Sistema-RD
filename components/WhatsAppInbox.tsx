@@ -115,10 +115,8 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedChat = conversations.find(c => c.id === selectedChatId);
 
-  // Calcula a URL de webhook para exibir ao usuário
-  const webhookUrlDisplay = useMemo(() => {
-    return `${window.location.origin}/api/whatsapp/webhook`;
-  }, []);
+  // URL de Webhook específica fornecida pelo usuário para o Supabase Functions
+  const webhookUrlDisplay = "https://wfrzsnwisypmgsbeccfj.supabase.co/functions/v1/rapid-service";
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -137,7 +135,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
             if (selectedChatId) fetchMessages(selectedChatId, false);
             checkRealStatus();
           }
-      }, 10000); 
+      }, 15000); 
       return () => clearInterval(timer);
   }, [selectedChatId, showSettings, showIdentifyModal, config.instanceUrl, viewMode]);
 
@@ -319,7 +317,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
       } catch (e) { alert("Erro ao salvar tag."); } finally { setIsSavingTag(false); }
   };
 
-  // --- ADDED FIX: handleIdentifySubmit implementation ---
   const handleIdentifySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedChatId || !identifyPhone || !identifyName) return;
@@ -330,7 +327,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
         setShowIdentifyModal(false);
         setIdentifyPhone('');
         setIdentifyName('');
-        // Refresh local info
         loadGlobalIdentification();
     } catch (err: any) {
         alert("Erro ao identificar contato: " + err.message);
@@ -372,12 +368,10 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
               const cleanNumber = config.pairingNumber.replace(/\D/g, '');
               if (!cleanNumber) throw new Error("Número de pareamento é obrigatório para este método.");
               
-              // Tenta primeiro o padrão hifenizado (v2)
               let response = await fetch(`${baseUrl}/instance/connect/pairing-code/${config.instanceName.trim()}?number=${cleanNumber}`, {
                   headers: { 'apikey': config.apiKey.trim() }
               });
               
-              // Se falhar (404), tenta o padrão camelCase (v1/legado)
               if (!response.ok && response.status === 404) {
                   response = await fetch(`${baseUrl}/instance/connect/pairingCode/${config.instanceName.trim()}?number=${cleanNumber}`, {
                       headers: { 'apikey': config.apiKey.trim() }
@@ -607,7 +601,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                                             draggable 
                                             onDragStart={() => handleDragStart(c.id)}
                                             onClick={() => setSelectedChatId(c.id)}
-                                            // FIXED: Corrected contextMenuChatId reference error
                                             className={clsx("bg-white p-3 rounded-xl shadow-sm border mb-2 cursor-grab active:cursor-grabbing hover:border-teal-400 transition-all group relative", selectedChatId === c.id ? "ring-2 ring-teal-500 border-transparent" : "border-slate-100")}
                                         >
                                             <div className="flex justify-between items-start mb-1">
@@ -804,7 +797,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                       <div className="flex items-center gap-3"><UserPlus className="text-amber-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Identificar Contato</h3></div>
                       <button onClick={() => setShowIdentifyModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                   </div>
-                  {/* FIXED: Implemented handleIdentifySubmit */}
                   <form onSubmit={handleIdentifySubmit} className="p-8 space-y-6">
                       <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3 text-xs text-amber-800 mb-2"><AlertCircle size={16} className="shrink-0" /><p>Vincule este ID técnico ao número real para que o sistema o reconheça no futuro.</p></div>
                       <div className="space-y-4">
@@ -824,21 +816,23 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                       <div className="flex items-center gap-3"><Settings className="text-teal-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Evolution API Config</h3></div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                   </div>
-                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6">
+                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 hide-scrollbar flex-1">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">URL da API</label><input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm" value={config.instanceUrl} onChange={e => setConfig({...config, instanceUrl: e.target.value})} placeholder="https://api.voll.com" /></div>
-                          <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Instância</label><input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm" value={config.instanceName} onChange={e => setConfig({...config, instanceName: e.target.value})} placeholder="Instancia_VOLL" /></div>
-                          <div className="md:col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">API Key Global</label><input type="password" title="API Key" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm" value={config.apiKey} onChange={e => setConfig({...config, apiKey: e.target.value})} /></div>
+                          <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">URL da API</label><input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" value={config.instanceUrl} onChange={e => setConfig({...config, instanceUrl: e.target.value})} placeholder="https://api.voll.com" /></div>
+                          <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Instância</label><input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" value={config.instanceName} onChange={e => setConfig({...config, instanceName: e.target.value})} placeholder="Instancia_VOLL" /></div>
+                          <div className="md:col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">API Key Global</label><input type="password" title="API Key" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" value={config.apiKey} onChange={e => setConfig({...config, apiKey: e.target.value})} /></div>
                       </div>
 
-                      {/* CAMPO DE WEBHOOK RESTAURADO */}
-                      <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl space-y-2">
-                          <label className="block text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2"><Link2 size={12}/> URL de Webhook para configurar na Evolution</label>
+                      <div className="p-6 bg-indigo-50 border border-indigo-100 rounded-[2rem] space-y-3">
+                          <label className="block text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2"><Link2 size={12}/> URL de Webhook p/ Evolution API</label>
                           <div className="flex gap-2">
-                              <input type="text" readOnly className="flex-1 px-3 py-2 bg-white border rounded-lg text-[11px] font-mono text-indigo-900" value={webhookUrlDisplay} />
-                              <button onClick={() => { navigator.clipboard.writeText(webhookUrlDisplay); alert("Link do Webhook copiado!"); }} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors" title="Copiar URL"><Copy size={16}/></button>
+                              <input type="text" readOnly className="flex-1 px-4 py-3 bg-white border border-indigo-200 rounded-2xl text-[11px] font-mono text-indigo-900 shadow-sm" value={webhookUrlDisplay} />
+                              <button onClick={() => { navigator.clipboard.writeText(webhookUrlDisplay); alert("Link do Webhook copiado!"); }} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all shadow-md active:scale-95" title="Copiar URL"><Copy size={20}/></button>
                           </div>
-                          <p className="text-[10px] text-indigo-600 italic">Copie este endereço e cole nas configurações de Webhook (Events) da sua instância na Evolution API.</p>
+                          <div className="flex items-start gap-2 bg-white/50 p-3 rounded-xl">
+                              <AlertCircle size={14} className="text-indigo-400 shrink-0 mt-0.5" />
+                              <p className="text-[10px] text-indigo-600 leading-relaxed"><strong>Instruções:</strong> No painel da Evolution, vá em <strong>Webhook > Events</strong> e cole este link. Ative os eventos de <em>MESSAGES_UPSERT</em> e <em>SEND_MESSAGE</em> para sincronizar as conversas.</p>
+                          </div>
                       </div>
 
                       <div className="p-6 bg-teal-50 rounded-[2rem] border-2 border-teal-100 space-y-4">

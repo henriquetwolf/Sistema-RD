@@ -4,7 +4,7 @@ import { appBackend } from '../services/appBackend';
 import { 
   FileSignature, Plus, Search, Eye, Trash2, Copy, CheckCircle, 
   ArrowLeft, Save, X, PenTool, ExternalLink, RefreshCw, UserPlus, 
-  Users, MapPin, Calendar, Folder, FolderPlus, ChevronRight, LayoutGrid, List, Filter, MoveRight
+  Users, MapPin, Calendar, Folder, FolderPlus, ChevronRight, LayoutGrid, List, Filter, MoveRight, Loader2, AlertTriangle
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -36,6 +36,8 @@ Pela prestação dos serviços, o CONTRATANTE pagará ao CONTRATADO...`
 export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) => {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [folders, setFolders] = useState<ContractFolder[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   
   // Navigation State
   const [view, setView] = useState<'list' | 'create' | 'preview'>('list');
@@ -60,18 +62,28 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [showMoveModal, setShowMoveModal] = useState<Contract | null>(null); // Contract to be moved
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    const [c, f] = await Promise.all([
-        appBackend.getContracts(),
-        appBackend.getFolders()
-    ]);
-    setContracts(c);
-    setFolders(f);
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+        const [c, f] = await Promise.all([
+            appBackend.getContracts(),
+            appBackend.getFolders()
+        ]);
+        setContracts(c || []);
+        setFolders(f || []);
+    } catch (e: any) {
+        console.error("Erro ao carregar dados de contratos:", e);
+        setFetchError("Falha na conexão com o banco de dados. Verifique a estrutura da tabela crm_contracts.");
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   // --- FOLDER LOGIC ---
@@ -85,25 +97,37 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
           createdAt: new Date().toISOString()
       };
 
-      await appBackend.saveFolder(newFolder);
-      await loadData();
-      setShowFolderModal(false);
-      setNewFolderName('');
+      try {
+          await appBackend.saveFolder(newFolder);
+          await loadData();
+          setShowFolderModal(false);
+          setNewFolderName('');
+      } catch (e) {
+          alert("Erro ao criar pasta.");
+      }
   };
 
   const handleDeleteFolder = async (id: string) => {
       if(window.confirm('Excluir esta pasta? Os contratos dentro dela serão movidos para "Todos os Contratos".')) {
-          await appBackend.deleteFolder(id);
-          if (currentFolderId === id) setCurrentFolderId(null);
-          loadData();
+          try {
+              await appBackend.deleteFolder(id);
+              if (currentFolderId === id) setCurrentFolderId(null);
+              await loadData();
+          } catch (e) {
+              alert("Erro ao excluir pasta.");
+          }
       }
   };
 
   const handleMoveContract = async (contract: Contract, folderId: string | null) => {
-      const updated = { ...contract, folderId: folderId || null }; // ensure null if empty
-      await appBackend.saveContract(updated);
-      loadData();
-      setShowMoveModal(null);
+      try {
+          const updated = { ...contract, folderId: folderId || null };
+          await appBackend.saveContract(updated);
+          await loadData();
+          setShowMoveModal(null);
+      } catch (e) {
+          alert("Erro ao mover contrato.");
+      }
   };
 
   // --- CONTRACT LOGIC ---
@@ -114,54 +138,53 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
           return;
       }
 
-      const formattedSigners: ContractSigner[] = signersList.map(s => ({
-          id: crypto.randomUUID(),
-          name: s.name,
-          email: s.email,
-          status: 'pending'
-      }));
+      setIsSaving(true);
+      try {
+          const formattedSigners: ContractSigner[] = signersList.map(s => ({
+              id: crypto.randomUUID(),
+              name: s.name,
+              email: s.email,
+              status: 'pending'
+          }));
 
-      const newContract: Contract = {
-          id: crypto.randomUUID(),
-          createdAt: new Date().toISOString(),
-          status: 'sent',
-          title: formData.title,
-          content: formData.content,
-          city: formData.city || 'Cidade',
-          contractDate: formData.contractDate,
-          signers: formattedSigners,
-          folderId: targetFolderId || currentFolderId // Use selected in form or current folder
-      };
+          const newContract: Contract = {
+              id: crypto.randomUUID(),
+              createdAt: new Date().toISOString(),
+              status: 'sent',
+              title: formData.title,
+              content: formData.content,
+              city: formData.city || 'Cidade',
+              contractDate: formData.contractDate,
+              signers: formattedSigners,
+              folderId: targetFolderId || currentFolderId // Use selected in form or current folder
+          };
 
-      await appBackend.saveContract(newContract);
-      await loadData();
-      setView('list');
-      setFormData(INITIAL_CONTRACT_FORM);
-      setSignersList([{name: '', email: ''}]);
-      setTargetFolderId('');
+          await appBackend.saveContract(newContract);
+          await loadData();
+          setView('list');
+          setFormData(INITIAL_CONTRACT_FORM);
+          setSignersList([{name: '', email: ''}]);
+          setTargetFolderId('');
+      } catch (e: any) {
+          console.error(e);
+          alert("Erro ao salvar contrato: " + (e.message || "Tente rodar o script de reparo em Configurações."));
+      } finally {
+          setIsSaving(false);
+      }
   };
 
   // --- FILTERING ---
   
   const filteredContracts = contracts.filter(c => {
-      // 1. Folder Filter
-      // If currentFolderId is set, show only matches. If null, show ALL (like a "Recent" or "All" view)
-      // Exception: If we wanted a "Root only" view, we would check strictly for null. 
-      // User request: "Guardar contratos salvos em pastas". Let's assume the main view shows ALL unless a folder is clicked.
-      // Better UX: Sidebar has "All", "Root", and specific folders.
-      // Current Logic: If currentFolderId is set, strict match. If null, show ALL.
       if (currentFolderId && c.folderId !== currentFolderId) return false;
 
-      // 2. Text Search
       const matchesSearch = c.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             c.signers.some(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
       if (!matchesSearch) return false;
 
-      // 3. Status Filter
       if (statusFilter === 'signed' && c.status !== 'signed') return false;
       if (statusFilter === 'pending' && c.status === 'signed') return false;
 
-      // 4. Date Filter
       if (dateStart) {
           const d = new Date(c.createdAt).toISOString().split('T')[0];
           if (d < dateStart) return false;
@@ -174,7 +197,6 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
       return true;
   });
 
-  // Helper
   const handleAddSigner = () => setSignersList([...signersList, {name: '', email: ''}]);
   const handleRemoveSigner = (idx: number) => {
       const l = [...signersList]; l.splice(idx, 1); setSignersList(l);
@@ -184,8 +206,12 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
   };
   const handleDelete = async (id: string) => {
       if(window.confirm("Excluir contrato permanentemente?")) {
-          await appBackend.deleteContract(id);
-          loadData();
+          try {
+              await appBackend.deleteContract(id);
+              await loadData();
+          } catch (e) {
+              alert("Erro ao excluir.");
+          }
       }
   };
   const handleCopyLink = (id: string) => {
@@ -195,8 +221,6 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
       setTimeout(() => setCopiedId(null), 2000);
   };
   const openPreview = (c: Contract) => { setSelectedContract(c); setView('preview'); };
-
-  // --- RENDER ---
 
   if (view === 'create') {
       return (
@@ -315,8 +339,9 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
 
                 <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
                     <button onClick={() => setView('list')} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
-                    <button onClick={handleCreate} className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm flex items-center gap-2">
-                        <Save size={16} /> Gerar Contrato
+                    <button onClick={handleCreate} disabled={isSaving} className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm flex items-center gap-2 disabled:opacity-50">
+                        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} 
+                        Gerar Contrato
                     </button>
                 </div>
             </div>
@@ -360,7 +385,6 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                            <p>{selectedContract.city}, {new Date(selectedContract.contractDate).toLocaleDateString()}</p>
                       </div>
 
-                      {/* Signatures List */}
                       <div className="border-t border-slate-200 pt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
                           {selectedContract.signers.map(signer => (
                               <div key={signer.id} className="flex flex-col items-center">
@@ -387,8 +411,6 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
         </div>
     );
   }
-
-  // --- MAIN VIEW WITH SIDEBAR ---
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 h-full flex flex-col md:flex-row gap-6 pb-20">
@@ -429,7 +451,7 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                     </button>
                 </div>
 
-                <div className="space-y-0.5 max-h-[300px] overflow-y-auto">
+                <div className="space-y-0.5 max-h-[300px] overflow-y-auto custom-scrollbar">
                     {folders.map(f => (
                         <div key={f.id} className="group relative">
                             <button 
@@ -451,7 +473,7 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                         </div>
                     ))}
                     {folders.length === 0 && (
-                        <p className="text-xs text-slate-400 px-3 italic">Nenhuma pasta criada.</p>
+                        <p className="text-xs text-slate-400 px-3 italic py-4">Nenhuma pasta criada.</p>
                     )}
                 </div>
              </div>
@@ -483,6 +505,7 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                             <option value="pending">Pendentes</option>
                             <option value="signed">Finalizados</option>
                         </select>
+                        <button onClick={loadData} className="p-2 text-slate-400 hover:text-teal-600 transition-colors"><RefreshCw size={20} className={isLoading ? "animate-spin" : ""} /></button>
                     </div>
                 </div>
                 
@@ -526,85 +549,98 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
 
             {/* Contracts Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredContracts.length === 0 && (
+                {isLoading ? (
+                    <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400">
+                        <Loader2 size={48} className="animate-spin text-teal-600 mb-4" />
+                        <p className="font-bold">Carregando seus documentos...</p>
+                    </div>
+                ) : fetchError ? (
+                    <div className="col-span-full text-center py-12 bg-red-50 border-2 border-red-100 rounded-xl p-8">
+                        <AlertTriangle size={48} className="mx-auto text-red-400 mb-4" />
+                        <p className="text-red-700 font-bold mb-2">Erro ao carregar contratos</p>
+                        <p className="text-red-600 text-sm mb-6">{fetchError}</p>
+                        <button onClick={loadData} className="bg-red-600 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-md flex items-center gap-2 mx-auto">
+                            <RefreshCw size={16}/> Tentar novamente
+                        </button>
+                    </div>
+                ) : filteredContracts.length === 0 ? (
                     <div className="col-span-full text-center py-12 bg-white rounded-xl border-2 border-dashed border-slate-200">
                         <FileSignature size={48} className="mx-auto text-slate-300 mb-4" />
-                        <p className="text-slate-500">Nenhum contrato encontrado com estes filtros.</p>
+                        <p className="text-slate-500">Nenhum contrato encontrado nesta visão.</p>
                         <button onClick={() => setView('create')} className="text-teal-600 font-bold text-sm mt-2 hover:underline">
                             Criar novo contrato
                         </button>
                     </div>
-                )}
+                ) : (
+                    filteredContracts.map(contract => {
+                        const signedCount = (contract.signers || []).filter(s => s.status === 'signed').length;
+                        const totalSigners = (contract.signers || []).length || 1;
+                        const percent = Math.round((signedCount / totalSigners) * 100);
 
-                {filteredContracts.map(contract => {
-                    const signedCount = contract.signers.filter(s => s.status === 'signed').length;
-                    const totalSigners = contract.signers.length;
-                    const percent = Math.round((signedCount / totalSigners) * 100);
+                        return (
+                            <div key={contract.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col overflow-hidden group">
+                                <div className="relative h-1.5 w-full bg-slate-100">
+                                    <div className={clsx("absolute left-0 top-0 h-full transition-all duration-500", contract.status === 'signed' ? "bg-green-500" : "bg-amber-400")} style={{width: `${percent}%`}}></div>
+                                </div>
+                                
+                                <div className="p-5 flex-1">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border", 
+                                            contract.status === 'signed' ? "bg-green-50 text-green-700 border-green-200" : "bg-amber-50 text-amber-700 border-amber-100"
+                                        )}>
+                                            {contract.status === 'signed' ? 'Finalizado' : 'Aguardando'}
+                                        </span>
+                                        
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => setShowMoveModal(contract)} className="text-slate-300 hover:text-teal-600 hover:bg-teal-50 p-1 rounded" title="Mover para pasta">
+                                                <MoveRight size={16} />
+                                            </button>
+                                            <button onClick={() => handleDelete(contract.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded" title="Excluir">
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
 
-                    return (
-                        <div key={contract.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col overflow-hidden group">
-                            <div className="relative h-1.5 w-full bg-slate-100">
-                                <div className={clsx("absolute left-0 top-0 h-full transition-all duration-500", contract.status === 'signed' ? "bg-green-500" : "bg-amber-400")} style={{width: `${percent}%`}}></div>
-                            </div>
-                            
-                            <div className="p-5 flex-1">
-                                <div className="flex justify-between items-start mb-3">
-                                    <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide", 
-                                        contract.status === 'signed' ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                                    )}>
-                                        {contract.status === 'signed' ? 'Finalizado' : 'Aguardando'}
-                                    </span>
+                                    <h3 className="font-bold text-slate-800 mb-1 truncate" title={contract.title}>{contract.title}</h3>
+                                    <p className="text-xs text-slate-400 mb-2">{new Date(contract.createdAt).toLocaleDateString()}</p>
                                     
-                                    {/* Action Menu (Visible on Hover) */}
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => setShowMoveModal(contract)} className="text-slate-300 hover:text-teal-600 hover:bg-teal-50 p-1 rounded" title="Mover para pasta">
-                                            <MoveRight size={16} />
+                                    <div className="mt-3 space-y-2">
+                                        {(contract.signers || []).slice(0, 2).map(signer => (
+                                            <div key={signer.id} className="flex items-center justify-between text-xs text-slate-600">
+                                                <span className="flex items-center gap-1.5 truncate">
+                                                    {signer.status === 'signed' ? <CheckCircle size={12} className="text-green-500 shrink-0"/> : <div className="w-3 h-3 rounded-full border border-slate-300 shrink-0"></div>}
+                                                    {signer.name}
+                                                </span>
+                                            </div>
+                                        ))}
+                                        {(contract.signers || []).length > 2 && (
+                                            <p className="text-xs text-slate-400 italic">+ {contract.signers.length - 2} outros</p>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
+                                        <button 
+                                            onClick={() => openPreview(contract)}
+                                            className="text-sm font-medium text-slate-600 hover:text-teal-600 flex items-center gap-1.5"
+                                        >
+                                            <Eye size={16} /> Visualizar
                                         </button>
-                                        <button onClick={() => handleDelete(contract.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded" title="Excluir">
-                                            <Trash2 size={16} />
-                                        </button>
+                                        
+                                        {contract.status !== 'signed' && (
+                                            <button 
+                                                onClick={() => handleCopyLink(contract.id)}
+                                                className={clsx("text-sm font-medium flex items-center gap-1.5 transition-colors", copiedId === contract.id ? "text-green-600" : "text-teal-600 hover:text-teal-800")}
+                                            >
+                                                {copiedId === contract.id ? <CheckCircle size={16}/> : <Copy size={16}/>}
+                                                Link
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
-
-                                <h3 className="font-bold text-slate-800 mb-1 truncate" title={contract.title}>{contract.title}</h3>
-                                <p className="text-xs text-slate-400 mb-2">{new Date(contract.createdAt).toLocaleDateString()}</p>
-                                
-                                <div className="mt-3 space-y-2">
-                                    {contract.signers.slice(0, 2).map(signer => (
-                                        <div key={signer.id} className="flex items-center justify-between text-xs text-slate-600">
-                                            <span className="flex items-center gap-1.5 truncate">
-                                                {signer.status === 'signed' ? <CheckCircle size={12} className="text-green-500 shrink-0"/> : <div className="w-3 h-3 rounded-full border border-slate-300 shrink-0"></div>}
-                                                {signer.name}
-                                            </span>
-                                        </div>
-                                    ))}
-                                    {contract.signers.length > 2 && (
-                                        <p className="text-xs text-slate-400 italic">+ {contract.signers.length - 2} outros</p>
-                                    )}
-                                </div>
-
-                                <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
-                                    <button 
-                                        onClick={() => openPreview(contract)}
-                                        className="text-sm font-medium text-slate-600 hover:text-teal-600 flex items-center gap-1.5"
-                                    >
-                                        <Eye size={16} /> Visualizar
-                                    </button>
-                                    
-                                    {contract.status !== 'signed' && (
-                                        <button 
-                                            onClick={() => handleCopyLink(contract.id)}
-                                            className={clsx("text-sm font-medium flex items-center gap-1.5 transition-colors", copiedId === contract.id ? "text-green-600" : "text-teal-600 hover:text-teal-800")}
-                                        >
-                                            {copiedId === contract.id ? <CheckCircle size={16}/> : <Copy size={16}/>}
-                                            Link
-                                        </button>
-                                    )}
-                                </div>
                             </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })
+                )}
             </div>
         </div>
 
@@ -650,7 +686,7 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                         <div className="space-y-1">
                             <button 
                                 onClick={() => handleMoveContract(showMoveModal, null)}
-                                className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2", !showMoveModal.folderId ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                                className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition-colors", !showMoveModal.folderId ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
                             >
                                 <LayoutGrid size={16} /> Sem Pasta (Raiz)
                             </button>
@@ -658,7 +694,7 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                                 <button 
                                     key={f.id}
                                     onClick={() => handleMoveContract(showMoveModal, f.id)}
-                                    className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2", showMoveModal.folderId === f.id ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                                    className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition-colors", showMoveModal.folderId === f.id ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
                                 >
                                     <Folder size={16} /> {f.name}
                                 </button>

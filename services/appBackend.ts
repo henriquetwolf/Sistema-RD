@@ -1,4 +1,3 @@
-
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -246,7 +245,7 @@ export const appBackend = {
           moduleId: d.module_id, 
           title: d.title, 
           description: d.description, 
-          videoUrl: d.video_url,
+          video_url: d.video_url,
           materials: d.materials || [], 
           orderIndex: d.order_index
       }));
@@ -438,29 +437,45 @@ export const appBackend = {
 
   getContracts: async (): Promise<Contract[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
+    if (error) {
+        console.error("Erro ao carregar contratos do Supabase:", error);
+        return [];
+    }
     return (data || []).map(d => ({
-      id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
+      id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at
     }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
     if (!isConfigured) return null;
-    const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
-    if (!data) return null;
-    // Corrected d.contract_date to data.contract_date
+    const { data, error } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
+    if (error || !data) return null;
     return {
-      id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers, createdAt: data.created_at
+      id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at
     };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contractDate, status: contract.status, folder_id: contract.folderId, signers: contract.signers
+      id: contract.id,
+      title: contract.title, 
+      content: contract.content, 
+      city: contract.city, 
+      contract_date: contract.contractDate, 
+      status: contract.status, 
+      folder_id: contract.folderId || null, 
+      signers: contract.signers || [],
+      created_at: contract.createdAt || new Date().toISOString()
     };
-    if (contract.id && contract.id.length > 10) await supabase.from('crm_contracts').update(payload).eq('id', contract.id);
-    else await supabase.from('crm_contracts').insert([payload]);
+    
+    // Usando upsert para garantir que funcione tanto para criação quanto para edição (com conflito no ID)
+    const { error } = await supabase.from('crm_contracts').upsert(payload, { onConflict: 'id' });
+    if (error) {
+        console.error("Erro ao salvar contrato no Supabase:", error);
+        throw error;
+    }
   },
 
   deleteContract: async (id: string): Promise<void> => {
@@ -470,8 +485,8 @@ export const appBackend = {
 
   signContract: async (contractId: string, signerId: string, signatureData: string): Promise<void> => {
     if (!isConfigured) return;
-    const { data: contract } = await supabase.from('crm_contracts').select('signers').eq('id', contractId).single();
-    if (contract) {
+    const { data: contract, error } = await supabase.from('crm_contracts').select('signers').eq('id', contractId).single();
+    if (contract && !error) {
       const updatedSigners = contract.signers.map((s: any) => 
         s.id === signerId ? { ...s, status: 'signed', signatureData, signedAt: new Date().toISOString() } : s
       );
@@ -485,7 +500,8 @@ export const appBackend = {
 
   getFolders: async (): Promise<ContractFolder[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_contract_folders').select('*').order('name');
+    const { data, error } = await supabase.from('crm_contract_folders').select('*').order('name');
+    if (error) return [];
     return (data || []).map(d => ({ id: d.id, name: d.name, createdAt: d.created_at }));
   },
 
@@ -857,7 +873,7 @@ export const appBackend = {
     let query = supabase.from('crm_banners').select('*').order('created_at', { ascending: false });
     if (audience) query = query.eq('target_audience', audience).eq('active', true);
     const { data } = await query;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, link_url: d.link_url, target_audience: d.target_audience, active: d.active, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, image_url: d.image_url, link_url: d.link_url, target_audience: d.target_audience, active: d.active, createdAt: d.created_at }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -921,11 +937,19 @@ export const appBackend = {
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
+    /* FIXED: Corrected mapping of record properties to match the InventoryRecord interface (camelCase). */
     const payload = {
-      type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico,
-      item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate,
-      studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations,
-      conference_date: record.conferenceDate || null, attachments: record.attachments
+      type: record.type, 
+      item_apostila_nova: record.itemApostilaNova, 
+      item_apostila_classico: record.itemApostilaClassico,
+      item_sacochila: record.itemSacochila, 
+      item_lapis: record.itemLapis, 
+      registration_date: record.registrationDate,
+      studio_id: record.studioId || null, 
+      tracking_code: record.trackingCode, 
+      observations: record.observations,
+      conference_date: record.conferenceDate || null, 
+      attachments: record.attachments
     };
     if (record.id) await supabase.from('crm_inventory').update(payload).eq('id', record.id);
     else await supabase.from('crm_inventory').insert([payload]);
@@ -1161,7 +1185,7 @@ export const appBackend = {
     const { data, error } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((j: any) => ({
-      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
+      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
     }));
   },
 

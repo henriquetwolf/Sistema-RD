@@ -44,14 +44,10 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /* Fixed: Cannot find name 'formatCurrency'. Helper added inside component */
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  /* Fixed: Moved handleOpenNew inside component scope to access setFormData, setProductImageUrl, setShowModal, and setActiveMenuId */
   const handleOpenNew = () => {
-      setFormData({
-          id: '', name: '', category: 'Curso Online', platform: 'Plataforma Própria', price: 0, url: '', status: 'active', description: '', certificateTemplateId: '', createdAt: ''
-      });
+      setFormData(initialFormState);
       setProductImageUrl('');
       setShowModal(true);
       setActiveMenuId(null);
@@ -69,7 +65,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           const loadedCourses = await fetchOnlineCourses();
           const loadedProducts = await fetchProducts();
           
-          // Sincronização automática para garantir que cursos criados no portal apareçam no dashboard
           if (loadedCourses.length > 0) {
               let syncPerformed = false;
               for (const course of loadedCourses) {
@@ -113,7 +108,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
               category: p.category || 'Curso Online',
               certificateTemplateId: p.certificate_template_id, 
               createdAt: p.created_at,
-              imageUrl: p.image_url // Mapeamento correto da coluna snake_case para o estado camelCase
+              imageUrl: p.image_url 
           }));
           setProducts(mapped);
           return mapped;
@@ -164,7 +159,13 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       try {
           await appBackend.saveCourseModule({ courseId: editingCourse.id, title, orderIndex: courseModules.length });
           handleOpenCourseBuilder(editingCourse);
-      } catch (e: any) { alert(e.message); }
+      } catch (e: any) { 
+          if (e.message?.includes('RLS')) {
+              alert("Erro de Permissão: Você precisa rodar o script de reparo do Banco de Dados em 'Configurações'.");
+          } else {
+              alert(e.message); 
+          }
+      }
   };
 
   const handleAddLesson = async (moduleId: string) => {
@@ -214,7 +215,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           status: formData.status, 
           description: formData.description, 
           certificate_template_id: formData.certificateTemplateId || null,
-          image_url: productImageUrl // Salva na coluna correta no banco
+          image_url: productImageUrl 
       };
 
       try {
@@ -272,9 +273,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                     <div className="flex items-center gap-4">
                         <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
                         <div>
-                            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-4">
-                                <ShoppingBag className="text-indigo-600" /> Produtos Digitais
-                            </h2>
+                            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><ShoppingBag className="text-indigo-600" /> Produtos Digitais</h2>
                             <p className="text-slate-500 text-sm">Gerencie o catálogo comercial sincronizado com o Portal.</p>
                         </div>
                     </div>
@@ -318,7 +317,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                         </div>
                     ) : (
                         filteredProducts.map(product => (
-                            <div key={product.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all overflow-hidden flex flex-col group overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+                            <div key={product.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all overflow-hidden flex flex-col group animate-in fade-in zoom-in-95 duration-300">
                                 <div className="h-48 bg-slate-50 relative overflow-hidden shrink-0 border-b border-slate-100">
                                     {product.imageUrl ? (
                                         <img src={product.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={product.name} />

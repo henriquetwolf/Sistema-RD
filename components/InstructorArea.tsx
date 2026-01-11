@@ -53,12 +53,14 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
 
   const fetchSupportNotifications = async () => {
       try {
+          // Busca chamados onde o instrutor é o remetente ou o alvo (mensagens da ADM)
           const tickets = await appBackend.getSupportTicketsBySender(instructor.id);
-          // Chamados pendentes são aqueles onde o status é 'pending' (foi respondido pelo admin)
-          // ou são novos chamados criados pelo admin (senderRole === 'admin' e status 'pending')
+          // Chamados pendentes são aqueles onde o status é 'pending' (resposta do admin ou novo chamado admin -> user)
           const pending = tickets.filter(t => t.status === 'pending').length;
           setPendingTicketsCount(pending);
-      } catch (e) {}
+      } catch (e) {
+          console.error("Erro ao buscar notificações de suporte:", e);
+      }
   };
 
   const fetchNews = async () => {

@@ -69,11 +69,12 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
 
   useEffect(() => {
     if (isOpen) {
-        if (activeTab === 'history') fetchHistory();
+        // Busca o histórico imediatamente para que o contador na aba apareça corretamente
+        fetchHistory();
         fetchTags();
         if (senderRole === 'instructor') fetchClassesData();
     }
-  }, [isOpen, activeTab, senderRole]);
+  }, [isOpen, senderId, senderRole]);
 
   const isFcAutoFilled = useMemo(() => {
       return selectedTag === 'Fechamento de Curso' && senderRole === 'instructor';
@@ -147,7 +148,7 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
     setIsLoadingHistory(true);
     try {
       const data = await appBackend.getSupportTicketsBySender(senderId);
-      setMyTickets(data);
+      setMyTickets(data || []);
     } catch (e) { console.error(e); } finally { setIsLoadingHistory(false); }
   };
 

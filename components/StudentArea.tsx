@@ -299,7 +299,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-6 space-y-8">
                 
-                {/* Destaques (Banners) e Welcome Card */}
+                {/* Banner Section - Restaurado e Otimizado */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <section className="bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden group flex flex-col justify-between min-h-[250px]">
                         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
@@ -310,11 +310,17 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         </div>
                     </section>
 
-                    {banners.length > 0 && (
-                        <div className="overflow-hidden rounded-[2.5rem] shadow-xl border-4 border-white relative group h-full">
+                    <div className="overflow-hidden rounded-[2.5rem] shadow-xl border-4 border-white relative group h-full bg-slate-200">
+                        {banners.length > 0 ? (
                             <img src={banners[0].imageUrl} alt={banners[0].title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                        </div>
-                    )}
+                        ) : (
+                            <div className="w-full h-full bg-gradient-to-tr from-indigo-500 to-purple-400 flex flex-col items-center justify-center p-8 text-center text-white">
+                                <Sparkles size={48} className="mb-4 opacity-30" />
+                                <h3 className="font-black text-xl mb-1">Novas Formações VOLL</h3>
+                                <p className="text-xs opacity-80 uppercase tracking-widest font-bold">Conheça os lançamentos da temporada</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <nav className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 overflow-x-auto no-scrollbar gap-1">

@@ -76,6 +76,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   };
 
   const loadCourses = async () => {
+      // Puxa a lista técnica de cursos online para a liberação
       const data = await appBackend.getOnlineCourses();
       setOnlineCourses(data);
   };

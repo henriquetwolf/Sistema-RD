@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Award, Plus, Search, Edit2, Trash2, 
   ArrowLeft, Save, X, Printer, Image as ImageIcon, Loader2,
-  Calendar, MapPin, User, FlipHorizontal, Book, Type, MousePointer2, Move, AlignCenter, AlignLeft
+  Calendar, MapPin, User, FlipHorizontal, Book, Type, MousePointer2, Move, AlignCenter, AlignLeft, CheckCircle2
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { CertificateModel, CertificateLayout, TextStyle } from '../types';
@@ -97,6 +97,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
   
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     fetchCertificates();
@@ -130,6 +131,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       setView('editor');
       setEditorSide('front');
       setSelectedElement(null);
+      setSaveSuccess(false);
   };
 
   const handleGenerate = (cert: CertificateModel) => {
@@ -158,22 +160,38 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
           return;
       }
       setIsSaving(true);
+      setSaveSuccess(false);
       try {
           const isUpdate = !!currentCert.id;
+          const finalId = currentCert.id || crypto.randomUUID();
+          
           const certToSave = { 
               ...currentCert, 
-              id: currentCert.id || crypto.randomUUID(),
+              id: finalId,
               createdAt: currentCert.createdAt || new Date().toISOString()
           };
+          
           await appBackend.saveCertificate(certToSave);
+          
           await appBackend.logActivity({ 
               action: isUpdate ? 'update' : 'create', 
               module: 'certificates', 
               details: `${isUpdate ? 'Editou' : 'Criou'} modelo de certificado: ${currentCert.title}`, 
-              recordId: certToSave.id 
+              recordId: finalId 
           });
+
+          // Atualiza o estado local para que o ID persista e futuras edições sejam updates
+          setCurrentCert(certToSave);
+          
           await fetchCertificates();
-          setView('list');
+          setSaveSuccess(true);
+          
+          // Opcional: Voltar para lista após delay ou permanecer no editor
+          setTimeout(() => {
+              setSaveSuccess(false);
+              setView('list');
+          }, 1500);
+
       } catch (e: any) {
           console.error(e);
           if (e.message?.includes('column') || e.message?.includes('does not exist')) {
@@ -261,7 +279,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                     </div>
                 </div>
                 <button 
-                    onClick={() => { setCurrentCert({...INITIAL_CERT, layoutConfig: DEFAULT_LAYOUT}); setView('editor'); setEditorSide('front'); }}
+                    onClick={() => { setCurrentCert({...INITIAL_CERT, layoutConfig: DEFAULT_LAYOUT}); setView('editor'); setEditorSide('front'); setSaveSuccess(false); }}
                     className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
                 >
                     <Plus size={18} /> Novo Modelo
@@ -330,27 +348,35 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                     <h2 className="text-lg font-bold text-slate-800">Editor de Modelo</h2>
                 </div>
                 <div className="flex items-center gap-2">
+                    {saveSuccess && (
+                        <span className="text-green-600 text-xs font-bold flex items-center gap-1 animate-pulse">
+                            <CheckCircle2 size={16}/> Salvo com sucesso!
+                        </span>
+                    )}
                     <div className="bg-slate-100 rounded-lg p-1 flex mr-4">
                         <button 
                             onClick={() => { setEditorSide('front'); setSelectedElement(null); }}
                             className={clsx("px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-2", editorSide === 'front' ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700")}
                         >
-                            Frente
+                            Frente {currentCert.backgroundData && <CheckCircle2 size={10} className="text-green-500" />}
                         </button>
                         <button 
                             onClick={() => { setEditorSide('back'); setSelectedElement(null); }}
                             className={clsx("px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-2", editorSide === 'back' ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700")}
                         >
-                            <FlipHorizontal size={14} /> Verso
+                            <FlipHorizontal size={14} /> Verso {currentCert.backBackgroundData && <CheckCircle2 size={10} className="text-green-500" />}
                         </button>
                     </div>
                     <button 
                         onClick={handleSave} 
                         disabled={isSaving}
-                        className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm"
+                        className={clsx(
+                            "px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-all",
+                            saveSuccess ? "bg-green-600 text-white" : "bg-amber-500 hover:bg-amber-600 text-white"
+                        )}
                     >
-                        {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                        Salvar Modelo
+                        {isSaving ? <Loader2 size={18} className="animate-spin" /> : saveSuccess ? <CheckCircle2 size={18}/> : <Save size={18} />}
+                        {saveSuccess ? 'Salvo!' : 'Salvar Modelo'}
                     </button>
                 </div>
             </div>
@@ -424,13 +450,17 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                                 </div>
                                 <div className="border-t border-slate-100 pt-4">
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Imagem de Fundo ({editorSide === 'front' ? 'Frente' : 'Verso'})</label>
-                                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:bg-slate-50 transition-colors relative cursor-pointer">
+                                    <div className={clsx(
+                                        "border-2 border-dashed rounded-lg p-4 text-center hover:bg-slate-50 transition-colors relative cursor-pointer",
+                                        (editorSide === 'front' ? currentCert.backgroundData : currentCert.backBackgroundData) ? "border-green-300 bg-green-50/20" : "border-slate-300"
+                                    )}>
                                         <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, editorSide)} className="absolute inset-0 opacity-0 cursor-pointer" />
                                         <div className="flex flex-col items-center">
-                                            <ImageIcon className="text-slate-300 mb-1" size={24} />
-                                            <span className="text-xs text-slate-500">Trocar Imagem</span>
+                                            {(editorSide === 'front' ? currentCert.backgroundData : currentCert.backBackgroundData) ? <CheckCircle2 className="text-green-500 mb-1" size={24}/> : <ImageIcon className="text-slate-300 mb-1" size={24} />}
+                                            <span className="text-xs text-slate-500">{(editorSide === 'front' ? currentCert.backgroundData : currentCert.backBackgroundData) ? 'Alterar Imagem' : 'Selecionar Imagem'}</span>
                                         </div>
                                     </div>
+                                    <p className="text-[10px] text-slate-400 mt-2 italic text-center">Para melhor qualidade, use imagens horizontais de 297mm x 210mm (A4 Landscape).</p>
                                 </div>
                             </div>
                             {editorSide === 'front' && (
@@ -474,7 +504,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                             </>
                         ) : (
                             <>
-                                {currentCert.backBackgroundData ? <img src={currentCert.backBackgroundData} alt="bg-back" className="absolute inset-0 w-full h-full object-cover z-0" /> : <div className="absolute inset-0 flex items-center justify-center bg-slate-50 text-slate-300"><span className="text-2xl font-bold uppercase tracking-widest">Verso em Branco</span></div>}
+                                {currentCert.backBackgroundData ? <img src={currentCert.backBackgroundData} alt="bg-back" className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none" /> : <div className="absolute inset-0 flex items-center justify-center bg-slate-50 text-slate-300"><span className="text-2xl font-bold uppercase tracking-widest">Verso em Branco</span></div>}
                                 <div className="absolute bottom-12 right-16 text-slate-500 font-mono text-sm z-10 bg-white/80 px-3 py-1 rounded border border-slate-200">ID: PREVIEW-HASH</div>
                             </>
                         )}

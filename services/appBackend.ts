@@ -132,14 +132,13 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
-    // Corrected: preset.interval_minutes to preset.intervalMinutes
     const payload = {
       name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: d.created_by_name };
     } else {
       const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
@@ -449,7 +448,6 @@ export const appBackend = {
     const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-      // Corrected: data.contract_date
       id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers, createdAt: data.created_at
     };
   },
@@ -572,7 +570,7 @@ export const appBackend = {
 
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
+    const { data, error = null } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
     if (error) {
         console.error("Erro ao buscar mensagens do chamado:", error);
         return [];
@@ -584,8 +582,8 @@ export const appBackend = {
       senderName: d.sender_name, 
       senderRole: d.sender_role, 
       content: d.content, 
-      attachmentUrl: d.attachment_url, 
-      attachmentName: d.attachment_name, 
+      attachment_url: d.attachment_url, 
+      attachment_name: d.attachment_name, 
       createdAt: d.created_at
     }));
   },
@@ -671,12 +669,11 @@ export const appBackend = {
     if (blk.id && blk.id.length > 10) {
       const { data, error } = await supabase.from('crm_event_blocks').update(payload).eq('id', blk.id).select().single();
       if (error) throw error;
-      // Fixed: Changed 'd' to 'data'
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     } else {
       const { data, error = null } = await supabase.from('crm_event_blocks').insert([payload]).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: blk.maxSelections };
+      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     }
   },
 
@@ -827,7 +824,6 @@ export const appBackend = {
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
-    // Fixed: trigger.payloadJson
     const payload = { pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson };
     if (trigger.id) await supabase.from('crm_webhook_triggers').update(payload).eq('id', trigger.id);
     else await supabase.from('crm_webhook_triggers').insert([payload]);
@@ -864,7 +860,8 @@ export const appBackend = {
 
   saveBanner: async (banner: Banner): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.link_url, target_audience: banner.target_audience, active: banner.active };
+    // Fix: access banner.linkUrl and banner.targetAudience correctly according to the Banner interface
+    const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.linkUrl, target_audience: banner.targetAudience, active: banner.active };
     if (banner.id) await supabase.from('crm_banners').update(payload).eq('id', banner.id);
     else await supabase.from('crm_banners').insert([payload]);
   },
@@ -927,7 +924,6 @@ export const appBackend = {
       type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico,
       item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate,
       studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations,
-      // Fix: Changed snake_case record property to camelCase to match interface
       conference_date: record.conferenceDate || null, attachments: record.attachments
     };
     if (record.id) await supabase.from('crm_inventory').update(payload).eq('id', record.id);
@@ -1013,22 +1009,37 @@ export const appBackend = {
       return (data || []).map((d: any) => ({
           id: d.id, 
           title: d.title, 
-          background_data: d.background_data, 
-          back_background_data: d.back_background_data,
-          linked_product_id: d.linked_product_id, 
-          body_text: d.body_text, 
-          layout_config: d.layout_config, 
+          backgroundData: d.background_data, 
+          backBackgroundData: d.back_background_data,
+          linkedProductId: d.linked_product_id, 
+          bodyText: d.body_text, 
+          layoutConfig: d.layout_config, 
           createdAt: d.created_at
       }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
       if (!isConfigured) return;
+      
+      // Sanitização básica: garante que o ID não seja uma string vazia para evitar erros de tipo UUID no Postgres
+      const finalId = (cert.id && cert.id.trim() !== '') ? cert.id : crypto.randomUUID();
+
       const payload = {
-          id: cert.id, title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData,
-          linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig
+          id: finalId, 
+          title: cert.title, 
+          background_data: cert.backgroundData, 
+          back_background_data: cert.backBackgroundData || '',
+          linked_product_id: cert.linkedProductId || null, 
+          body_text: cert.bodyText || '', 
+          layout_config: cert.layoutConfig
       };
-      await supabase.from('crm_certificates').upsert(payload);
+
+      // Upsert explícito especificando a coluna de conflito
+      const { error } = await supabase.from('crm_certificates').upsert(payload, { onConflict: 'id' });
+      if (error) {
+          console.error("Erro ao salvar certificado no Supabase:", error);
+          throw error;
+      }
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -1120,8 +1131,6 @@ export const appBackend = {
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: Access job.lastMessage instead of job.last_message to match the SyncJob interface
-    // Also added created_at to payload to match database structure and getSyncJobs mapping
     const payload = { 
       id: job.id, 
       name: job.name, 

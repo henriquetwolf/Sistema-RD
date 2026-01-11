@@ -270,9 +270,9 @@ export const whatsappService = {
             ? chat.contact_phone 
             : chat.wa_id;
 
-        // Sanitização rigorosa da URL
+        // Sanitização rigorosa da URL - não força HTTPS se já tiver HTTP
         let baseUrl = config.instanceUrl.trim();
-        if (!baseUrl.startsWith('http')) baseUrl = `https://${baseUrl}`;
+        if (!baseUrl.includes('://')) baseUrl = `https://${baseUrl}`;
         baseUrl = baseUrl.replace(/\/$/, "");
 
         const url = `${baseUrl}/message/sendText/${config.instanceName.trim()}`;

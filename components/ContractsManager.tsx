@@ -4,7 +4,7 @@ import { appBackend } from '../services/appBackend';
 import { 
   FileSignature, Plus, Search, Eye, Trash2, Copy, CheckCircle, 
   ArrowLeft, Save, X, PenTool, ExternalLink, RefreshCw, UserPlus, 
-  Users, MapPin, Calendar, Folder, FolderPlus, ChevronRight, LayoutGrid, List, Filter, MoveRight, Loader2, AlertTriangle
+  Users, MapPin, Calendar, Folder, FolderPlus, ChevronRight, LayoutGrid, List, Filter, MoveRight, Loader2, AlertTriangle, Send
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -51,6 +51,7 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
   // Selection State
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = useState<{title: string, id: string} | null>(null);
   
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
@@ -147,8 +148,9 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
               status: 'pending'
           }));
 
+          const contractId = crypto.randomUUID();
           const newContract: Contract = {
-              id: crypto.randomUUID(),
+              id: contractId,
               createdAt: new Date().toISOString(),
               status: 'sent',
               title: formData.title,
@@ -160,7 +162,16 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
           };
 
           await appBackend.saveContract(newContract);
+          
+          // Simulação de envio de e-mail para todos os signatários
+          for (const signer of formattedSigners) {
+              if (signer.email) {
+                  await appBackend.sendContractEmailSimulation(signer.email, signer.name, newContract.title);
+              }
+          }
+
           await loadData();
+          setSuccessInfo({ title: newContract.title, id: contractId });
           setView('list');
           setFormData(INITIAL_CONTRACT_FORM);
           setSignersList([{name: '', email: ''}]);
@@ -176,7 +187,9 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
   // --- FILTERING ---
   
   const filteredContracts = contracts.filter(c => {
-      if (currentFolderId && c.folderId !== currentFolderId) return false;
+      // Correção: Se estamos em "Todos os Contratos" (null), mostra tudo.
+      // Se estamos em uma pasta específica, filtra.
+      if (currentFolderId !== null && c.folderId !== currentFolderId) return false;
 
       const matchesSearch = c.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             c.signers.some(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -308,7 +321,7 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                                         <input 
                                             type="email" 
                                             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                                            placeholder="Email (opcional)"
+                                            placeholder="Email para envio"
                                             value={signer.email}
                                             onChange={e => handleSignerChange(idx, 'email', e.target.value)}
                                         />
@@ -339,9 +352,9 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
 
                 <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
                     <button onClick={() => setView('list')} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
-                    <button onClick={handleCreate} disabled={isSaving} className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm flex items-center gap-2 disabled:opacity-50">
-                        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} 
-                        Gerar Contrato
+                    <button onClick={handleCreate} disabled={isSaving} className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50">
+                        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} 
+                        Gerar e Enviar Convites
                     </button>
                 </div>
             </div>
@@ -423,7 +436,7 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                     <ArrowLeft size={16} /> Voltar ao Painel
                 </button>
                 <button 
-                    onClick={() => setView('create')}
+                    onClick={() => { setSuccessInfo(null); setView('create'); }}
                     className="w-full bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-sm transition-all flex items-center justify-center gap-2 mb-4"
                 >
                     <Plus size={18} /> Novo Contrato
@@ -482,6 +495,32 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
         {/* MAIN CONTENT: LIST */}
         <div className="flex-1 min-w-0">
             
+            {/* Success Notification after Create */}
+            {successInfo && (
+                <div className="mb-6 animate-in slide-in-from-top-4">
+                    <div className="bg-emerald-50 border-l-4 border-emerald-500 p-5 rounded-r-xl shadow-sm flex items-start gap-4">
+                        <div className="p-2 bg-emerald-100 rounded-full text-emerald-600 shrink-0">
+                            <CheckCircle size={24} />
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="font-bold text-emerald-900">Contrato Gerado com Sucesso!</h4>
+                            <p className="text-sm text-emerald-700 mt-1">
+                                O contrato <strong>{successInfo.title}</strong> foi salvo e os links de assinatura foram preparados.
+                            </p>
+                            <div className="mt-4 flex items-center gap-3">
+                                <button 
+                                    onClick={() => handleCopyLink(successInfo.id)}
+                                    className="px-4 py-2 bg-emerald-600 text-white text-xs font-black uppercase rounded-lg shadow-sm hover:bg-emerald-700 transition-all flex items-center gap-2"
+                                >
+                                    <Copy size={14}/> Copiar Link Manual
+                                </button>
+                                <button onClick={() => setSuccessInfo(null)} className="text-xs font-bold text-emerald-600 hover:underline">Dispensar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Top Bar: Search & Filters */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 space-y-4">
                 <div className="flex flex-col md:flex-row gap-4">
@@ -552,7 +591,7 @@ export const ContractsManager: React.FC<ContractsManagerProps> = ({ onBack }) =>
                 {isLoading ? (
                     <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400">
                         <Loader2 size={48} className="animate-spin text-teal-600 mb-4" />
-                        <p className="font-bold">Carregando seus documentos...</p>
+                        <p className="font-bold">Sincronizando documentos...</p>
                     </div>
                 ) : fetchError ? (
                     <div className="col-span-full text-center py-12 bg-red-50 border-2 border-red-100 rounded-xl p-8">

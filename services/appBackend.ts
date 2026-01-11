@@ -131,7 +131,6 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
-    // Corrected preset.primary_key to preset.primaryKey to match SavedPreset interface
     const payload = {
       name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
     };
@@ -476,6 +475,12 @@ export const appBackend = {
         console.error("Erro ao salvar contrato no Supabase:", error);
         throw error;
     }
+  },
+
+  sendContractEmailSimulation: async (email: string, name: string, contractTitle: string): Promise<boolean> => {
+      console.log(`[SIMULAÇÃO EMAIL] Enviando contrato "${contractTitle}" para ${name} (${email})`);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      return true;
   },
 
   deleteContract: async (id: string): Promise<void> => {

@@ -39,8 +39,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
 
   // Form State (Products)
   const initialFormState: Product = {
-      id: '', name: '', category: 'Curso Online', platform: '', price: 0, url: '', status: 'active', description: '', certificateTemplateId: '', createdAt: '', 
-      // Adicionando campo de imagem (já existe no OnlineCourse mas precisamos no formulário de produto)
+      id: '', name: '', category: 'Curso Online', platform: '', price: 0, url: '', status: 'active', description: '', certificateTemplateId: '', createdAt: ''
   };
   const [formData, setFormData] = useState<Product>(initialFormState);
   const [productImageUrl, setProductImageUrl] = useState<string>('');
@@ -59,13 +58,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       try {
           const { data, error } = await appBackend.client.from('crm_products').select('*').order('name', { ascending: true });
           if (error) throw error;
-          setProducts((data || []).map((p: any) => ({ 
-              ...p, 
-              price: Number(p.price || 0), 
-              certificateTemplateId: p.certificate_template_id, 
-              createdAt: p.created_at,
-              imageUrl: p.image_url // Garantindo que carregamos a imagem do banco
-          })));
+          setProducts((data || []).map((p: any) => ({ ...p, price: Number(p.price || 0), certificateTemplateId: p.certificate_template_id, createdAt: p.created_at, imageUrl: p.image_url })));
       } catch (e: any) { console.error(e); } finally { setIsLoading(false); }
   };
 
@@ -162,8 +155,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const handleSaveProduct = async () => {
       if (!formData.name) { alert("Nome é obrigatório."); return; }
       setIsSaving(true);
-      
-      const payload: any = { 
+      const payload = { 
           name: formData.name, 
           category: formData.category, 
           platform: formData.platform, 
@@ -172,7 +164,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           status: formData.status, 
           description: formData.description, 
           certificate_template_id: formData.certificateTemplateId || null,
-          image_url: productImageUrl // Vinculando imagem ao produto
+          image_url: productImageUrl
       };
 
       try {
@@ -187,7 +179,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                       price: formData.price,
                       paymentLink: formData.url,
                       certificateTemplateId: formData.certificateTemplateId,
-                      imageUrl: productImageUrl // Vinculando imagem ao curso técnico
+                      imageUrl: productImageUrl
                   });
               } catch (courseErr: any) {
                   console.error("Erro ao salvar dados técnicos do curso:", courseErr);

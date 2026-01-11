@@ -140,11 +140,11 @@ export const appBackend = {
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, interval_minutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
       const { data, error } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, interval_minutes: data.interval_minutes, createdByName: data.created_by_name };
     }
   },
 
@@ -317,6 +317,43 @@ export const appBackend = {
       } else {
           await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', studentDealId).eq('lesson_id', lessonId);
       }
+  },
+
+  // --- COURSE INFO (Portal Info) ---
+
+  /**
+   * Fetches general information about courses for the portal display.
+   */
+  getCourseInfos: async (): Promise<CourseInfo[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_course_info').select('*').order('course_name');
+    return (data || []).map(d => ({
+      id: d.id, courseName: d.course_name, details: d.details, materials: d.materials, requirements: d.requirements, updatedAt: d.updated_at
+    }));
+  },
+
+  /**
+   * Saves or updates general course information.
+   */
+  saveCourseInfo: async (info: Partial<CourseInfo>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      course_name: info.courseName,
+      details: info.details,
+      materials: info.materials,
+      requirements: info.requirements,
+      updated_at: new Date().toISOString()
+    };
+    if (info.id) await supabase.from('crm_course_info').update(payload).eq('id', info.id);
+    else await supabase.from('crm_course_info').insert([payload]);
+  },
+
+  /**
+   * Deletes a course information record.
+   */
+  deleteCourseInfo: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_course_info').delete().eq('id', id);
   },
 
   // --- FORMS & SURVEYS ---
@@ -621,7 +658,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, openInstallments: d.open_installments, totalNegotiatedValue: d.total_negotiated_value, totalInstallments: d.total_installments, dueDate: d.due_date, responsibleAgent: d.responsible_agent, identifierCode: d.identifier_code, fullName: d.full_name, productName: d.product_name, originalValue: d.original_value, paymentMethod: d.payment_method, observations: d.observations, status: d.status, team: d.team, voucherLink1: d.voucher_link1, testDate: d.test_date, voucherLink2: d.voucher_link2, voucherLink3: d.voucher_link3, boletos_link: d.boletos_link, negotiation_reference: d.negotiation_reference, attachments: d.attachments, createdAt: d.created_at
+      id: d.id, openInstallments: d.open_installments, totalNegotiatedValue: d.total_negotiated_value, totalInstallments: d.total_installments, dueDate: d.due_date, responsibleAgent: d.responsible_agent, identifierCode: d.identifier_code, fullName: d.full_name, productName: d.product_name, originalValue: d.original_value, paymentMethod: d.payment_method, observations: d.observations, status: d.status, team: d.team, voucherLink1: d.voucher_link1, testDate: d.test_date, voucherLink2: d.voucher_link2, voucherLink3: d.voucher_link3, boletosLink: d.boletos_link, negotiationReference: d.negotiation_reference, attachments: d.attachments, createdAt: d.created_at
     }));
   },
 
@@ -787,7 +824,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
     return (data || []).map((d: any) => ({
-      id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico,
+      id: d.id, type: d.type, itemApostilaNova: d.item__apostila_nova, itemApostilaClassico: d.item_apostila_classico,
       itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date,
       studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations, conferenceDate: d.conference_date,
       attachments: d.attachments, createdAt: d.created_at
@@ -818,7 +855,7 @@ export const appBackend = {
       id: d.id, status: d.status, responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password,
       secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name,
       cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country,
-      sizeM2: d.size_m2, student_capacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology,
+      sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology,
       studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account,
       beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: !!d.has_reformer, qtyReformer: d.qty_reformer || 0,
       hasLadderBarrel: !!d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel || 0, hasChair: !!d.has_chair, qtyChair: d.qty_chair || 0,
@@ -867,9 +904,12 @@ export const appBackend = {
       await supabase.from('crm_certificates').upsert(payload);
   },
 
+  /**
+   * Deletes a certificate template.
+   */
   deleteCertificate: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      await supabase.from('crm_certificates').delete().eq('id', id);
+    if (!isConfigured) return;
+    await supabase.from('crm_certificates').delete().eq('id', id);
   },
 
   issueCertificate: async (studentDealId: string, templateId: string): Promise<string> => {
@@ -899,24 +939,6 @@ export const appBackend = {
           },
           issuedAt: cert.issued_at
       };
-  },
-
-  getCourseInfos: async (): Promise<CourseInfo[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_course_infos').select('*').order('course_name');
-    return (data || []).map(d => ({ id: d.id, courseName: d.course_name, details: d.details, materials: d.materials, requirements: d.requirements, updatedAt: d.updated_at }));
-  },
-
-  saveCourseInfo: async (info: Partial<CourseInfo>): Promise<void> => {
-    if (!isConfigured) return;
-    const payload = { course_name: info.courseName, details: info.details, materials: info.materials, requirements: info.requirements, updated_at: new Date().toISOString() };
-    if (info.id) await supabase.from('crm_course_infos').update(payload).eq('id', info.id);
-    else await supabase.from('crm_course_infos').insert([payload]);
-  },
-
-  deleteCourseInfo: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_course_infos').delete().eq('id', id);
   },
 
   getAppLogo: async (): Promise<string | null> => {

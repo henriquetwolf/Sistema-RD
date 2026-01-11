@@ -610,7 +610,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                                             <p className="text-[10px] text-slate-500 truncate">{c.last_message}</p>
                                             {c.tag && (
                                                 <div className="mt-2 flex">
-                                                    <span className={clsx("text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase border", tags.find(t => t.name === c.tag)?.color || 'bg-slate-50 text-slate-400')}>
+                                                    <span className={clsx("text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase border", tags.find(t => t.name === c.tag)?.color || 'bg-slate-400 text-slate-50')}>
                                                         {c.tag}
                                                     </span>
                                                 </div>
@@ -695,7 +695,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                                     onClick={() => handleUpdateStage(selectedChat.id, stage.id)}
                                     className={clsx(
                                         "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tighter flex items-center gap-1.5 transition-all justify-center whitespace-nowrap",
-                                        selectedChat.status === stage.id ? "bg-white text-indigo-700 shadow-md ring-1 ring-slate-200" : "text-slate-400 hover:text-slate-600"
+                                        selectedChat.status === stage.id ? "bg-white text-indigo-700 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600"
                                     )}
                                 >
                                     {selectedChat.status === stage.id ? <CheckCircle size={10}/> : <Circle size={10}/>}

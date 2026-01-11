@@ -135,16 +135,16 @@ export const appBackend = {
     if (!isConfigured) throw new Error("Backend not configured");
     // Fix: Use intervalMinutes property from the preset object (was interval_minutes)
     const payload = {
-      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
+      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primary_key, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
       const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     }
   },
 
@@ -975,8 +975,15 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
       return (data || []).map((d: any) => ({
-          id: d.id, title: d.title, background_data: d.background_data, backBackgroundData: d.back_background_data,
-          linked_product_id: d.linked_product_id, body_text: d.body_text, layout_config: d.layout_config, createdAt: d.created_at
+          // Fix: Ensure property names match the CertificateModel interface (camelCase)
+          id: d.id, 
+          title: d.title, 
+          backgroundData: d.background_data, 
+          backBackgroundData: d.back_background_data,
+          linkedProductId: d.linked_product_id, 
+          bodyText: d.body_text, 
+          layoutConfig: d.layout_config, 
+          createdAt: d.created_at
       }));
   },
 
@@ -1069,7 +1076,7 @@ export const appBackend = {
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
     if (!isConfigured) return;
-    const payload = { id: job.id, name: job.name, sheet_url: job.sheetUrl, config: job.config, last_sync: job.lastSync, status: job.status, last_message: job.lastMessage, active: job.active, interval_minutes: job.intervalMinutes, created_by: job.createdBy };
+    const payload = { id: job.id, name: job.name, sheet_url: job.sheetUrl, config: job.config, last_sync: job.lastSync, status: job.status, last_message: job.last_message, active: job.active, interval_minutes: job.intervalMinutes, created_by: job.createdBy };
     await supabase.from('crm_sync_jobs').upsert(payload);
   },
 

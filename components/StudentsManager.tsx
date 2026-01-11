@@ -61,7 +61,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
         setStudents(deals);
 
         if (deals.length > 0) {
-            // Load Certificates and Templates
             const { data: issuedCerts } = await appBackend.client.from('crm_student_certificates').select('student_deal_id, hash, issued_at').in('student_deal_id', deals.map(d => d.id));
             const certMap: Record<string, CertStatus> = {};
             issuedCerts?.forEach((c: any) => { certMap[c.student_deal_id] = { hash: c.hash, issuedAt: c.issued_at }; });
@@ -82,10 +81,17 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
   const openUnlockModal = async (student: StudentDeal) => {
       setUnlockModalStudent(student);
-      setIsSavingAccess(true); // Usado para mostrar loading no modal
+      setIsSavingAccess(true);
       try {
-          const accessed = await appBackend.getStudentCourseAccess(student.id);
-          setStudentAccessedIds(accessed);
+          // Busca os IDs dos cursos já liberados
+          const { data } = await appBackend.client
+              .from('crm_student_course_access')
+              .select('course_id')
+              .eq('student_deal_id', student.id);
+          
+          setStudentAccessedIds((data || []).map(d => d.course_id));
+      } catch (e) {
+          console.error(e);
       } finally {
           setIsSavingAccess(false);
       }
@@ -99,20 +105,27 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       if (!unlockModalStudent) return;
       setIsSavingAccess(true);
       try {
-          // 1. Limpa todos os acessos atuais para reinserir
-          await appBackend.client.from('crm_student_course_access').delete().eq('student_deal_id', unlockModalStudent.id);
+          // 1. Limpa todos os acessos atuais usando os nomes de coluna snake_case do banco
+          await appBackend.client
+            .from('crm_student_course_access')
+            .delete()
+            .eq('student_deal_id', unlockModalStudent.id);
           
-          // 2. Insere os novos
+          // 2. Insere os novos se houver algum selecionado
           if (studentAccessedIds.length > 0) {
               const inserts = studentAccessedIds.map(cid => ({ 
                   student_deal_id: unlockModalStudent.id, 
                   course_id: cid, 
                   unlocked_at: new Date().toISOString() 
               }));
-              const { error: insertError } = await appBackend.client.from('crm_student_course_access').insert(inserts);
+              
+              const { error: insertError } = await appBackend.client
+                  .from('crm_student_course_access')
+                  .insert(inserts);
+              
               if (insertError) throw insertError;
           }
-          alert("Acessos salvos com sucesso!");
+          alert("Acessos atualizados com sucesso!");
           setUnlockModalStudent(null);
       } catch (e: any) { 
           alert("Erro ao salvar acessos: " + e.message); 
@@ -131,13 +144,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       } catch (e: any) { alert(e.message); }
   };
 
-  const copyCertLink = (hash: string) => {
-      const link = `${window.location.origin}/?certificateHash=${hash}`;
-      navigator.clipboard.writeText(link);
-      setCopiedLink(hash);
-      setTimeout(() => setCopiedLink(null), 2000);
-  };
-
   const filtered = students.filter(s => (s.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (s.email || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
@@ -145,12 +151,14 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
                 <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
-                <div><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Users className="text-teal-600" /> Gestão de Alunos</h2><p className="text-slate-500 text-sm">Matriculados ativos com acesso ao Portal.</p></div>
+                <div><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Users className="text-teal-600" /> Alunos</h2><p className="text-slate-500 text-sm">Liberação de cursos e certificados.</p></div>
             </div>
             <button onClick={fetchData} className="p-2 text-slate-500 hover:text-teal-600 transition-colors"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Buscar aluno..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 transition-all text-sm" /></div></div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Buscar aluno..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 transition-all text-sm" /></div>
+        </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto min-h-[400px]">
             {isLoading ? <div className="flex justify-center items-center h-64"><Loader2 size={32} className="animate-spin text-teal-600" /></div> : (
@@ -158,10 +166,9 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                     <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500">
                         <tr>
                             <th className="px-6 py-4">Nome</th>
-                            <th className="px-6 py-4">Contato</th>
                             <th className="px-6 py-4">Produto Base</th>
                             <th className="px-6 py-4 text-center">Certificado</th>
-                            <th className="px-6 py-4 text-center">Ações de Conteúdo</th>
+                            <th className="px-6 py-4 text-center">Cursos Online</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -170,17 +177,14 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             return (
                                 <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 font-bold text-slate-800">{s.company_name || s.contact_name}</td>
-                                    <td className="px-6 py-4 text-xs text-slate-500">{s.email}<br/>{s.phone}</td>
                                     <td className="px-6 py-4"><span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-[10px] font-black uppercase">{s.product_name || 'Geral'}</span></td>
                                     <td className="px-6 py-4 text-center">
                                         {cert ? (
                                             <div className="flex items-center justify-center gap-1">
                                                 <a href={`/?certificateHash=${cert.hash}`} target="_blank" className="p-1.5 bg-slate-100 rounded hover:bg-teal-50 text-slate-400 hover:text-teal-600 transition-all"><Eye size={14}/></a>
-                                                <button onClick={() => copyCertLink(cert.hash)} className={clsx("p-1.5 rounded transition-all", copiedLink === cert.hash ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-400 hover:bg-teal-50 hover:text-teal-600")}><CheckCircle size={14}/></button>
+                                                <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?certificateHash=${cert.hash}`); setCopiedLink(cert.hash); setTimeout(() => setCopiedLink(null), 2000); }} className={clsx("p-1.5 rounded transition-all", copiedLink === cert.hash ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-400")}><CheckCircle size={14}/></button>
                                             </div>
-                                        ) : productTemplates[s.product_name || ''] ? (
-                                            <button onClick={() => handleIssueCertificate(s)} className="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-black uppercase hover:bg-amber-200 transition-all">Emitir</button>
-                                        ) : <span className="text-[9px] text-slate-300">N/A</span>}
+                                        ) : <span className="text-[10px] text-slate-300">N/A</span>}
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <button onClick={() => openUnlockModal(s)} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:bg-indigo-700 active:scale-95 transition-all"><MonitorPlay size={14}/> Liberar Cursos</button>
@@ -201,28 +205,20 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                         <button onClick={() => setUnlockModalStudent(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                     </div>
                     <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-4">
-                        <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3 text-xs text-amber-800 mb-2"><Zap size={18} className="shrink-0 text-amber-500"/><p>Selecione os cursos do seu catálogo comercial que deseja liberar para este aluno.</p></div>
+                        <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3 text-xs text-amber-800 mb-2"><Zap size={18} className="shrink-0 text-amber-500"/><p>Marque os cursos que este aluno deve ter acesso no Portal.</p></div>
                         <div className="grid grid-cols-1 gap-3">
-                            {onlineCourses.length === 0 ? (
-                                <p className="text-center py-10 text-slate-400 italic">Nenhum curso online catalogado em 'Produtos Digitais'.</p>
-                            ) : onlineCourses.map(course => (
+                            {onlineCourses.map(course => (
                                 <div key={course.id} onClick={() => toggleAccess(course.id)} className={clsx("p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group", studentAccessedIds.includes(course.id) ? "bg-indigo-50 border-indigo-500 shadow-sm" : "bg-white border-slate-100 hover:border-indigo-200")}>
                                     <div className="flex items-center gap-4">
                                         <div className={clsx("w-12 h-12 rounded-xl border-2 flex items-center justify-center", studentAccessedIds.includes(course.id) ? "bg-indigo-600 text-white border-white/20" : "bg-slate-50 text-slate-300 border-slate-100 group-hover:text-indigo-400")}><MonitorPlay size={24} /></div>
-                                        <div><p className="font-black text-slate-800 text-sm">{course.title}</p></div>
+                                        <p className="font-black text-slate-800 text-sm">{course.title}</p>
                                     </div>
                                     <div className={clsx("w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all", studentAccessedIds.includes(course.id) ? "bg-indigo-500 border-indigo-500 text-white" : "border-slate-200 text-transparent")}><Check size={18} /></div>
                                 </div>
                             ))}
                         </div>
                     </div>
-                    <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-3xl">
-                        <button onClick={() => setUnlockModalStudent(null)} className="px-6 py-2.5 text-slate-500 font-bold text-sm">Cancelar</button>
-                        <button onClick={saveAccessChanges} disabled={isSavingAccess} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl shadow-indigo-600/20 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50">
-                            {isSavingAccess ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} 
-                            Salvar Acessos
-                        </button>
-                    </div>
+                    <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-3xl"><button onClick={() => setUnlockModalStudent(null)} className="px-6 py-2.5 text-slate-500 font-bold text-sm">Cancelar</button><button onClick={saveAccessChanges} disabled={isSavingAccess} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl shadow-indigo-600/20 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50">{isSavingAccess ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Acessos</button></div>
                 </div>
             </div>
         )}

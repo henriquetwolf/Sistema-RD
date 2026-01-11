@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ShoppingBag, Plus, Search, MoreVertical, Edit2, Trash2, 
   ExternalLink, ArrowLeft, Save, X, Tag, MonitorPlay, 
   DollarSign, Globe, Loader2, CheckCircle2, AlertCircle, Award,
   Layers, BookOpen, Video, FileText, List, ChevronRight, GripVertical, Paperclip, 
-  Download, ListPlus, LayoutTemplate
+  Download, ListPlus, LayoutTemplate, Upload, Image as ImageIcon
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -39,9 +39,13 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
 
   // Form State (Products)
   const initialFormState: Product = {
-      id: '', name: '', category: 'Curso Online', platform: '', price: 0, url: '', status: 'active', description: '', certificateTemplateId: '', createdAt: ''
+      id: '', name: '', category: 'Curso Online', platform: '', price: 0, url: '', status: 'active', description: '', certificateTemplateId: '', createdAt: '', 
+      // Adicionando campo de imagem (já existe no OnlineCourse mas precisamos no formulário de produto)
   };
   const [formData, setFormData] = useState<Product>(initialFormState);
+  const [productImageUrl, setProductImageUrl] = useState<string>('');
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Effects ---
   useEffect(() => {
@@ -55,7 +59,13 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       try {
           const { data, error } = await appBackend.client.from('crm_products').select('*').order('name', { ascending: true });
           if (error) throw error;
-          setProducts((data || []).map((p: any) => ({ ...p, price: Number(p.price || 0), certificateTemplateId: p.certificate_template_id, createdAt: p.created_at })));
+          setProducts((data || []).map((p: any) => ({ 
+              ...p, 
+              price: Number(p.price || 0), 
+              certificateTemplateId: p.certificate_template_id, 
+              createdAt: p.created_at,
+              imageUrl: p.image_url // Garantindo que carregamos a imagem do banco
+          })));
       } catch (e: any) { console.error(e); } finally { setIsLoading(false); }
   };
 
@@ -139,10 +149,21 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       }
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setProductImageUrl(reader.result as string);
+          };
+          reader.readAsDataURL(e.target.files[0]);
+      }
+  };
+
   const handleSaveProduct = async () => {
       if (!formData.name) { alert("Nome é obrigatório."); return; }
       setIsSaving(true);
-      const payload = { 
+      
+      const payload: any = { 
           name: formData.name, 
           category: formData.category, 
           platform: formData.platform, 
@@ -150,7 +171,8 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           url: formData.url, 
           status: formData.status, 
           description: formData.description, 
-          certificate_template_id: formData.certificateTemplateId || null 
+          certificate_template_id: formData.certificateTemplateId || null,
+          image_url: productImageUrl // Vinculando imagem ao produto
       };
 
       try {
@@ -164,7 +186,8 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                       description: formData.description,
                       price: formData.price,
                       paymentLink: formData.url,
-                      certificateTemplateId: formData.certificateTemplateId
+                      certificateTemplateId: formData.certificateTemplateId,
+                      imageUrl: productImageUrl // Vinculando imagem ao curso técnico
                   });
               } catch (courseErr: any) {
                   console.error("Erro ao salvar dados técnicos do curso:", courseErr);
@@ -176,6 +199,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           fetchOnlineCourses();
           setShowModal(false);
           setFormData(initialFormState);
+          setProductImageUrl('');
       } catch (e: any) { 
           alert(`Erro ao salvar produto: ${e.message}`); 
       } finally { 
@@ -192,12 +216,14 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
 
   const handleEdit = (product: Product) => {
       setFormData(product);
+      setProductImageUrl((product as any).imageUrl || '');
       setShowModal(true);
       setActiveMenuId(null);
   };
 
   const handleOpenNew = () => {
       setFormData(initialFormState);
+      setProductImageUrl('');
       setShowModal(true);
       setActiveMenuId(null);
   };
@@ -225,11 +251,17 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {isLoading ? <div className="col-span-full flex justify-center py-20"><Loader2 size={40} className="animate-spin text-indigo-600" /></div> : products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).map(product => (
                         <div key={product.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
-                            <div className="p-5 flex-1">
-                                <div className="flex justify-between items-start mb-3">
-                                    <span className={clsx("text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide", product.status === 'active' ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500")}>{product.status === 'active' ? 'Ativo' : 'Inativo'}</span>
+                            <div className="h-40 bg-slate-100 relative overflow-hidden shrink-0 border-b border-slate-50">
+                                {(product as any).imageUrl ? (
+                                    <img src={(product as any).imageUrl} className="w-full h-full object-cover" alt={product.name} />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                        <ImageIcon size={48} />
+                                    </div>
+                                )}
+                                <div className="absolute top-2 right-2">
                                     <div className="relative">
-                                        <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === product.id ? null : product.id); }} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 menu-btn"><MoreVertical size={18} /></button>
+                                        <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === product.id ? null : product.id); }} className="bg-white/80 backdrop-blur-md text-slate-600 p-1.5 rounded-full shadow-sm hover:bg-white menu-btn"><MoreVertical size={16} /></button>
                                         {activeMenuId === product.id && (
                                             <div className="absolute right-0 top-8 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
                                                 <button onClick={() => handleEdit(product)} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Edit2 size={12} /> Editar</button>
@@ -237,6 +269,11 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                             </div>
                                         )}
                                     </div>
+                                </div>
+                            </div>
+                            <div className="p-5 flex-1">
+                                <div className="flex justify-between items-start mb-3">
+                                    <span className={clsx("text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide", product.status === 'active' ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500")}>{product.status === 'active' ? 'Ativo' : 'Inativo'}</span>
                                 </div>
                                 <h3 className="font-bold text-slate-800 text-lg mb-1">{product.name}</h3>
                                 <p className="text-xs text-slate-500 mb-4 flex items-center gap-1"><Tag size={12} /> {product.category} • {product.platform}</p>
@@ -331,6 +368,30 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                     </div>
                     <div className="p-6 overflow-y-auto space-y-5 flex-1">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-bold text-slate-600 mb-3 uppercase tracking-widest">Capa do Produto / Curso</label>
+                                <div className="flex flex-col md:flex-row gap-4 items-center bg-slate-50 p-4 rounded-xl border-2 border-dashed border-slate-200">
+                                    <div className="w-32 h-32 bg-white rounded-lg border flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                                        {productImageUrl ? (
+                                            <img src={productImageUrl} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <ImageIcon className="text-slate-200" size={48} />
+                                        )}
+                                    </div>
+                                    <div className="flex-1 space-y-2 text-center md:text-left">
+                                        <p className="text-xs text-slate-500">Selecione uma imagem para ser exibida no portal do aluno.</p>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-50 shadow-sm flex items-center gap-2 transition-all"
+                                        >
+                                            <Upload size={14}/> Carregar Imagem
+                                        </button>
+                                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Nome do Produto</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Ex: Formação em Pilates Online" /></div>
                             <div><label className="block text-xs font-bold text-slate-600 mb-1">Categoria</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                             <div><label className="block text-xs font-bold text-slate-600 mb-1">Plataforma</label><input type="text" list="platforms" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.platform} onChange={e => setFormData({ ...formData, platform: e.target.value })} placeholder="Ex: Hotmart" /><datalist id="platforms">{PLATFORMS.map(p => <option key={p} value={p} />)}</datalist></div>

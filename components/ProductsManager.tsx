@@ -182,7 +182,13 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       try {
           await appBackend.saveCourseLesson({ moduleId, title, orderIndex: (moduleLessons[moduleId] || []).length, description: '', videoUrl: '' });
           handleOpenCourseBuilder(editingCourse!);
-      } catch (e: any) { alert(e.message); }
+      } catch (e: any) { 
+          if (e.message?.includes('column') && e.message?.includes('schema cache')) {
+              alert("Erro de Sincronização de Banco: A nova coluna 'materials' ainda não foi reconhecida pelo Supabase.\n\nSolução: Vá em 'Configurações' > 'Banco de Dados' e clique em 'Gerar Script de Correção V41'. Copie e rode o código no Supabase.");
+          } else {
+              alert(`Erro ao criar aula: ${e.message}`);
+          }
+      }
   };
 
   const handleEditLesson = async (lesson: CourseLesson) => {

@@ -281,7 +281,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const generateRepairSQL = () => `
 -- SCRIPT DE MANUTENÇÃO VOLL CRM (V41)
--- Correção de Permissões RLS para Módulos e Aulas
+-- Correção de Permissões RLS e Schema Cache
 
 -- 1. Garante que as tabelas existam com a estrutura correta
 CREATE TABLE IF NOT EXISTS public.crm_course_modules (
@@ -303,21 +303,25 @@ CREATE TABLE IF NOT EXISTS public.crm_course_lessons (
     created_at timestamp with time zone DEFAULT now()
 );
 
--- 2. Habilita RLS (Segurança de Nível de Linha)
+-- 2. Garante a coluna 'materials' especificamente (Caso a tabela já existisse sem ela)
+ALTER TABLE public.crm_course_lessons ADD COLUMN IF NOT EXISTS materials jsonb DEFAULT '[]';
+
+-- 3. Habilita RLS
 ALTER TABLE public.crm_course_modules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_course_lessons ENABLE ROW LEVEL SECURITY;
 
--- 3. Cria Políticas de Acesso Total para que o CRM possa gerenciar os dados
+-- 4. Cria Políticas de Acesso Total
 DROP POLICY IF EXISTS "Acesso total para módulos" ON public.crm_course_modules;
 CREATE POLICY "Acesso total para módulos" ON public.crm_course_modules FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Acesso total para lições" ON public.crm_course_lessons;
 CREATE POLICY "Acesso total para lições" ON public.crm_course_lessons FOR ALL USING (true) WITH CHECK (true);
 
--- 4. Permissões de acesso aos dados para as roles
+-- 5. Permissões de acesso aos dados para as roles
 GRANT ALL ON public.crm_course_modules TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_course_lessons TO anon, authenticated, service_role;
 
+-- 6. RECARREGA O CACHE DA API (PostgREST) - Resolve erro "Could not find column in schema cache"
 NOTIFY pgrst, 'reload config';
   `.trim();
 
@@ -452,7 +456,7 @@ NOTIFY pgrst, 'reload config';
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6">
                 <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-slate-800">Manutenção de Tabelas (V41)</h3></div>
-                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para corrigir erros de permissão (RLS) ao criar módulos e aulas.</p>
+                <p className="text-sm text-slate-500 mb-6 font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={16}/> Use este script para corrigir erros de permissão (RLS) ou colunas não encontradas.</p>
                 {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-sm hover:bg-slate-800 transition-all">Gerar Script de Correção V41</button> : (
                     <div className="relative animate-in slide-in-from-top-4">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-[400px] border border-amber-900/50 leading-relaxed">{generateRepairSQL()}</pre>
@@ -462,7 +466,6 @@ NOTIFY pgrst, 'reload config';
             </div>
         )}
 
-        {/* ... manter demais abas ... */}
         {activeTab === 'visual' && (
             <div className="space-y-6">
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 space-y-6">

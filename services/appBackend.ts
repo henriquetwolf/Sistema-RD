@@ -132,9 +132,8 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
-    // Fix: Using intervalMinutes from SavedPreset instead of non-existent interval_minutes
     const payload = {
-      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
+      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.interval_minutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
@@ -179,7 +178,7 @@ export const appBackend = {
           title: course.title,
           description: course.description,
           price: course.price,
-          payment_link: course.payment_link,
+          payment_link: course.paymentLink,
           image_url: course.imageUrl,
           certificate_template_id: course.certificateTemplateId || null
       };
@@ -306,13 +305,11 @@ export const appBackend = {
       if (!isConfigured) return;
       if (completed) {
           await supabase.from('crm_student_lesson_progress').upsert({ 
-              // Fix: Changed student_deal_id to use studentDealId parameter
               student_deal_id: studentDealId, 
               lesson_id: lessonId,
               completed_at: new Date().toISOString()
           });
       } else {
-          // Fix: Changed student_deal_id equality check to use studentDealId parameter
           await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', studentDealId).eq('lesson_id', lessonId);
       }
   },
@@ -351,7 +348,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distribution_mode: d.distribution_mode, fixed_owner_id: d.fixed_owner_id, team_id: d.team_id, target_pipeline: d.target_pipeline, target_stage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id
+      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, teamId: d.team_id, targetPipeline: d.target_pipeline, targetStage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id
     }));
   },
 
@@ -360,7 +357,7 @@ export const appBackend = {
     const { data } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-      id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, distribution_mode: data.distribution_mode, fixed_owner_id: data.fixed_owner_id, team_id: data.team_id, target_pipeline: data.target_pipeline, target_stage: data.target_stage, questions: data.questions, style: data.style, createdAt: data.created_at, submissionsCount: data.submissions_count || 0, folderId: data.folder_id
+      id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, teamId: data.team_id, targetPipeline: data.target_pipeline, targetStage: data.target_stage, questions: data.questions, style: data.style, createdAt: data.created_at, submissionsCount: data.submissions_count || 0, folderId: data.folder_id
     } as unknown as FormModel;
   },
 
@@ -422,7 +419,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').not('target_type', 'is', null).order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distribution_mode: d.distribution_mode, fixed_owner_id: d.fixed_owner_id, team_id: d.team_id, target_pipeline: d.target_pipeline, target_stage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id, targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active
+      id: d.id, title: d.title, description: d.description, campaign: d.campaign, isLeadCapture: d.is_lead_capture, distributionMode: d.distribution_mode, fixedOwnerId: d.fixed_owner_id, teamId: d.team_id, targetPipeline: d.target_pipeline, targetStage: d.target_stage, questions: d.questions, style: d.style, createdAt: d.created_at, submissionsCount: d.submissions_count || 0, folderId: d.folder_id, targetType: d.target_type, targetProductType: d.target_product_type, targetProductName: d.target_product_name, onlyIfFinished: d.only_if_finished, isActive: d.is_active
     }));
   },
 
@@ -451,7 +448,7 @@ export const appBackend = {
     const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-      // Fix: Changed folder_id to folderId to match the Contract interface
+      // Fix: Changed 'd' to 'data' for contract_date to match scope
       id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers, createdAt: data.created_at
     };
   },
@@ -525,7 +522,7 @@ export const appBackend = {
 
   getSupportTickets: async (): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_support_tickets').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
     return (data || []).map(d => ({
       id: d.id, senderId: d.sender_id, senderName: d.sender_name, senderEmail: d.sender_email, senderRole: d.sender_role, targetId: d.target_id, targetName: d.target_name, targetEmail: d.target_email, targetRole: d.target_role, subject: d.subject, message: d.message, tag: d.tag, status: d.status, response: d.response, assignedId: d.assigned_id, assignedName: d.assigned_name, createdAt: d.created_at, updatedAt: d.updated_at
     }));
@@ -533,7 +530,7 @@ export const appBackend = {
 
   getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${senderId},target_id.eq.${senderId}`).order('created_at', { ascending: false });
+    const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${senderId},target_id.eq.${senderId}`).order('updated_at', { ascending: false });
     return (data || []).map(d => ({
       id: d.id, senderId: d.sender_id, senderName: d.sender_name, senderEmail: d.sender_email, senderRole: d.sender_role, targetId: d.target_id, targetName: d.target_name, targetEmail: d.target_email, targetRole: d.target_role, subject: d.subject, message: d.message, tag: d.tag, status: d.status, response: d.response, assignedId: d.assigned_id, assignedName: d.assigned_name, createdAt: d.created_at, updatedAt: d.updated_at
     }));
@@ -542,7 +539,7 @@ export const appBackend = {
   saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
     if (!isConfigured) return;
     const payload = {
-      id: ticket.id || crypto.randomUUID(), // Ensure ID is in payload for upsert
+      id: ticket.id || crypto.randomUUID(), 
       sender_id: ticket.senderId, 
       sender_name: ticket.senderName, 
       sender_email: ticket.senderEmail, 
@@ -560,8 +557,11 @@ export const appBackend = {
       updated_at: new Date().toISOString()
     };
     
-    // Use upsert instead of conditional update/insert to handle new IDs generated on client
-    await supabase.from('crm_support_tickets').upsert(payload);
+    const { error } = await supabase.from('crm_support_tickets').upsert(payload);
+    if (error) {
+        console.error("Erro ao salvar ticket:", error);
+        throw error;
+    }
   },
 
   deleteSupportTicket: async (id: string): Promise<void> => {
@@ -571,17 +571,39 @@ export const appBackend = {
 
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
+    if (error) {
+        console.error("Erro ao buscar mensagens do chamado:", error);
+        return [];
+    }
     return (data || []).map(d => ({
-      id: d.id, ticketId: d.ticket_id, senderId: d.sender_id, senderName: d.sender_name, senderRole: d.sender_role, content: d.content, attachment_url: d.attachment_url, attachmentName: d.attachment_name, createdAt: d.created_at
+      id: d.id, 
+      ticketId: d.ticket_id, 
+      senderId: d.sender_id, 
+      senderName: d.sender_name, 
+      senderRole: d.sender_role, 
+      content: d.content, 
+      attachmentUrl: d.attachment_url, 
+      attachmentName: d.attachment_name, 
+      createdAt: d.created_at
     }));
   },
 
   addSupportMessage: async (msg: SupportMessage): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_support_messages').insert([{
-      ticket_id: msg.ticketId, sender_id: msg.senderId, sender_name: msg.senderName, sender_role: msg.senderRole, content: msg.content, attachment_url: msg.attachmentUrl, attachmentName: msg.attachmentName
+    const { error } = await supabase.from('crm_support_messages').insert([{
+      ticket_id: msg.ticketId, 
+      sender_id: msg.senderId, 
+      sender_name: msg.senderName, 
+      sender_role: msg.senderRole, 
+      content: msg.content, 
+      attachment_url: msg.attachmentUrl, 
+      attachment_name: msg.attachmentName
     }]);
+    if (error) {
+        console.error("Erro ao adicionar mensagem:", error);
+        throw error;
+    }
   },
 
   // --- EVENTS ---
@@ -648,11 +670,11 @@ export const appBackend = {
     if (blk.id && blk.id.length > 10) {
       const { data, error } = await supabase.from('crm_event_blocks').update(payload).eq('id', blk.id).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
+      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: d.max_selections };
     } else {
       const { data, error = null } = await supabase.from('crm_event_blocks').insert([payload]).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
+      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: blk.maxSelections };
     }
   },
 
@@ -798,7 +820,7 @@ export const appBackend = {
   getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_webhook_triggers').select('*');
-    return (data || []).map((t: any) => ({ id: t.id, pipelineName: t.pipeline_name, stageId: t.stage_id, payload_json: t.payload_json, createdAt: t.created_at }));
+    return (data || []).map((t: any) => ({ id: t.id, pipelineName: t.pipeline_name, stageId: t.stage_id, payloadJson: t.payload_json, createdAt: t.created_at }));
   },
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
@@ -834,7 +856,7 @@ export const appBackend = {
     let query = supabase.from('crm_banners').select('*').order('created_at', { ascending: false });
     if (audience) query = query.eq('target_audience', audience).eq('active', true);
     const { data } = await query;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, link_url: d.link_url, target_audience: d.target_audience, active: d.active, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, linkUrl: d.link_url, targetAudience: d.target_audience, active: d.active, createdAt: d.created_at }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -870,7 +892,7 @@ export const appBackend = {
   getTeacherNews: async (): Promise<TeacherNews[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, image_url: d.image_url, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, imageUrl: d.image_url, createdAt: d.created_at }));
   },
 
   saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
@@ -898,11 +920,11 @@ export const appBackend = {
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: Using studioId, trackingCode and conferenceDate instead of snake_case versions from InventoryRecord type
     const payload = {
       type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico,
       item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate,
       studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations,
+      // Fix: Changed snake_case record property to camelCase to match interface
       conference_date: record.conferenceDate || null, attachments: record.attachments
     };
     if (record.id) await supabase.from('crm_inventory').update(payload).eq('id', record.id);
@@ -1027,14 +1049,23 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data: cert } = await supabase.from('crm_student_certificates').select('*, crm_deals(company_name, contact_name, course_city), crm_certificates(*)').eq('hash', hash).single();
       if (!cert) return null;
-      const d = cert.crm_deals;
-      const t = cert.crm_certificates;
+      // Handle potential joined data arrays vs objects
+      const dealData = Array.isArray(cert.crm_deals) ? cert.crm_deals[0] : cert.crm_deals;
+      const certTemplateData = Array.isArray(cert.crm_certificates) ? cert.crm_certificates[0] : cert.crm_certificates;
+      
+      if (!dealData || !certTemplateData) return null;
+
       return {
-          studentName: d.company_name || d.contact_name,
-          studentCity: d.course_city || 'Sede VOLL',
+          studentName: dealData.company_name || dealData.contact_name,
+          studentCity: dealData.course_city || 'Sede VOLL',
           template: {
-              id: t.id, title: t.title, backgroundData: t.background_data, backBackgroundData: t.back_background_data,
-              linked_product_id: t.linked_product_id, bodyText: t.body_text, layout_config: t.layout_config
+              id: certTemplateData.id, 
+              title: certTemplateData.title, 
+              backgroundData: certTemplateData.background_data, 
+              backBackgroundData: certTemplateData.back_background_data,
+              linkedProductId: certTemplateData.linked_product_id, 
+              bodyText: certTemplateData.body_text, 
+              layoutConfig: certTemplateData.layout_config
           },
           issuedAt: cert.issued_at
       };

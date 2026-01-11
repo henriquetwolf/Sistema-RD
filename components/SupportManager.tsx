@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LifeBuoy, Search, Filter, Clock, CheckCircle, AlertTriangle, User, Users, 
@@ -46,16 +47,30 @@ export const SupportManager: React.FC = () => {
     return saved ? JSON.parse(saved) as CollaboratorSession : { name: 'Administrador', id: 'admin' };
   }, []);
 
-  useEffect(() => { fetchTickets(); fetchTags(); }, []);
+  useEffect(() => { 
+      fetchTickets(); 
+      fetchTags(); 
+      
+      // Auto-refresh a cada 15 segundos para o Admin
+      const timer = setInterval(() => {
+          if (viewMode !== 'dashboard') {
+              fetchTickets(false); // Silent refresh
+              if (selectedTicket) fetchThread(selectedTicket.id);
+          }
+      }, 15000);
+
+      return () => clearInterval(timer);
+  }, [viewMode, selectedTicket]);
+
   useEffect(() => { if (selectedTicket) fetchThread(selectedTicket.id); }, [selectedTicket]);
   useEffect(() => { threadEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [thread]);
 
-  const fetchTickets = async () => {
-    setIsLoading(true);
+  const fetchTickets = async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     try {
       const data = await appBackend.getSupportTickets();
       setTickets(data);
-    } catch (e) { console.error(e); } finally { setIsLoading(false); }
+    } catch (e) { console.error(e); } finally { if (showLoading) setIsLoading(false); }
   };
 
   const fetchTags = async () => {
@@ -317,7 +332,7 @@ export const SupportManager: React.FC = () => {
             <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value as any); setTagFilter('all'); }} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Público: Todos</option><option value="student">Alunos</option><option value="instructor">Instrutores</option><option value="studio">Studios</option></select>
             <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Categoria: Todas</option>{uniqueTagsForCurrentRole.map(t => <option key={t} value={t}>{t}</option>)}</select>
             <select value={responderFilter} onChange={e => setResponderFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-3 py-2 outline-none"><option value="all">Atendente: Todos</option>{uniqueResponders.map(r => <option key={r} value={r}>{r}</option>)}</select>
-            <button onClick={fetchTickets} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
+            <button onClick={() => fetchTickets()} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
         </div>
       </div>
 
@@ -613,7 +628,7 @@ export const SupportManager: React.FC = () => {
       {/* DETAIL MODAL (Chat) */}
       {selectedTicket && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col h-[90vh]">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl my-8 animate-in fade-in zoom-in-95 flex flex-col h-[90vh]">
             <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="bg-indigo-100 p-2 rounded-lg text-indigo-700"><MessageSquare size={20}/></div>
@@ -642,7 +657,7 @@ export const SupportManager: React.FC = () => {
                             <p className="text-[10px] font-black text-indigo-700 uppercase mb-3">Status e Fluxo</p>
                             <div className="flex flex-col gap-2">
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'open')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'open' ? "bg-red-600 text-white shadow-md" : "bg-white text-red-600 border border-red-100")}>Aberto</button>
-                                <button onClick={() => handleUpdateStatus(selectedTicket, 'pending')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'pending' ? "bg-amber-500 text-white shadow-md" : "bg-white text-amber-500 border border-amber-100")}>Em Análise</button>
+                                <button onClick={() => handleUpdateStatus(selectedTicket, 'pending')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'pending' ? "bg-amber-50 text-white shadow-md" : "bg-white text-amber-500 border border-amber-100")}>Em Análise</button>
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'waiting')} className={clsx("w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all", selectedTicket.status === 'waiting' ? "bg-blue-500 text-white shadow-md" : "bg-white text-blue-500 border border-blue-100")}>Aguardando Usuário</button>
                                 <button onClick={() => handleUpdateStatus(selectedTicket, 'closed')} className="w-full py-2 rounded-lg text-[10px] font-black uppercase bg-green-600 text-white hover:bg-green-700 transition-all shadow-md mt-2">Resolvido / Fechar</button>
                             </div>

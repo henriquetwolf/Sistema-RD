@@ -7,7 +7,7 @@ import {
     Video, Download, Loader2, CheckCircle, Clock, X, Info, Layers, 
     PieChart, Send, ArrowRight, Sparkles, Bell, Trophy, ChevronRight, Book, ListTodo, LifeBuoy,
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
-    Mic
+    Mic, RefreshCw
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import clsx from 'clsx';
@@ -46,6 +46,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         fetchSupportNotifications();
     }, [student]);
 
+    // Sempre que o aluno abrir a aba de certificados, buscamos os dados mais recentes do banco
+    useEffect(() => {
+        if (activeTab === 'certificates') {
+            loadCertificates();
+        }
+    }, [activeTab]);
+
     const fetchSupportNotifications = async () => {
         if (!mainDealId) return;
         try {
@@ -54,25 +61,32 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         } catch (e) {}
     };
 
+    const loadCertificates = async () => {
+        const dealIds = student.deals.map(d => d.id);
+        if (dealIds.length > 0) {
+            const { data: issuedCerts } = await appBackend.client
+                .from('crm_student_certificates')
+                .select('*, crm_certificates(title)')
+                .in('student_deal_id', dealIds)
+                .order('issued_at', { ascending: false });
+            setCertificates(issuedCerts || []);
+        }
+    };
+
     const loadBaseData = async () => {
         setIsLoading(true);
         try {
-            const dealIds = student.deals.map(d => d.id);
             const allCodes = Array.from(new Set(student.deals.flatMap(d => [d.class_mod_1, d.class_mod_2]).filter(Boolean)));
             if (allCodes.length > 0) {
                 const { data } = await appBackend.client.from('crm_classes').select('*').or(`mod_1_code.in.(${allCodes.map(c => `"${c}"`).join(',')}),mod_2_code.in.(${allCodes.map(c => `"${c}"`).join(',')})`);
                 if (data) setClasses(data);
             }
-            if (dealIds.length > 0) {
-                const { data: issuedCerts } = await appBackend.client.from('crm_student_certificates').select('*, crm_certificates(title)').in('student_deal_id', dealIds);
-                setCertificates(issuedCerts || []);
-            }
+            await loadCertificates();
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     };
 
     const loadBanners = async () => {
         try { 
-            // Tenta puxar banners ativos cadastrados no Painel de Configurações
             const data = await appBackend.getBanners('student'); 
             setBanners(data || []); 
         } catch (e) {
@@ -126,16 +140,18 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 : completedLessonIds.filter(id => id !== lessonId);
             setCompletedLessonIds(updatedProgress);
 
+            // Verificação de conclusão total do curso para emissão de certificado
             if (newStatus && playingCourse.certificateTemplateId) {
                 const allLessonIdsInCourse = courseStructure?.modules.flatMap(m => (courseStructure.lessons[m.id] || []).map(l => l.id)) || [];
                 const isFinished = allLessonIdsInCourse.every(id => updatedProgress.includes(id));
                 
                 if (isFinished) {
-                    const alreadyHasCert = certificates.some(c => c.student_deal_id === mainDealId && c.certificate_template_id === playingCourse.certificateTemplateId);
+                    // Evita duplicidade se já houver certificado para este modelo
+                    const alreadyHasCert = certificates.some(c => c.certificate_template_id === playingCourse.certificateTemplateId);
                     if (!alreadyHasCert) {
                         await appBackend.issueCertificate(mainDealId, playingCourse.certificateTemplateId);
-                        loadBaseData();
-                        alert("🎉 Parabéns! Você concluiu o curso e seu certificado foi gerado!");
+                        await loadCertificates(); // Sincroniza a lista de diplomas
+                        alert("🎉 Parabéns! Você concluiu 100% das aulas e seu certificado já está disponível na aba 'Meus Diplomas'!");
                     }
                 }
             }
@@ -150,29 +166,17 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         return Math.round((completed / allLessons.length) * 100);
     }, [courseStructure, completedLessonIds, playingCourse]);
 
-    /**
-     * Otimizado para suportar diversos formatos de link do YouTube:
-     * - youtube.com/watch?v=ID
-     * - youtu.be/ID
-     * - youtube.com/embed/ID
-     * - youtube.com/live/ID
-     * - youtube.com/v/ID
-     */
     const getYouTubeEmbedUrl = (url: string) => {
         if (!url || typeof url !== 'string') return '';
-        
         let videoId = '';
         const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
         const match = url.match(regex);
-        
         if (match && match[1]) {
             videoId = match[1];
         } else {
-            // Fallback manual se o regex falhar mas for um ID simples de 11 dígitos
             const cleanUrl = url.trim();
             if (cleanUrl.length === 11) videoId = cleanUrl;
         }
-
         return videoId ? `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1` : '';
     };
 
@@ -324,7 +328,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-6 space-y-8">
                 
-                {/* Banner Section - Restaurado p/ usar os banners do banco */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <section className="bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden group flex flex-col justify-between min-h-[250px]">
                         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
@@ -367,7 +370,12 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
                     {activeTab === 'classes' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {classes.length === 0 ? <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300"><GraduationCap size={48} className="mb-4 opacity-20"/> <p className="font-bold">Nenhuma formação presencial ativa.</p></div> : classes.map(cls => (
+                            {classes.length === 0 ? (
+                                <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300">
+                                    <GraduationCap size={48} className="mb-4 opacity-20"/> 
+                                    <p className="font-bold">Nenhuma formação presencial ativa.</p>
+                                </div>
+                            ) : classes.map(cls => (
                                 <div key={cls.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all overflow-hidden border-b-8 border-b-purple-500">
                                     <h3 className="text-xl font-black text-slate-800 mb-4 leading-tight">{cls.course}</h3>
                                     <div className="flex items-center gap-2 text-slate-500 text-sm mb-6 font-bold uppercase tracking-widest"><MapPin size={16} className="text-purple-500" /> {cls.city}, {cls.state}</div>
@@ -433,12 +441,23 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
                     {activeTab === 'certificates' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {certificates.length === 0 ? <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300"><Award size={48} className="mb-4 opacity-20"/> <p className="font-bold">Nenhum certificado emitido.</p></div> : certificates.map(cert => (
+                            <div className="col-span-full flex justify-end mb-4">
+                                <button onClick={loadCertificates} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase hover:text-teal-600 transition-colors">
+                                    <RefreshCw size={14}/> Atualizar Lista
+                                </button>
+                            </div>
+                            {certificates.length === 0 ? (
+                                <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300">
+                                    <Award size={48} className="mb-4 opacity-20"/> 
+                                    <p className="font-bold">Nenhum certificado emitido.</p>
+                                    <p className="text-xs mt-1">Conclua 100% de um curso para liberar seu diploma.</p>
+                                </div>
+                            ) : certificates.map(cert => (
                                 <div key={cert.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-6 shadow-sm hover:shadow-xl transition-all group">
                                     <div className="bg-emerald-50 p-5 rounded-[2rem] text-emerald-600 group-hover:rotate-12 transition-transform shadow-inner"><Trophy size={32}/></div>
                                     <div className="flex-1">
                                         <h4 className="font-black text-slate-800 text-lg leading-tight mb-1">{cert.crm_certificates?.title}</h4>
-                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Emitido: {new Date(cert.issued_at).toLocaleDateString()}</p>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Emitido em {new Date(cert.issued_at).toLocaleDateString()}</p>
                                     </div>
                                     <a href={`/?certificateHash=${cert.hash}`} target="_blank" className="p-4 bg-emerald-500 text-white rounded-2xl shadow-lg hover:bg-emerald-600 transition-all active:scale-95"><Download size={24}/></a>
                                 </div>

@@ -83,15 +83,16 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       setUnlockModalStudent(student);
       setIsSavingAccess(true);
       try {
-          // Busca os IDs dos cursos já liberados
-          const { data } = await appBackend.client
+          // Chamada direta ao Supabase para garantir nomes de coluna snake_case
+          const { data, error } = await appBackend.client
               .from('crm_student_course_access')
               .select('course_id')
               .eq('student_deal_id', student.id);
           
+          if (error) throw error;
           setStudentAccessedIds((data || []).map(d => d.course_id));
       } catch (e) {
-          console.error(e);
+          console.error("Erro ao carregar acessos:", e);
       } finally {
           setIsSavingAccess(false);
       }
@@ -105,13 +106,15 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       if (!unlockModalStudent) return;
       setIsSavingAccess(true);
       try {
-          // 1. Limpa todos os acessos atuais usando os nomes de coluna snake_case do banco
-          await appBackend.client
+          // 1. Limpa todos os acessos atuais (Delete)
+          const { error: delErr } = await appBackend.client
             .from('crm_student_course_access')
             .delete()
             .eq('student_deal_id', unlockModalStudent.id);
           
-          // 2. Insere os novos se houver algum selecionado
+          if (delErr) throw delErr;
+
+          // 2. Insere os novos selecionados (Insert)
           if (studentAccessedIds.length > 0) {
               const inserts = studentAccessedIds.map(cid => ({ 
                   student_deal_id: unlockModalStudent.id, 

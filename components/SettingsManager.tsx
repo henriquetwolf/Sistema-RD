@@ -27,6 +27,8 @@ interface UnifiedProduct {
     type: 'Digital' | 'Presencial' | 'Evento';
 }
 
+type SettingsTab = 'visual' | 'company' | 'banners' | 'connection_plug' | 'roles' | 'instructor_levels' | 'course_info' | 'support_tags' | 'logs' | 'database';
+
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ 
   onLogoChange, 
   currentLogo,
@@ -34,7 +36,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   onStartWizard,
   onDeleteJob
 }) => {
-  const [activeTab, setActiveTab] = useState<'visual' | 'company' | 'banners' | 'connection_plug' | 'roles' | 'database'>('visual');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('visual');
   const [preview, setPreview] = useState<string | null>(currentLogo);
   const [securityMargin, setSecurityMargin] = useState<number>(5);
   const [isSaved, setIsSaved] = useState(false);
@@ -56,7 +58,21 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [isSavingCompany, setIsSavingCompany] = useState(false); 
   const [editingCompany, setEditingCompany] = useState<Partial<CompanySetting> | null>(null);
-  const [productSearch, setProductSearch] = useState('');
+
+  const [instructorLevels, setInstructorLevels] = useState<InstructorLevel[]>([]);
+  const [isLoadingLevels, setIsLoadingLevels] = useState(false);
+  const [editingLevel, setEditingLevel] = useState<Partial<InstructorLevel> | null>(null);
+
+  const [courseInfos, setCourseInfos] = useState<CourseInfo[]>([]);
+  const [editingCourseInfo, setEditingCourseInfo] = useState<Partial<CourseInfo> | null>(null);
+  const [isLoadingCourseInfo, setIsLoadingCourseInfo] = useState(false);
+
+  const [supportTags, setSupportTags] = useState<SupportTag[]>([]);
+  const [isLoadingTags, setIsLoadingTags] = useState(false);
+  const [editingTag, setEditingTag] = useState<Partial<SupportTag> | null>(null);
+
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
   const [webhookTriggers, setWebhookTriggers] = useState<WebhookTrigger[]>([]);
   const [isLoadingTriggers, setIsLoadingTriggers] = useState(false);
@@ -89,6 +105,10 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       if (activeTab === 'roles') fetchRoles();
       else if (activeTab === 'banners') fetchBanners();
       else if (activeTab === 'company') fetchCompanies();
+      else if (activeTab === 'instructor_levels') fetchInstructorLevels();
+      else if (activeTab === 'course_info') fetchCourseInfos();
+      else if (activeTab === 'support_tags') fetchSupportTags();
+      else if (activeTab === 'logs') fetchLogs();
       else if (activeTab === 'connection_plug') fetchWebhookTriggers();
   }, [activeTab]);
 
@@ -117,6 +137,26 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const fetchCompanies = async () => {
       setIsLoadingCompanies(true);
       try { const data = await appBackend.getCompanies(); setCompanies(data); } catch(e) {} finally { setIsLoadingCompanies(false); }
+  };
+
+  const fetchInstructorLevels = async () => {
+      setIsLoadingLevels(true);
+      try { const data = await appBackend.getInstructorLevels(); setInstructorLevels(data); } catch(e) {} finally { setIsLoadingLevels(false); }
+  };
+
+  const fetchCourseInfos = async () => {
+      setIsLoadingCourseInfo(true);
+      try { const data = await appBackend.getCourseInfos(); setCourseInfos(data); } catch(e) {} finally { setIsLoadingCourseInfo(false); }
+  };
+
+  const fetchSupportTags = async () => {
+      setIsLoadingTags(true);
+      try { const data = await appBackend.getSupportTags(); setSupportTags(data); } catch(e) {} finally { setIsLoadingTags(false); }
+  };
+
+  const fetchLogs = async () => {
+      setIsLoadingLogs(true);
+      try { const data = await appBackend.getActivityLogs(200); setLogs(data); } catch(e) {} finally { setIsLoadingLogs(false); }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,24 +212,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
     } catch (err) {} finally { setIsSavingCompany(false); }
   };
 
-  const toggleCompanyProductType = (type: string) => {
-      if (!editingCompany) return;
-      const currentTypes = editingCompany.productTypes || [];
-      const newTypes = currentTypes.includes(type) ? currentTypes.filter(t => t !== type) : [...currentTypes, type];
-      setEditingCompany({ ...editingCompany, productTypes: newTypes });
-  };
-
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V42
-CREATE TABLE IF NOT EXISTS public.crm_banners (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    title text NOT NULL,
-    image_url text NOT NULL,
-    link_url text,
-    target_audience text DEFAULT 'student',
-    active boolean DEFAULT true,
-    created_at timestamp with time zone DEFAULT now()
-);
+-- SCRIPT DE FUNDAÇÃO CRM V43 (REPARO TOTAL)
 CREATE TABLE IF NOT EXISTS public.crm_student_course_access (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     student_deal_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
@@ -197,9 +221,7 @@ CREATE TABLE IF NOT EXISTS public.crm_student_course_access (
     unlocked_at timestamp with time zone DEFAULT now(),
     UNIQUE(student_deal_id, course_id)
 );
-ALTER TABLE public.crm_banners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_student_course_access ENABLE ROW LEVEL SECURITY;
-GRANT ALL ON public.crm_banners TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_student_course_access TO anon, authenticated, service_role;
 NOTIFY pgrst, 'reload schema';
   `.trim();
@@ -210,16 +232,19 @@ NOTIFY pgrst, 'reload schema';
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-8 pb-20">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <h2 className="text-2xl font-bold text-slate-800">Configurações do Sistema</h2>
-            <p className="text-slate-500 text-sm">Personalize acessos, banners e empresas.</p>
+            <h2 className="text-2xl font-bold text-slate-800">Configurações</h2>
+            <p className="text-slate-500 text-sm">Personalize o sistema e gerencie dados globais.</p>
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto shrink-0 max-w-full no-scrollbar">
+        <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto shrink-0 max-w-full no-scrollbar">
             {[
-                { id: 'visual', label: 'Identidade', color: 'text-slate-800' },
+                { id: 'visual', label: 'Geral', color: 'text-slate-800' },
                 { id: 'company', label: 'Empresas', color: 'text-teal-700' },
                 { id: 'banners', label: 'Banners', color: 'text-orange-700' },
-                { id: 'connection_plug', label: 'Plug', color: 'text-indigo-700' },
                 { id: 'roles', label: 'Acessos', color: 'text-indigo-700' },
+                { id: 'instructor_levels', label: 'Níveis', color: 'text-rose-700' },
+                { id: 'course_info', label: 'Infos', color: 'text-blue-700' },
+                { id: 'support_tags', label: 'Tags', color: 'text-emerald-700' },
+                { id: 'logs', label: 'Logs', color: 'text-slate-600' },
                 { id: 'database', label: 'Banco', color: 'text-amber-700' }
             ].map(tab => (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === tab.id ? `bg-white ${tab.color} shadow-sm` : "text-slate-500")}>{tab.label}</button>
@@ -239,6 +264,11 @@ NOTIFY pgrst, 'reload schema';
                         <input type="file" className="hidden" id="logo-up" accept="image/*" onChange={handleImageUpload} />
                         <label htmlFor="logo-up" className="cursor-pointer bg-teal-50 text-teal-700 px-6 py-2 rounded-lg font-bold border border-teal-200">Trocar Logo</label>
                     </div>
+                </div>
+                <div className="bg-white rounded-xl border border-slate-200 p-8">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4">Margem de Segurança do Estoque</h3>
+                    <input type="number" className="w-24 px-4 py-2 border rounded-lg" value={securityMargin} onChange={(e) => setSecurityMargin(parseInt(e.target.value) || 0)} />
+                    <p className="text-xs text-slate-400 mt-2">Limite para alerta de "Necessita Remessa" nos Studios.</p>
                 </div>
                 <button onClick={handleSaveGlobal} className="bg-teal-600 text-white px-10 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2">{isSaved ? 'Salvo!' : 'Salvar Geral'}</button>
             </div>
@@ -264,7 +294,7 @@ NOTIFY pgrst, 'reload schema';
         {activeTab === 'banners' && (
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold">Banners Rotativos</h3>
+                    <h3 className="text-lg font-bold">Banners do Portal</h3>
                     <button onClick={() => setEditingBanner({ title: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Banner</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -301,11 +331,43 @@ NOTIFY pgrst, 'reload schema';
             </div>
         )}
 
+        {activeTab === 'instructor_levels' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold">Níveis Docentes (Honorários)</h3>
+                    <button onClick={() => setEditingLevel({ name: '', honorarium: 0 })} className="bg-rose-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Nível</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {instructorLevels.map(lvl => (
+                        <div key={lvl.id} className="p-4 border rounded-xl flex items-center justify-between">
+                            <div><p className="font-bold">{lvl.name}</p><p className="text-xs text-emerald-600 font-bold">R$ {lvl.honorarium.toLocaleString()}</p></div>
+                            <div className="flex gap-1"><button onClick={() => setEditingLevel(lvl)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"><Edit2 size={14}/></button></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'logs' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8">
+                <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><History size={20}/> Histórico de Auditoria</h3>
+                <div className="space-y-3">
+                    {logs.map(log => (
+                        <div key={log.id} className="p-3 border-b text-xs flex items-start gap-4">
+                            <span className="text-slate-400 w-24 shrink-0">{new Date(log.createdAt).toLocaleString()}</span>
+                            <span className="font-bold text-slate-700 w-32 shrink-0">{log.userName}</span>
+                            <span className="flex-1 text-slate-600">{log.details}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
         {activeTab === 'database' && (
             <div className="bg-white rounded-xl border border-slate-200 p-8">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold">Resincronizar Banco de Dados</h3></div>
-                <p className="text-sm text-slate-500 mb-6">Use este script se o sistema apresentar erros de "coluna não encontrada" ou problemas na liberação de alunos.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V42</button> : (
+                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold">Manutenção e Sincronização</h3></div>
+                <p className="text-sm text-slate-500 mb-6">Execute este reparo se notar erros de banco de dados ou colunas ausentes.</p>
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V43</button> : (
                     <div className="relative">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs">{sqlCopied ? 'Copiado!' : 'Copiar'}</button>
@@ -320,7 +382,7 @@ NOTIFY pgrst, 'reload schema';
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
                   <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="font-bold">Empresa de Faturamento</h3>
+                      <h3 className="font-bold">Configurar Empresa</h3>
                       <button onClick={() => setEditingCompany(null)}><X size={24}/></button>
                   </div>
                   <div className="p-8 overflow-y-auto custom-scrollbar space-y-6">
@@ -328,18 +390,9 @@ NOTIFY pgrst, 'reload schema';
                           <input placeholder="Razão Social" className="w-full px-3 py-2 border rounded-lg" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} />
                           <input placeholder="CNPJ" className="w-full px-3 py-2 border rounded-lg" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} />
                       </div>
-                      <input placeholder="Webhook URL" className="w-full px-3 py-2 border rounded-lg font-mono text-xs" value={editingCompany.webhookUrl} onChange={e => setEditingCompany({...editingCompany, webhookUrl: e.target.value})} />
-                      <div className="border-t pt-4">
-                          <p className="text-xs font-bold text-slate-400 uppercase mb-3">Atribuição por Tipo</p>
-                          <div className="flex gap-2">
-                              {['Digital', 'Presencial', 'Evento'].map(type => (
-                                  <button key={type} onClick={() => toggleCompanyProductType(type)} className={clsx("px-4 py-2 rounded-lg border-2 text-xs font-bold", editingCompany.productTypes?.includes(type) ? "bg-teal-50 border-teal-500 text-teal-700" : "bg-white border-slate-100")}>{type}</button>
-                              ))}
-                          </div>
-                      </div>
                   </div>
                   <div className="p-6 bg-slate-50 border-t flex justify-end">
-                      <button onClick={handleSaveCompany} disabled={isSavingCompany} className="bg-teal-600 text-white px-8 py-2 rounded-lg font-bold">{isSavingCompany ? 'Salvando...' : 'Salvar Empresa'}</button>
+                      <button onClick={handleSaveCompany} disabled={isSavingCompany} className="bg-teal-600 text-white px-8 py-2 rounded-lg font-bold">{isSavingCompany ? 'Salvando...' : 'Salvar'}</button>
                   </div>
               </div>
           </div>
@@ -353,20 +406,61 @@ NOTIFY pgrst, 'reload schema';
                       <h3 className="font-bold">Configurar Banner</h3>
                       <button onClick={() => setEditingBanner(null)}><X size={24}/></button>
                   </div>
-                  <div className="p-8 space-y-6">
+                  <div className="p-8 space-y-4">
                       <input placeholder="Título" className="w-full px-3 py-2 border rounded-lg" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} />
-                      <input placeholder="Link URL" className="w-full px-3 py-2 border rounded-lg" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} />
-                      <select className="w-full px-3 py-2 border rounded-lg" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
-                          <option value="student">Público: Aluno</option>
-                          <option value="instructor">Público: Instrutor</option>
-                      </select>
+                      <input placeholder="Link" className="w-full px-3 py-2 border rounded-lg" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} />
                       <div className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer" onClick={() => bannerFileInputRef.current?.click()}>
                           {editingBanner.imageUrl ? <img src={editingBanner.imageUrl} className="h-20 mx-auto" /> : <p className="text-xs text-slate-400">Clique para enviar imagem</p>}
                           <input type="file" ref={bannerFileInputRef} className="hidden" accept="image/*" onChange={handleBannerImageUpload} />
                       </div>
                   </div>
                   <div className="p-6 bg-slate-50 border-t flex justify-end">
-                      <button onClick={handleSaveBanner} className="bg-orange-600 text-white px-8 py-2 rounded-lg font-bold">Salvar Banner</button>
+                      <button onClick={handleSaveBanner} className="bg-orange-600 text-white px-8 py-2 rounded-lg font-bold">Salvar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL ROLE */}
+      {editingRole && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold">Permissões: {editingRole.name}</h3>
+                      <button onClick={() => setEditingRole(null)}><X size={24}/></button>
+                  </div>
+                  <div className="p-8 overflow-y-auto custom-scrollbar">
+                      <input placeholder="Nome do Perfil" className="w-full px-4 py-2 border rounded-xl mb-8 font-bold text-lg" value={editingRole.name} onChange={e => setEditingRole({...editingRole, name: e.target.value})} />
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {PERMISSION_MODULES.map(mod => (
+                              <label key={mod.id} className={clsx("p-4 border-2 rounded-xl cursor-pointer transition-all flex items-center justify-between", editingRole.permissions[mod.id] ? "bg-indigo-50 border-indigo-500" : "bg-white border-slate-100")}>
+                                  <span className="text-xs font-bold">{mod.label}</span>
+                                  <input type="checkbox" checked={!!editingRole.permissions[mod.id]} onChange={e => setEditingRole({...editingRole, permissions: {...editingRole.permissions, [mod.id]: e.target.checked}})} className="w-5 h-5 rounded text-indigo-600" />
+                              </label>
+                          ))}
+                      </div>
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t flex justify-end">
+                      <button onClick={handleSaveRole} className="bg-indigo-600 text-white px-8 py-2 rounded-lg font-bold">Salvar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL NÍVEL DOCENTE */}
+      {editingLevel && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 flex flex-col">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold">Configurar Nível</h3>
+                      <button onClick={() => setEditingLevel(null)}><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-4">
+                      <input placeholder="Nome do Nível" className="w-full px-3 py-2 border rounded-lg" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} />
+                      <input type="number" placeholder="Valor Honorário (R$)" className="w-full px-3 py-2 border rounded-lg" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value) || 0})} />
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t flex justify-end">
+                      <button onClick={() => { appBackend.saveInstructorLevel(editingLevel as InstructorLevel).then(fetchInstructorLevels); setEditingLevel(null); }} className="bg-rose-600 text-white px-8 py-2 rounded-lg font-bold">Salvar</button>
                   </div>
               </div>
           </div>

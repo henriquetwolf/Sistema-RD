@@ -71,7 +71,11 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     };
 
     const loadBanners = async () => {
-        try { const data = await appBackend.getBanners('student'); setBanners(data); } catch (e) {}
+        try { 
+            // Puxa banners ativos cadastrados no Painel de Configurações
+            const data = await appBackend.getBanners('student'); 
+            setBanners(data); 
+        } catch (e) {}
     };
 
     const loadOnlineCourses = async () => {
@@ -82,6 +86,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 appBackend.getStudentCourseAccess(mainDealId),
                 appBackend.getStudentLessonProgress(mainDealId)
             ]);
+            // Filtra apenas cursos que possuem imagem ou descrição válida para evitar lixo
             setAllCourses(coursesData || []);
             setUnlockedCourseIds(accessIds || []);
             setCompletedLessonIds(progressIds || []);
@@ -299,7 +304,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-6 space-y-8">
                 
-                {/* Banner Section - Restaurado e Otimizado */}
+                {/* Banner Section - Restaurado p/ usar os banners do banco */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <section className="bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden group flex flex-col justify-between min-h-[250px]">
                         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
@@ -312,7 +317,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
                     <div className="overflow-hidden rounded-[2.5rem] shadow-xl border-4 border-white relative group h-full bg-slate-200">
                         {banners.length > 0 ? (
-                            <img src={banners[0].imageUrl} alt={banners[0].title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                            <a href={banners[0].linkUrl || '#'} target={banners[0].linkUrl ? "_blank" : "_self"} className="block w-full h-full">
+                                <img src={banners[0].imageUrl} alt={banners[0].title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                            </a>
                         ) : (
                             <div className="w-full h-full bg-gradient-to-tr from-indigo-500 to-purple-400 flex flex-col items-center justify-center p-8 text-center text-white">
                                 <Sparkles size={48} className="mb-4 opacity-30" />
@@ -326,7 +333,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 <nav className="flex bg-white/60 p-1.5 rounded-3xl shadow-sm border border-slate-200 overflow-x-auto no-scrollbar gap-1">
                     {[
                         { id: 'classes', label: 'Formações Presenciais', icon: GraduationCap, color: 'text-purple-600' },
-                        { id: 'online_courses', label: 'Cursos Online', icon: MonitorPlay, color: 'text-indigo-600' },
+                        { id: 'online_courses', label: 'Meus Cursos Online', icon: MonitorPlay, color: 'text-indigo-600' },
                         { id: 'events', label: 'Eventos', icon: Mic, color: 'text-amber-600' },
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' }
                     ].map(tab => (
@@ -362,7 +369,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     {activeTab === 'online_courses' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {allCourses.length === 0 ? (
-                                <div className="col-span-full py-20 text-center text-slate-400 italic">Nenhum curso online disponível no momento.</div>
+                                <div className="col-span-full py-20 text-center text-slate-400 italic font-bold border-2 border-dashed rounded-3xl">Você ainda não possui cursos online liberados.</div>
                             ) : allCourses.map(course => {
                                 const isUnlocked = unlockedCourseIds.includes(course.id);
                                 return (
@@ -371,7 +378,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                         onClick={() => isUnlocked && handleOpenCoursePlayer(course)}
                                         className={clsx(
                                             "bg-white rounded-[2rem] shadow-sm hover:shadow-xl transition-all overflow-hidden border border-slate-200 flex flex-col group",
-                                            !isUnlocked ? "cursor-not-allowed opacity-80" : "cursor-pointer"
+                                            !isUnlocked ? "opacity-50 grayscale cursor-default" : "cursor-pointer"
                                         )}
                                     >
                                         <div className="h-48 relative overflow-hidden">
@@ -381,9 +388,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                 <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300"><MonitorPlay size={48} /></div>
                                             )}
                                             {!isUnlocked && (
-                                                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+                                                <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center text-white">
                                                     <Lock size={32} className="mb-2" />
-                                                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">Conteúdo Bloqueado</span>
+                                                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">Aguardando Liberação</span>
                                                 </div>
                                             )}
                                         </div>
@@ -392,9 +399,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                             <p className="text-xs text-slate-500 line-clamp-2 mb-6">{course.description}</p>
                                             <div className="mt-auto flex items-center justify-between">
                                                 {isUnlocked ? (
-                                                    <span className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">Continuar Assistindo <ArrowRight size={14}/></span>
+                                                    <span className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">Assistir Agora <ArrowRight size={14}/></span>
                                                 ) : (
-                                                    <a href={course.paymentLink || '#'} target="_blank" className="text-xs font-black text-teal-600 uppercase tracking-widest flex items-center gap-2 hover:underline">Saber Mais <ExternalLink size={14}/></a>
+                                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Indisponível</span>
                                                 )}
                                             </div>
                                         </div>

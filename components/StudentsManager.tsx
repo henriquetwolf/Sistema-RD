@@ -76,9 +76,9 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   };
 
   const loadCourses = async () => {
-      // Puxa a lista técnica de cursos online para a liberação
+      // Puxa apenas os cursos que existem tecnicamente e comercialmente
       const data = await appBackend.getOnlineCourses();
-      setOnlineCourses(data);
+      setOnlineCourses(data || []);
   };
 
   const openUnlockModal = async (student: StudentDeal) => {
@@ -129,7 +129,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
                 <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
-                <div><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Users className="text-teal-600" /> Gestão de Alunos</h2><p className="text-slate-500 text-sm">Visualizando matriculados e liberando conteúdos.</p></div>
+                <div><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Users className="text-teal-600" /> Gestão de Alunos</h2><p className="text-slate-500 text-sm">Matriculados ativos com acesso ao Portal.</p></div>
             </div>
             <button onClick={fetchData} className="p-2 text-slate-500 hover:text-teal-600 transition-colors"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
         </div>
@@ -185,9 +185,11 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                         <button onClick={() => setUnlockModalStudent(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                     </div>
                     <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-4">
-                        <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3 text-xs text-amber-800 mb-2"><Zap size={18} className="shrink-0 text-amber-500"/><p>Marque os cursos que este aluno deve ter acesso imediato no Portal do Aluno.</p></div>
+                        <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3 text-xs text-amber-800 mb-2"><Zap size={18} className="shrink-0 text-amber-500"/><p>Selecione os cursos do seu catálogo comercial que deseja liberar para este aluno.</p></div>
                         <div className="grid grid-cols-1 gap-3">
-                            {onlineCourses.map(course => (
+                            {onlineCourses.length === 0 ? (
+                                <p className="text-center py-10 text-slate-400 italic">Nenhum curso online catalogado em 'Produtos Digitais'.</p>
+                            ) : onlineCourses.map(course => (
                                 <div key={course.id} onClick={() => toggleAccess(course.id)} className={clsx("p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group", studentAccessedIds.includes(course.id) ? "bg-indigo-50 border-indigo-500 shadow-sm" : "bg-white border-slate-100 hover:border-indigo-200")}>
                                     <div className="flex items-center gap-4">
                                         <div className={clsx("w-12 h-12 rounded-xl border-2 flex items-center justify-center", studentAccessedIds.includes(course.id) ? "bg-indigo-600 text-white border-white/20" : "bg-slate-50 text-slate-300 border-slate-100 group-hover:text-indigo-400")}><MonitorPlay size={24} /></div>

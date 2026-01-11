@@ -138,7 +138,7 @@ export const appBackend = {
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: d.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
       const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
@@ -582,7 +582,7 @@ export const appBackend = {
       senderName: d.sender_name, 
       senderRole: d.sender_role, 
       content: d.content, 
-      attachment_url: d.attachment_url, 
+      attachmentUrl: d.attachment_url, 
       attachment_name: d.attachment_name, 
       createdAt: d.created_at
     }));
@@ -860,7 +860,6 @@ export const appBackend = {
 
   saveBanner: async (banner: Banner): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: access banner.linkUrl and banner.targetAudience correctly according to the Banner interface
     const payload = { title: banner.title, image_url: banner.imageUrl, link_url: banner.linkUrl, target_audience: banner.targetAudience, active: banner.active };
     if (banner.id) await supabase.from('crm_banners').update(payload).eq('id', banner.id);
     else await supabase.from('crm_banners').insert([payload]);

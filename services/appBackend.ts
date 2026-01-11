@@ -1031,6 +1031,7 @@ export const appBackend = {
           background_data: cert.backgroundData, 
           back_background_data: cert.backBackgroundData || '',
           linked_product_id: cert.linkedProductId || null, 
+          // Corrected cert.body_text to cert.bodyText to fix property access error on CertificateModel
           body_text: cert.bodyText || '', 
           layout_config: cert.layoutConfig
       };
@@ -1062,7 +1063,8 @@ export const appBackend = {
 
   getStudentCertificate: async (hash: string): Promise<any> => {
       if (!isConfigured) return null;
-      // Realizamos um join explícito para garantir que trazemos o nome do aluno e o modelo
+      // Realizamos um join explícito forçando as Foreign Keys
+      // O Supabase usa os nomes das tabelas para inferir as relações
       const { data: cert, error } = await supabase
         .from('crm_student_certificates')
         .select(`
@@ -1073,31 +1075,50 @@ export const appBackend = {
         .eq('hash', hash)
         .maybeSingle();
 
-      if (error || !cert) {
-          console.error("Erro ao buscar certificado:", error);
+      if (error) {
+          console.error("Erro técnico ao buscar certificado (V48):", error);
           return null;
       }
 
-      // Supabase pode retornar os joins como arrays dependendo da configuração da tabela
+      if (!cert) {
+          console.warn("Certificado não localizado para o hash informado.");
+          return null;
+      }
+
+      // Supabase pode retornar os joins como objetos únicos ou arrays
       const dealData = Array.isArray(cert.crm_deals) ? cert.crm_deals[0] : cert.crm_deals;
       const certTemplateData = Array.isArray(cert.crm_certificates) ? cert.crm_certificates[0] : cert.crm_certificates;
       
-      if (!dealData || !certTemplateData) {
-          console.warn("Dados vinculados (Deal ou Template) não localizados.");
+      // Se não encontrou o modelo de certificado, tentamos uma busca manual pelo ID do template para garantir
+      let finalTemplate = certTemplateData;
+      if (!finalTemplate && cert.certificate_template_id) {
+          const { data: manualTemplate } = await supabase.from('crm_certificates').select('*').eq('id', cert.certificate_template_id).maybeSingle();
+          if (manualTemplate) finalTemplate = manualTemplate;
+      }
+
+      // Se não encontrou o aluno, tentamos busca manual pelo deal_id
+      let finalDeal = dealData;
+      if (!finalDeal && cert.student_deal_id) {
+          const { data: manualDeal } = await supabase.from('crm_deals').select('company_name, contact_name, course_city').eq('id', cert.student_deal_id).maybeSingle();
+          if (manualDeal) finalDeal = manualDeal;
+      }
+
+      if (!finalDeal || !finalTemplate) {
+          console.warn("Falha crítica no mapeamento: Dados vinculados não localizados mesmo com busca manual.");
           return null;
       }
 
       return {
-          studentName: dealData.company_name || dealData.contact_name,
-          studentCity: dealData.course_city || 'Sede VOLL',
+          studentName: finalDeal.company_name || finalDeal.contact_name,
+          studentCity: finalDeal.course_city || 'Sede VOLL',
           template: {
-              id: certTemplateData.id, 
-              title: certTemplateData.title, 
-              backgroundData: certTemplateData.background_data, 
-              backBackgroundData: certTemplateData.back_background_data,
-              linkedProductId: certTemplateData.linked_product_id, 
-              bodyText: certTemplateData.body_text, 
-              layoutConfig: certTemplateData.layout_config
+              id: finalTemplate.id, 
+              title: finalTemplate.title, 
+              backgroundData: finalTemplate.background_data, 
+              backBackgroundData: finalTemplate.back_background_data,
+              linkedProductId: finalTemplate.linked_product_id, 
+              bodyText: finalTemplate.body_text, 
+              layoutConfig: finalTemplate.layout_config
           },
           issuedAt: cert.issued_at
       };
@@ -1156,7 +1177,8 @@ export const appBackend = {
       config: job.config, 
       last_sync: job.lastSync, 
       status: job.status, 
-      last_message: job.last_message, 
+      // Corrected job.last_message to job.lastMessage to fix property access error on SyncJob
+      last_message: job.lastMessage, 
       active: job.active, 
       interval_minutes: job.intervalMinutes, 
       created_by: job.createdBy,

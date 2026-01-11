@@ -286,8 +286,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   }, [allProducts, editingCompany, productSearch]);
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V47 (REPARO TOTAL DE ACESSO A DIPLOMAS)
--- 1. Garante que as tabelas existem com os tipos corretos
+-- SCRIPT DE FUNDAÇÃO CRM V48 (FIX TOTAL RELACIONAMENTOS E RLS)
+-- 1. Garante que as tabelas existem
 CREATE TABLE IF NOT EXISTS public.crm_certificates (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
@@ -301,35 +301,47 @@ CREATE TABLE IF NOT EXISTS public.crm_certificates (
 
 CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    student_deal_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
-    certificate_template_id uuid REFERENCES public.crm_certificates(id) ON DELETE CASCADE,
+    student_deal_id uuid,
+    certificate_template_id uuid,
     hash text UNIQUE NOT NULL,
     issued_at timestamp with time zone DEFAULT now()
 );
 
--- 2. Ativação de RLS e Políticas de Acesso Público (Visualização via Hash)
+-- 2. RECONSTRÓI RELACIONAMENTOS (Crucial para o .select() do Supabase)
+ALTER TABLE public.crm_student_certificates 
+DROP CONSTRAINT IF EXISTS crm_student_certificates_student_deal_id_fkey;
+
+ALTER TABLE public.crm_student_certificates 
+ADD CONSTRAINT crm_student_certificates_student_deal_id_fkey 
+FOREIGN KEY (student_deal_id) REFERENCES public.crm_deals(id) ON DELETE CASCADE;
+
+ALTER TABLE public.crm_student_certificates 
+DROP CONSTRAINT IF EXISTS crm_student_certificates_certificate_template_id_fkey;
+
+ALTER TABLE public.crm_student_certificates 
+ADD CONSTRAINT crm_student_certificates_certificate_template_id_fkey 
+FOREIGN KEY (certificate_template_id) REFERENCES public.crm_certificates(id) ON DELETE CASCADE;
+
+-- 3. POLÍTICAS DE ACESSO (Liberando leitura pública via Hash)
 ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_student_certificates ENABLE ROW LEVEL SECURITY;
 
--- Limpa políticas antigas para evitar conflitos
-DROP POLICY IF EXISTS "Acesso Total Certificados" ON public.crm_certificates;
-DROP POLICY IF EXISTS "Acesso Total Diplomas" ON public.crm_student_certificates;
-DROP POLICY IF EXISTS "Leitura Pública de Diplomas por Hash" ON public.crm_student_certificates;
-DROP POLICY IF EXISTS "Leitura Pública de Modelos" ON public.crm_certificates;
+DROP POLICY IF EXISTS "Leitura Pública de Diplomas" ON public.crm_student_certificates;
+CREATE POLICY "Leitura Pública de Diplomas" ON public.crm_student_certificates FOR SELECT USING (true);
 
--- Políticas V47: Qualquer um com o HASH pode ler o diploma e o modelo vinculado
-CREATE POLICY "Leitura Pública de Diplomas por Hash" ON public.crm_student_certificates FOR SELECT USING (true);
-CREATE POLICY "Leitura Pública de Modelos" ON public.crm_certificates FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Leitura Pública de Modelos Cert" ON public.crm_certificates;
+CREATE POLICY "Leitura Pública de Modelos Cert" ON public.crm_certificates FOR SELECT USING (true);
 
--- Política de Escrita (Apenas Admin/Sistema via Service Role ou Autenticado)
+DROP POLICY IF EXISTS "Escrita Admin Certificados" ON public.crm_certificates;
 CREATE POLICY "Escrita Admin Certificados" ON public.crm_certificates FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Escrita Admin Diplomas" ON public.crm_student_certificates;
 CREATE POLICY "Escrita Admin Diplomas" ON public.crm_student_certificates FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- 3. Permissões de Rede
+-- 4. Permissões de Rede
 GRANT ALL ON public.crm_certificates TO anon, authenticated, service_role;
 GRANT ALL ON public.crm_student_certificates TO anon, authenticated, service_role;
 
--- 4. Notifica o sistema para recarregar o esquema
 NOTIFY pgrst, 'reload schema';
   `.trim();
 
@@ -529,7 +541,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold">Manutenção e Sincronização</h3></div>
                 <p className="text-sm text-slate-500 mb-6">Execute este reparo se notar erros de banco de dados ou colunas ausentes na liberação de alunos.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V47</button> : (
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V48</button> : (
                     <div className="relative">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs">{sqlCopied ? 'Copiado!' : 'Copiar'}</button>

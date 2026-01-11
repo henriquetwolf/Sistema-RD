@@ -179,7 +179,7 @@ export const appBackend = {
           title: course.title,
           description: course.description,
           price: course.price,
-          payment_link: course.paymentLink,
+          payment_link: course.payment_link,
           image_url: course.imageUrl,
           certificate_template_id: course.certificateTemplateId || null
       };
@@ -306,12 +306,14 @@ export const appBackend = {
       if (!isConfigured) return;
       if (completed) {
           await supabase.from('crm_student_lesson_progress').upsert({ 
-              student_deal_id: student_deal_id, 
+              // Fix: Changed student_deal_id to use studentDealId parameter
+              student_deal_id: studentDealId, 
               lesson_id: lessonId,
               completed_at: new Date().toISOString()
           });
       } else {
-          await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', student_deal_id).eq('lesson_id', lessonId);
+          // Fix: Changed student_deal_id equality check to use studentDealId parameter
+          await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', studentDealId).eq('lesson_id', lessonId);
       }
   },
 
@@ -449,7 +451,8 @@ export const appBackend = {
     const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-      id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folder_id: data.folder_id, signers: data.signers, createdAt: data.created_at
+      // Fix: Changed folder_id to folderId to match the Contract interface
+      id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, status: data.status, folderId: data.folder_id, signers: data.signers, createdAt: data.created_at
     };
   },
 
@@ -684,12 +687,12 @@ export const appBackend = {
       observations: d.observations, 
       status: d.status, 
       team: d.team, 
-      voucherLink1: d.voucher_link1, 
-      testDate: d.test_date, 
-      voucherLink2: d.voucher_link2, 
-      voucherLink3: d.voucher_link3, 
-      boletosLink: d.boletos_link, 
-      negotiationReference: d.negotiation_reference, 
+      voucher_link1: d.voucher_link1, 
+      test_date: d.test_date, 
+      voucher_link2: d.voucher_link2, 
+      voucher_link3: d.voucher_link3, 
+      boletos_link: d.boletos_link, 
+      negotiation_reference: d.negotiation_reference, 
       attachments: d.attachments, 
       createdAt: d.created_at
     }));

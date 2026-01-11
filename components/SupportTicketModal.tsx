@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2, Lock, Landmark, Bell } from 'lucide-react';
+import { LifeBuoy, X, Send, Loader2, MessageSquare, AlertCircle, CheckCircle2, History, ChevronRight, Clock, MessageCircle, User, Paperclip, Image as ImageIcon, Download, FileText, Tag, MapPin, Building, DollarSign, Wallet, CreditCard, Plus, Trash2, Lock, Landmark, Bell, Save } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { SupportTicket, SupportMessage, SupportTag } from '../types';
 import { Teacher } from './TeachersManager';
@@ -69,7 +69,6 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
 
   useEffect(() => {
     if (isOpen) {
-        // Busca o histórico imediatamente para que o contador na aba apareça corretamente
         fetchHistory();
         fetchTags();
         if (senderRole === 'instructor') fetchClassesData();
@@ -195,6 +194,7 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
       if ((!replyText.trim() && !attachment) || !selectedTicket) return;
       setIsSendingReply(true);
       try {
+          // 1. Salva a nova mensagem
           await appBackend.addSupportMessage({
               ticketId: selectedTicket.id,
               senderId: senderId,
@@ -204,10 +204,27 @@ export const SupportTicketModal: React.FC<SupportTicketModalProps> = ({ isOpen, 
               attachmentUrl: attachment?.url,
               attachmentName: attachment?.name
           } as any);
+
+          // 2. IMPORTANTE: Atualiza o chamado principal para status 'open' e atualiza a data
+          // Isso faz o chamado subir na lista do admin e sinaliza que precisa de resposta.
+          const updatedTicket: SupportTicket = {
+              ...selectedTicket,
+              status: 'open', // Volta para aberto para o admin ver
+              updatedAt: new Date().toISOString()
+          };
+          await appBackend.saveSupportTicket(updatedTicket);
+          
           setReplyText('');
           setAttachment(null);
           await fetchThread(selectedTicket.id);
-      } catch (e) { alert("Erro ao enviar mensagem."); } finally { setIsSendingReply(false); }
+          // Atualiza localmente o status do ticket selecionado para refletir a mudança
+          setSelectedTicket(updatedTicket);
+          fetchHistory(); // Recarrega a lista de chamados
+      } catch (e) { 
+          alert("Erro ao enviar mensagem."); 
+      } finally { 
+          setIsSendingReply(false); 
+      }
   };
 
   const totalExpenses = useMemo(() => {
@@ -334,7 +351,7 @@ ${expensesText}
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Atendimento Interno VOLL</p>
               </div>
           </div>
-          {!isSuccess && <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>}
+          {!isSuccess && <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"><X size={24}/></button>}
         </div>
 
         <div className="flex bg-slate-50 border-b px-8 gap-6 shrink-0">
@@ -593,7 +610,7 @@ ${expensesText}
                                 </div>
                                 <h4 className="text-xl font-black text-slate-800">{selectedTicket.subject}</h4>
                                 <div className="space-y-4">
-                                    <div className="flex justify-start"><div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]"><span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem {selectedTicket.senderRole === 'admin' ? 'da VOLL' : 'Inicial'}:</span><p className="text-sm text-slate-600 leading-relaxed italic whitespace-pre-wrap">{selectedTicket.message}</p><span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span></div></div>
+                                    <div className="flex justify-start"><div className="bg-white p-5 rounded-2xl rounded-tl-none border shadow-sm max-w-[85%]"><span className="block text-[10px] font-black text-slate-400 uppercase mb-2">Mensagem {selectedTicket.senderRole === 'admin' ? 'da VOLL' : 'Inicial'}:</span><p className="text-sm text-slate-700 leading-relaxed font-medium italic whitespace-pre-wrap">{selectedTicket.message}</p><span className="block text-right text-[9px] text-slate-400 mt-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span></div></div>
                                     {thread.map(msg => (
                                         <div key={msg.id} className={clsx("flex", msg.senderRole === 'admin' ? "justify-start" : "justify-end")}>
                                             <div className={clsx("p-4 rounded-2xl shadow-sm max-w-[85%] relative border", msg.senderRole === 'admin' ? "bg-indigo-50 border-indigo-100 rounded-tl-none" : "bg-white border-slate-100 rounded-tr-none")}>

@@ -132,8 +132,9 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
+    // Fix: line 136 - Property 'primary_key' does not exist on type 'Partial<SavedPreset>'. Changed to primaryKey.
     const payload = {
-      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primary_key, interval_minutes: preset.interval_minutes, created_by_name: preset.createdByName
+      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
@@ -439,7 +440,15 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
-      id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
+      id: d.id, 
+      title: d.title, 
+      content: d.content, 
+      city: d.city, 
+      contractDate: d.contract_date, 
+      status: d.status, 
+      folderId: d.folder_id, 
+      signers: d.signers, 
+      createdAt: d.created_at
     }));
   },
 
@@ -603,6 +612,7 @@ export const appBackend = {
     if (ws.id && ws.id.length > 10) {
       const { data, error } = await supabase.from('crm_workshops').update(payload).eq('id', ws.id).select().single();
       if (error) throw error;
+      // Fix: return correctly mapped data from supabase single result, using 'data' instead of 'd'
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
     } else {
       const { data, error = null } = await supabase.from('crm_workshops').insert([payload]).select().single();
@@ -668,11 +678,11 @@ export const appBackend = {
       status: d.status, 
       team: d.team, 
       voucherLink1: d.voucher_link1, 
-      testDate: d.test_date, 
+      testDate: d.test_date, // fixed property mapping
       voucherLink2: d.voucher_link2, 
       voucherLink3: d.voucher_link3, 
-      boletosLink: d.boletos_link, 
-      negotiationReference: d.negotiation_reference, 
+      boletosLink: d.boletos_link, // fixed property mapping
+      negotiationReference: d.negotiation_reference, // fixed property mapping
       attachments: d.attachments, 
       createdAt: d.created_at
     }));
@@ -881,7 +891,7 @@ export const appBackend = {
     const payload = {
       type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico,
       item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate,
-      studio_id: record.studioId || null, tracking_code: record.tracking_code, observations: record.observations,
+      studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations,
       conference_date: record.conferenceDate || null, attachments: record.attachments
     };
     if (record.id) await supabase.from('crm_inventory').update(payload).eq('id', record.id);

@@ -755,7 +755,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                   <div className="p-8 space-y-6">
                       <div>
                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome da Tag</label>
-                          <input type="text" className="w-full px-4 py-2.5 border rounded-xl font-bold bg-slate-50 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-teal-500" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Dúvida Técnica..." autoFocus />
+                          <input type="text" className="w-full px-4 py-2.5 border rounded-xl font-bold bg-slate-50 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-teal-50" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Dúvida Técnica..." autoFocus />
                       </div>
                       <div>
                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Cor de Identificação</label>
@@ -831,7 +831,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                           </div>
                           <div className="flex items-start gap-2 bg-white/50 p-3 rounded-xl">
                               <AlertCircle size={14} className="text-indigo-400 shrink-0 mt-0.5" />
-                              <p className="text-[10px] text-indigo-600 leading-relaxed"><strong>Instruções:</strong> No painel da Evolution, vá em <strong>Webhook > Events</strong> e cole este link. Ative os eventos de <em>MESSAGES_UPSERT</em> e <em>SEND_MESSAGE</em> para sincronizar as conversas.</p>
+                              <p className="text-[10px] text-indigo-600 leading-relaxed"><strong>Instruções:</strong> No painel da Evolution, vá em <strong>Webhook &gt; Events</strong> e cole este link. Ative os eventos de <em>MESSAGES_UPSERT</em> e <em>SEND_MESSAGE</em> para sincronizar as conversas.</p>
                           </div>
                       </div>
 

@@ -316,7 +316,7 @@ NOTIFY pgrst, 'reload schema';
                     {isLoadingBanners ? <Loader2 className="animate-spin mx-auto text-orange-600"/> : banners.length === 0 ? (
                         <div className="col-span-full p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhum banner cadastrado.</div>
                     ) : banners.map(b => (
-                        <div key={b.id} className="border rounded-xl overflow-hidden group shadow-sm hover:shadow-md transition-shadow">
+                        <div key={b.id} className="border rounded-xl overflow-hidden group shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
                             <img src={b.imageUrl} className="w-full h-32 object-cover" />
                             <div className="p-4 flex items-center justify-between bg-slate-50">
                                 <div><p className="font-bold text-xs">{b.title}</p><p className="text-[10px] text-slate-400 uppercase">{b.targetAudience}</p></div>
@@ -571,7 +571,7 @@ NOTIFY pgrst, 'reload schema';
                           <div className="space-y-6">
                               <input placeholder="Nome do Nível" className="w-full px-4 py-2 border rounded-xl font-bold" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} />
                               <div className="relative">
-                                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">R$</span>
                                   <input type="number" placeholder="Valor Honorário (R$)" className="w-full pl-9 pr-4 py-2 border rounded-xl font-bold text-rose-600" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value) || 0})} />
                               </div>
                               <textarea placeholder="Observações e Critérios do Nível..." className="w-full px-4 py-2 border rounded-xl h-32 resize-none outline-none" value={editingLevel.observations} onChange={e => setEditingLevel({...editingLevel, observations: e.target.value})} />
@@ -639,6 +639,55 @@ NOTIFY pgrst, 'reload schema';
                                       {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Banner
                                   </button>
                               </div>
+                          </div>
+                      )}
+
+                      {/* FORM COURSE INFO / PORTAL */}
+                      {editingCourseInfo && (
+                          <div className="space-y-6">
+                              <div>
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome do Curso</label>
+                                  <input 
+                                      className="w-full px-4 py-2.5 border-2 border-slate-100 rounded-xl font-bold text-slate-800 focus:border-blue-500 outline-none transition-all" 
+                                      value={editingCourseInfo.courseName} 
+                                      onChange={e => setEditingCourseInfo({...editingCourseInfo, courseName: e.target.value})} 
+                                      placeholder="Ex: Formação Completa em Pilates" 
+                                  />
+                              </div>
+
+                              <div>
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Detalhes Técnicos e Ementa</label>
+                                  <textarea 
+                                      className="w-full px-4 py-2.5 border-2 border-slate-100 rounded-xl text-sm h-32 resize-none outline-none focus:border-blue-500 transition-all" 
+                                      value={editingCourseInfo.details} 
+                                      onChange={e => setEditingCourseInfo({...editingCourseInfo, details: e.target.value})} 
+                                      placeholder="Descreva os tópicos abordados, módulos e carga horária..." 
+                                  />
+                              </div>
+
+                              <div>
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Materiais de Apoio (Drive/Links)</label>
+                                  <textarea 
+                                      className="w-full px-4 py-2.5 border-2 border-slate-100 rounded-xl text-sm h-32 resize-none outline-none focus:border-blue-500 transition-all font-mono" 
+                                      value={editingCourseInfo.materials} 
+                                      onChange={e => setEditingCourseInfo({...editingCourseInfo, materials: e.target.value})} 
+                                      placeholder="Links para apostilas, vídeos complementares ou pastas no Drive..." 
+                                  />
+                              </div>
+
+                              <div>
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Pré-requisitos para Instrutores</label>
+                                  <textarea 
+                                      className="w-full px-4 py-2.5 border-2 border-slate-100 rounded-xl text-sm h-32 resize-none outline-none focus:border-blue-500 transition-all" 
+                                      value={editingCourseInfo.requirements} 
+                                      onChange={e => setEditingCourseInfo({...editingCourseInfo, requirements: e.target.value})} 
+                                      placeholder="Quais competências o instrutor deve ter para ministrar este curso?" 
+                                  />
+                              </div>
+
+                              <button onClick={handleSaveCourseInfo} disabled={isSavingItem} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-600/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Informações de Curso
+                              </button>
                           </div>
                       )}
 

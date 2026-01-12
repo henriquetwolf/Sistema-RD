@@ -106,7 +106,7 @@ export const appBackend = {
           module: log.module,
           details: log.details,
           // Fixed: property should be recordId, not record_id
-          record_id: log.recordId
+          record_id: (log as any).recordId
       }]);
   },
 
@@ -1207,6 +1207,9 @@ export const appBackend = {
       id: d.id,
       name: d.name,
       triggerType: d.trigger_type,
+      pipelineName: d.pipeline_name,
+      stageId: d.stage_id,
+      productType: d.product_type,
       productId: d.product_id,
       messageTemplate: d.message_template,
       isActive: d.is_active,
@@ -1220,6 +1223,9 @@ export const appBackend = {
       id: rule.id || crypto.randomUUID(),
       name: rule.name,
       trigger_type: rule.triggerType,
+      pipeline_name: rule.pipelineName,
+      stage_id: rule.stageId,
+      product_type: rule.productType,
       product_id: rule.productId,
       message_template: rule.messageTemplate,
       is_active: rule.isActive,

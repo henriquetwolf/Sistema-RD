@@ -575,8 +575,11 @@ export interface Franchise {
 export interface WAAutomationRule {
   id: string;
   name: string;
-  triggerType: 'deal_closed';
-  productId: string; // ID do produto que dispara a automação
+  triggerType: 'crm_stage_reached';
+  pipelineName: string;
+  stageId: string;
+  productType?: 'Digital' | 'Presencial' | 'Evento' | '';
+  productId: string; // ID ou Nome do produto/curso
   messageTemplate: string;
   isActive: boolean;
   createdAt: string;

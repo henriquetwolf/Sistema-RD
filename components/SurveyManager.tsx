@@ -1,11 +1,11 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { SurveyModel, FormQuestion, QuestionType, FormStyle, FormAnswer, Product, FormFolder } from '../types';
 import { FormViewer } from './FormViewer';
 import { 
   Plus, Trash2, Eye, Edit2, ArrowLeft, Save, Copy, Target, Share2, 
   Loader2, Check, List, CheckSquare as CheckboxIcon, Inbox, Download, Table, 
-  Layout, Folder, FolderPlus, MoveRight, LayoutGrid, X, PieChart
+  Layout, Folder, FolderPlus, MoveRight, LayoutGrid, X, PieChart, Type,
+  AlignLeft, Hash, Palette, RefreshCw, Sparkle, Info
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -33,10 +33,20 @@ const INITIAL_SURVEY: SurveyModel = {
   }
 };
 
+const QUESTION_TYPES: { id: QuestionType; label: string; icon: any }[] = [
+    { id: 'text', label: 'Pergunta Curta', icon: Type },
+    { id: 'paragraph', label: 'Feedback Longo', icon: AlignLeft },
+    { id: 'select', label: 'Múltipla Escolha', icon: List },
+    { id: 'checkbox', label: 'Caixas de Seleção', icon: CheckboxIcon },
+    { id: 'number', label: 'Nota / Número', icon: Hash },
+];
+
 export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
-  const [view, setView] = useState<'list' | 'editor' | 'responses'>('list');
+  const [view, setView] = useState<'list' | 'editor' | 'responses' | 'preview'>('list');
+  const [editorStep, setEditorStep] = useState<'editor' | 'design' | 'targeting'>('editor');
   const [surveys, setSurveys] = useState<SurveyModel[]>([]);
   const [folders, setFolders] = useState<FormFolder[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [currentSurvey, setCurrentSurvey] = useState<SurveyModel>(INITIAL_SURVEY);
   const [loading, setLoading] = useState(false);
@@ -44,20 +54,23 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
   const [showMoveModal, setShowMoveModal] = useState<SurveyModel | null>(null);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
-  const [submissions, setSubmissions] = useState<any[]>([]);
-  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
 
-  useEffect(() => { loadSurveys(); loadFolders(); }, []);
+  useEffect(() => { loadSurveys(); loadFolders(); loadMetadata(); }, []);
 
   const loadSurveys = async () => { 
       setLoading(true); 
-      try { const data = await appBackend.getSurveys(); setSurveys(data); } 
-      catch (e) { console.error(e); } 
-      finally { setLoading(false); }
+      try { const data = await appBackend.getSurveys(); setSurveys(data); } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
   const loadFolders = async () => {
     try { const data = await appBackend.getFormFolders('survey'); setFolders(data); } catch (e) {}
+  };
+
+  const loadMetadata = async () => {
+      try {
+          const { data } = await appBackend.client.from('crm_products').select('id, name').eq('status', 'active');
+          if (data) setProducts(data);
+      } catch (e) {}
   };
 
   const handleSaveSurvey = async () => { 
@@ -67,18 +80,22 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
           await appBackend.saveSurvey(currentSurvey); 
           await loadSurveys(); 
           setView('list'); 
-      } catch (e: any) { alert("Erro ao salvar pesquisa."); } 
-      finally { setIsSaving(false); }
+      } catch (e: any) { alert("Erro ao salvar."); } finally { setIsSaving(false); }
   };
 
   const handleDelete = async (id: string) => { 
       const target = surveys.find(s => s.id === id); 
-      if(window.confirm(`Excluir a pesquisa "${target?.title}"? Todas as respostas também serão apagadas.`)) { 
+      if(window.confirm(`Excluir a pesquisa "${target?.title}"?`)) { 
           try {
               await appBackend.deleteForm(id); 
               setSurveys(prev => prev.filter(s => s.id !== id));
-          } catch (e: any) { alert("Erro ao excluir: " + e.message); }
+          } catch (e: any) { alert("Erro ao excluir."); }
       } 
+  };
+
+  const addQuestion = (type: QuestionType) => {
+      const newQ: FormQuestion = { id: crypto.randomUUID(), title: 'Nova Pergunta', type, required: true, options: (type === 'select' || type === 'checkbox') ? ['Excelente', 'Bom', 'Regular'] : undefined };
+      setCurrentSurvey(prev => ({ ...prev, questions: [...prev.questions, newQ] }));
   };
 
   const filteredSurveys = useMemo(() => {
@@ -102,73 +119,105 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
     setShowMoveModal(null);
   };
 
-  const handleViewResponses = async (survey: SurveyModel) => {
-    setCurrentSurvey(survey);
-    setView('responses');
-    setLoadingSubmissions(true);
-    try {
-        const data = await appBackend.getFormSubmissions(survey.id);
-        setSubmissions(data);
-    } catch (e) { alert("Erro ao carregar respostas."); } 
-    finally { setLoadingSubmissions(false); }
-  };
-
-  if (view === 'responses') return (
-      <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl overflow-hidden border border-slate-200 animate-in fade-in">
-          <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm z-20">
-              <div className="flex items-center gap-4">
-                  <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
-                  <h2 className="text-lg font-bold text-slate-800">{currentSurvey.title} ({submissions.length} respostas)</h2>
-              </div>
-              <button onClick={() => setView('list')} className="bg-slate-800 text-white px-4 py-2 rounded-lg font-bold text-sm">Fechar</button>
-          </div>
-          <div className="flex-1 overflow-auto bg-slate-50 p-6">
-              {loadingSubmissions ? <Loader2 className="animate-spin mx-auto text-amber-600" /> : (
-                  <div className="bg-white rounded-xl border overflow-hidden">
-                    <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 border-b">
-                            <tr><th className="p-3">Data</th>{currentSurvey.questions.map(q => <th key={q.id} className="p-3">{q.title}</th>)}</tr>
-                        </thead>
-                        <tbody>
-                            {submissions.map((sub, i) => (
-                                <tr key={i} className="border-b">
-                                    <td className="p-3 text-slate-400">{new Date(sub.created_at).toLocaleString()}</td>
-                                    {currentSurvey.questions.map(q => {
-                                        const ans = sub.answers?.find((a: any) => a.questionId === q.id);
-                                        return <td key={q.id} className="p-3">{ans?.value || '-'}</td>;
-                                    })}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                  </div>
-              )}
-          </div>
-      </div>
-  );
+  if (view === 'preview') return <FormViewer form={currentSurvey} onBack={() => setView('editor')} />;
 
   if (view === 'editor') return (
       <div className="flex flex-col h-[calc(100vh-140px)] bg-amber-50 rounded-xl overflow-hidden border border-slate-200 animate-in fade-in">
           <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shrink-0 shadow-sm z-20">
-              <button onClick={() => setView('list')} className="text-slate-500 hover:text-slate-700 font-medium text-sm flex items-center gap-1"><ArrowLeft size={16} /> Sair</button>
-              <button onClick={handleSaveSurvey} disabled={isSaving} className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2">
-                  {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Pesquisa
-              </button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-12">
-              <div className="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm space-y-6">
-                  <input type="text" className="w-full text-2xl font-black border-b outline-none focus:border-amber-500" value={currentSurvey.title} onChange={e => setCurrentSurvey({...currentSurvey, title: e.target.value})} placeholder="Título da Pesquisa..." />
-                  <textarea className="w-full h-20 text-slate-500 outline-none resize-none" value={currentSurvey.description} onChange={e => setCurrentSurvey({...currentSurvey, description: e.target.value})} placeholder="Instruções para o aluno..." />
-                  <div className="pt-6 border-t">
-                      <button onClick={() => setCurrentSurvey({...currentSurvey, questions: [...currentSurvey.questions, { id: crypto.randomUUID(), title: 'Nova Pergunta', type: 'text', required: true }]})} className="text-amber-600 font-bold text-sm">+ Adicionar Pergunta</button>
+              <div className="flex items-center gap-4">
+                  <button onClick={() => setView('list')} className="text-slate-500 hover:text-slate-700 font-medium text-sm flex items-center gap-1"><ArrowLeft size={16} /> Sair</button>
+                  <div className="h-6 w-px bg-slate-200"></div>
+                  <div className="flex bg-slate-100 p-1 rounded-lg">
+                      <button onClick={() => setEditorStep('editor')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md", editorStep === 'editor' ? "bg-white shadow text-amber-700" : "text-slate-500")}>Perguntas</button>
+                      <button onClick={() => setEditorStep('design')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md", editorStep === 'design' ? "bg-white shadow text-amber-700" : "text-slate-500")}>Design</button>
+                      <button onClick={() => setEditorStep('targeting')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md", editorStep === 'targeting' ? "bg-white shadow text-amber-700" : "text-slate-500")}>Público & Alvo</button>
                   </div>
-                  {currentSurvey.questions.map((q, idx) => (
-                      <div key={q.id} className="p-4 border rounded-xl space-y-2 group">
-                          <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Pergunta {idx + 1}</span><button onClick={() => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.filter(x => x.id !== q.id)})} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></div>
-                          <input type="text" className="w-full font-bold outline-none" value={q.title} onChange={e => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.map(x => x.id === q.id ? {...x, title: e.target.value} : x)})} />
-                      </div>
-                  ))}
               </div>
+              <div className="flex gap-3">
+                  <button onClick={() => setView('preview')} className="text-slate-600 hover:text-amber-600 font-bold text-sm flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50"><Eye size={18} /> Prévia</button>
+                  <button onClick={handleSaveSurvey} disabled={isSaving} className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center gap-2 transition-all">
+                      {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Pesquisa
+                  </button>
+              </div>
+          </div>
+
+          <div className="flex-1 flex overflow-hidden">
+              {editorStep === 'editor' ? (
+                  <>
+                    <aside className="w-72 bg-white border-r border-slate-200 overflow-y-auto p-4 shrink-0 shadow-sm">
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Campos de Pesquisa</h3>
+                        <div className="grid grid-cols-1 gap-2">
+                            {QUESTION_TYPES.map(qt => (
+                                <button key={qt.id} onClick={() => addQuestion(qt.id)} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:border-amber-200 hover:bg-amber-50 text-sm font-medium text-slate-700 transition-all text-left">
+                                    <qt.icon size={18} className="text-amber-500" /> {qt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </aside>
+                    <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                        <div className="max-w-3xl mx-auto space-y-6">
+                            <div className="bg-white rounded-xl border-t-[10px] border-amber-500 p-8 shadow-sm">
+                                <input type="text" className="w-full text-3xl font-bold text-slate-800 border-b-2 border-transparent focus:border-amber-100 focus:ring-0 p-0 mb-4 outline-none" value={currentSurvey.title} onChange={e => setCurrentSurvey({...currentSurvey, title: e.target.value})} placeholder="Título da Pesquisa" />
+                                <textarea className="w-full text-slate-500 border-none focus:ring-0 p-0 resize-none h-12 outline-none" value={currentSurvey.description} onChange={e => setCurrentSurvey({...currentSurvey, description: e.target.value})} placeholder="Instruções para o aluno..." />
+                            </div>
+                            <div className="space-y-4 pb-20">
+                                {currentSurvey.questions.map((q, idx) => (
+                                    <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm group hover:border-amber-300 transition-all">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase">Pergunta {idx + 1}</span>
+                                            <button onClick={() => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.filter(x => x.id !== q.id)})} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
+                                        </div>
+                                        <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-lg text-sm font-bold" value={q.title} onChange={e => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.map(x => x.id === q.id ? {...x, title: e.target.value} : x)})} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </main>
+                  </>
+              ) : editorStep === 'design' ? (
+                  <main className="flex-1 overflow-y-auto p-12 bg-white">
+                      <div className="max-w-xl mx-auto space-y-8">
+                          <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3 border-b pb-4"><Palette className="text-amber-600" /> Estilo Visual</h3>
+                          <div className="grid grid-cols-1 gap-6">
+                              <div><label className="block text-sm font-bold text-slate-700 mb-2">Cor Principal</label><input type="color" className="w-full h-12 border rounded-lg cursor-pointer" value={currentSurvey.style?.primaryColor} onChange={e => setCurrentSurvey({...currentSurvey, style: {...currentSurvey.style!, primaryColor: e.target.value}})} /></div>
+                              <div><label className="block text-sm font-bold text-slate-700 mb-2">Texto do Botão</label><input type="text" className="w-full px-4 py-2 border rounded-lg text-sm" value={currentSurvey.style?.buttonText} onChange={e => setCurrentSurvey({...currentSurvey, style: {...currentSurvey.style!, buttonText: e.target.value}})} /></div>
+                          </div>
+                      </div>
+                  </main>
+              ) : (
+                  <main className="flex-1 overflow-y-auto p-12 bg-white">
+                      <div className="max-w-2xl mx-auto space-y-10">
+                          <section>
+                              <h3 className="text-lg font-bold flex items-center gap-2 mb-6 border-b pb-4"><Target className="text-indigo-600" /> Direcionamento Interno</h3>
+                              <div className="space-y-6">
+                                  <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 space-y-6">
+                                      <div>
+                                          <label className="block text-xs font-black text-indigo-700 uppercase mb-2">Público Alvo</label>
+                                          <select className="w-full px-4 py-2.5 border rounded-xl bg-white font-bold" value={currentSurvey.targetType} onChange={e => setCurrentSurvey({...currentSurvey, targetType: e.target.value as any})}>
+                                              <option value="all">Qualquer Aluno</option>
+                                              <option value="product_type">Por Tipo de Produto</option>
+                                              <option value="specific_product">Curso Específico</option>
+                                          </select>
+                                      </div>
+                                      {currentSurvey.targetType === 'specific_product' && (
+                                          <div className="animate-in fade-in slide-in-from-top-1">
+                                              <label className="block text-xs font-black text-indigo-700 uppercase mb-2">Selecione o Curso</label>
+                                              <select className="w-full px-4 py-2.5 border rounded-xl bg-white" value={currentSurvey.targetProductName} onChange={e => setCurrentSurvey({...currentSurvey, targetProductName: e.target.value})}>
+                                                  <option value="">Escolha...</option>
+                                                  {products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                              </select>
+                                          </div>
+                                      )}
+                                      <label className="flex items-center gap-3 p-4 bg-white rounded-xl border border-indigo-100 cursor-pointer">
+                                          <input type="checkbox" checked={currentSurvey.onlyIfFinished} onChange={e => setCurrentSurvey({...currentSurvey, onlyIfFinished: e.target.checked})} className="w-5 h-5 rounded text-indigo-600" />
+                                          <div className="flex-1"><span className="font-bold text-indigo-900 block">Exibir apenas após finalizar curso?</span></div>
+                                      </label>
+                                  </div>
+                              </div>
+                          </section>
+                      </div>
+                  </main>
+              )}
           </div>
       </div>
   );
@@ -177,10 +226,10 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
     <div className="animate-in fade-in h-full flex flex-col md:flex-row gap-6 pb-20">
       <aside className="w-full md:w-64 flex-shrink-0 space-y-4">
         <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm font-medium mb-4"><ArrowLeft size={16} /> Voltar</button>
-        <button onClick={() => { setCurrentSurvey(INITIAL_SURVEY); setView('editor'); }} className="w-full bg-amber-500 text-white px-4 py-2.5 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 mb-4 active:scale-95"><Plus size={18} /> Nova Pesquisa</button>
+        <button onClick={() => { setCurrentSurvey(INITIAL_SURVEY); setView('editor'); setEditorStep('editor'); }} className="w-full bg-amber-500 text-white px-4 py-2.5 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 mb-4 active:scale-95"><Plus size={18} /> Nova Pesquisa</button>
         <div className="bg-white rounded-xl border border-slate-200 p-2 shadow-sm">
             <button onClick={() => setCurrentFolderId(null)} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors", currentFolderId === null ? "bg-amber-50 text-amber-700" : "text-slate-600 hover:bg-slate-50")}><LayoutGrid size={16} /> Todas</button>
-            <div className="mt-4 flex items-center justify-between px-3 mb-2"><p className="text-xs font-bold text-slate-400 uppercase">Pastas de Pesquisa</p><button onClick={() => setShowFolderModal(true)}><FolderPlus size={16}/></button></div>
+            <div className="mt-4 flex items-center justify-between px-3 mb-2"><p className="text-xs font-bold text-slate-400 uppercase">Pastas</p><button onClick={() => setShowFolderModal(true)}><FolderPlus size={16}/></button></div>
             {folders.map(f => <button key={f.id} onClick={() => setCurrentFolderId(f.id)} className={clsx("w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm", currentFolderId === f.id ? "bg-amber-50 text-amber-700" : "text-slate-600 hover:bg-slate-50")}><Folder size={16}/> {f.name}</button>)}
         </div>
       </aside>
@@ -192,13 +241,13 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                         <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-50 text-amber-700 uppercase">Pesquisa Interna</span>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => setShowMoveModal(s)} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-100 rounded-lg"><MoveRight size={16}/></button>
-                            <button onClick={() => { setCurrentSurvey(s); setView('editor'); }} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-100 rounded-lg"><Edit2 size={16} /></button>
+                            <button onClick={() => { setCurrentSurvey(s); setView('editor'); setEditorStep('editor'); }} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-100 rounded-lg"><Edit2 size={16} /></button>
                             <button onClick={() => handleDelete(s.id)} className="p-1.5 text-slate-400 hover:text-red-500 bg-slate-100 rounded-lg"><Trash2 size={16} /></button>
                         </div>
                     </div>
                     <h3 className="font-black text-slate-800 text-lg mb-1">{s.title}</h3>
                     <div className="grid grid-cols-2 gap-3 mt-6">
-                        <button onClick={() => handleViewResponses(s)} className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center transition-colors">
+                        <button className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center transition-colors">
                             <PieChart size={20} className="mb-1 text-amber-500" />
                             <p className="text-[10px] font-bold text-slate-400 uppercase">Respostas</p>
                             <p className="text-xl font-black text-slate-800">{s.submissionsCount || 0}</p>
@@ -222,19 +271,6 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                       <button onClick={() => setShowFolderModal(false)} className="px-3 py-1.5 text-sm text-slate-600">Cancelar</button>
                       <button onClick={handleCreateFolder} className="px-3 py-1.5 bg-amber-600 text-white rounded text-sm font-bold">Criar</button>
                   </div>
-              </div>
-          </div>
-      )}
-
-      {showMoveModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-                  <h3 className="font-bold text-slate-800 mb-4">Mover Pesquisa</h3>
-                  <div className="space-y-1">
-                      <button onClick={() => handleMoveSurvey(showMoveModal, null)} className="w-full text-left px-3 py-2 rounded text-sm hover:bg-amber-50">Sem Pasta (Raiz)</button>
-                      {folders.map(f => <button key={f.id} onClick={() => handleMoveSurvey(showMoveModal, f.id)} className="w-full text-left px-3 py-2 rounded text-sm hover:bg-amber-50">{f.name}</button>)}
-                  </div>
-                  <button onClick={() => setShowMoveModal(null)} className="mt-4 w-full py-2 text-xs font-bold text-slate-400">Fechar</button>
               </div>
           </div>
       )}

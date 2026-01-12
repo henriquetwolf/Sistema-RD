@@ -472,7 +472,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Tags do Sistema de Suporte</h3>
-                    <button onClick={() => setEditingTag({ id: '', name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">+ Nova Tag</button>
+                    <button onClick={() => setEditingTag({ id: '', name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">+ Novo Tag</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {isLoadingTags ? <Loader2 className="animate-spin mx-auto text-emerald-600"/> : supportTags.map(t => (
@@ -732,7 +732,7 @@ NOTIFY pgrst, 'reload schema';
                                       <button onClick={() => setEditingTrigger({...editingTrigger, payloadJson: DEFAULT_WEBHOOK_PAYLOAD})} className="text-[10px] font-black text-indigo-600 uppercase hover:underline">Resetar Padrão</button>
                                   </div>
                                   <textarea className="w-full px-4 py-3 border rounded-2xl text-[11px] font-mono h-64 bg-slate-900 text-emerald-400 custom-scrollbar-dark" value={editingTrigger.payloadJson} onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} placeholder="Payload JSON" />
-                                  <p className="text-[9px] text-slate-400 mt-2">Use {{placeholders}} para mapear campos do CRM automaticamente.</p>
+                                  <p className="text-[9px] text-slate-400 mt-2">Use {'{{placeholders}}'} para mapear campos do CRM automaticamente.</p>
                               </div>
                               <button onClick={handleSaveTrigger} disabled={isSavingItem} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2">
                                   {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Gatilho de Automação

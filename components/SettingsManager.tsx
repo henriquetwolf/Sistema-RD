@@ -285,8 +285,53 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   }, [allProducts, editingCompany, productSearch]);
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V51 (MODULO DE CONTRATOS E ESTRUTURA)
--- 1. Tabelas de Contratos e Pastas
+-- SCRIPT DE FUNDAÇÃO CRM V52 (CURSOS ONLINE E ESTRUTURA)
+-- 1. Tabelas de Cursos Online (Módulos e Aulas)
+CREATE TABLE IF NOT EXISTS public.crm_online_courses (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    title text NOT NULL,
+    description text,
+    price numeric DEFAULT 0,
+    payment_link text,
+    image_url text,
+    certificate_template_id uuid,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.crm_course_modules (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    course_id uuid REFERENCES public.crm_online_courses(id) ON DELETE CASCADE,
+    title text NOT NULL,
+    order_index integer DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS public.crm_course_lessons (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    module_id uuid REFERENCES public.crm_course_modules(id) ON DELETE CASCADE,
+    title text NOT NULL,
+    description text,
+    video_url text,
+    materials jsonb DEFAULT '[]'::jsonb,
+    order_index integer DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS public.crm_student_course_access (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    student_deal_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
+    course_id uuid REFERENCES public.crm_online_courses(id) ON DELETE CASCADE,
+    unlocked_at timestamp with time zone DEFAULT now(),
+    UNIQUE(student_deal_id, course_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.crm_student_lesson_progress (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    student_deal_id uuid REFERENCES public.crm_deals(id) ON DELETE CASCADE,
+    lesson_id uuid REFERENCES public.crm_course_lessons(id) ON DELETE CASCADE,
+    completed_at timestamp with time zone DEFAULT now(),
+    UNIQUE(student_deal_id, lesson_id)
+);
+
+-- 2. Tabelas de Contratos e Pastas
 CREATE TABLE IF NOT EXISTS public.crm_contract_folders (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text NOT NULL,
@@ -305,7 +350,7 @@ CREATE TABLE IF NOT EXISTS public.crm_contracts (
     created_at timestamp with time zone DEFAULT now()
 );
 
--- 2. Tabelas de Certificados
+-- 3. Tabelas de Certificados
 CREATE TABLE IF NOT EXISTS public.crm_certificates (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
@@ -325,33 +370,35 @@ CREATE TABLE IF NOT EXISTS public.crm_student_certificates (
     issued_at timestamp with time zone DEFAULT now()
 );
 
--- 3. LIMPEZA DE REGISTROS ÓRFÃOS E RELACIONAMENTOS
-DELETE FROM public.crm_student_certificates WHERE student_deal_id NOT IN (SELECT id FROM public.crm_deals);
-DELETE FROM public.crm_student_certificates WHERE certificate_template_id NOT IN (SELECT id FROM public.crm_certificates);
-
-ALTER TABLE public.crm_student_certificates DROP CONSTRAINT IF EXISTS crm_student_certificates_student_deal_id_fkey;
-ALTER TABLE public.crm_student_certificates ADD CONSTRAINT crm_student_certificates_student_deal_id_fkey FOREIGN KEY (student_deal_id) REFERENCES public.crm_deals(id) ON DELETE CASCADE;
-
-ALTER TABLE public.crm_student_certificates DROP CONSTRAINT IF EXISTS crm_student_certificates_certificate_template_id_fkey;
-ALTER TABLE public.crm_student_certificates ADD CONSTRAINT crm_student_certificates_certificate_template_id_fkey FOREIGN KEY (certificate_template_id) REFERENCES public.crm_certificates(id) ON DELETE CASCADE;
-
 -- 4. POLÍTICAS DE ACESSO
+ALTER TABLE public.crm_online_courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crm_course_modules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crm_course_lessons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crm_student_course_access ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crm_student_lesson_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_contracts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_contract_folders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_student_certificates ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Acesso Total Autenticado Contratos" ON public.crm_contracts;
-CREATE POLICY "Acesso Total Autenticado Contratos" ON public.crm_contracts FOR ALL TO authenticated USING (true) WITH CHECK (true);
+-- Políticas simplificadas para facilitar sincronização
+DROP POLICY IF EXISTS "Acesso Total Autenticado Cursos" ON public.crm_online_courses;
+CREATE POLICY "Acesso Total Autenticado Cursos" ON public.crm_online_courses FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Acesso Total Autenticado Pastas" ON public.crm_contract_folders;
-CREATE POLICY "Acesso Total Autenticado Pastas" ON public.crm_contract_folders FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Acesso Total Autenticado Modulos" ON public.crm_course_modules;
+CREATE POLICY "Acesso Total Autenticado Modulos" ON public.crm_course_modules FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Leitura Pública Contratos" ON public.crm_contracts;
-CREATE POLICY "Leitura Pública Contratos" ON public.crm_contracts FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Acesso Total Autenticado Aulas" ON public.crm_course_lessons;
+CREATE POLICY "Acesso Total Autenticado Aulas" ON public.crm_course_lessons FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Leitura Pública de Diplomas" ON public.crm_student_certificates;
-CREATE POLICY "Leitura Pública de Diplomas" ON public.crm_student_certificates FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Leitura Pública Cursos" ON public.crm_online_courses;
+CREATE POLICY "Leitura Pública Cursos" ON public.crm_online_courses FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Leitura Pública Modulos" ON public.crm_course_modules;
+CREATE POLICY "Leitura Pública Modulos" ON public.crm_course_modules FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Leitura Pública Aulas" ON public.crm_course_lessons;
+CREATE POLICY "Leitura Pública Aulas" ON public.crm_course_lessons FOR SELECT USING (true);
 
 -- 5. Permissões de Rede
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
@@ -523,7 +570,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Categorias de Suporte (Tags)</h3>
-                    <button onClick={() => setEditingTag({ name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Nova Tag</button>
+                    <button onClick={() => setEditingTag({ name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Tag</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {supportTags.map(tag => (
@@ -555,7 +602,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold">Manutenção e Sincronização</h3></div>
                 <p className="text-sm text-slate-500 mb-6">Execute este reparo se notar erros de banco de dados ou colunas ausentes na liberação de alunos.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V51</button> : (
+                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V52</button> : (
                     <div className="relative">
                         <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto">{generateRepairSQL()}</pre>
                         <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs">{sqlCopied ? 'Copiado!' : 'Copiar'}</button>

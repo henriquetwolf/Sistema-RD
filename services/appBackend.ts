@@ -137,11 +137,11 @@ export const appBackend = {
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     } else {
       const { data, error = null } = await supabase.from(TABLE_NAME).insert([payload]).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primary_key: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+      return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
     }
   },
 
@@ -237,14 +237,14 @@ export const appBackend = {
 
   getModuleLessons: async (moduleId: string): Promise<CourseLesson[]> => {
       if (!isConfigured) return [];
-      const { data, error = null } = await supabase.from('crm_course_lessons').select('*').eq('moduleId', moduleId).order('order_index', { ascending: true });
+      const { data, error = null } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index', { ascending: true });
       if (error) throw error;
       return (data || []).map((d: any) => ({ 
           id: d.id, 
-          moduleId: d.moduleId, 
+          moduleId: d.module_id, 
           title: d.title, 
           description: d.description, 
-          video_url: d.video_url,
+          videoUrl: d.video_url,
           materials: d.materials || [], 
           orderIndex: d.order_index
       }));
@@ -253,7 +253,7 @@ export const appBackend = {
   saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
       if (!isConfigured) return;
       const payload = { 
-          moduleId: lesson.moduleId, 
+          module_id: lesson.moduleId, 
           title: lesson.title, 
           description: lesson.description, 
           video_url: lesson.videoUrl, 

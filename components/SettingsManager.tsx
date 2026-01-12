@@ -6,7 +6,7 @@ import {
     Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
     Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search,
     Play, Pause, Calendar, Smartphone, Link as LinkIcon, ChevronDown, Award, ShoppingBag, Zap, Filter,
-    List, ArrowRight, Braces, Sparkles, RefreshCw, BookOpen, Book, ListTodo, LifeBuoy, Hash, Tag as TagIcon
+    List, ArrowRight, Braces, Sparkles, RefreshCw, BookOpen, Book, ListTodo, LifeBuoy, Hash, Tag as TagIcon, Terminal
 } from 'lucide-react';
 import { appBackend, CompanySetting, WebhookTrigger, Pipeline } from '../services/appBackend';
 import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, Product, CourseInfo, SupportTag } from '../types';
@@ -26,7 +26,34 @@ interface UnifiedProduct {
     type: 'Digital' | 'Presencial' | 'Evento';
 }
 
-type SettingsTab = 'visual' | 'company' | 'banners' | 'connection_plug' | 'roles' | 'instructor_levels' | 'course_info' | 'support_tags' | 'logs' | 'database';
+type SettingsTab = 'visual' | 'company' | 'banners' | 'connection_plug' | 'roles' | 'instructor_levels' | 'course_info' | 'support_tags' | 'logs' | 'database' | 'sql_script';
+
+const DEFAULT_WEBHOOK_PAYLOAD = JSON.stringify({
+  "data_venda": "{{data_venda}}",
+  "situacao_venda": "Aprovada",
+  "numero_venda": "{{deal_number}}",
+  "nome_cliente": "{{nome_cliente}}",
+  "email_cliente": "{{email_cliente}}",
+  "telefone_cliente": "{{telefone_cliente}}",
+  "cpf_cnpj_cliente": "{{cpf_cnpj_cliente}}",
+  "nome_vendedor": "{{nome_vendedor}}",
+  "tipo_produto": "{{tipo_produto}}",
+  "curso_produto": "{{curso_produto}}",
+  "fonte_negociacao": "{{fonte_negociacao}}",
+  "campanha": "{{campanha}}",
+  "funil_vendas": "{{funil_vendas}}",
+  "etapa_funil": "{{etapa_funil}}",
+  "cidade_cliente": "{{cidade_cliente}}",
+  "turma_modulo": "{{turma_modulo}}",
+  "valor_total": "{{valor_total}}",
+  "forma_pagamento": "{{forma_pagamento}}",
+  "valor_entrada": "{{valor_entrada}}",
+  "numero_parcelas": "{{numero_parcelas}}",
+  "valor_parcelas": "{{valor_parcelas}}",
+  "dia_primeiro_vencimento": "{{dia_primeiro_vencimento}}",
+  "link_comprovante": "{{link_comprovante}}",
+  "codigo_transacao": "{{codigo_transacao}}"
+}, null, 2);
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ 
   onLogoChange, 
@@ -39,7 +66,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const [preview, setPreview] = useState<string | null>(currentLogo);
   const [securityMargin, setSecurityMargin] = useState<number>(5);
   const [isSaved, setIsSaved] = useState(false);
-  const [showSql, setShowSql] = useState(false);
   const [sqlCopied, setSqlCopied] = useState(false);
 
   // States para CRUDs
@@ -103,7 +129,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       { id: 'global_settings', label: 'Configurações' }
   ];
 
-  // Carregamento inicial
   useEffect(() => {
     const fetchGlobalSettings = async () => {
         const margin = await appBackend.getInventorySecurityMargin();
@@ -114,7 +139,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
     fetchGlobalSettings();
   }, []);
 
-  // Carregamento dinâmico por aba
   useEffect(() => {
       if (activeTab === 'roles') fetchRoles();
       else if (activeTab === 'banners') fetchBanners();
@@ -134,7 +158,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const fetchInstructorLevels = async () => { setIsLoadingLevels(true); try { const data = await appBackend.getInstructorLevels(); setInstructorLevels(data); } catch (e) {} finally { setIsLoadingLevels(false); } };
   const fetchCourseInfos = async () => { setIsLoadingCourseInfo(true); try { const data = await appBackend.getCourseInfos(); setCourseInfos(data); } catch (e) {} finally { setIsLoadingCourseInfo(false); } };
   const fetchSupportTags = async () => { setIsLoadingTags(true); try { const data = await appBackend.getSupportTags(); setSupportTags(data); } catch (e) {} finally { setIsLoadingTags(false); } };
-  const fetchLogs = async () => { setIsLoadingLogs(true); try { const data = await appBackend.getActivityLogs(200); setLogs(data); } catch (e) {} finally { setIsLoadingLogs(false); } };
+  const fetchLogs = async () => { setIsLoadingLogs(true); try { const data = await appBackend.getActivityLogs(100); setLogs(data); } catch (e) {} finally { setIsLoadingLogs(false); } };
 
   const fetchUnifiedProducts = async () => {
       try {
@@ -152,6 +176,14 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
           }
           setAllProducts(unified.sort((a, b) => a.name.localeCompare(b.name)));
       } catch (e) {}
+  };
+
+  const handleBannerImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files?.[0]) {
+          const reader = new FileReader();
+          reader.onloadend = () => setEditingBanner(prev => prev ? { ...prev, imageUrl: reader.result as string } : null);
+          reader.readAsDataURL(e.target.files[0]);
+      }
   };
 
   const handleSaveGlobal = async () => {
@@ -204,7 +236,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V53
+-- SCRIPT DE FUNDAÇÃO CRM V54
 CREATE TABLE IF NOT EXISTS public.crm_online_courses (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
@@ -241,6 +273,16 @@ CREATE TABLE IF NOT EXISTS public.crm_webhook_triggers (
     created_at timestamp with time zone DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS public.crm_activity_logs (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_name text,
+    action text,
+    module text,
+    details text,
+    record_id text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
 NOTIFY pgrst, 'reload schema';
   `.trim();
 
@@ -264,7 +306,8 @@ NOTIFY pgrst, 'reload schema';
                 { id: 'course_info', label: 'Portal', color: 'text-blue-700' },
                 { id: 'support_tags', label: 'Tags', color: 'text-emerald-700' },
                 { id: 'logs', label: 'Logs', color: 'text-slate-600' },
-                { id: 'database', label: 'Banco', color: 'text-amber-700' }
+                { id: 'database', label: 'Banco', color: 'text-amber-700' },
+                { id: 'sql_script', label: 'SQL', color: 'text-red-700' }
             ].map(tab => (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id as SettingsTab)} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === tab.id ? `bg-white ${tab.color} shadow-sm` : "text-slate-500 hover:text-slate-700")}>{tab.label}</button>
             ))}
@@ -342,13 +385,19 @@ NOTIFY pgrst, 'reload schema';
         {activeTab === 'connection_plug' && (
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold flex items-center gap-2"><Zap className="text-indigo-600"/> Connection Plug</h3>
-                    <button onClick={() => setEditingTrigger({ pipelineName: 'Padrão', stageId: 'closed' })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700">+ Novo Gatilho</button>
+                    <div className="flex items-center gap-3">
+                        <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600"><Zap size={24}/></div>
+                        <div>
+                            <h3 className="text-lg font-bold">Automação: Connection Plug</h3>
+                            <p className="text-xs text-slate-500">Configuração de Webhooks e Gatilhos por etapa do CRM.</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setEditingTrigger({ pipelineName: 'Padrão', stageId: 'closed', payloadJson: DEFAULT_WEBHOOK_PAYLOAD })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700">+ Novo Gatilho</button>
                 </div>
                 <div className="space-y-4">
                     {isLoadingTriggers ? <Loader2 className="animate-spin mx-auto text-indigo-600"/> : webhookTriggers.map(t => (
-                        <div key={t.id} className="p-4 border rounded-xl flex items-center justify-between group">
-                            <div><p className="font-bold text-slate-800">{t.pipelineName} • {t.stageId}</p><p className="text-[10px] text-slate-400 uppercase">Webhook Automático</p></div>
+                        <div key={t.id} className="p-4 border rounded-xl flex items-center justify-between group hover:border-indigo-300 transition-all">
+                            <div><p className="font-bold text-slate-800">{t.pipelineName} • {t.stageId}</p><p className="text-[10px] text-slate-400 uppercase">Disparo de Automação Externo</p></div>
                             <div className="flex gap-2"><button onClick={() => setEditingTrigger(t)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteWebhookTrigger(t.id!).then(fetchWebhookTriggers)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
                         </div>
                     ))}
@@ -411,7 +460,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Categorias de Suporte</h3>
-                    <button onClick={() => setEditingTag({ name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">+ Nova Tag</button>
+                    <button onClick={() => setEditingTag({ name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">+ Novo Tag</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {isLoadingTags ? <Loader2 className="animate-spin mx-auto text-emerald-600"/> : supportTags.map(tag => (
@@ -424,11 +473,30 @@ NOTIFY pgrst, 'reload schema';
             </div>
         )}
 
+        {activeTab === 'logs' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold flex items-center gap-2"><History size={20}/> Histórico de Auditoria</h3>
+                    <button onClick={fetchLogs} className="p-2 text-slate-400 hover:text-indigo-600 transition-all"><RefreshCw size={18} className={clsx(isLoadingLogs && "animate-spin")} /></button>
+                </div>
+                <div className="space-y-3">
+                    {isLoadingLogs ? <Loader2 className="animate-spin mx-auto text-slate-400"/> : logs.map(log => (
+                        <div key={log.id} className="p-3 border-b border-slate-50 text-xs flex items-start gap-4 animate-in fade-in">
+                            <span className="text-slate-400 w-32 shrink-0 font-mono">{new Date(log.createdAt).toLocaleString()}</span>
+                            <span className="font-bold text-slate-700 w-40 shrink-0 truncate">{log.userName}</span>
+                            <span className="flex-1 text-slate-600 leading-relaxed"><span className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-black uppercase mr-2">{log.action}</span> {log.details}</span>
+                        </div>
+                    ))}
+                    {logs.length === 0 && !isLoadingLogs && <div className="text-center py-10 text-slate-300 italic">Nenhum log de atividade recente.</div>}
+                </div>
+            </div>
+        )}
+
         {activeTab === 'database' && (
             <div className="space-y-6">
                 <div className="bg-white rounded-xl border border-slate-200 p-8">
                     <div className="flex justify-between items-center mb-6">
-                        <div className="flex items-center gap-3"><Layers className="text-amber-600"/><h3 className="text-lg font-bold">Sincronização</h3></div>
+                        <div className="flex items-center gap-3"><Layers className="text-amber-600"/><h3 className="text-lg font-bold">Sincronização de Banco</h3></div>
                         <button onClick={onStartWizard} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 flex items-center gap-2"><Plus size={16}/> Nova Conexão</button>
                     </div>
                     <div className="space-y-3">
@@ -440,16 +508,24 @@ NOTIFY pgrst, 'reload schema';
                         ))}
                     </div>
                 </div>
+            </div>
+        )}
 
-                <div className="bg-slate-900 rounded-xl border border-slate-800 p-8">
-                    <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600"/><h3 className="text-lg font-bold text-white">Script SQL de Reparo</h3></div>
-                    <p className="text-sm text-slate-400 mb-6">Copie e execute no SQL Editor do Supabase se houver erros estruturais.</p>
-                    {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold">Gerar Script V53</button> : (
-                        <div className="relative">
-                            <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-64">{generateRepairSQL()}</pre>
-                            <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs">{sqlCopied ? 'Copiado!' : 'Copiar'}</button>
-                        </div>
-                    )}
+        {activeTab === 'sql_script' && (
+            <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 animate-in zoom-in-95 duration-200">
+                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V54</h3></div>
+                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados, criando as tabelas necessárias para as novas funcionalidades (Cursos, Logs, Banners e Plug). Copie e execute no **SQL Editor** do Supabase.</p>
+                <div className="relative">
+                    <pre className="bg-black text-emerald-400 p-6 rounded-2xl text-[10px] font-mono overflow-auto max-h-[400px] shadow-inner custom-scrollbar-dark border border-slate-800">
+                        {generateRepairSQL()}
+                    </pre>
+                    <button onClick={copySql} className="absolute top-4 right-4 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border border-slate-700">
+                        {sqlCopied ? <><Check size={14}/> Copiado!</> : <><Copy size={14}/> Copiar Script</>}
+                    </button>
+                </div>
+                <div className="mt-6 flex items-start gap-3 bg-red-500/10 p-4 rounded-xl border border-red-500/20">
+                    <AlertTriangle className="text-red-500 shrink-0" size={18}/>
+                    <p className="text-[10px] text-red-200 leading-snug uppercase font-black">CUIDADO: Execute este script apenas no ambiente de produção correto. Ele não apaga dados existentes (IF NOT EXISTS), mas modifica o esquema global do banco.</p>
                 </div>
             </div>
         )}
@@ -458,7 +534,7 @@ NOTIFY pgrst, 'reload schema';
       {/* MODAL GENÉRICO PARA CRUDS */}
       {(editingRole || editingBanner || editingCompany || editingLevel || editingCourseInfo || editingTag || editingTrigger) && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
                   <div className="p-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="font-bold uppercase text-xs tracking-widest text-slate-500">Configuração de Item</h3>
                       <button onClick={() => { setEditingRole(null); setEditingBanner(null); setEditingCompany(null); setEditingLevel(null); setEditingCourseInfo(null); setEditingTag(null); setEditingTrigger(null); }}><X size={24}/></button>
@@ -486,22 +562,57 @@ NOTIFY pgrst, 'reload schema';
                       {/* FORM BANNER */}
                       {editingBanner && (
                           <div className="space-y-6">
-                              <input placeholder="Título do Banner" className="w-full px-4 py-2 border rounded-lg" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} />
-                              <input placeholder="URL da Imagem" className="w-full px-4 py-2 border rounded-lg font-mono text-xs" value={editingBanner.imageUrl} onChange={e => setEditingBanner({...editingBanner, imageUrl: e.target.value})} />
-                              <div className="grid grid-cols-2 gap-4">
-                                  <select className="px-4 py-2 border rounded-lg bg-white" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
-                                      <option value="student">Alunos</option><option value="instructor">Instrutores</option>
-                                  </select>
-                                  <label className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg border cursor-pointer"><input type="checkbox" checked={editingBanner.active} onChange={e => setEditingBanner({...editingBanner, active: e.target.checked})}/><span className="text-xs font-bold">Ativo</span></label>
+                              <div>
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Título do Banner</label>
+                                  <input type="text" className="w-full px-4 py-3 border rounded-2xl font-bold bg-slate-50" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} placeholder="Ex: Campanha Black Friday" />
                               </div>
-                              <button onClick={handleSaveBanner} disabled={isSavingItem} className="w-full py-3 bg-orange-600 text-white rounded-xl font-bold">{isSavingItem ? 'Salvando...' : 'Salvar Banner'}</button>
+                              
+                              <div>
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Imagem do Banner</label>
+                                  <div className="flex flex-col gap-4">
+                                      <div className="flex items-center gap-4">
+                                          <button 
+                                            onClick={() => bannerFileInputRef.current?.click()}
+                                            className="bg-orange-50 border-2 border-orange-200 text-orange-700 px-6 py-2.5 rounded-xl font-black text-xs uppercase hover:bg-orange-100 transition-all flex items-center gap-2 shadow-sm"
+                                          >
+                                              <Upload size={16}/> Selecionar Arquivo
+                                          </button>
+                                          <input 
+                                            ref={bannerFileInputRef}
+                                            type="file" 
+                                            className="hidden" 
+                                            accept="image/*" 
+                                            onChange={handleBannerImageUpload} 
+                                          />
+                                      </div>
+                                      {editingBanner.imageUrl && (
+                                          <div className="w-full h-32 rounded-2xl overflow-hidden border shadow-sm bg-slate-100">
+                                              <img src={editingBanner.imageUrl} className="w-full h-full object-cover" alt="Preview" />
+                                          </div>
+                                      )}
+                                  </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Público Alvo</label>
+                                      <select className="w-full px-4 py-3 border rounded-2xl bg-white text-sm font-bold" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
+                                          <option value="student">Alunos</option><option value="instructor">Instrutores</option>
+                                      </select>
+                                  </div>
+                                  <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Estado</label>
+                                      <label className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-2xl border-2 border-slate-100 cursor-pointer hover:bg-white transition-all"><input type="checkbox" checked={editingBanner.active} onChange={e => setEditingBanner({...editingBanner, active: e.target.checked})} className="w-5 h-5 rounded text-orange-600"/><span className="text-xs font-black uppercase text-slate-700">Ativo no Portal</span></label>
+                                  </div>
+                              </div>
+                              <button onClick={handleSaveBanner} disabled={isSavingItem} className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 disabled:opacity-50">{isSavingItem ? 'Salvando...' : 'Salvar Banner'}</button>
                           </div>
                       )}
 
                       {/* FORM LEVEL */}
                       {editingLevel && (
                           <div className="space-y-6">
-                              <input placeholder="Nome do Nível" className="w-full px-4 py-2 border rounded-lg" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} />
+                              <input placeholder="Nome do Nível" className="w-full px-4 py-2 border rounded-lg font-bold" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} />
                               <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="number" placeholder="Valor do Honorário" className="w-full pl-10 pr-4 py-2 border rounded-lg font-bold" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value) || 0})} /></div>
                               <button onClick={handleSaveLevel} disabled={isSavingItem} className="w-full py-3 bg-rose-600 text-white rounded-xl font-bold">{isSavingItem ? 'Salvando...' : 'Salvar Nível'}</button>
                           </div>
@@ -527,19 +638,33 @@ NOTIFY pgrst, 'reload schema';
                           </div>
                       )}
 
-                      {/* FORM TRIGGER */}
+                      {/* FORM TRIGGER (PLUG) */}
                       {editingTrigger && (
-                          <div className="space-y-6">
-                              <label className="block text-xs font-bold text-slate-400 mb-1">Pipeline</label>
-                              <input className="w-full px-4 py-2 border rounded-lg" value={editingTrigger.pipelineName} onChange={e => setEditingTrigger({...editingTrigger, pipelineName: e.target.value})} />
-                              <label className="block text-xs font-bold text-slate-400 mb-1">ID da Etapa</label>
-                              <input className="w-full px-4 py-2 border rounded-lg font-mono" value={editingTrigger.stageId} onChange={e => setEditingTrigger({...editingTrigger, stageId: e.target.value})} />
-                              <textarea placeholder="Payload JSON (Opcional)" className="w-full px-4 py-2 border rounded-lg h-32 font-mono text-xs" value={editingTrigger.payloadJson} onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} />
-                              <button onClick={handleSaveTrigger} disabled={isSavingItem} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold">{isSavingItem ? 'Salvando...' : 'Salvar Gatilho'}</button>
+                          <div className="space-y-6 animate-in slide-in-from-bottom-2">
+                              <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 flex gap-3 text-xs text-indigo-700"><Zap size={18}/><p>Defina qual **Funil** e **Etapa** devem disparar o webhook para integração externa.</p></div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Pipeline / Funil</label>
+                                    <input className="w-full px-4 py-2 border border-slate-200 bg-slate-50 focus:bg-white rounded-xl text-sm font-bold transition-all outline-none" value={editingTrigger.pipelineName} onChange={e => setEditingTrigger({...editingTrigger, pipelineName: e.target.value})} placeholder="Padrão" />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">ID da Etapa (Closed, Contacted...)</label>
+                                    <input className="w-full px-4 py-2 border border-slate-200 bg-slate-50 focus:bg-white rounded-xl text-sm font-bold font-mono transition-all outline-none" value={editingTrigger.stageId} onChange={e => setEditingTrigger({...editingTrigger, stageId: e.target.value})} placeholder="closed" />
+                                </div>
+                              </div>
+                              <div>
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Payload JSON Customizado</label>
+                                  <textarea className="w-full px-4 py-3 border border-slate-200 bg-slate-50 focus:bg-white rounded-2xl text-xs font-mono h-48 outline-none transition-all" value={editingTrigger.payloadJson} onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} />
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                      <span className="text-[8px] font-black text-slate-400 border px-1 rounded uppercase">Placeholders:</span>
+                                      {["{{data_venda}}", "{{nome_cliente}}", "{{email_cliente}}", "{{turma_modulo}}"].map(p => <span key={p} className="text-[8px] font-black bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded cursor-copy" title="Clique para copiar" onClick={() => navigator.clipboard.writeText(p)}>{p}</span>)}
+                                  </div>
+                              </div>
+                              <button onClick={handleSaveTrigger} disabled={isSavingItem} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-600/20 active:scale-95 disabled:opacity-50">{isSavingItem ? 'Salvando...' : 'Salvar Gatilho'}</button>
                           </div>
                       )}
                       
-                      {/* FORM COMPANY (MODAL ESPECIAL) */}
+                      {/* FORM COMPANY */}
                       {editingCompany && (
                           <div className="space-y-6">
                               <div className="grid grid-cols-2 gap-4">

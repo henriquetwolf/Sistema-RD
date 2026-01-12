@@ -1,13 +1,14 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Settings, Save, Smartphone, Loader2, Wifi, 
   WifiOff, RefreshCw, Link2, AlertCircle, Copy, Zap, Info, Plus, 
   Trash2, Edit2, CheckCircle2, XCircle, ShoppingBag, MessageSquare, X, Filter, Target, Package, ChevronRight,
-  LayoutGrid
+  LayoutGrid, History, Calendar, User, Phone, MessageCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend, Pipeline } from '../services/appBackend';
-import { WAAutomationRule, Product, EventModel } from '../types';
+import { WAAutomationRule, Product, EventModel, WAAutomationLog } from '../types';
 
 interface WAConfig {
   mode: 'evolution' | 'twilio';
@@ -20,7 +21,7 @@ interface WAConfig {
 }
 
 export const WhatsAppAutomation: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'config' | 'automations'>('automations');
+  const [activeTab, setActiveTab] = useState<'config' | 'automations' | 'logs'>('automations');
   const [config, setConfig] = useState<WAConfig>({
       mode: 'evolution',
       evolutionMethod: 'qr',
@@ -32,10 +33,11 @@ export const WhatsAppAutomation: React.FC = () => {
   });
   
   const [rules, setRules] = useState<WAAutomationRule[]>([]);
+  const [logs, setLogs] = useState<WAAutomationLog[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [events, setEvents] = useState<EventModel[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [isLoadingRules, setIsLoadingRules] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   const [showRuleModal, setShowRuleModal] = useState(false);
   const [editingRule, setEditingRule] = useState<Partial<WAAutomationRule> | null>(null);
 
@@ -53,6 +55,12 @@ export const WhatsAppAutomation: React.FC = () => {
     loadCrmMetadata();
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      loadLogs();
+    }
+  }, [activeTab]);
+
   const loadConfig = async () => {
     const c = await appBackend.getWhatsAppConfig();
     if (c) {
@@ -62,11 +70,19 @@ export const WhatsAppAutomation: React.FC = () => {
   };
 
   const loadRules = async () => {
-      setIsLoadingRules(true);
+      setIsLoadingData(true);
       try {
           const data = await appBackend.getWAAutomationRules();
           setRules(data);
-      } catch (e) { console.error(e); } finally { setIsLoadingRules(false); }
+      } catch (e) { console.error(e); } finally { setIsLoadingData(false); }
+  };
+
+  const loadLogs = async () => {
+      setIsLoadingData(true);
+      try {
+          const data = await appBackend.getWAAutomationLogs();
+          setLogs(data);
+      } catch (e) { console.error(e); } finally { setIsLoadingData(false); }
   };
 
   const loadCrmMetadata = async () => {
@@ -218,6 +234,7 @@ export const WhatsAppAutomation: React.FC = () => {
             </div>
             <div className="flex bg-slate-100 p-1 rounded-2xl shadow-inner">
                 <button onClick={() => setActiveTab('automations')} className={clsx("px-8 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === 'automations' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>Automações</button>
+                <button onClick={() => setActiveTab('logs')} className={clsx("px-8 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === 'logs' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>Histórico</button>
                 <button onClick={() => setActiveTab('config')} className={clsx("px-8 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all", activeTab === 'config' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>Config. Instância</button>
             </div>
         </div>
@@ -320,6 +337,60 @@ export const WhatsAppAutomation: React.FC = () => {
                     </div>
                 </div>
             </div>
+        ) : activeTab === 'logs' ? (
+            <div className="space-y-6 animate-in fade-in duration-500">
+                <div className="bg-white rounded-[2.5rem] p-10 border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3"><History className="text-indigo-600"/> Disparos Realizados</h3>
+                            <p className="text-sm text-slate-500 font-medium">Histórico completo das mensagens enviadas pelos robôs de automação.</p>
+                        </div>
+                        <button onClick={loadLogs} className="p-3 text-slate-400 hover:text-indigo-600 transition-all hover:bg-indigo-50 rounded-xl">
+                            <RefreshCw size={20} className={isLoadingData ? "animate-spin" : ""}/>
+                        </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50 border-b border-slate-100">
+                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Calendar size={12}/> Data</th>
+                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"><Zap size={12} className="inline mr-1"/> Gatilho</th>
+                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"><User size={12} className="inline mr-1"/> Aluno</th>
+                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"><Phone size={12} className="inline mr-1"/> Telefone</th>
+                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"><MessageCircle size={12} className="inline mr-1"/> Mensagem</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {isLoadingData && logs.length === 0 ? (
+                                    <tr><td colSpan={5} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-indigo-600" /></td></tr>
+                                ) : logs.length === 0 ? (
+                                    <tr><td colSpan={5} className="py-20 text-center text-slate-300 italic">Nenhum disparo registrado ainda.</td></tr>
+                                ) : logs.map(log => (
+                                    <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className="text-[11px] font-bold text-slate-600">{new Date(log.createdAt).toLocaleDateString()}</span>
+                                            <span className="text-[9px] block text-slate-400 font-mono uppercase">{new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{log.ruleName}</span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-xs font-bold text-slate-800">{log.studentName}</span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-xs font-mono text-slate-500 font-bold">{log.phone}</span>
+                                        </td>
+                                        <td className="px-6 py-4 max-w-xs">
+                                            <p className="text-xs text-slate-500 truncate" title={log.message}>{log.message}</p>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         ) : (
             <div className="space-y-6">
                 <div className="bg-white rounded-[3rem] p-12 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-10">
@@ -338,7 +409,7 @@ export const WhatsAppAutomation: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {isLoadingRules ? (
+                    {isLoadingData ? (
                         <div className="col-span-full flex justify-center py-20"><Loader2 className="animate-spin text-indigo-600" size={48}/></div>
                     ) : rules.length === 0 ? (
                         <div className="col-span-full text-center py-32 bg-white rounded-[3rem] border-2 border-dashed border-slate-100 text-slate-400">
@@ -423,7 +494,7 @@ export const WhatsAppAutomation: React.FC = () => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Etapa de Gatilho (Trigger)</label>
+                                    <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Etapa de Gatilho (Trigger)</label>
                                     <div className="relative group">
                                         <Target className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={20} />
                                         <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all disabled:opacity-50" value={editingRule?.stageId} onChange={e => setEditingRule(prev => prev ? {...prev, stageId: e.target.value} : null)} disabled={!editingRule?.pipelineName}>
@@ -435,7 +506,7 @@ export const WhatsAppAutomation: React.FC = () => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Tipo de Produto (Filtro)</label>
+                                    <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Tipo de Produto (Filtro)</label>
                                     <div className="relative group">
                                         <LayoutGrid className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={20} />
                                         <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all" value={editingRule?.productType} onChange={e => setEditingRule(prev => prev ? {...prev, productType: e.target.value as any, productId: ''} : null)}>
@@ -449,7 +520,7 @@ export const WhatsAppAutomation: React.FC = () => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Produto / Curso de Origem</label>
+                                    <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Produto / Curso de Origem</label>
                                     <div className="relative group">
                                         <ShoppingBag className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={20} />
                                         <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all" value={editingRule?.productId} onChange={e => setEditingRule(prev => prev ? {...prev, productId: e.target.value} : null)}>

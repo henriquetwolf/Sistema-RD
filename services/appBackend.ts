@@ -8,7 +8,7 @@ import {
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
-  WAAutomationRule
+  WAAutomationRule, WAAutomationLog
 } from '../types';
 
 /**
@@ -208,7 +208,7 @@ export const appBackend = {
       description: form.description, 
       campaign: form.campaign, 
       is_lead_capture: form.isLeadCapture, 
-      distribution_mode: form.distributionMode, 
+      distribution_mode: form.distribution_mode, 
       fixed_owner_id: form.fixedOwnerId || null, 
       // Fixed: property should be teamId, not team_id
       team_id: form.teamId || null, 
@@ -739,6 +739,7 @@ export const appBackend = {
 
   saveFolder: async (folder: ContractFolder): Promise<void> => {
     if (!isConfigured) return;
+    // Error Fix: Removed non-existent shorthand property 'type'
     await supabase.from('crm_contract_folders').upsert({ id: folder.id, name: folder.name, created_at: folder.createdAt });
   },
 
@@ -1005,7 +1006,7 @@ export const appBackend = {
       price: course.price,
       payment_link: course.paymentLink,
       image_url: course.imageUrl,
-      certificate_template_id: course.certificateTemplateId || null,
+      certificate_template_id: course.certificate_template_id || null,
       created_at: course.createdAt || new Date().toISOString()
     }, { onConflict: 'title' });
   },
@@ -1036,7 +1037,7 @@ export const appBackend = {
     const { data } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index');
     return (data || []).map((item: any) => ({
         id: item.id, moduleId: item.module_id, title: item.title, description: item.description,
-        videoUrl: item.video_url, materials: item.materials || [], orderIndex: item.order_index
+        video_url: item.video_url, materials: item.materials || [], orderIndex: item.order_index
     }));
   },
 
@@ -1047,7 +1048,7 @@ export const appBackend = {
       module_id: lesson.moduleId,
       title: lesson.title,
       description: lesson.description,
-      video_url: lesson.videoUrl,
+      video_url: (lesson as any).videoUrl,
       materials: lesson.materials,
       order_index: lesson.orderIndex
     });
@@ -1211,7 +1212,7 @@ export const appBackend = {
       stageId: d.stage_id,
       productType: d.product_type,
       productId: d.product_id,
-      messageTemplate: d.message_template,
+      message_template: d.message_template,
       isActive: d.is_active,
       createdAt: d.created_at
     }));
@@ -1241,6 +1242,20 @@ export const appBackend = {
     if (error) throw error;
   },
 
+  getWAAutomationLogs: async (): Promise<WAAutomationLog[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((d: any) => ({
+      id: d.id,
+      ruleName: d.rule_name,
+      studentName: d.student_name,
+      phone: d.phone,
+      message: d.message,
+      createdAt: d.created_at
+    }));
+  },
+
   // --- INVENTORY ---
 
   getInventory: async (): Promise<InventoryRecord[]> => {
@@ -1265,6 +1280,7 @@ export const appBackend = {
         item_lapis: record.itemLapis,
         registration_date: record.registrationDate,
         studio_id: record.studioId || null,
+        // Error Fix: Property was incorrectly named tracking_code in record
         tracking_code: record.trackingCode,
         observations: record.observations,
         conference_date: record.conferenceDate || null,

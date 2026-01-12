@@ -584,3 +584,12 @@ export interface WAAutomationRule {
   isActive: boolean;
   createdAt: string;
 }
+
+export interface WAAutomationLog {
+  id: string;
+  ruleName: string;
+  studentName: string;
+  phone: string;
+  message: string;
+  createdAt: string;
+}

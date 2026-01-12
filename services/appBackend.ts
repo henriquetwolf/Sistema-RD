@@ -125,7 +125,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from(TABLE_NAME).select('*').order('name');
     return (data || []).map(d => ({
-      id: d.id, name: d.name, url: d.url, key: d.key, tableName: d.table_name, primaryKey: d.primary_key, interval_minutes: d.interval_minutes, createdByName: d.created_by_name
+      id: d.id, name: d.name, url: d.url, key: d.key, table_name: d.table_name, primary_key: d.primary_key, interval_minutes: d.interval_minutes, createdByName: d.created_by_name
     }));
   },
 
@@ -732,12 +732,10 @@ export const appBackend = {
     if (ws.id && ws.id.length > 10) {
       const { data, error } = await supabase.from('crm_workshops').update(payload).eq('id', ws.id).select().single();
       if (error) throw error;
-      // FIXED: Corrected mapping using data instead of d
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
     } else {
       const { data, error = null } = await supabase.from('crm_workshops').insert([payload]).select().single();
       if (error) throw error;
-      // FIXED: Corrected mapping using data instead of d
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
     }
   },
@@ -759,12 +757,10 @@ export const appBackend = {
     if (blk.id && blk.id.length > 10) {
       const { data, error } = await supabase.from('crm_event_blocks').update(payload).eq('id', blk.id).select().single();
       if (error) throw error;
-      // FIXED: Corrected mapping using data instead of d
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     } else {
       const { data, error = null } = await supabase.from('crm_event_blocks').insert([payload]).select().single();
       if (error) throw error;
-      // FIXED: Corrected mapping using data instead of d
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     }
   },
@@ -951,8 +947,8 @@ export const appBackend = {
       id: d.id, 
       title: d.title, 
       imageUrl: d.image_url, 
-      link_url: d.link_url, 
-      target_audience: d.target_audience, 
+      linkUrl: d.link_url, 
+      targetAudience: d.target_audience, 
       active: d.active, 
       createdAt: d.created_at 
     }));

@@ -34,11 +34,11 @@ const INITIAL_FORM: FormModel = {
 
 const CRM_FIELDS = [
     { value: '', label: 'Nenhum (Campo Manual)' },
-    { value: 'contact_name', label: 'Nome Completo (Cliente)' },
+    { value: 'company_name', label: 'Nome Completo do Cliente *' },
     { value: 'email', label: 'E-mail' },
     { value: 'phone', label: 'Telefone / WhatsApp' },
     { value: 'cpf', label: 'CPF' },
-    { value: 'company_name', label: 'Nome da Empresa / Razão Social' },
+    { value: 'contact_name', label: 'Nome do Contato / Sócio (Opcional)' },
     { value: 'product_type', label: 'Tipo de Produto' },
     { value: 'payment_method', label: 'Forma de Pagamento' },
     { value: 'observation', label: 'Observações' },
@@ -416,7 +416,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                                         <option value="">Escolha uma equipe...</option>
                                                         {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                                       </select>
-                                                      <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1"><Info size={10}/> Os leads serão distribuídos em fila entre os membros ativos desta equipe.</p>
+                                                      <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1"><Info size={10}/> Os leads serão distribuídos sequencialmente entre os membros ativos desta equipe.</p>
                                                     </div>
                                                   )}
                                               </div>

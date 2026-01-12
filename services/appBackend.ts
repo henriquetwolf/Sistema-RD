@@ -280,7 +280,7 @@ export const appBackend = {
     // 3. Lógica de Captura de Lead (CRM Comercial)
     if (isLeadCapture) {
         try {
-            // Buscar configurações do formulário para saber o destino
+            // Buscar configurações do formulário para saber o destino e o rodízio
             const { data: form } = await supabase.from('crm_forms').select('*').eq('id', formId).single();
             if (!form) return;
 
@@ -304,23 +304,34 @@ export const appBackend = {
                 }
             });
 
-            // Garantir título caso não mapeado
-            if (!dealPayload.company_name && !dealPayload.contact_name) {
-                dealPayload.title = `Lead via ${form.title}`;
+            // Ajustar o Título do Negócio prioritariamente para o campo company_name (Nome Completo)
+            // Se não mapeado, tenta contact_name, se não, usa o título do form.
+            if (!dealPayload.company_name) {
+                dealPayload.company_name = dealPayload.contact_name;
+            }
+            
+            if (dealPayload.company_name) {
+                dealPayload.title = dealPayload.company_name;
             } else {
-                dealPayload.title = dealPayload.company_name || dealPayload.contact_name;
+                dealPayload.title = `Lead via ${form.title}`;
             }
 
             // Atribuição de Dono (Owner)
             let finalOwnerId = form.fixed_owner_id;
 
-            // Lógica de Round-Robin se configurado por equipe
+            // Lógica de Round-Robin Real (Sequencial e Persistente)
             if (form.distribution_mode === 'round-robin' && form.team_id) {
                 const { data: team } = await supabase.from('crm_teams').select('members').eq('id', form.team_id).single();
                 if (team && team.members && team.members.length > 0) {
-                    // Escolha aleatória entre membros (simulando rodízio simples sem persistência de estado)
-                    const idx = Math.floor(Math.random() * team.members.length);
-                    finalOwnerId = team.members[idx];
+                    // Pegar o último índice usado no formulário específico
+                    let lastIdx = form.last_assigned_index || 0;
+                    // Avançar para o próximo
+                    let nextIdx = (lastIdx + 1) % team.members.length;
+                    
+                    finalOwnerId = team.members[nextIdx];
+
+                    // Atualizar o formulário com o novo índice usado
+                    await supabase.from('crm_forms').update({ last_assigned_index: nextIdx }).eq('id', formId);
                 }
             }
             
@@ -339,7 +350,6 @@ export const appBackend = {
                     .eq('stage_id', newDeal.stage);
                 
                 if (triggers && triggers.length > 0) {
-                    // Disparar Webhook logic (Helper simplificado)
                     console.log("Lead capturado: Disparando Webhooks de automação...");
                 }
             }
@@ -708,7 +718,7 @@ export const appBackend = {
     const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
     return (data || []).map((item: any) => ({
         id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role,
-        content: item.content, attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at
+        content: item.content, attachment_url: item.attachment_url, attachment_name: item.attachment_name, createdAt: item.created_at
     }));
   },
 
@@ -862,9 +872,9 @@ export const appBackend = {
         title: item.title, 
         backgroundData: item.background_data, 
         backBackgroundData: item.back_background_data,
-        linkedProductId: item.linked_product_id, 
-        bodyText: item.body_text, 
-        layoutConfig: item.layout_config, 
+        linked_product_id: item.linked_product_id, 
+        body_text: item.body_text, 
+        layout_config: item.layout_config, 
         createdAt: item.created_at
     }));
   },
@@ -935,7 +945,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
     return (data || []).map((item: any) => ({
-        id: item.id, title: item.title, description: item.description, price: item.price, paymentLink: item.payment_link,
+        id: item.id, title: item.title, description: item.description, price: item.price, payment_link: item.payment_link,
         imageUrl: item.image_url, certificateTemplateId: item.certificate_template_id, createdAt: item.created_at
     }));
   },
@@ -1151,7 +1161,7 @@ export const appBackend = {
     return (data || []).map((item: any) => ({
         id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico,
         itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date,
-        studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations,
+        studioId: item.studio_id, tracking_code: item.tracking_code, observations: item.observations,
         conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at
     }));
   },

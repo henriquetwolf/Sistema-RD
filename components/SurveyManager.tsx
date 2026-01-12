@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { SurveyModel, FormQuestion, QuestionType, FormStyle, FormAnswer, Product } from '../types';
+import { SurveyModel, FormQuestion, QuestionType, FormStyle, FormAnswer, Product, FormFolder } from '../types';
 import { FormViewer } from './FormViewer';
 import { 
   Plus, MoreVertical, Trash2, Eye, Edit2, 
@@ -7,7 +7,7 @@ import {
   Type, AlignLeft, Mail, Phone, Calendar, Hash, Target, Share2, 
   Monitor, Palette, X, Image as ImageIcon, Users, User, ArrowRightLeft, Tag, Loader2,
   Layers, Check, List, CheckSquare as CheckboxIcon, ChevronDown, ListPlus, Inbox, Download, Table, Link2, Layout, Sparkles,
-  Filter, CheckCircle2, AlertTriangle, Briefcase, ShoppingBag, PieChart, Sparkle, Info, RefreshCw
+  Filter, CheckCircle2, AlertTriangle, Briefcase, ShoppingBag, PieChart, Sparkle, Info, RefreshCw, Folder, FolderPlus, MoveRight, LayoutGrid
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -30,6 +30,7 @@ const INITIAL_SURVEY: SurveyModel = {
   targetType: 'all',
   onlyIfFinished: true,
   isActive: true,
+  folderId: null,
   style: {
       backgroundType: 'color',
       backgroundColor: '#f1f5f9',
@@ -72,20 +73,34 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
   const [view, setView] = useState<'list' | 'editor' | 'preview' | 'responses'>('list');
   const [editorStep, setEditorStep] = useState<'editor' | 'design' | 'targeting'>('editor');
   const [surveys, setSurveys] = useState<SurveyModel[]>([]);
+  const [folders, setFolders] = useState<FormFolder[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [currentSurvey, setCurrentSurvey] = useState<SurveyModel>(INITIAL_SURVEY);
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  // Folder UI States
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showMoveModal, setShowMoveModal] = useState<SurveyModel | null>(null);
+
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
 
-  useEffect(() => { loadSurveys(); loadProducts(); }, []);
+  useEffect(() => { loadSurveys(); loadProducts(); loadFolders(); }, []);
 
   const loadSurveys = async () => { 
       setLoading(true); 
       try { const data = await appBackend.getSurveys(); setSurveys(data || []); } catch (e) { console.error(e); } finally { setLoading(false); }
+  };
+
+  const loadFolders = async () => {
+      try {
+          const data = await appBackend.getFormFolders();
+          setFolders(data || []);
+      } catch (e) {}
   };
 
   const loadProducts = async () => {
@@ -94,6 +109,39 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
           if (data) setProducts(data);
       } catch (e) {}
   };
+
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return;
+    const newFolder: FormFolder = {
+        id: crypto.randomUUID(),
+        name: newFolderName,
+        createdAt: new Date().toISOString()
+    };
+    await appBackend.saveFormFolder(newFolder);
+    await loadFolders();
+    setShowFolderModal(false);
+    setNewFolderName('');
+  };
+
+  const handleDeleteFolder = async (id: string) => {
+    if (window.confirm('Excluir esta pasta? As pesquisas não serão apagadas, apenas voltarão para a raiz.')) {
+        await appBackend.deleteFormFolder(id);
+        if (currentFolderId === id) setCurrentFolderId(null);
+        loadFolders();
+    }
+  };
+
+  const handleMoveSurvey = async (survey: SurveyModel, folderId: string | null) => {
+    const updated = { ...survey, folderId: folderId || null };
+    await appBackend.saveSurvey(updated);
+    await loadSurveys();
+    setShowMoveModal(null);
+  };
+
+  const filteredSurveys = useMemo(() => {
+    if (currentFolderId === null) return surveys;
+    return surveys.filter(s => s.folderId === currentFolderId);
+  }, [surveys, currentFolderId]);
 
   const handleEdit = (survey: SurveyModel) => { 
       setCurrentSurvey({ ...INITIAL_SURVEY, ...survey }); 
@@ -415,6 +463,21 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                           </div>
                                       </label>
                                   </div>
+
+                                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Folder size={14}/> Organização</h4>
+                                      <div>
+                                          <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">Mover para Pasta</label>
+                                          <select 
+                                              className="w-full px-4 py-2 border rounded-lg bg-white text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                                              value={currentSurvey.folderId || ''}
+                                              onChange={e => setCurrentSurvey({...currentSurvey, folderId: e.target.value || null})}
+                                          >
+                                              <option value="">Sem pasta (Raiz)</option>
+                                              {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                          </select>
+                                      </div>
+                                  </div>
                               </div>
                           </section>
                       </div>
@@ -425,63 +488,211 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
   );
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-            <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
-            <div><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><PieChart className="text-amber-500" /> Pesquisas de Satisfação</h2><p className="text-slate-500 text-sm">Crie NPS e feedbacks para o Portal do Aluno.</p></div>
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 h-full flex flex-col md:flex-row gap-6 pb-20">
+      
+      {/* SIDEBAR: Pastas */}
+      <aside className="w-full md:w-64 flex-shrink-0 space-y-4">
+        <div>
+            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm font-medium mb-4">
+                <ArrowLeft size={16} /> Voltar ao Painel
+            </button>
+            <button 
+                onClick={() => { setCurrentSurvey(INITIAL_SURVEY); setView('editor'); setEditorStep('editor'); }} 
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl font-bold shadow-lg shadow-amber-600/20 transition-all flex items-center justify-center gap-2 mb-4 active:scale-95"
+            >
+                <Plus size={18} /> Nova Pesquisa
+            </button>
         </div>
-        <div className="flex gap-2">
-            <button onClick={loadSurveys} className="p-2 text-slate-400 hover:text-amber-600 transition-all" title="Atualizar"><RefreshCw size={20} className={clsx(loading && "animate-spin")} /></button>
-            <button onClick={() => { setCurrentSurvey(INITIAL_SURVEY); setView('editor'); setEditorStep('editor'); }} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-amber-600/20 transition-all active:scale-95"><Plus size={18} /> Nova Pesquisa</button>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {loading ? (
-            <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
-                <Loader2 className="animate-spin text-amber-500" size={40}/>
-                <p className="font-bold text-sm uppercase tracking-widest">Carregando pesquisas...</p>
+        <div className="bg-white rounded-xl border border-slate-200 p-2 shadow-sm">
+            <p className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Navegação</p>
+            
+            <button 
+                onClick={() => setCurrentFolderId(null)}
+                className={clsx(
+                    "w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1",
+                    currentFolderId === null ? "bg-amber-50 text-amber-700" : "text-slate-600 hover:bg-slate-50"
+                )}
+            >
+                <span className="flex items-center gap-2"><LayoutGrid size={16} /> Todas as Pesquisas</span>
+                <span className="text-xs opacity-60 bg-white px-1.5 rounded-full border border-slate-100">{surveys.length}</span>
+            </button>
+
+            <div className="mt-4 flex items-center justify-between px-3 mb-2">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pastas</p>
+                <button onClick={() => setShowFolderModal(true)} className="text-slate-400 hover:text-amber-600 p-1 rounded-md hover:bg-amber-50 transition-colors" title="Nova Pasta">
+                    <FolderPlus size={16} />
+                </button>
             </div>
-        ) : surveys.length === 0 ? (
-            <div className="col-span-full text-center py-24 bg-white rounded-[2rem] border-2 border-dashed border-slate-200 text-slate-400">
-                <PieChart className="mx-auto mb-4 opacity-10" size={64} />
-                <p className="font-bold text-lg">Nenhuma pesquisa encontrada</p>
-                <p className="text-sm">Clique em "+ Nova Pesquisa" para começar a ouvir seus alunos.</p>
+
+            <div className="space-y-0.5 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+                {folders.map(f => {
+                    const count = surveys.filter(s => s.folderId === f.id).length;
+                    return (
+                        <div key={f.id} className="group relative">
+                            <button 
+                                onClick={() => setCurrentFolderId(f.id)}
+                                className={clsx(
+                                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                                    currentFolderId === f.id ? "bg-amber-50 text-amber-700" : "text-slate-600 hover:bg-slate-50"
+                                )}
+                            >
+                                <Folder size={16} className={currentFolderId === f.id ? "fill-amber-200 text-amber-600" : "text-slate-400 group-hover:text-amber-600"} />
+                                <span className="truncate flex-1 text-left">{f.name}</span>
+                                <span className="text-[10px] opacity-40">{count}</span>
+                            </button>
+                            <button 
+                                onClick={() => handleDeleteFolder(f.id)}
+                                className="absolute right-10 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Excluir Pasta"
+                            >
+                                <X size={12} />
+                            </button>
+                        </div>
+                    );
+                })}
+                {folders.length === 0 && (
+                    <div className="p-8 text-center bg-slate-50 rounded-lg border-2 border-dashed border-slate-100 mx-1">
+                        <Folder className="mx-auto text-slate-300 mb-2" size={24} />
+                        <p className="text-[10px] text-slate-400 italic">Sem pastas personalizadas.</p>
+                    </div>
+                )}
             </div>
-        ) : (
-            surveys.map(f => (
-                <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-amber-200 transition-all flex flex-col group overflow-hidden">
-                  <div className="p-6 flex-1">
-                      <div className="flex justify-between items-start mb-4">
-                          <span className={clsx("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border", f.isActive ? "bg-green-50 text-green-700 border-green-200" : "bg-slate-50 text-slate-400 border-slate-100")}>
-                              {f.isActive ? 'ATIVA' : 'PAUSADA'}
-                          </span>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-100 rounded-lg"><Edit2 size={16} /></button>
-                              <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-400 hover:text-red-500 bg-slate-100 rounded-lg"><Trash2 size={16} /></button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  {currentFolderId ? (
+                      <>
+                        <Folder className="text-amber-500" /> {folders.find(f => f.id === currentFolderId)?.name}
+                      </>
+                  ) : (
+                      <>
+                        <PieChart className="text-amber-500" /> Todas as Pesquisas
+                      </>
+                  )}
+              </h2>
+              <div className="flex gap-2">
+                  <button onClick={loadSurveys} className="p-2 text-slate-400 hover:text-amber-600 transition-all" title="Atualizar"><RefreshCw size={20} className={clsx(loading && "animate-spin")} /></button>
+                  <div className="flex items-center gap-2 text-xs text-slate-400 font-bold uppercase">
+                      {filteredSurveys.length} pesquisas
+                  </div>
+              </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {loading ? (
+                <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
+                    <Loader2 className="animate-spin text-amber-500" size={40}/>
+                    <p className="font-bold text-sm uppercase tracking-widest">Carregando pesquisas...</p>
+                </div>
+            ) : filteredSurveys.length === 0 ? (
+                <div className="col-span-full text-center py-24 bg-white rounded-[2rem] border-2 border-dashed border-slate-200 text-slate-400">
+                    <PieChart className="mx-auto mb-4 opacity-10" size={64} />
+                    <p className="font-bold text-lg">Nenhuma pesquisa encontrada</p>
+                    <p className="text-sm">Clique em "+ Nova Pesquisa" para começar a ouvir seus alunos.</p>
+                </div>
+            ) : (
+                filteredSurveys.map(f => (
+                    <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-amber-200 transition-all flex flex-col group overflow-hidden">
+                      <div className="p-6 flex-1">
+                          <div className="flex justify-between items-start mb-4">
+                              <span className={clsx("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border", f.isActive ? "bg-green-50 text-green-700 border-green-200" : "bg-slate-50 text-slate-400 border-slate-100")}>
+                                  {f.isActive ? 'ATIVA' : 'PAUSADA'}
+                              </span>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={() => setShowMoveModal(f)} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-100 rounded-lg" title="Mover p/ Pasta"><MoveRight size={16}/></button>
+                                  <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-100 rounded-lg"><Edit2 size={16} /></button>
+                                  <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-400 hover:text-red-500 bg-slate-100 rounded-lg"><Trash2 size={16} /></button>
+                              </div>
+                          </div>
+                          <h3 className="font-black text-slate-800 text-lg mb-1 line-clamp-1">{f.title}</h3>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase mb-4 flex items-center gap-1">
+                              <Target size={10}/> {f.targetType === 'all' ? 'Todos Alunos' : f.targetType === 'product_type' ? `Categoria: ${f.targetProductType}` : `Produto: ${f.targetProductName}`}
+                          </p>
+                          <div className="grid grid-cols-2 gap-3">
+                              <button onClick={() => handleViewResponses(f)} className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center transition-colors">
+                                  <Table size={20} className="mb-1 text-amber-500" />
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase">Respostas</p>
+                                  <p className="text-xl font-black text-slate-800">{f.submissionsCount || 0}</p>
+                              </button>
+                              <button onClick={() => copyToClipboard(f.id)} className={clsx("rounded-xl flex flex-col items-center justify-center transition-all shadow-sm border", copiedLink ? "bg-green-50 text-green-700 border-green-200" : "bg-white text-slate-500 border-slate-200 hover:bg-teal-50")}>
+                                  {copiedLink ? <CheckCircle2 size={20}/> : <Share2 size={20} />}
+                                  <span className="text-[10px] font-black uppercase mt-1">{copiedLink ? 'Copiado' : 'Link Externo'}</span>
+                              </button>
                           </div>
                       </div>
-                      <h3 className="font-black text-slate-800 text-lg mb-1 line-clamp-1">{f.title}</h3>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase mb-4 flex items-center gap-1">
-                          <Target size={10}/> {f.targetType === 'all' ? 'Todos Alunos' : f.targetType === 'product_type' ? `Categoria: ${f.targetProductType}` : `Produto: ${f.targetProductName}`}
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                          <button onClick={() => handleViewResponses(f)} className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center transition-colors">
-                              <Table size={20} className="mb-1 text-amber-500" />
-                              <p className="text-[10px] font-bold text-slate-400 uppercase">Respostas</p>
-                              <p className="text-xl font-black text-slate-800">{f.submissionsCount || 0}</p>
+                    </div>
+                ))
+            )}
+          </div>
+      </div>
+
+      {/* --- MODALS --- */}
+
+      {/* Create Folder Modal */}
+      {showFolderModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-sm overflow-hidden animate-in fade-in zoom-in-95">
+                  <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800">Nova Pasta de Pesquisas</h3>
+                      <button onClick={() => setShowFolderModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  </div>
+                  <div className="p-5">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Pasta</label>
+                      <input 
+                          type="text" 
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          placeholder="Ex: Pós-Curso 2025"
+                          value={newFolderName}
+                          onChange={e => setNewFolderName(e.target.value)}
+                          autoFocus
+                      />
+                  </div>
+                  <div className="px-5 py-3 bg-slate-50 flex justify-end gap-2">
+                      <button onClick={() => setShowFolderModal(false)} className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-200 rounded">Cancelar</button>
+                      <button onClick={handleCreateFolder} className="px-3 py-1.5 bg-amber-600 text-white rounded text-sm font-bold hover:bg-amber-700 shadow-sm">Criar Pasta</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Move Survey Modal */}
+      {showMoveModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-sm overflow-hidden animate-in fade-in zoom-in-95">
+                  <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800">Mover Pesquisa</h3>
+                      <button onClick={() => setShowMoveModal(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  </div>
+                  <div className="p-5">
+                      <p className="text-sm text-slate-500 mb-4">Selecione a pasta de destino para: <br/><strong className="text-slate-800">{showMoveModal.title}</strong></p>
+                      <div className="space-y-1">
+                          <button 
+                              onClick={() => handleMoveSurvey(showMoveModal, null)}
+                              className={clsx("w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors", !showMoveModal.folderId ? "bg-amber-50 text-amber-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                          >
+                              <span className="flex items-center gap-2"><LayoutGrid size={16} /> Sem Pasta (Raiz)</span>
+                              {!showMoveModal.folderId && <Check size={14}/>}
                           </button>
-                          <button onClick={() => copyToClipboard(f.id)} className={clsx("rounded-xl flex flex-col items-center justify-center transition-all shadow-sm border", copiedLink ? "bg-green-50 text-green-700 border-green-200" : "bg-white text-slate-500 border-slate-200 hover:bg-teal-50")}>
-                              {copiedLink ? <CheckCircle2 size={20}/> : <Share2 size={20} />}
-                              <span className="text-[10px] font-black uppercase mt-1">{copiedLink ? 'Copiado' : 'Link Externo'}</span>
-                          </button>
+                          {folders.map(f => (
+                              <button 
+                                  key={f.id}
+                                  onClick={() => handleMoveSurvey(showMoveModal, f.id)}
+                                  className={clsx("w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors", showMoveModal.folderId === f.id ? "bg-amber-50 text-amber-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                              >
+                                  <span className="flex items-center gap-2"><Folder size={16} /> {f.name}</span>
+                                  {showMoveModal.folderId === f.id && <Check size={14}/>}
+                              </button>
+                          ))}
                       </div>
                   </div>
-                </div>
-            ))
-        )}
-      </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

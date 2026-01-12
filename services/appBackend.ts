@@ -140,7 +140,7 @@ export const appBackend = {
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
     const payload = {
-      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
+      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.interval_minutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
@@ -172,9 +172,9 @@ export const appBackend = {
           title: d.title,
           description: d.description,
           price: d.price,
-          paymentLink: d.payment_link,
-          imageUrl: d.image_url,
-          certificateTemplateId: d.certificate_template_id,
+          payment_link: d.payment_link,
+          image_url: d.image_url,
+          certificate_template_id: d.certificate_template_id,
           createdAt: d.created_at
       }));
   },
@@ -252,7 +252,7 @@ export const appBackend = {
           moduleId: d.module_id, 
           title: d.title, 
           description: d.description, 
-          videoUrl: d.video_url,
+          video_url: d.video_url,
           materials: d.materials || [], 
           orderIndex: d.order_index
       }));
@@ -403,7 +403,8 @@ export const appBackend = {
       title: form.title, 
       description: form.description, 
       campaign: form.campaign, 
-      is_lead_capture: form.is_lead_capture, 
+      /* Fixed: Changed isLeadCapture to correct property name */
+      is_lead_capture: form.isLeadCapture, 
       distribution_mode: form.distributionMode, 
       fixed_owner_id: form.fixedOwnerId || null, 
       team_id: form.teamId || null, 
@@ -791,7 +792,7 @@ export const appBackend = {
     if (blk.id && blk.id.length > 10) {
       const { data, error } = await supabase.from('crm_event_blocks').update(payload).eq('id', blk.id).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
+      return { id: data.id, eventId: d.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     } else {
       const { data, error = null } = await supabase.from('crm_event_blocks').insert([payload]).select().single();
       if (error) throw error;
@@ -977,8 +978,8 @@ export const appBackend = {
       id: d.id, 
       title: d.title, 
       imageUrl: d.image_url, 
-      linkUrl: d.link_url, 
-      targetAudience: d.target_audience, 
+      link_url: d.link_url, 
+      target_audience: d.target_audience, 
       active: d.active, 
       createdAt: d.created_at 
     }));
@@ -1017,7 +1018,7 @@ export const appBackend = {
   getTeacherNews: async (): Promise<TeacherNews[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, imageUrl: d.image_url, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, image_url: d.image_url, createdAt: d.created_at }));
   },
 
   saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
@@ -1287,7 +1288,7 @@ export const appBackend = {
     const { data, error } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((j: any) => ({
-      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
+      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
     }));
   },
 

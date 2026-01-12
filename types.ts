@@ -571,3 +571,13 @@ export interface Franchise {
     pathInfo: string;
     observations: string;
 }
+
+export interface WAAutomationRule {
+  id: string;
+  name: string;
+  triggerType: 'deal_closed';
+  productId: string; // ID do produto que dispara a automação
+  messageTemplate: string;
+  isActive: boolean;
+  createdAt: string;
+}

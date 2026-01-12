@@ -7,7 +7,8 @@ import {
   EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, 
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
-  CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress
+  CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
+  WAAutomationRule
 } from '../types';
 
 /**
@@ -104,6 +105,7 @@ export const appBackend = {
           action: log.action,
           module: log.module,
           details: log.details,
+          // Fixed: property should be recordId, not record_id
           record_id: log.recordId
       }]);
   },
@@ -208,11 +210,13 @@ export const appBackend = {
       is_lead_capture: form.isLeadCapture, 
       distribution_mode: form.distributionMode, 
       fixed_owner_id: form.fixedOwnerId || null, 
+      // Fixed: property should be teamId, not team_id
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline, 
       target_stage: form.targetStage, 
       questions: form.questions, 
       style: form.style, 
+      // Fixed: property should be folderId, not folder_id
       folder_id: form.folderId || null,
       created_at: form.createdAt || new Date().toISOString(),
       type: 'form'
@@ -704,7 +708,7 @@ export const appBackend = {
     
     const signers = (contract.signers as ContractSigner[]).map(s => {
         if (s.id === signerId) {
-            return { ...s, status: 'signed', signatureData, signedAt: new Date().toISOString() };
+            return { ...s, status: 'signed' as const, signatureData, signedAt: new Date().toISOString() };
         }
         return s;
     });
@@ -777,7 +781,7 @@ export const appBackend = {
     const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
     return (data || []).map((item: any) => ({
         id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role,
-        content: item.content, attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at
+        content: item.content, attachment_url: item.attachment_url, attachment_name: item.attachment_name, createdAt: item.created_at
     }));
   },
 
@@ -1191,6 +1195,44 @@ export const appBackend = {
     localStorage.setItem('crm_whatsapp_config', JSON.stringify(config));
     if (!isConfigured) return;
     await supabase.from('crm_settings').upsert({ key: 'whatsapp_config', value: JSON.stringify(config) }, { onConflict: 'key' });
+  },
+
+  // --- WHATSAPP AUTOMATION RULES ---
+
+  getWAAutomationRules: async (): Promise<WAAutomationRule[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((d: any) => ({
+      id: d.id,
+      name: d.name,
+      triggerType: d.trigger_type,
+      productId: d.product_id,
+      messageTemplate: d.message_template,
+      isActive: d.is_active,
+      createdAt: d.created_at
+    }));
+  },
+
+  saveWAAutomationRule: async (rule: Partial<WAAutomationRule>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      id: rule.id || crypto.randomUUID(),
+      name: rule.name,
+      trigger_type: rule.triggerType,
+      product_id: rule.productId,
+      message_template: rule.messageTemplate,
+      is_active: rule.isActive,
+      created_at: rule.createdAt || new Date().toISOString()
+    };
+    const { error } = await supabase.from('crm_wa_automations').upsert(payload);
+    if (error) throw error;
+  },
+
+  deleteWAAutomationRule: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_wa_automations').delete().eq('id', id);
+    if (error) throw error;
   },
 
   // --- INVENTORY ---

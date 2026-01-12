@@ -1,9 +1,9 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Award, Plus, Search, Edit2, Trash2, 
   ArrowLeft, Save, X, Printer, Image as ImageIcon, Loader2,
-  Calendar, MapPin, User, FlipHorizontal, Book, Type, MousePointer2, Move, AlignCenter, AlignLeft, CheckCircle2
+  Calendar, MapPin, User, FlipHorizontal, Book, Type, MousePointer2, Move, AlignCenter, AlignLeft, CheckCircle2,
+  List, History, ExternalLink, RefreshCw, FileText
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { CertificateModel, CertificateLayout, TextStyle } from '../types';
@@ -79,10 +79,16 @@ const InteractableText: React.FC<InteractableTextProps> = ({ text, style, isSele
 };
 
 export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack }) => {
+  const [activeTab, setActiveTab] = useState<'models' | 'issued'>('models');
   const [view, setView] = useState<'list' | 'editor' | 'generator'>('list');
   const [certificates, setCertificates] = useState<CertificateModel[]>([]);
   const [products, setProducts] = useState<{id: string, name: string}[]>([]);
   const [currentCert, setCurrentCert] = useState<CertificateModel>(INITIAL_CERT);
+  
+  // Issued State
+  const [issuedHistory, setIssuedHistory] = useState<any[]>([]);
+  const [studentsWithAccess, setStudentsWithAccess] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [editorSide, setEditorSide] = useState<'front' | 'back'>('front');
   const [selectedElement, setSelectedElement] = useState<'body' | 'name' | 'footer' | null>(null);
@@ -104,6 +110,12 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
     fetchProducts();
   }, []);
 
+  useEffect(() => {
+      if (activeTab === 'issued') {
+          fetchIssuedData();
+      }
+  }, [activeTab]);
+
   const fetchCertificates = async () => {
       setLoading(true);
       try {
@@ -122,6 +134,23 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
           if (data) setProducts(data);
       } catch (e) {
           console.error(e);
+      }
+  };
+
+  const fetchIssuedData = async () => {
+      setLoading(true);
+      try {
+          const [issuedRes, studentsRes] = await Promise.all([
+              appBackend.client.from('crm_student_certificates').select('*, crm_certificates(title)').order('issued_at', { ascending: false }),
+              appBackend.client.from('crm_deals').select('id, contact_name, company_name, email').eq('stage', 'closed').order('contact_name')
+          ]);
+          
+          setIssuedHistory(issuedRes.data || []);
+          setStudentsWithAccess(studentsRes.data || []);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setLoading(false);
       }
   };
 
@@ -154,6 +183,17 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       }
   };
 
+  const handleDeleteIssued = async (id: string) => {
+      if (!window.confirm("Deseja revogar este certificado emitido? O aluno perderá o acesso a este diploma no portal.")) return;
+      try {
+          const { error } = await appBackend.client.from('crm_student_certificates').delete().eq('id', id);
+          if (error) throw error;
+          fetchIssuedData();
+      } catch (e: any) {
+          alert("Erro ao revogar: " + e.message);
+      }
+  };
+
   const handleSave = async () => {
       if(!currentCert.title || !currentCert.backgroundData) {
           alert("Título e Imagem de Frente são obrigatórios.");
@@ -180,13 +220,10 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
               recordId: finalId 
           });
 
-          // Atualiza o estado local para que o ID persista e futuras edições sejam updates
           setCurrentCert(certToSave);
-          
           await fetchCertificates();
           setSaveSuccess(true);
           
-          // Opcional: Voltar para lista após delay ou permanecer no editor
           setTimeout(() => {
               setSaveSuccess(false);
               setView('list');
@@ -194,11 +231,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
 
       } catch (e: any) {
           console.error(e);
-          if (e.message?.includes('column') || e.message?.includes('does not exist')) {
-             alert("Erro de Banco de Dados: Colunas ausentes no banco. Vá em 'Configurações' > 'Banco de Dados' e rode o SQL de reparo.");
-          } else {
-             alert(`Erro ao salvar: ${e.message}`);
-          }
+          alert(`Erro ao salvar: ${e.message}`);
       } finally {
           setIsSaving(false);
       }
@@ -217,10 +250,6 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
           };
           reader.readAsDataURL(file);
       }
-  };
-
-  const handlePrint = () => {
-      window.print();
   };
 
   const handleElementMouseDown = (e: React.MouseEvent, element: 'body' | 'name' | 'footer') => {
@@ -263,73 +292,164 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
       });
   };
 
+  const filteredStudents = useMemo(() => {
+      return studentsWithAccess.filter(s => 
+          (s.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+      );
+  }, [studentsWithAccess, searchTerm]);
+
   if (view === 'list') {
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
                         <ArrowLeft size={20} />
                     </button>
                     <div>
                         <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                            <Award className="text-amber-500" /> Certificados
+                            <Award className="text-amber-500" /> Certificação
                         </h2>
-                        <p className="text-slate-500 text-sm">Gerencie modelos e emita certificados.</p>
+                        <p className="text-slate-500 text-sm">Gestão de modelos e controle de emissões.</p>
                     </div>
                 </div>
-                <button 
-                    onClick={() => { setCurrentCert({...INITIAL_CERT, layoutConfig: DEFAULT_LAYOUT}); setView('editor'); setEditorSide('front'); setSaveSuccess(false); }}
-                    className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"
-                >
-                    <Plus size={18} /> Novo Modelo
-                </button>
+                <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
+                    <button onClick={() => { setActiveTab('models'); setSearchTerm(''); }} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", activeTab === 'models' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                        <ImageIcon size={14}/> Modelos
+                    </button>
+                    <button onClick={() => { setActiveTab('issued'); setSearchTerm(''); }} className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", activeTab === 'issued' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                        <History size={14}/> Certificados Emitidos
+                    </button>
+                </div>
             </div>
 
-            {loading ? (
-                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-amber-500" size={32} /></div>
-            ) : certificates.length === 0 ? (
-                <div className="text-center py-20 text-slate-400 bg-white rounded-xl border-2 border-dashed border-slate-200">
-                    <Award size={48} className="mx-auto mb-4 opacity-50" />
-                    <p>Nenhum modelo cadastrado.</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {certificates.map(cert => (
-                        <div key={cert.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col group hover:shadow-md transition-all">
-                            <div className="h-40 bg-slate-100 relative overflow-hidden border-b border-slate-100">
-                                {cert.backgroundData ? (
-                                    <img src={cert.backgroundData} alt="bg" className="w-full h-full object-cover opacity-80" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                        <ImageIcon size={32} />
-                                    </div>
-                                )}
-                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => handleEdit(cert)} className="bg-white text-slate-700 p-2 rounded-full hover:bg-slate-100" title="Editar"><Edit2 size={16}/></button>
-                                    <button onClick={() => handleDelete(cert.id)} className="bg-white text-red-600 p-2 rounded-full hover:bg-red-50" title="Excluir"><Trash2 size={16}/></button>
-                                </div>
-                            </div>
-                            <div className="p-5 flex-1 flex flex-col">
-                                <h3 className="font-bold text-slate-800 text-lg mb-1">{cert.title}</h3>
-                                <div className="text-xs text-slate-500 mb-4 flex flex-col gap-1">
-                                    <span>Criado em {new Date(cert.createdAt).toLocaleDateString()}</span>
-                                    {cert.linkedProductId && (
-                                        <span className="flex items-center gap-1 text-teal-600 font-medium">
-                                            <Book size={10} /> 
-                                            {products.find(p => p.id === cert.linkedProductId)?.name || cert.linkedProductId}
-                                        </span>
-                                    )}
-                                </div>
-                                <button 
-                                    onClick={() => handleGenerate(cert)}
-                                    className="mt-auto w-full py-2 bg-slate-50 hover:bg-amber-50 text-slate-600 hover:text-amber-700 border border-slate-200 hover:border-amber-200 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors"
-                                >
-                                    <Printer size={16} /> Emitir Certificado
-                                </button>
-                            </div>
+            {activeTab === 'models' ? (
+                <>
+                    <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="relative flex-1 max-w-sm">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <input type="text" placeholder="Buscar modelo..." className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border rounded-lg text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                         </div>
-                    ))}
+                        <button 
+                            onClick={() => { setCurrentCert({...INITIAL_CERT, layoutConfig: DEFAULT_LAYOUT}); setView('editor'); setEditorSide('front'); setSaveSuccess(false); }}
+                            className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95"
+                        >
+                            <Plus size={18} /> Novo Modelo
+                        </button>
+                    </div>
+
+                    {loading ? (
+                        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-amber-500" size={32} /></div>
+                    ) : certificates.length === 0 ? (
+                        <div className="text-center py-20 text-slate-400 bg-white rounded-xl border-2 border-dashed border-slate-200">
+                            <Award size={48} className="mx-auto mb-4 opacity-50" />
+                            <p>Nenhum modelo cadastrado.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {certificates.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase())).map(cert => (
+                                <div key={cert.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col group hover:shadow-md transition-all">
+                                    <div className="h-40 bg-slate-100 relative overflow-hidden border-b border-slate-100">
+                                        {cert.backgroundData ? (
+                                            <img src={cert.backgroundData} alt="bg" className="w-full h-full object-cover opacity-80" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                                <ImageIcon size={32} />
+                                            </div>
+                                        )}
+                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => handleEdit(cert)} className="bg-white text-slate-700 p-2 rounded-full hover:bg-slate-100" title="Editar"><Edit2 size={16}/></button>
+                                            <button onClick={() => handleDelete(cert.id)} className="bg-white text-red-600 p-2 rounded-full hover:bg-red-50" title="Excluir"><Trash2 size={16}/></button>
+                                        </div>
+                                    </div>
+                                    <div className="p-5 flex-1 flex flex-col">
+                                        <h3 className="font-bold text-slate-800 text-lg mb-1">{cert.title}</h3>
+                                        <div className="text-xs text-slate-500 mb-4 flex flex-col gap-1">
+                                            <span>Criado em {new Date(cert.createdAt).toLocaleDateString()}</span>
+                                            {cert.linkedProductId && (
+                                                <span className="flex items-center gap-1 text-teal-600 font-medium">
+                                                    <Book size={10} /> 
+                                                    {products.find(p => p.id === cert.linkedProductId)?.name || cert.linkedProductId}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <button 
+                                            onClick={() => handleGenerate(cert)}
+                                            className="mt-auto w-full py-2 bg-slate-50 hover:bg-amber-50 text-slate-600 hover:text-amber-700 border border-slate-200 hover:border-amber-200 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+                                        >
+                                            <Printer size={16} /> Emitir Manualmente
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </>
+            ) : (
+                <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input type="text" placeholder="Buscar aluno ou e-mail..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-sm" />
+                        </div>
+                        <button onClick={fetchIssuedData} className="p-2 text-slate-400 hover:text-amber-600 transition-colors"><RefreshCw size={20} className={clsx(loading && "animate-spin")} /></button>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <table className="w-full text-left text-sm border-collapse">
+                            <thead className="bg-slate-50 text-slate-600 uppercase text-[10px] font-black tracking-widest border-b border-slate-200">
+                                <tr>
+                                    <th className="px-6 py-4">Aluno com Acesso</th>
+                                    <th className="px-6 py-4">Certificados Liberados</th>
+                                    <th className="px-6 py-4 text-right">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {loading ? (
+                                    <tr><td colSpan={3} className="py-20 text-center"><Loader2 size={32} className="animate-spin mx-auto text-amber-500" /></td></tr>
+                                ) : filteredStudents.length === 0 ? (
+                                    <tr><td colSpan={3} className="py-20 text-center text-slate-400 italic">Nenhum aluno localizado.</td></tr>
+                                ) : filteredStudents.map(student => {
+                                    const studentCerts = issuedHistory.filter(h => h.student_deal_id === student.id);
+                                    return (
+                                        <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs">{student.contact_name.charAt(0)}</div>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-slate-800">{student.contact_name}</span>
+                                                        <span className="text-[10px] text-slate-400">{student.email}</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {studentCerts.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {studentCerts.map(sc => (
+                                                            <div key={sc.id} className="group relative flex items-center gap-2 bg-amber-50 text-amber-700 border border-amber-100 px-2 py-1 rounded text-[10px] font-bold">
+                                                                <Award size={10}/>
+                                                                <span className="max-w-[150px] truncate">{sc.crm_certificates?.title || 'Modelo Excluído'}</span>
+                                                                <div className="flex gap-1 ml-1">
+                                                                    <a href={`/?certificateHash=${sc.hash}`} target="_blank" className="p-0.5 hover:bg-white rounded transition-colors" title="Visualizar"><ExternalLink size={10}/></a>
+                                                                    <button onClick={() => handleDeleteIssued(sc.id)} className="p-0.5 hover:bg-red-100 text-red-400 hover:text-red-600 rounded transition-colors" title="Revogar"><X size={10}/></button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-slate-300 italic">Nenhum certificado emitido</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button onClick={() => { setGenName(student.contact_name); setView('list'); setActiveTab('models'); }} className="text-[10px] font-black uppercase text-amber-600 hover:underline">Novo Diploma</button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
         </div>
@@ -524,7 +644,7 @@ export const CertificatesManager: React.FC<CertificatesManagerProps> = ({ onBack
                     <button onClick={() => setView('list')} className="text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100"><ArrowLeft size={20} /></button>
                     <h2 className="text-lg font-bold text-slate-800">Emitir: {currentCert.title}</h2>
                 </div>
-                <button onClick={handlePrint} className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm"><Printer size={18} /> Imprimir / PDF</button>
+                <button onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm"><Printer size={18} /> Imprimir / PDF</button>
             </div>
             <div className="flex-1 flex overflow-hidden">
                 <div className="w-80 bg-white border-r border-slate-200 overflow-y-auto p-6 space-y-6 shadow-sm z-10 print:hidden shrink-0">

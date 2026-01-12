@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, MapPin, Users, Mic, Clock, Plus, Search, 
@@ -26,6 +25,8 @@ const INITIAL_EVENT: EventModel = {
 const INITIAL_WORKSHOP: Workshop = {
     id: '',
     eventId: '',
+    // Add missing blockId
+    blockId: '',
     title: '',
     description: '', // Init description
     speaker: '',

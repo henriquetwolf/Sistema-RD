@@ -21,6 +21,8 @@ const INITIAL_SURVEY: SurveyModel = {
   id: '',
   title: 'Pesquisa de Satisfação',
   description: 'Gostaríamos de ouvir sua opinião.',
+  // Add missing campaign property
+  campaign: '',
   isLeadCapture: false,
   questions: [],
   createdAt: '',
@@ -30,6 +32,8 @@ const INITIAL_SURVEY: SurveyModel = {
   onlyIfFinished: true,
   isActive: true,
   folderId: null,
+  // Add missing distributionMode property
+  distributionMode: 'fixed',
   style: {
       backgroundType: 'color', backgroundColor: '#fff7ed', cardTransparent: false, primaryColor: '#f59e0b', textColor: '#451a03', fontFamily: 'sans', titleAlignment: 'left', borderRadius: 'medium', buttonText: 'Enviar Pesquisa', shadowIntensity: 'soft', successTitle: 'Obrigado!', successMessage: 'Sua opinião é fundamental.', successButtonText: 'Fechar'
   }
@@ -339,7 +343,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                           onClick={() => setCurrentSurvey({...currentSurvey, targetAudience: item.id as any})}
                                           className={clsx(
                                               "flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all gap-2",
-                                              currentSurvey.targetAudience === item.id ? "bg-indigo-50 border-indigo-600 text-indigo-700 shadow-md" : "bg-white border-slate-100 text-slate-400 hover:bg-slate-50"
+                                              currentSurvey.targetAudience === item.id ? "bg-indigo-50 border-indigo-600 text-indigo-700 shadow-md" : "bg-white border-slate-100 hover:bg-slate-50"
                                           )}
                                       >
                                           <item.icon size={24} />

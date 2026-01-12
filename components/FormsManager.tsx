@@ -65,6 +65,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [currentForm, setCurrentForm] = useState<FormModel>(INITIAL_FORM);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [collaborators, setCollaborators] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState<FormModel | null>(null);
@@ -86,12 +87,14 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
 
   const loadMetadata = async () => {
       try {
-          const [pRes, cRes] = await Promise.all([
+          const [pRes, cRes, tRes] = await Promise.all([
               appBackend.getPipelines(),
-              appBackend.client.from('crm_collaborators').select('id, full_name').eq('status', 'active')
+              appBackend.client.from('crm_collaborators').select('id, full_name').eq('status', 'active'),
+              appBackend.client.from('crm_teams').select('id, name')
           ]);
           if (pRes) setPipelines(pRes);
           if (cRes.data) setCollaborators(cRes.data);
+          if (tRes.data) setTeams(tRes.data);
       } catch (e) {}
   };
 
@@ -129,6 +132,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
 
   const filteredForms = useMemo(() => {
     if (currentFolderId === null) return forms;
+    // Fix: change surveys to forms to match state variable name
     return forms.filter(f => f.folderId === currentFolderId);
   }, [forms, currentFolderId]);
 
@@ -147,6 +151,10 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
     await loadForms();
     setShowMoveModal(null);
   };
+
+  const currentPipeline = useMemo(() => {
+      return pipelines.find(p => p.name === currentForm.targetPipeline) || pipelines[0];
+  }, [pipelines, currentForm.targetPipeline]);
 
   if (view === 'preview') return <FormViewer form={currentForm} onBack={() => setView('editor')} />;
 
@@ -203,8 +211,8 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                             </div>
                                             {currentForm.isLeadCapture && (
                                                 <div className="md:col-span-2">
-                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Vincular Campo CRM</label>
-                                                    <select className="w-full px-4 py-2 border rounded-lg text-sm bg-white" value={q.crmMapping || ''} onChange={e => setCurrentForm({...currentForm, questions: currentForm.questions.map(x => x.id === q.id ? {...x, crmMapping: e.target.value} : x)})}>
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1.5"><ArrowRightLeft size={10} className="text-teal-500"/> Vincular Campo Comercial (CRM)</label>
+                                                    <select className="w-full px-4 py-2 border rounded-lg text-sm bg-white font-bold text-teal-700" value={q.crmMapping || ''} onChange={e => setCurrentForm({...currentForm, questions: currentForm.questions.map(x => x.id === q.id ? {...x, crmMapping: e.target.value} : x)})}>
                                                         {CRM_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                                     </select>
                                                 </div>
@@ -243,8 +251,54 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                   {currentForm.isLeadCapture && (
                                       <div className="space-y-6 p-6 border rounded-2xl bg-white animate-in slide-in-from-top-2">
                                           <div className="grid grid-cols-2 gap-4">
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Funil de Vendas</label><select className="w-full border rounded-lg p-2 text-sm" value={currentForm.targetPipeline} onChange={e => setCurrentForm({...currentForm, targetPipeline: e.target.value})}>{pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Modo Distribuição</label><select className="w-full border rounded-lg p-2 text-sm" value={currentForm.distributionMode} onChange={e => setCurrentForm({...currentForm, distributionMode: e.target.value as any})}><option value="fixed">Vendedor Fixo</option><option value="round-robin">Rodízio por Equipe</option></select></div>
+                                              <div>
+                                                <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Funil de Vendas</label>
+                                                <select className="w-full border rounded-lg p-2 text-sm font-bold" value={currentForm.targetPipeline} onChange={e => setCurrentForm({...currentForm, targetPipeline: e.target.value, targetStage: (pipelines.find(p => p.name === e.target.value)?.stages || [])[0]?.id || 'new'})}>
+                                                  {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                                </select>
+                                              </div>
+                                              <div>
+                                                <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Etapa do Funil</label>
+                                                <select className="w-full border rounded-lg p-2 text-sm" value={currentForm.targetStage} onChange={e => setCurrentForm({...currentForm, targetStage: e.target.value})}>
+                                                  {(currentPipeline?.stages || []).map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                                                </select>
+                                              </div>
+                                          </div>
+
+                                          <div className="space-y-4 pt-4 border-t border-slate-100">
+                                              <div className="flex items-center gap-2 mb-2">
+                                                <Users size={16} className="text-teal-600"/>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase">Atribuição e Distribuição</label>
+                                              </div>
+                                              
+                                              <div className="bg-slate-50 p-4 rounded-xl space-y-4">
+                                                  <div>
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Modo de Distribuição</label>
+                                                    <select className="w-full border rounded-lg p-2 text-sm font-medium bg-white" value={currentForm.distributionMode} onChange={e => setCurrentForm({...currentForm, distributionMode: e.target.value as any})}>
+                                                      <option value="fixed">Vendedor Fixo (Sempre o mesmo)</option>
+                                                      <option value="round-robin">Rodízio por Equipe (Divisão Igualitária)</option>
+                                                    </select>
+                                                  </div>
+
+                                                  {currentForm.distributionMode === 'fixed' ? (
+                                                    <div className="animate-in slide-in-from-top-1">
+                                                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Selecionar Vendedor Responsável</label>
+                                                      <select className="w-full border rounded-lg p-2 text-sm font-bold text-indigo-700 bg-white" value={currentForm.fixedOwnerId || ''} onChange={e => setCurrentForm({...currentForm, fixedOwnerId: e.target.value})}>
+                                                        <option value="">Escolha um vendedor...</option>
+                                                        {collaborators.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                                                      </select>
+                                                    </div>
+                                                  ) : (
+                                                    <div className="animate-in slide-in-from-top-1">
+                                                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Selecionar Equipe de Vendas</label>
+                                                      <select className="w-full border rounded-lg p-2 text-sm font-bold text-indigo-700 bg-white" value={currentForm.teamId || ''} onChange={e => setCurrentForm({...currentForm, teamId: e.target.value})}>
+                                                        <option value="">Escolha uma equipe...</option>
+                                                        {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                                      </select>
+                                                      <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1"><Info size={10}/> Os leads serão distribuídos em fila entre os membros ativos desta equipe.</p>
+                                                    </div>
+                                                  )}
+                                              </div>
                                           </div>
                                       </div>
                                   )}
@@ -299,12 +353,43 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
 
       {showFolderModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+              <div className="bg-white rounded-xl shadow-xl w-full max-sm p-6">
                   <h3 className="font-bold text-slate-800 mb-4">Nova Pasta</h3>
                   <input type="text" className="w-full px-3 py-2 border rounded-lg mb-4" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Nome..." />
                   <div className="flex justify-end gap-2">
                       <button onClick={() => setShowFolderModal(false)} className="px-3 py-1.5 text-sm text-slate-600">Cancelar</button>
                       <button onClick={handleCreateFolder} className="px-3 py-1.5 bg-teal-600 text-white rounded text-sm font-bold">Criar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {showMoveModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
+                  <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800">Mover Formulário</h3>
+                      <button onClick={() => setShowMoveModal(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  </div>
+                  <div className="p-5">
+                      <p className="text-sm text-slate-500 mb-4">Selecione o destino para: <br/><strong className="text-slate-800">{showMoveModal.title}</strong></p>
+                      <div className="space-y-1">
+                          <button 
+                              onClick={() => handleMoveForm(showMoveModal, null)}
+                              className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition-colors", !showMoveModal.folderId ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                          >
+                              <LayoutGrid size={16} /> Sem Pasta (Raiz)
+                          </button>
+                          {folders.map(f => (
+                              <button 
+                                  key={f.id}
+                                  onClick={() => handleMoveForm(showMoveModal, f.id)}
+                                  className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition-colors", showMoveModal.folderId === f.id ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                              >
+                                  <Folder size={16} /> {f.name}
+                              </button>
+                          ))}
+                      </div>
                   </div>
               </div>
           </div>

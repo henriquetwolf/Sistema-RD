@@ -5,7 +5,8 @@ import {
   Plus, Trash2, Eye, Edit2, ArrowLeft, Save, Copy, Target, Share2, 
   Loader2, Check, List, CheckSquare as CheckboxIcon, Inbox, Download, Table, 
   Layout, Folder, FolderPlus, MoveRight, LayoutGrid, X, PieChart, Type,
-  AlignLeft, Hash, Palette, RefreshCw, Sparkles, Info, Lock, Zap, Minus
+  AlignLeft, Hash, Palette, RefreshCw, Sparkles, Info, Lock, Zap, Minus,
+  GraduationCap, School, Building2, Users
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -24,6 +25,7 @@ const INITIAL_SURVEY: SurveyModel = {
   questions: [],
   createdAt: '',
   submissionsCount: 0,
+  targetAudience: 'student',
   targetType: 'all',
   onlyIfFinished: true,
   isActive: true,
@@ -78,7 +80,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
 
   const loadMetadata = async () => {
       try {
-          const { data } = await appBackend.client.from('crm_products').select('id, name').eq('status', 'active');
+          const { data } = await appBackend.client.from('crm_products').select('id, name, category').eq('status', 'active');
           if (data) setProducts(data);
       } catch (e) {}
   };
@@ -235,7 +237,6 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                                     />
                                                 </div>
 
-                                                {/* GERENCIAMENTO DE OPÇÕES PARA SELECT E CHECKBOX */}
                                                 {(q.type === 'select' || q.type === 'checkbox') && (
                                                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
                                                         <div className="flex items-center justify-between">
@@ -294,11 +295,6 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                                     >
                                                         {SYSTEM_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                                     </select>
-                                                    {q.systemMapping && (
-                                                        <p className="mt-2 text-[10px] text-amber-600 font-medium leading-tight">
-                                                            * Este campo será ocultado para o aluno e preenchido automaticamente pelo sistema com base no login.
-                                                        </p>
-                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -327,32 +323,80 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                   </main>
               ) : (
                   <main className="flex-1 overflow-y-auto p-12 bg-white">
-                      <div className="max-w-2xl mx-auto space-y-10">
+                      <div className="max-w-2xl mx-auto space-y-12">
+                          {/* ÁREA DE DESTINO */}
                           <section>
-                              <h3 className="text-lg font-bold flex items-center gap-2 mb-6 border-b pb-4"><Target className="text-indigo-600" /> Direcionamento Interno</h3>
+                              <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-6 border-b pb-4"><Layout className="text-indigo-600" /> Portal de Destino (Área)</h3>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                  {[
+                                      { id: 'all', label: 'Todos', icon: Users },
+                                      { id: 'student', label: 'Alunos', icon: GraduationCap },
+                                      { id: 'instructor', label: 'Instrutores', icon: School },
+                                      { id: 'studio', label: 'Studios', icon: Building2 }
+                                  ].map(item => (
+                                      <button 
+                                          key={item.id}
+                                          onClick={() => setCurrentSurvey({...currentSurvey, targetAudience: item.id as any})}
+                                          className={clsx(
+                                              "flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all gap-2",
+                                              currentSurvey.targetAudience === item.id ? "bg-indigo-50 border-indigo-600 text-indigo-700 shadow-md" : "bg-white border-slate-100 text-slate-400 hover:bg-slate-50"
+                                          )}
+                                      >
+                                          <item.icon size={24} />
+                                          <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
+                                      </button>
+                                  ))}
+                              </div>
+                          </section>
+
+                          {/* DIRECIONAMENTO POR PRODUTO */}
+                          <section>
+                              <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-6 border-b pb-4"><Target className="text-indigo-600" /> Direcionamento por Produto</h3>
                               <div className="space-y-6">
-                                  <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 space-y-6">
+                                  <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 space-y-6">
                                       <div>
-                                          <label className="block text-xs font-black text-indigo-700 uppercase mb-2">Público Alvo</label>
+                                          <label className="block text-[10px] font-black text-indigo-700 uppercase mb-2 ml-1">Vincular a:</label>
                                           <select className="w-full px-4 py-2.5 border rounded-xl bg-white font-bold" value={currentSurvey.targetType} onChange={e => setCurrentSurvey({...currentSurvey, targetType: e.target.value as any})}>
-                                              <option value="all">Qualquer Aluno</option>
-                                              <option value="product_type">Por Tipo de Produto</option>
-                                              <option value="specific_product">Curso Específico</option>
+                                              <option value="all">Exibir para qualquer usuário da Área</option>
+                                              <option value="product_type">Filtrar por Tipo de Produto</option>
+                                              <option value="specific_product">Filtrar por Curso Específico</option>
                                           </select>
                                       </div>
+
+                                      {currentSurvey.targetType === 'product_type' && (
+                                          <div className="animate-in fade-in slide-in-from-top-1">
+                                              <label className="block text-[10px] font-black text-indigo-700 uppercase mb-2 ml-1">Tipo de Produto</label>
+                                              <select className="w-full px-4 py-2.5 border rounded-xl bg-white" value={currentSurvey.targetProductType} onChange={e => setCurrentSurvey({...currentSurvey, targetProductType: e.target.value})}>
+                                                  <option value="">Selecione...</option>
+                                                  <option value="Presencial">Presencial</option>
+                                                  <option value="Digital">Digital</option>
+                                                  <option value="Evento">Evento</option>
+                                              </select>
+                                          </div>
+                                      )}
+
                                       {currentSurvey.targetType === 'specific_product' && (
                                           <div className="animate-in fade-in slide-in-from-top-1">
-                                              <label className="block text-xs font-black text-indigo-700 uppercase mb-2">Selecione o Curso</label>
+                                              <label className="block text-[10px] font-black text-indigo-700 uppercase mb-2 ml-1">Selecione o Produto/Curso</label>
                                               <select className="w-full px-4 py-2.5 border rounded-xl bg-white" value={currentSurvey.targetProductName} onChange={e => setCurrentSurvey({...currentSurvey, targetProductName: e.target.value})}>
-                                                  <option value="">Escolha...</option>
+                                                  <option value="">Escolha um curso da lista comercial...</option>
                                                   {products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                               </select>
                                           </div>
                                       )}
-                                      <label className="flex items-center gap-3 p-4 bg-white rounded-xl border border-indigo-100 cursor-pointer">
-                                          <input type="checkbox" checked={currentSurvey.onlyIfFinished} onChange={e => setCurrentSurvey({...currentSurvey, onlyIfFinished: e.target.checked})} className="w-5 h-5 rounded text-indigo-600" />
-                                          <div className="flex-1"><span className="font-bold text-indigo-900 block">Exibir apenas após finalizar curso?</span></div>
-                                      </label>
+
+                                      {/* GATILHO DE CONCLUSÃO */}
+                                      {(currentSurvey.targetType === 'specific_product' || (currentSurvey.targetType === 'product_type' && currentSurvey.targetProductType === 'Presencial')) && (
+                                          <div className="p-4 bg-white/60 border border-indigo-100 rounded-2xl space-y-3 animate-in slide-in-from-bottom-2">
+                                              <label className="flex items-center gap-3 cursor-pointer">
+                                                  <input type="checkbox" checked={currentSurvey.onlyIfFinished} onChange={e => setCurrentSurvey({...currentSurvey, onlyIfFinished: e.target.checked})} className="w-5 h-5 rounded text-indigo-600" />
+                                                  <div className="flex-1">
+                                                      <span className="font-bold text-indigo-900 block text-sm">Gatilho de Conclusão</span>
+                                                      <p className="text-[10px] text-indigo-500 font-medium leading-tight">Exibir automaticamente ao encerrar o curso presencial (após o último dia do último módulo).</p>
+                                                  </div>
+                                              </label>
+                                          </div>
+                                      )}
                                   </div>
                               </div>
                           </section>
@@ -395,7 +439,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                         </button>
                         <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?publicFormId=${s.id}`); alert("Link copiado!"); }} className="bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl flex flex-col items-center justify-center">
                             <Share2 size={20} />
-                            <span className="text-[10px] font-black uppercase mt-1">Link Interno</span>
+                            <span className="text-[10px] font-black uppercase mt-1">Link Externo</span>
                         </button>
                     </div>
                 </div>

@@ -1,7 +1,7 @@
+
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
-  // Added ContractSigner to imports to fix "Cannot find name 'ContractSigner'" error
   ContractSigner,
   CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, 
   EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, 
@@ -104,8 +104,8 @@ export const appBackend = {
           .order('created_at', { ascending: false })
           .limit(limit);
       if (error) throw error;
-      return (data || []).map((d: any) => ({
-          id: d.id, userName: d.user_name, action: d.action as any, module: d.module, details: d.details, recordId: d.record_id, createdAt: d.created_at
+      return (data || []).map((item: any) => ({
+          id: item.id, userName: item.user_name, action: item.action as any, module: item.module, details: item.details, recordId: item.record_id, createdAt: item.created_at
       }));
   },
 
@@ -114,49 +114,50 @@ export const appBackend = {
   getForms: async (): Promise<FormModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').eq('type', 'form').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-      id: d.id, 
-      title: d.title, 
-      description: d.description, 
-      campaign: d.campaign, 
-      isLeadCapture: d.is_lead_capture, 
-      distributionMode: d.distribution_mode, 
-      fixedOwnerId: d.fixed_owner_id, 
-      teamId: d.team_id, 
-      targetPipeline: d.target_pipeline, 
-      targetStage: d.target_stage, 
-      questions: d.questions, 
-      style: d.style, 
-      createdAt: d.created_at, 
-      submissionsCount: d.submissions_count || 0, 
-      folderId: d.folder_id
+    return (data || []).map((item: any) => ({
+      id: item.id, 
+      title: item.title, 
+      description: item.description, 
+      campaign: item.campaign, 
+      isLeadCapture: item.is_lead_capture, 
+      distributionMode: item.distribution_mode, 
+      fixedOwnerId: item.fixed_owner_id, 
+      teamId: item.team_id, 
+      targetPipeline: item.target_pipeline, 
+      targetStage: item.target_stage, 
+      questions: item.questions, 
+      style: item.style, 
+      createdAt: item.created_at, 
+      submissionsCount: item.submissions_count || 0, 
+      folderId: item.folder_id
     }));
   },
 
   getSurveys: async (): Promise<SurveyModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').eq('type', 'survey').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-      id: d.id, 
-      title: d.title, 
-      description: d.description, 
-      campaign: d.campaign, 
-      isLeadCapture: d.is_lead_capture, 
-      distributionMode: d.distribution_mode, 
-      fixedOwnerId: d.fixed_owner_id, 
-      teamId: d.team_id, 
-      targetPipeline: d.target_pipeline, 
-      targetStage: d.target_stage, 
-      questions: d.questions, 
-      style: d.style, 
-      createdAt: d.created_at, 
-      submissionsCount: d.submissions_count || 0, 
-      folderId: d.folder_id,
-      targetType: d.target_type || 'all',
-      targetProductType: d.target_product_type,
-      targetProductName: d.target_product_name,
-      onlyIfFinished: d.only_if_finished || false,
-      isActive: d.is_active !== false
+    return (data || []).map((item: any) => ({
+      id: item.id, 
+      title: item.title, 
+      description: item.description, 
+      campaign: item.campaign, 
+      isLeadCapture: item.is_lead_capture, 
+      distributionMode: item.distribution_mode, 
+      fixedOwnerId: item.fixed_owner_id, 
+      teamId: item.team_id, 
+      targetPipeline: item.target_pipeline, 
+      targetStage: item.target_stage, 
+      questions: item.questions, 
+      style: item.style, 
+      createdAt: item.created_at, 
+      submissionsCount: item.submissions_count || 0, 
+      folderId: item.folder_id,
+      targetAudience: item.target_audience || 'all',
+      targetType: item.target_type || 'all',
+      targetProductType: item.target_product_type,
+      targetProductName: item.target_product_name,
+      onlyIfFinished: item.only_if_finished || false,
+      isActive: item.is_active !== false
     }));
   },
 
@@ -190,7 +191,6 @@ export const appBackend = {
       description: survey.description, 
       campaign: survey.campaign, 
       is_lead_capture: survey.isLeadCapture, 
-      // Fix: Changed survey.distribution_mode to survey.distributionMode to match SurveyModel type definition
       distribution_mode: survey.distributionMode, 
       fixed_owner_id: survey.fixedOwnerId || null, 
       team_id: survey.teamId || null, 
@@ -199,6 +199,7 @@ export const appBackend = {
       questions: survey.questions, 
       style: survey.style, 
       folder_id: survey.folderId || null, 
+      target_audience: survey.targetAudience || 'all',
       target_type: survey.targetType, 
       target_product_type: survey.targetProductType, 
       target_product_name: survey.targetProductName, 
@@ -218,7 +219,7 @@ export const appBackend = {
   getFormFolders: async (type: 'form' | 'survey' = 'form'): Promise<FormFolder[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_form_folders').select('*').eq('type', type).order('name');
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name, createdAt: item.created_at }));
   },
 
   saveFormFolder: async (folder: FormFolder, type: 'form' | 'survey' = 'form'): Promise<void> => {
@@ -258,7 +259,7 @@ export const appBackend = {
   getInstructorLevels: async (): Promise<InstructorLevel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_levels').select('*').order('name');
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, honorarium: d.honorarium, observations: d.observations }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name, honorarium: item.honorarium, observations: item.observations }));
   },
 
   saveInstructorLevel: async (level: InstructorLevel): Promise<void> => {
@@ -274,7 +275,7 @@ export const appBackend = {
   getRoles: async (): Promise<Role[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_roles').select('*').order('name');
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, permissions: d.permissions || {} }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name, permissions: item.permissions || {} }));
   },
 
   saveRole: async (role: Role): Promise<void> => {
@@ -290,7 +291,7 @@ export const appBackend = {
   getBanners: async (audience: 'student' | 'instructor'): Promise<Banner[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_banners').select('*').eq('target_audience', audience).eq('active', true).order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, imageUrl: d.image_url, linkUrl: d.link_url, targetAudience: d.target_audience, active: d.active, createdAt: d.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title, imageUrl: item.image_url, linkUrl: item.link_url, targetAudience: item.target_audience, active: item.active, createdAt: item.created_at }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -306,7 +307,7 @@ export const appBackend = {
   getCompanies: async (): Promise<CompanySetting[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_companies').select('*').order('legal_name');
-    return (data || []).map((d: any) => ({ id: d.id, legalName: d.legal_name, cnpj: d.cnpj, webhookUrl: d.webhook_url, productTypes: d.product_types || [], product_ids: d.product_ids || [] }));
+    return (data || []).map((item: any) => ({ id: item.id, legalName: item.legal_name, cnpj: item.cnpj, webhookUrl: item.webhook_url, productTypes: item.product_types || [], product_ids: item.product_ids || [] }));
   },
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
@@ -322,7 +323,7 @@ export const appBackend = {
   getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_webhook_triggers').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({ id: d.id, pipelineName: d.pipeline_name, stageId: d.stage_id, payloadJson: d.payload_json, createdAt: d.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, pipelineName: item.pipeline_name, stageId: item.stage_id, payload_json: item.payload_json, createdAt: item.created_at }));
   },
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
@@ -338,7 +339,7 @@ export const appBackend = {
   getCourseInfos: async (): Promise<CourseInfo[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_course_info').select('*').order('course_name');
-    return (data || []).map((d: any) => ({ id: d.id, courseName: d.course_name, details: d.details, materials: d.materials, requirements: d.requirements, updatedAt: d.updated_at }));
+    return (data || []).map((item: any) => ({ id: item.id, courseName: item.course_name, details: item.details, materials: item.materials, requirements: item.requirements, updatedAt: item.updated_at }));
   },
 
   saveCourseInfo: async (info: Partial<CourseInfo>): Promise<void> => {
@@ -359,7 +360,7 @@ export const appBackend = {
         query = query.or(`role.eq.${role},role.eq.all`);
     }
     const { data } = await query;
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, role: d.role, createdAt: d.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name, role: item.role, createdAt: item.created_at }));
   },
 
   saveSupportTag: async (tag: Partial<SupportTag>): Promise<void> => {
@@ -375,7 +376,8 @@ export const appBackend = {
   getPipelines: async (): Promise<Pipeline[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_pipelines').select('*').order('name');
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, stages: d.stages }));
+    // FIXED: Parameter shadowing fix (was named data, now item)
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name, stages: item.stages }));
   },
 
   savePipeline: async (pipeline: Pipeline): Promise<void> => {
@@ -420,7 +422,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
     return (data || []).map((j: any) => ({
-      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
+      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
     }));
   },
 
@@ -449,9 +451,9 @@ export const appBackend = {
   getPresets: async (): Promise<SavedPreset[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from(TABLE_NAME).select('*').order('name');
-    return (data || []).map((d: any) => ({
-        id: d.id, name: d.name, url: d.url, key: d.key, tableName: d.table_name,
-        primaryKey: d.primary_key, intervalMinutes: d.interval_minutes, createdByName: d.created_by_name
+    return (data || []).map((item: any) => ({
+        id: item.id, name: item.name, url: item.url, key: item.key, tableName: item.table_name,
+        primaryKey: item.primary_key, intervalMinutes: item.interval_minutes, createdByName: item.created_by_name
     }));
   },
 
@@ -484,9 +486,9 @@ export const appBackend = {
   getContracts: async (): Promise<Contract[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-        id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date,
-        status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
+    return (data || []).map((item: any) => ({
+        id: item.id, title: item.title, content: item.content, city: item.city, contractDate: item.contract_date,
+        status: item.status, folderId: item.folder_id, signers: item.signers, createdAt: item.created_at
     }));
   },
 
@@ -495,8 +497,8 @@ export const appBackend = {
     const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-        id: data.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date,
-        status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
+        id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date,
+        status: data.status, folderId: data.folder_id, signers: data.signers, createdAt: data.created_at
     };
   },
 
@@ -526,7 +528,6 @@ export const appBackend = {
     const { data: contract } = await supabase.from('crm_contracts').select('signers').eq('id', contractId).single();
     if (!contract) throw new Error("Contrato não encontrado");
     
-    // Use ContractSigner type here, which is now imported
     const signers = (contract.signers as ContractSigner[]).map(s => {
         if (s.id === signerId) {
             return { ...s, status: 'signed', signatureData, signedAt: new Date().toISOString() };
@@ -545,9 +546,9 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').eq('status', 'sent');
     return (data || [])
-        .map((d: any) => ({
-            id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date,
-            status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
+        .map((item: any) => ({
+            id: item.id, title: item.title, content: item.content, city: item.city, contractDate: item.contract_date,
+            status: item.status, folderId: item.folder_id, signers: item.signers, createdAt: item.created_at
         }))
         .filter((c: Contract) => c.signers.some(s => s.email.toLowerCase() === email.toLowerCase() && s.status === 'pending'));
   },
@@ -560,7 +561,7 @@ export const appBackend = {
   getFolders: async (): Promise<ContractFolder[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contract_folders').select('*').order('name');
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name, createdAt: item.created_at }));
   },
 
   saveFolder: async (folder: ContractFolder): Promise<void> => {
@@ -577,31 +578,31 @@ export const appBackend = {
   getSupportTickets: async (): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-        id: d.id, senderId: d.sender_id, senderName: d.sender_name, senderEmail: d.sender_email, senderRole: d.sender_role,
-        targetId: d.target_id, targetName: d.target_name, targetEmail: d.target_email, targetRole: d.target_role,
-        subject: d.subject, message: d.message, tag: d.tag, status: d.status, response: d.response,
-        assignedId: d.assigned_id, assignedName: d.assigned_name, createdAt: d.created_at, updatedAt: d.updated_at
+    return (data || []).map((item: any) => ({
+        id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role,
+        targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role,
+        subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response,
+        assignedId: item.assigned_id, assignedName: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at
     }));
   },
 
   getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${senderId},target_id.eq.${senderId}`).order('updated_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-        id: d.id, senderId: d.sender_id, senderName: d.sender_name, senderEmail: d.sender_email, senderRole: d.sender_role,
-        targetId: d.target_id, targetName: d.target_name, targetEmail: d.target_email, targetRole: d.target_role,
-        subject: d.subject, message: d.message, tag: d.tag, status: d.status, response: d.response,
-        assignedId: d.assigned_id, assignedName: d.assigned_name, createdAt: d.created_at, updatedAt: d.updated_at
+    return (data || []).map((item: any) => ({
+        id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role,
+        targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role,
+        subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response,
+        assignedId: item.assigned_id, assignedName: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at
     }));
   },
 
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-    return (data || []).map((d: any) => ({
-        id: d.id, ticketId: d.ticket_id, senderId: d.sender_id, senderName: d.sender_name, senderRole: d.sender_role,
-        content: d.content, attachmentUrl: d.attachment_url, attachmentName: d.attachment_name, createdAt: d.created_at
+    return (data || []).map((item: any) => ({
+        id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role,
+        content: item.content, attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at
     }));
   },
 
@@ -653,18 +654,18 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    return (data || []).map((d: any) => ({
-        id: d.id, status: d.status, responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email,
-        password: d.password, secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone,
-        fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone,
-        address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2,
-        studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology,
-        studio_type: d.studio_type, name_on_site: d.name_on_site, bank: d.bank, agency: d.agency,
-        account: d.account, beneficiary: d.beneficiary, pix_key: d.pix_key, has_reformer: !!d.has_reformer,
-        qty_reformer: d.qty_reformer, has_ladder_barrel: !!d.has_ladder_barrel, qty_ladder_barrel: d.qty_ladder_barrel,
-        has_chair: !!d.has_chair, qty_chair: d.qty_chair, has_cadillac: !!d.has_cadillac, qty_cadillac: d.qty_cadillac,
-        has_chairs_for_course: !!d.has_chairs_for_course, has_tv: !!d.has_tv, max_kits_capacity: d.max_kits_capacity,
-        attachments: d.attachments
+    return (data || []).map((item: any) => ({
+        id: item.id, status: item.status, responsibleName: item.responsible_name, cpf: item.cpf, phone: item.phone, email: item.email,
+        password: item.password, secondContactName: item.second_contact_name, secondContactPhone: item.second_contact_phone,
+        fantasyName: item.fantasy_name, legalName: item.legal_name, cnpj: item.cnpj, studioPhone: item.studio_phone,
+        address: item.address, city: item.city, state: item.state, country: item.country, sizeM2: item.size_m2,
+        studentCapacity: item.student_capacity, rentValue: item.rent_value, methodology: item.methodology,
+        studioType: item.studio_type, nameOnSite: item.name_on_site, bank: item.bank, agency: item.agency,
+        account: item.account, beneficiary: item.beneficiary, pixKey: item.pix_key, hasReformer: !!item.has_reformer,
+        qtyReformer: item.qty_reformer, hasLadderBarrel: !!item.has_ladder_barrel, qtyLadderBarrel: item.qty_ladder_barrel,
+        hasChair: !!item.has_chair, qtyChair: item.qty_chair, hasCadillac: !!item.has_cadillac, qtyCadillac: item.qty_cadillac,
+        hasChairsForCourse: !!item.has_chairs_for_course, hasTv: !!item.has_tv, maxKitsCapacity: item.max_kits_capacity,
+        attachments: item.attachments
     }));
   },
 
@@ -724,8 +725,8 @@ export const appBackend = {
   getTeacherNews: async (): Promise<TeacherNews[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-        id: d.id, title: d.title, content: d.content, imageUrl: d.image_url, createdAt: d.created_at
+    return (data || []).map((item: any) => ({
+        id: item.id, title: item.title, content: item.content, imageUrl: item.image_url, createdAt: item.created_at
     }));
   },
 
@@ -750,9 +751,16 @@ export const appBackend = {
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-        id: d.id, title: d.title, backgroundData: d.background_data, backBackgroundData: d.back_background_data,
-        linkedProductId: d.linked_product_id, bodyText: d.body_text, layoutConfig: d.layout_config, createdAt: d.created_at
+    // FIXED: Shadowing fix and param renaming to resolve scope errors
+    return (data || []).map((item: any) => ({
+        id: item.id, 
+        title: item.title, 
+        backgroundData: item.background_data, 
+        backBackgroundData: item.back_background_data,
+        linkedProductId: item.linked_product_id, 
+        bodyText: item.body_text, 
+        layoutConfig: item.layout_config, 
+        createdAt: item.created_at
     }));
   },
 
@@ -821,9 +829,9 @@ export const appBackend = {
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-        id: d.id, title: d.title, description: d.description, price: d.price, paymentLink: d.payment_link,
-        imageUrl: d.image_url, certificateTemplateId: d.certificate_template_id, createdAt: d.created_at
+    return (data || []).map((item: any) => ({
+        id: item.id, title: item.title, description: item.description, price: item.price, paymentLink: item.payment_link,
+        imageUrl: item.image_url, certificateTemplateId: item.certificate_template_id, createdAt: item.created_at
     }));
   },
 
@@ -845,7 +853,7 @@ export const appBackend = {
   getCourseModules: async (courseId: string): Promise<CourseModule[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_course_modules').select('*').eq('course_id', courseId).order('order_index');
-    return (data || []).map((d: any) => ({ id: d.id, courseId: d.course_id, title: d.title, orderIndex: d.order_index }));
+    return (data || []).map((item: any) => ({ id: item.id, courseId: item.course_id, title: item.title, orderIndex: item.order_index }));
   },
 
   saveCourseModule: async (mod: Partial<CourseModule>): Promise<void> => {
@@ -867,9 +875,9 @@ export const appBackend = {
   getModuleLessons: async (moduleId: string): Promise<CourseLesson[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index');
-    return (data || []).map((d: any) => ({
-        id: d.id, moduleId: d.module_id, title: d.title, description: d.description,
-        videoUrl: d.video_url, materials: d.materials || [], orderIndex: d.order_index
+    return (data || []).map((item: any) => ({
+        id: item.id, moduleId: item.module_id, title: item.title, description: item.description,
+        videoUrl: item.video_url, materials: item.materials || [], orderIndex: item.order_index
     }));
   },
 
@@ -895,13 +903,13 @@ export const appBackend = {
   getStudentCourseAccess: async (studentDealId: string): Promise<string[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_student_course_access').select('course_id').eq('student_deal_id', studentDealId);
-    return (data || []).map(d => d.course_id);
+    return (data || []).map(item => item.course_id);
   },
 
   getStudentLessonProgress: async (studentDealId: string): Promise<string[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_student_lesson_progress').select('lesson_id').eq('student_deal_id', studentDealId);
-    return (data || []).map(d => d.lesson_id);
+    return (data || []).map(item => item.lesson_id);
   },
 
   toggleLessonProgress: async (studentDealId: string, lessonId: string, completed: boolean): Promise<void> => {
@@ -917,9 +925,9 @@ export const appBackend = {
   getEvents: async (): Promise<EventModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-        id: d.id, name: d.name, description: d.description, location: d.location, dates: d.dates || [],
-        createdAt: d.created_at, registrationOpen: d.registration_open
+    return (data || []).map((item: any) => ({
+        id: item.id, name: item.name, description: item.description, location: item.location, dates: item.dates || [],
+        createdAt: item.created_at, registrationOpen: item.registration_open
     }));
   },
 
@@ -950,7 +958,7 @@ export const appBackend = {
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date');
-    return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
+    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, date: item.date, title: item.title, maxSelections: item.max_selections }));
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
@@ -975,9 +983,9 @@ export const appBackend = {
   getWorkshops: async (eventId: string): Promise<Workshop[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_workshops').select('*').eq('event_id', eventId).order('date');
-    return (data || []).map((d: any) => ({
-        id: d.id, eventId: d.event_id, blockId: d.block_id, title: d.title, description: d.description,
-        speaker: d.speaker, date: d.date, time: d.time, spots: d.spots
+    return (data || []).map((item: any) => ({
+        id: item.id, eventId: item.event_id, blockId: item.block_id, title: item.title, description: item.description,
+        speaker: item.speaker, date: item.date, time: item.time, spots: item.spots
     }));
   },
 
@@ -1010,9 +1018,9 @@ export const appBackend = {
   getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId).order('registered_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-        id: d.id, eventId: d.event_id, workshopId: d.workshop_id, studentId: d.student_id,
-        studentName: d.student_name, studentEmail: d.student_email, registeredAt: d.registered_at
+    return (data || []).map((item: any) => ({
+        id: item.id, eventId: item.event_id, workshopId: item.workshop_id, studentId: item.student_id,
+        studentName: item.student_name, studentEmail: item.student_email, registeredAt: item.registered_at
     }));
   },
 
@@ -1035,11 +1043,11 @@ export const appBackend = {
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    return (data || []).map((d: any) => ({
-        id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico,
-        itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date,
-        studioId: d.studio_id, trackingCode: d.tracking_code, observations: d.observations,
-        conferenceDate: d.conference_date, attachments: d.attachments, createdAt: d.created_at
+    return (data || []).map((item: any) => ({
+        id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico,
+        itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date,
+        studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations,
+        conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at
     }));
   },
 
@@ -1072,14 +1080,14 @@ export const appBackend = {
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-        id: d.id, openInstallments: d.open_installments, totalNegotiatedValue: d.total_negotiated_value,
-        totalInstallments: d.total_installments, dueDate: d.due_date, responsibleAgent: d.responsible_agent,
-        identifier_code: d.identifier_code, fullName: d.full_name, productName: d.product_name,
-        originalValue: d.original_value, paymentMethod: d.payment_method, observations: d.observations,
-        status: d.status, team: d.team, voucherLink1: d.voucher_link_1, testDate: d.test_date,
-        voucherLink2: d.voucher_link_2, voucherLink3: d.voucher_link_3, boletosLink: d.boletos_link,
-        negotiation_reference: d.negotiation_reference, attachments: d.attachments, createdAt: d.created_at
+    return (data || []).map((item: any) => ({
+        id: item.id, openInstallments: item.open_installments, totalNegotiatedValue: item.total_negotiated_value,
+        totalInstallments: item.total_installments, dueDate: item.due_date, responsibleAgent: item.responsible_agent,
+        identifierCode: item.identifier_code, fullName: item.full_name, productName: item.product_name,
+        originalValue: item.original_value, paymentMethod: item.payment_method, observations: item.observations,
+        status: item.status, team: item.team, voucherLink1: item.voucher_link_1, testDate: item.test_date,
+        voucherLink2: item.voucher_link_2, voucherLink3: item.voucher_link_3, boletosLink: item.boletos_link,
+        negotiationReference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at
     }));
   },
 

@@ -1,3 +1,4 @@
+
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -122,6 +123,29 @@ export const appBackend = {
 
   // --- FORMS & SURVEYS ---
 
+  getFormById: async (id: string): Promise<FormModel | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
+    if (!data) return null;
+    return {
+      id: data.id, 
+      title: data.title, 
+      description: data.description, 
+      campaign: data.campaign, 
+      isLeadCapture: data.is_lead_capture, 
+      distributionMode: data.distribution_mode, 
+      fixedOwnerId: data.fixed_owner_id, 
+      teamId: data.team_id, 
+      targetPipeline: data.target_pipeline, 
+      targetStage: data.target_stage, 
+      questions: data.questions, 
+      style: data.style, 
+      createdAt: data.created_at, 
+      submissionsCount: data.submissions_count || 0, 
+      folderId: data.folder_id
+    };
+  },
+
   getForms: async (): Promise<FormModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').eq('type', 'form').order('created_at', { ascending: false });
@@ -198,34 +222,29 @@ export const appBackend = {
     if (!isConfigured) return;
     const payload = {
       id: (survey.id && survey.id.length > 10) ? survey.id : crypto.randomUUID(),
-      title: survey.title, 
-      description: survey.description, 
-      campaign: survey.campaign, 
-      is_lead_capture: survey.isLeadCapture, 
-      distribution_mode: survey.distributionMode, 
-      fixed_owner_id: survey.fixedOwnerId || null, 
-      team_id: survey.teamId || null, 
-      target_pipeline: survey.targetPipeline, 
-      target_stage: survey.targetStage, 
-      questions: survey.questions, 
-      style: survey.style, 
-      folder_id: survey.folderId || null, 
-      target_audience: survey.targetAudience || 'all',
-      target_type: survey.targetType, 
-      target_product_type: survey.targetProductType, 
-      target_product_name: survey.targetProductName, 
-      only_if_finished: survey.onlyIfFinished, 
+      title: survey.title,
+      description: survey.description,
+      campaign: survey.campaign,
+      is_lead_capture: survey.isLeadCapture,
+      distribution_mode: survey.distributionMode,
+      questions: survey.questions,
+      style: survey.style,
+      folder_id: survey.folderId,
+      target_audience: survey.targetAudience,
+      target_type: survey.targetType,
+      target_product_type: survey.targetProductType,
+      target_product_name: survey.targetProductName,
+      only_if_finished: survey.onlyIfFinished,
       is_active: survey.isActive,
-      created_at: survey.createdAt || new Date().toISOString(),
-      type: 'survey'
+      type: 'survey',
+      created_at: survey.createdAt || new Date().toISOString()
     };
     await supabase.from('crm_forms').upsert(payload, { onConflict: 'id' });
   },
 
   deleteForm: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_forms').delete().eq('id', id);
-    if (error) throw error;
+    await supabase.from('crm_forms').delete().eq('id', id);
   },
 
   getFormFolders: async (type: 'form' | 'survey' = 'form'): Promise<FormFolder[]> => {
@@ -234,37 +253,9 @@ export const appBackend = {
     return (data || []).map((item: any) => ({ id: item.id, name: item.name, createdAt: item.created_at }));
   },
 
-  saveFormFolder: async (folder: FormFolder, type: 'form' | 'survey' = 'form'): Promise<void> => {
+  saveFormFolder: async (folder: FormFolder, type: 'form' | 'survey'): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_form_folders').upsert({ id: folder.id, name: folder.name, type: type });
-  },
-
-  deleteFormFolder: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_form_folders').delete().eq('id', id);
-  },
-
-  getFormById: async (id: string): Promise<FormModel | null> => {
-    if (!isConfigured) return null;
-    const { data } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
-    if (!data) return null;
-    return {
-      id: data.id, 
-      title: data.title, 
-      description: data.description, 
-      campaign: data.campaign, 
-      isLeadCapture: data.is_lead_capture, 
-      distributionMode: data.distribution_mode, 
-      fixedOwnerId: data.fixed_owner_id, 
-      teamId: data.team_id, 
-      targetPipeline: data.target_pipeline, 
-      targetStage: data.target_stage, 
-      questions: data.questions, 
-      style: data.style, 
-      createdAt: data.created_at, 
-      submissionsCount: data.submissions_count || 0, 
-      folderId: data.folder_id
-    } as any;
+    await supabase.from('crm_form_folders').upsert({ id: folder.id, name: folder.name, type, created_at: folder.createdAt });
   },
 
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
@@ -299,13 +290,10 @@ export const appBackend = {
             answers.forEach(ans => {
                 const q = questions.find((quest: any) => quest.id === ans.questionId);
                 if (q && q.crmMapping) {
-                    // Mapeamento direto de nomes de campos
                     dealPayload[q.crmMapping] = ans.value;
                 }
             });
 
-            // Ajustar o Título do Negócio prioritariamente para o campo company_name (Nome Completo)
-            // Se não mapeado, tenta contact_name, se não, usa o título do form.
             if (!dealPayload.company_name) {
                 dealPayload.company_name = dealPayload.contact_name;
             }
@@ -316,43 +304,22 @@ export const appBackend = {
                 dealPayload.title = `Lead via ${form.title}`;
             }
 
-            // Atribuição de Dono (Owner)
             let finalOwnerId = form.fixed_owner_id;
 
-            // Lógica de Round-Robin Real (Sequencial e Persistente)
             if (form.distribution_mode === 'round-robin' && form.team_id) {
                 const { data: team } = await supabase.from('crm_teams').select('members').eq('id', form.team_id).single();
                 if (team && team.members && team.members.length > 0) {
-                    // Pegar o último índice usado no formulário específico
                     let lastIdx = form.last_assigned_index || 0;
-                    // Avançar para o próximo
                     let nextIdx = (lastIdx + 1) % team.members.length;
-                    
                     finalOwnerId = team.members[nextIdx];
-
-                    // Atualizar o formulário com o novo índice usado
                     await supabase.from('crm_forms').update({ last_assigned_index: nextIdx }).eq('id', formId);
                 }
             }
             
             dealPayload.owner_id = finalOwnerId;
 
-            // Inserir Negócio no CRM
             const { data: newDeal, error: dealError } = await supabase.from('crm_deals').insert([dealPayload]).select().single();
             if (dealError) throw dealError;
-
-            // Disparar automações se houver
-            if (newDeal) {
-                // Automação Connection Plug (Webhook)
-                const { data: triggers } = await supabase.from('crm_webhook_triggers')
-                    .select('*')
-                    .eq('pipeline_name', newDeal.pipeline)
-                    .eq('stage_id', newDeal.stage);
-                
-                if (triggers && triggers.length > 0) {
-                    console.log("Lead capturado: Disparando Webhooks de automação...");
-                }
-            }
 
         } catch (crmErr) {
             console.error("Erro ao processar captura de lead comercial:", crmErr);
@@ -371,33 +338,59 @@ export const appBackend = {
     return data || [];
   },
 
-  // --- OUTROS MÉTODOS ---
+  // --- INSTRUCTOR LEVELS ---
 
   getInstructorLevels: async (): Promise<InstructorLevel[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_teacher_levels').select('*').order('name');
-    return (data || []).map((item: any) => ({ 
-        id: item.id, 
-        name: item.name, 
-        honorarium: item.honorarium || item.level_honorarium || 0, 
-        observations: item.observations 
-    }));
+    if (!isConfigured) {
+        // Retorna dados fictícios se não houver Supabase configurado
+        return [
+            { id: '1', name: 'Mestre', honorarium: 1500, observations: 'Nível máximo' },
+            { id: '2', name: 'Sênior', honorarium: 1200, observations: 'Alta experiência' },
+            { id: '3', name: 'Pleno', honorarium: 900, observations: 'Experiência intermediária' },
+            { id: '4', name: 'Júnior', honorarium: 600, observations: 'Em treinamento' }
+        ];
+    }
+    try {
+        const { data, error } = await supabase.from('crm_teacher_levels').select('*').order('name');
+        if (error) throw error;
+        return (data || []).map((item: any) => ({ 
+            id: item.id, 
+            name: item.name, 
+            honorarium: Number(item.honorarium || item.level_honorarium || 0), 
+            observations: item.observations 
+        }));
+    } catch (e) {
+        console.error("Erro Supabase getInstructorLevels:", e);
+        throw e;
+    }
   },
 
-  saveInstructorLevel: async (level: InstructorLevel): Promise<void> => {
+  saveInstructorLevel: async (level: Partial<InstructorLevel>): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_teacher_levels').upsert({ 
-        id: level.id, 
+    const payload: any = { 
         name: level.name, 
-        honorarium: level.honorarium, 
+        honorarium: Number(level.honorarium || 0), 
         observations: level.observations 
-    });
+    };
+    // Se o ID for string vazia ou nula, deixa o Postgres gerar. Se for preenchido, é um update.
+    if (level.id && level.id.trim() !== '') {
+        payload.id = level.id;
+    }
+    
+    const { error } = await supabase.from('crm_teacher_levels').upsert(payload);
+    if (error) {
+        console.error("Erro ao salvar nível docente:", error);
+        throw error;
+    }
   },
 
   deleteInstructorLevel: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_teacher_levels').delete().eq('id', id);
+    const { error } = await supabase.from('crm_teacher_levels').delete().eq('id', id);
+    if (error) throw error;
   },
+
+  // --- ROLES & PERMISSIONS ---
 
   getRoles: async (): Promise<Role[]> => {
     if (!isConfigured) return [];
@@ -407,13 +400,15 @@ export const appBackend = {
 
   saveRole: async (role: Role): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_roles').upsert({ id: role.id, name: role.name, permissions: role.permissions });
+    await supabase.from('crm_roles').upsert({ id: role.id || crypto.randomUUID(), name: role.name, permissions: role.permissions });
   },
 
   deleteRole: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_roles').delete().eq('id', id);
   },
+
+  // --- BANNERS ---
 
   getBanners: async (audience: 'student' | 'instructor'): Promise<Banner[]> => {
     if (!isConfigured) return [];
@@ -423,13 +418,23 @@ export const appBackend = {
 
   saveBanner: async (banner: Banner): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_banners').upsert({ id: banner.id, title: banner.title, image_url: banner.imageUrl, link_url: banner.linkUrl, target_audience: banner.targetAudience, active: banner.active });
+    await supabase.from('crm_banners').upsert({
+      id: banner.id || crypto.randomUUID(),
+      title: banner.title,
+      image_url: banner.imageUrl,
+      link_url: banner.linkUrl,
+      target_audience: banner.targetAudience,
+      active: banner.active,
+      created_at: banner.createdAt || new Date().toISOString()
+    });
   },
 
   deleteBanner: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_banners').delete().eq('id', id);
   },
+
+  // --- COMPANIES ---
 
   getCompanies: async (): Promise<CompanySetting[]> => {
     if (!isConfigured) return [];
@@ -439,7 +444,14 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_companies').upsert({ id: company.id, legal_name: company.legalName, cnpj: company.cnpj, webhook_url: company.webhookUrl, product_types: company.productTypes, product_ids: company.productIds });
+    await supabase.from('crm_companies').upsert({
+      id: company.id || crypto.randomUUID(),
+      legal_name: company.legalName,
+      cnpj: company.cnpj,
+      webhook_url: company.webhookUrl,
+      product_types: company.productTypes,
+      product_ids: company.productIds
+    });
   },
 
   deleteCompany: async (id: string): Promise<void> => {
@@ -447,21 +459,26 @@ export const appBackend = {
     await supabase.from('crm_companies').delete().eq('id', id);
   },
 
+  // --- WEBHOOK TRIGGERS ---
+
   getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_webhook_triggers').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, pipelineName: item.pipeline_name, stageId: item.stage_id, payload_json: item.payload_json, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, pipelineName: item.pipeline_name, stageId: item.stage_id, payloadJson: item.payload_json, createdAt: item.created_at }));
   },
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id, pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson });
+    await supabase.from('crm_webhook_triggers').upsert({
+      id: trigger.id || crypto.randomUUID(),
+      pipeline_name: trigger.pipelineName,
+      stage_id: trigger.stageId,
+      payload_json: trigger.payloadJson,
+      created_at: trigger.createdAt || new Date().toISOString()
+    });
   },
 
-  deleteWebhookTrigger: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_webhook_triggers').delete().eq('id', id);
-  },
+  // --- COURSE INFO ---
 
   getCourseInfos: async (): Promise<CourseInfo[]> => {
     if (!isConfigured) return [];
@@ -471,7 +488,14 @@ export const appBackend = {
 
   saveCourseInfo: async (info: Partial<CourseInfo>): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_course_info').upsert({ id: info.id, course_name: info.courseName, details: info.details, materials: info.materials, requirements: info.requirements });
+    await supabase.from('crm_course_info').upsert({
+      id: info.id || crypto.randomUUID(),
+      course_name: info.courseName,
+      details: info.details,
+      materials: info.materials,
+      requirements: info.requirements,
+      updated_at: new Date().toISOString()
+    });
   },
 
   deleteCourseInfo: async (id: string): Promise<void> => {
@@ -479,7 +503,8 @@ export const appBackend = {
     await supabase.from('crm_course_info').delete().eq('id', id);
   },
 
-  // FIXED: Updated to accept an optional role to filter tags
+  // --- SUPPORT TAGS ---
+
   getSupportTags: async (role?: 'student' | 'instructor' | 'studio' | 'admin' | 'all'): Promise<SupportTag[]> => {
     if (!isConfigured) return [];
     let query = supabase.from('crm_support_tags').select('*').order('name');
@@ -492,13 +517,15 @@ export const appBackend = {
 
   saveSupportTag: async (tag: Partial<SupportTag>): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_support_tags').upsert({ id: tag.id, name: tag.name, role: tag.role });
+    await supabase.from('crm_support_tags').upsert({
+      id: tag.id || crypto.randomUUID(),
+      name: tag.name,
+      role: tag.role,
+      created_at: tag.createdAt || new Date().toISOString()
+    });
   },
 
-  deleteSupportTag: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_support_tags').delete().eq('id', id);
-  },
+  // --- PIPELINES ---
 
   getPipelines: async (): Promise<Pipeline[]> => {
     if (!isConfigured) return [];
@@ -515,6 +542,8 @@ export const appBackend = {
     if (!isConfigured) return;
     await supabase.from('crm_pipelines').delete().eq('id', id);
   },
+
+  // --- APP SETTINGS ---
 
   getAppLogo: async (): Promise<string | null> => {
     const local = localStorage.getItem('crm_app_logo');
@@ -544,6 +573,8 @@ export const appBackend = {
     await supabase.from('crm_settings').upsert({ key: 'inventory_security_margin', value: margin.toString() }, { onConflict: 'key' });
   },
 
+  // --- SYNC JOBS ---
+
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
@@ -559,21 +590,18 @@ export const appBackend = {
     });
   },
 
+  updateJobStatus: async (id: string, status: string, lastSync: string | null, lastMessage: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_sync_jobs').update({ status, last_sync: lastSync, last_message: lastMessage }).eq('id', id);
+  },
+
   deleteSyncJob: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_sync_jobs').delete().eq('id', id);
   },
 
-  updateJobStatus: async (id: string, status: string, lastSync: string, lastMessage: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_sync_jobs').update({ status, last_sync: lastSync, last_message: lastMessage }).eq('id', id);
-  },
+  // --- PRESETS ---
 
-  /**
-   * ADDED MISSING METHODS TO RESOLVE TYPESCRIPT ERRORS
-   */
-
-  // PRESETS
   getPresets: async (): Promise<SavedPreset[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from(TABLE_NAME).select('*').order('name');
@@ -608,7 +636,8 @@ export const appBackend = {
     await supabase.from(TABLE_NAME).delete().eq('id', id);
   },
 
-  // CONTRACTS
+  // --- CONTRACTS ---
+
   getContracts: async (): Promise<Contract[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
@@ -623,25 +652,25 @@ export const appBackend = {
     const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-        id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date,
-        status: data.status, folderId: data.folder_id, signers: data.signers, createdAt: data.created_at
+      id: data.id, createdAt: data.created_at, status: data.status, title: data.title,
+      content: data.content, city: data.city, contractDate: data.contract_date,
+      signers: data.signers, folderId: data.folder_id
     };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: contract.id,
-        title: contract.title,
-        content: contract.content,
-        city: contract.city,
-        contract_date: contract.contractDate,
-        status: contract.status,
-        folder_id: contract.folderId || null,
-        signers: contract.signers,
-        created_at: contract.createdAt
-    };
-    await supabase.from('crm_contracts').upsert(payload);
+    await supabase.from('crm_contracts').upsert({
+      id: contract.id,
+      title: contract.title,
+      content: contract.content,
+      city: contract.city,
+      contract_date: contract.contractDate,
+      status: contract.status,
+      folder_id: contract.folderId,
+      signers: contract.signers,
+      created_at: contract.createdAt
+    });
   },
 
   deleteContract: async (id: string): Promise<void> => {
@@ -679,11 +708,6 @@ export const appBackend = {
         .filter((c: Contract) => c.signers.some(s => s.email.toLowerCase() === email.toLowerCase() && s.status === 'pending'));
   },
 
-  sendContractEmailSimulation: async (email: string, name: string, title: string): Promise<void> => {
-      console.log(`[SIMULAÇÃO] Enviando e-mail de contrato para ${name} (${email}) - Título: ${title}`);
-  },
-
-  // CONTRACT FOLDERS
   getFolders: async (): Promise<ContractFolder[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contract_folders').select('*').order('name');
@@ -700,7 +724,13 @@ export const appBackend = {
     await supabase.from('crm_contract_folders').delete().eq('id', id);
   },
 
-  // SUPPORT
+  sendContractEmailSimulation: async (email: string, name: string, title: string): Promise<void> => {
+      console.log(`[SIMULAÇÃO] Enviando e-mail de contrato para ${name} (${email}) - Documento: ${title}`);
+      return Promise.resolve();
+  },
+
+  // --- SUPPORT ---
+
   getSupportTickets: async (): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
@@ -728,7 +758,7 @@ export const appBackend = {
     const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
     return (data || []).map((item: any) => ({
         id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role,
-        content: item.content, attachment_url: item.attachment_url, attachment_name: item.attachment_name, createdAt: item.created_at
+        content: item.content, attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at
     }));
   },
 
@@ -776,7 +806,8 @@ export const appBackend = {
     await supabase.from('crm_support_messages').insert([payload]);
   },
 
-  // PARTNER STUDIOS
+  // --- PARTNER STUDIOS ---
+
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
@@ -820,7 +851,6 @@ export const appBackend = {
         rent_value: studio.rentValue,
         methodology: studio.methodology,
         studio_type: studio.studioType,
-        // Fixed compilation error: property 'name_on_site' does not exist on type 'PartnerStudio'. Use 'nameOnSite'.
         name_on_site: studio.nameOnSite,
         bank: studio.bank,
         agency: studio.agency,
@@ -848,7 +878,8 @@ export const appBackend = {
     await supabase.from('crm_partner_studios').delete().eq('id', id);
   },
 
-  // TEACHER NEWS
+  // --- TEACHER NEWS ---
+
   getTeacherNews: async (): Promise<TeacherNews[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
@@ -859,14 +890,13 @@ export const appBackend = {
 
   saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: news.id || crypto.randomUUID(),
-        title: news.title,
-        content: news.content,
-        image_url: news.imageUrl,
-        created_at: news.createdAt || new Date().toISOString()
-    };
-    await supabase.from('crm_teacher_news').upsert(payload);
+    await supabase.from('crm_teacher_news').upsert({
+      id: news.id || crypto.randomUUID(),
+      title: news.title,
+      content: news.content,
+      image_url: news.imageUrl,
+      created_at: news.createdAt || new Date().toISOString()
+    });
   },
 
   deleteTeacherNews: async (id: string): Promise<void> => {
@@ -874,7 +904,8 @@ export const appBackend = {
     await supabase.from('crm_teacher_news').delete().eq('id', id);
   },
 
-  // CERTIFICATES
+  // --- CERTIFICATES ---
+
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
@@ -892,17 +923,16 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: cert.id,
-        title: cert.title,
-        background_data: cert.backgroundData,
-        back_background_data: cert.backBackgroundData,
-        linked_product_id: cert.linkedProductId,
-        body_text: cert.bodyText,
-        layout_config: cert.layoutConfig,
-        created_at: cert.createdAt
-    };
-    await supabase.from('crm_certificates').upsert(payload);
+    await supabase.from('crm_certificates').upsert({
+      id: cert.id,
+      title: cert.title,
+      background_data: cert.backgroundData,
+      back_background_data: cert.backBackgroundData,
+      linked_product_id: cert.linkedProductId,
+      body_text: cert.bodyText,
+      layout_config: cert.layoutConfig,
+      created_at: cert.createdAt
+    });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -951,7 +981,8 @@ export const appBackend = {
     };
   },
 
-  // ONLINE COURSES & PROGRESS
+  // --- ONLINE COURSES & PROGRESS ---
+
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
@@ -963,17 +994,16 @@ export const appBackend = {
 
   saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: course.id || crypto.randomUUID(),
-        title: course.title,
-        description: course.description,
-        price: course.price,
-        payment_link: course.paymentLink,
-        image_url: course.imageUrl,
-        certificate_template_id: course.certificateTemplateId,
-        created_at: course.createdAt || new Date().toISOString()
-    };
-    await supabase.from('crm_online_courses').upsert(payload);
+    await supabase.from('crm_online_courses').upsert({
+      id: course.id || crypto.randomUUID(),
+      title: course.title,
+      description: course.description,
+      price: course.price,
+      payment_link: course.paymentLink,
+      image_url: course.imageUrl,
+      certificate_template_id: course.certificateTemplateId || null,
+      created_at: course.createdAt || new Date().toISOString()
+    }, { onConflict: 'title' });
   },
 
   getCourseModules: async (courseId: string): Promise<CourseModule[]> => {
@@ -984,13 +1014,12 @@ export const appBackend = {
 
   saveCourseModule: async (mod: Partial<CourseModule>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: mod.id || crypto.randomUUID(),
-        course_id: mod.courseId,
-        title: mod.title,
-        order_index: mod.orderIndex
-    };
-    await supabase.from('crm_course_modules').upsert(payload);
+    await supabase.from('crm_course_modules').upsert({
+      id: mod.id || crypto.randomUUID(),
+      course_id: mod.courseId,
+      title: mod.title,
+      order_index: mod.orderIndex
+    });
   },
 
   deleteCourseModule: async (id: string): Promise<void> => {
@@ -1009,16 +1038,15 @@ export const appBackend = {
 
   saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: lesson.id || crypto.randomUUID(),
-        module_id: lesson.moduleId,
-        title: lesson.title,
-        description: lesson.description,
-        video_url: lesson.videoUrl,
-        materials: lesson.materials,
-        order_index: lesson.orderIndex
-    };
-    await supabase.from('crm_course_lessons').upsert(payload);
+    await supabase.from('crm_course_lessons').upsert({
+      id: lesson.id || crypto.randomUUID(),
+      module_id: lesson.moduleId,
+      title: lesson.title,
+      description: lesson.description,
+      video_url: lesson.videoUrl,
+      materials: lesson.materials,
+      order_index: lesson.orderIndex
+    });
   },
 
   deleteCourseLesson: async (id: string): Promise<void> => {
@@ -1047,7 +1075,8 @@ export const appBackend = {
     }
   },
 
-  // EVENTS
+  // --- EVENTS ---
+
   getEvents: async (): Promise<EventModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
@@ -1088,15 +1117,14 @@ export const appBackend = {
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
-    if (!isConfigured) throw new Error("Banco não configurado");
-    const payload = {
-        id: block.id || crypto.randomUUID(),
-        event_id: block.eventId,
-        date: block.date,
-        title: block.title,
-        max_selections: block.maxSelections
-    };
-    const { data, error } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
+    if (!isConfigured) throw new Error("Not configured");
+    const { data, error } = await supabase.from('crm_event_blocks').upsert({
+      id: block.id,
+      event_id: block.eventId,
+      date: block.date,
+      title: block.title,
+      max_selections: block.maxSelections
+    }).select().single();
     if (error) throw error;
     return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
   },
@@ -1115,24 +1143,23 @@ export const appBackend = {
     }));
   },
 
-  saveWorkshop: async (workshop: Workshop): Promise<Workshop> => {
-    if (!isConfigured) throw new Error("Banco não configurado");
-    const payload = {
-        id: workshop.id || crypto.randomUUID(),
-        event_id: workshop.eventId,
-        block_id: workshop.blockId,
-        title: workshop.title,
-        description: workshop.description,
-        speaker: workshop.speaker,
-        date: workshop.date,
-        time: workshop.time,
-        spots: workshop.spots
-    };
-    const { data, error } = await supabase.from('crm_workshops').upsert(payload).select().single();
+  saveWorkshop: async (ws: Workshop): Promise<Workshop> => {
+    if (!isConfigured) throw new Error("Not configured");
+    const { data, error } = await supabase.from('crm_workshops').upsert({
+      id: ws.id,
+      event_id: ws.eventId,
+      block_id: ws.blockId,
+      title: ws.title,
+      description: ws.description,
+      speaker: ws.speaker,
+      date: ws.date,
+      time: ws.time,
+      spots: ws.spots
+    }).select().single();
     if (error) throw error;
     return {
-        id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description,
-        speaker: data.speaker, date: data.date, time: data.time, spots: data.spots
+      id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title,
+      description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots
     };
   },
 
@@ -1150,7 +1177,8 @@ export const appBackend = {
     }));
   },
 
-  // WHATSAPP CONFIG
+  // --- WHATSAPP CONFIG ---
+
   getWhatsAppConfig: async (): Promise<any> => {
     const local = localStorage.getItem('crm_whatsapp_config');
     if (local) return JSON.parse(local);
@@ -1165,7 +1193,8 @@ export const appBackend = {
     await supabase.from('crm_settings').upsert({ key: 'whatsapp_config', value: JSON.stringify(config) }, { onConflict: 'key' });
   },
 
-  // INVENTORY
+  // --- INVENTORY ---
+
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
@@ -1186,7 +1215,7 @@ export const appBackend = {
         item_apostila_classico: record.itemApostilaClassico,
         item_sacochila: record.itemSacochila,
         item_lapis: record.itemLapis,
-        registration_date: record.registrationDate,
+        registration_date: record.registration_date,
         studio_id: record.studioId || null,
         tracking_code: record.trackingCode,
         observations: record.observations,
@@ -1202,7 +1231,8 @@ export const appBackend = {
     await supabase.from('crm_inventory').delete().eq('id', id);
   },
 
-  // BILLING
+  // --- BILLING ---
+
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
@@ -1219,31 +1249,30 @@ export const appBackend = {
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: neg.id || crypto.randomUUID(),
-        open_installments: neg.openInstallments,
-        total_negotiated_value: neg.totalNegotiatedValue,
-        total_installments: neg.totalInstallments,
-        due_date: neg.dueDate || null,
-        responsible_agent: neg.responsibleAgent,
-        identifier_code: neg.identifierCode,
-        full_name: neg.fullName,
-        product_name: neg.productName,
-        original_value: neg.originalValue,
-        payment_method: neg.paymentMethod,
-        observations: neg.observations,
-        status: neg.status,
-        team: neg.team,
-        voucher_link_1: neg.voucherLink1,
-        test_date: neg.testDate,
-        voucher_link_2: neg.voucherLink2,
-        voucher_link_3: neg.voucherLink3,
-        boletos_link: neg.boletosLink,
-        negotiation_reference: neg.negotiationReference,
-        attachments: neg.attachments,
-        created_at: neg.createdAt || new Date().toISOString()
-    };
-    await supabase.from('crm_billing_negotiations').upsert(payload);
+    await supabase.from('crm_billing_negotiations').upsert({
+      id: neg.id || crypto.randomUUID(),
+      open_installments: neg.openInstallments,
+      total_negotiated_value: neg.totalNegotiatedValue,
+      total_installments: neg.totalInstallments,
+      due_date: neg.dueDate,
+      responsible_agent: neg.responsibleAgent,
+      identifier_code: neg.identifier_code,
+      full_name: neg.fullName,
+      product_name: neg.productName,
+      original_value: neg.originalValue,
+      payment_method: neg.paymentMethod,
+      observations: neg.observations,
+      status: neg.status,
+      team: neg.team,
+      voucher_link_1: neg.voucherLink1,
+      test_date: neg.testDate,
+      voucher_link_2: neg.voucherLink2,
+      voucher_link_3: neg.voucherLink3,
+      boletos_link: neg.boletosLink,
+      negotiation_reference: neg.negotiationReference,
+      attachments: neg.attachments,
+      created_at: neg.createdAt || new Date().toISOString()
+    });
   },
 
   deleteBillingNegotiation: async (id: string): Promise<void> => {

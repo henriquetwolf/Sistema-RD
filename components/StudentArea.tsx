@@ -62,10 +62,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         try {
             const contracts = await appBackend.getPendingContractsByEmail(student.email);
             setPendingContracts(contracts);
-            // Se tiver contratos pendentes e não estiver em uma aba crítica, sugere a aba de contratos
-            if (contracts.length > 0 && activeTab === 'classes') {
-                // Notificação visual apenas
-            }
         } catch (e) {
             console.error("Erro ao carregar contratos pendentes:", e);
         }
@@ -164,17 +160,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 : completedLessonIds.filter(id => id !== lessonId);
             setCompletedLessonIds(updatedProgress);
 
-            // Verificação de conclusão total do curso para emissão de certificado
             if (newStatus && playingCourse.certificateTemplateId) {
                 const allLessonIdsInCourse = courseStructure?.modules.flatMap(m => (courseStructure.lessons[m.id] || []).map(l => l.id)) || [];
                 const isFinished = allLessonIdsInCourse.every(id => updatedProgress.includes(id));
                 
                 if (isFinished) {
-                    // Evita duplicidade se já houver certificado para este modelo
                     const alreadyHasCert = certificates.some(c => c.certificate_template_id === playingCourse.certificateTemplateId);
                     if (!alreadyHasCert) {
                         await appBackend.issueCertificate(mainDealId, playingCourse.certificateTemplateId);
-                        await loadCertificates(); // Sincroniza a lista de diplomas
+                        await loadCertificates(); 
                         alert("🎉 Parabéns! Você concluiu 100% das aulas e seu certificado já está disponível na aba 'Meus Diplomas'!");
                     }
                 }
@@ -334,8 +328,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             </header>
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-6 space-y-8">
-                
-                {/* Notificação de Contratos Pendentes */}
                 {pendingContracts.length > 0 && (
                     <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 animate-bounce-subtle shadow-lg shadow-amber-500/10">
                         <div className="flex items-center gap-4">
@@ -526,7 +518,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 </div>
             </main>
             
-            {/* Modal de Assinatura Interno */}
             {signingContract && (
                 <div className="fixed inset-0 z-[300] bg-white overflow-y-auto">
                     <div className="bg-slate-50 border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">

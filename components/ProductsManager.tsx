@@ -5,7 +5,7 @@ import {
   DollarSign, Globe, Loader2, CheckCircle2, AlertCircle, Award,
   Layers, BookOpen, Video, FileText, List, ChevronRight, GripVertical, Paperclip, 
   Download, ListPlus, LayoutTemplate, Upload, Image as ImageIcon, RefreshCw, AlertTriangle,
-  Settings, Layout, PlayCircle, Youtube, Code
+  Settings, Layout, PlayCircle, Code
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -27,7 +27,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [syncError, setSyncError] = useState<string | null>(null);
   
   const [showModal, setShowModal] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -53,8 +52,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-
   const handleOpenNew = () => {
       setFormData(initialFormState);
       setProductImageUrl('');
@@ -68,14 +65,12 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
 
   const initData = async () => {
       setIsLoading(true);
-      setSyncError(null);
       try {
           await fetchCertificates();
           await fetchOnlineCourses();
           await fetchProducts();
       } catch (e: any) {
           console.error("Erro no carregamento de produtos:", e);
-          setSyncError("Não foi possível carregar o catálogo completo.");
       } finally {
           setIsLoading(false);
       }
@@ -198,7 +193,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       setIsSaving(true);
       try {
           await appBackend.saveOnlineCourse(editingCourse);
-          // Sync back to products list as well
           const product = products.find(p => p.name === editingCourse.title);
           if (product) {
               await appBackend.client.from('crm_products').update({
@@ -434,7 +428,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Imagem de Capa (Portal)</label>
                                 <div className="flex flex-col md:flex-row gap-6 items-center bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200">
                                     <div className="w-48 h-32 bg-white rounded-2xl border flex items-center justify-center overflow-hidden shrink-0 shadow-lg">
-                                        {editingCourse?.imageUrl ? <img src={editingCourse.imageUrl} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-100" size={48} />}
+                                        {editingCourse?.imageUrl ? <img src={editingCourse.imageUrl} className="w-full h-full object-cover" alt="Course" /> : <ImageIcon className="text-slate-100" size={48} />}
                                     </div>
                                     <div className="flex-1 space-y-3">
                                         <p className="text-xs text-slate-500">Esta imagem será vista pelos alunos na vitrine.</p>
@@ -508,7 +502,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Capa do Produto</label>
                                 <div className="flex flex-col md:flex-row gap-6 items-center bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200">
                                     <div className="w-36 h-36 bg-white rounded-2xl border flex items-center justify-center overflow-hidden shrink-0 shadow-lg">
-                                        {productImageUrl ? <img src={productImageUrl} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-100" size={64} />}
+                                        {productImageUrl ? <img src={productImageUrl} className="w-full h-full object-cover" alt="Product" /> : <ImageIcon className="text-slate-100" size={64} />}
                                     </div>
                                     <div className="flex-1 space-y-3">
                                         <button type="button" onClick={() => fileInputRef.current?.click()} className="bg-white border-2 border-slate-200 text-slate-700 px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:border-indigo-500 shadow-sm flex items-center gap-2 transition-all active:scale-95">Escolher Arquivo</button>
@@ -575,7 +569,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                 <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
                     <div className="px-8 py-6 border-b bg-slate-50 flex justify-between items-center">
                         <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><Layout size={20} className="text-indigo-600"/> {editingModule?.id ? 'Editar Módulo' : 'Novo Módulo'}</h3>
-                        <button onClick={() => setShowModuleModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={24}/></button>
+                        <button onClick={() => setShowModuleModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                     </div>
                     <div className="p-8 space-y-6">
                         <div>
@@ -612,7 +606,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                 <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
                     <div className="px-8 py-6 border-b bg-slate-50 flex justify-between items-center shrink-0">
                         <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><Video size={20} className="text-indigo-600"/> {editingLesson?.id ? 'Editar Aula' : 'Nova Aula'}</h3>
-                        <button onClick={() => setShowLessonModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={24}/></button>
+                        <button onClick={() => setShowLessonModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                     </div>
                     <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 flex-1">
                         <div>
@@ -637,7 +631,9 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                     placeholder="<iframe ...></iframe>" 
                                 />
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-1 ml-1">Copie o código completo do botão 'Compartilhar' > 'Incorporar' no YouTube.</p>
+                            <p className="text-[10px] text-slate-400 mt-1 ml-1">
+                                {"Copie o código completo do botão 'Compartilhar' > 'Incorporar' no YouTube."}
+                            </p>
                         </div>
 
                         <div>

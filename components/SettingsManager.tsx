@@ -150,7 +150,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       } 
   };
   const fetchCourseInfos = async () => { setIsLoadingCourseInfo(true); try { const data = await appBackend.getCourseInfos(); setCourseInfos(data); } catch (e) {} finally { setIsLoadingCourseInfo(false); } };
-  const fetchSupportTags = async () => { setIsLoadingTags(true); try { const data = await appBackend.getSupportTags(); setSupportTags(data); } catch (e) {} finally { setIsLoadingTags(false); } };
+  const fetchSupportTags = async () => { setIsLoadingTags(true); try { const data = await appBackend.getSupportTags(undefined); setSupportTags(data); } catch (e) {} finally { setIsLoadingTags(false); } };
   const fetchLogs = async () => { setIsLoadingLogs(true); try { const data = await appBackend.getActivityLogs(100); setLogs(data); } catch (e) {} finally { setIsLoadingLogs(false); } };
 
   const handleSaveGlobal = async () => {
@@ -522,7 +522,7 @@ NOTIFY pgrst, 'reload schema';
                       <h3 className="font-bold uppercase text-xs tracking-widest text-slate-500">Configuração de Item</h3>
                       <button onClick={() => { setEditingRole(null); setEditingBanner(null); setEditingCompany(null); setEditingLevel(null); setEditingCourseInfo(null); setEditingTag(null); setEditingTrigger(null); }}><X size={24}/></button>
                   </div>
-                  <div className="p-8 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 flex-1 custom-scrollbar">
                       
                       {/* FORM ROLE / ACESSOS */}
                       {editingRole && (
@@ -777,6 +777,62 @@ NOTIFY pgrst, 'reload schema';
                                       </select>
                                   </div>
                               </div>
+
+                              <div>
+                                  <div className="flex justify-between items-center mb-1.5 ml-1">
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">3. Payload JSON Customizado (Opcional)</label>
+                                      <button 
+                                          type="button"
+                                          onClick={() => {
+                                              const defaultJson = {
+                                                  "data_venda": "{{data_venda}}",
+                                                  "situacao_venda": "Aprovada",
+                                                  "numero_venda": "{{deal_number}}",
+                                                  "numero_negociacao": "{{deal_number}}",
+                                                  "nome_cliente": "{{nome_cliente}}",
+                                                  "email_cliente": "{{email_cliente}}",
+                                                  "telefone_cliente": "{{telefone_cliente}}",
+                                                  "cpf_cnpj_cliente": "{{cpf_cnpj_cliente}}",
+                                                  "nome_vendedor": "{{nome_vendedor}}",
+                                                  "tipo_produto": "{{tipo_produto}}",
+                                                  "curso_produto": "{{curso_produto}}",
+                                                  "fonte_negociacao": "{{fonte_negociacao}}",
+                                                  "campanha": "{{campanha}}",
+                                                  "funil_vendas": "{{funil_vendas}}",
+                                                  "etapa_funil": "{{etapa_funil}}",
+                                                  "cidade_cliente": "{{cidade_cliente}}",
+                                                  "turma_modulo": "{{turma_modulo}}",
+                                                  "valor_total": "{{valor_total}}",
+                                                  "itens_venda": "1",
+                                                  "forma_pagamento": "{{forma_pagamento}}",
+                                                  "valor_entrada": "{{valor_entrada}}",
+                                                  "numero_parcelas": "{{numero_parcelas}}",
+                                                  "valor_parcelas": "{{valor_parcelas}}",
+                                                  "dia_primeiro_vencimento": "{{dia_primeiro_vencimento}}",
+                                                  "link_comprovante": "{{link_comprovante}}",
+                                                  "codigo_transacao": "{{codigo_transacao}}"
+                                              };
+                                              setEditingTrigger({...editingTrigger, payloadJson: JSON.stringify(defaultJson, null, 2)});
+                                          }}
+                                          className="text-[9px] font-black text-indigo-600 uppercase hover:underline"
+                                      >
+                                          Carregar Código Padrão
+                                      </button>
+                                  </div>
+                                  <textarea 
+                                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-xs font-mono h-48 resize-none bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
+                                      value={editingTrigger.payloadJson || ''} 
+                                      onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} 
+                                      placeholder='{"data": "{{data_venda}}", "cliente": "{{nome_cliente}}", ...}'
+                                  />
+                                  <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                      <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                                          <strong>Dica:</strong> Use as tags para dados dinâmicos: <br/>
+                                          <code>{"{{data_venda}}"}, {"{{deal_number}}"}, {"{{nome_cliente}}"}, {"{{email_cliente}}"}, {"{{telefone_cliente}}"}, {"{{cpf_cnpj_cliente}}"}, {"{{nome_vendedor}}"}, {"{{tipo_produto}}"}, {"{{curso_produto}}"}, {"{{valor_total}}"}, {"{{forma_pagamento}}"}</code>
+                                      </p>
+                                  </div>
+                              </div>
+
                               <button onClick={handleSaveTrigger} disabled={isSavingItem} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2">
                                   {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Gatilho de Plug
                               </button>

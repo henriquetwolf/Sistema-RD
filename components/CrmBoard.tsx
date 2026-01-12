@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
@@ -122,8 +123,7 @@ const generateDealNumber = () => {
     const hh = String(now.getHours()).padStart(2, '0');
     const min = String(now.getMinutes()).padStart(2, '0');
     const random = Math.floor(1000 + Math.random() * 9000);
-    // Convert to number explicitly and avoid any octal interpretation
-    return parseInt(`${yyyy}${mm}${dd}${hh}${min}${random}`, 10);
+    return Number(`${yyyy}${mm}${dd}${hh}${min}${random}`);
 };
 
 const INITIAL_FORM_STATE: Partial<Deal> = {
@@ -185,14 +185,17 @@ export const CrmBoard: React.FC = () => {
     fetchData();
   }, []);
 
+  // Lógica de preenchimento automático de CNPJ e Empresa
   useEffect(() => {
       if (companies.length > 0) {
           let matched: CompanySetting | undefined;
 
+          // 1. Prioridade Máxima: Tenta encontrar por PRODUTO ESPECÍFICO
           if (dealFormData.productName) {
               matched = companies.find(c => (c.productIds || []).includes(dealFormData.productName!));
           }
 
+          // 2. Fallback: Se não encontrou por produto, tenta por TIPO DE PRODUTO
           if (!matched && dealFormData.productType) {
               matched = companies.find(c => (c.productTypes || []).includes(dealFormData.productType!));
           }
@@ -204,6 +207,7 @@ export const CrmBoard: React.FC = () => {
                   billingCompanyName: matched!.legalName
               }));
           } else {
+              // Se não houver match algum, limpa os campos automáticos
               setDealFormData(prev => ({
                   ...prev,
                   billingCnpj: '',
@@ -235,7 +239,8 @@ export const CrmBoard: React.FC = () => {
                   nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
-                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receipt_link: d.receipt_link,
+                  /* FIXED: Corrected property mapping to camelCase Deal interface */
+                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
                   transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
                   classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
@@ -280,7 +285,11 @@ export const CrmBoard: React.FC = () => {
       }
   };
 
+  /**
+   * Função para disparar chamado automático para produtos digitais
+   */
   const triggerDigitalSupportTicket = async (deal: any) => {
+      // Verifica se o estágio é fechamento (normalmente id 'closed') e o produto é digital
       if (deal.product_type === 'Digital' && deal.stage === 'closed') {
           try {
               await appBackend.saveSupportTicket({
@@ -340,7 +349,9 @@ export const CrmBoard: React.FC = () => {
         if (error) throw error;
 
         if (data) {
+            // Gatilho do Connection Plug
             dispatchNegotiationWebhook(data);
+            // Gatilho do Suporte (Login Digital)
             triggerDigitalSupportTicket(data);
         }
 
@@ -353,7 +364,6 @@ export const CrmBoard: React.FC = () => {
     return { count: stageDeals.length, total: stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0) };
   };
 
-  // Fixed setDraggedTicketId to setDraggedDealId to match state variable name.
   const handleDragStart = (e: React.DragEvent, dealId: string) => { setDraggedDealId(dealId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dealId); };
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
   
@@ -372,7 +382,9 @@ export const CrmBoard: React.FC = () => {
         if (error) throw error;
 
         if (data) {
+            // Gatilho do Connection Plug
             dispatchNegotiationWebhook(data);
+            // Gatilho do Suporte (Login Digital)
             triggerDigitalSupportTicket(data);
         }
 
@@ -474,8 +486,10 @@ export const CrmBoard: React.FC = () => {
   const dispatchNegotiationWebhook = async (deal: any) => {
       if (!deal.billing_cnpj) return;
       
+      // Verificação de Gatilho (Connection Plug)
       const trigger = webhookTriggers.find(t => t.pipelineName === deal.pipeline && t.stageId === deal.stage);
       
+      // Se não houver trigger configurado para este estágio+funil, interrompe
       if (!trigger) return;
 
       const company = companies.find(c => c.cnpj === deal.billing_cnpj);
@@ -488,10 +502,12 @@ export const CrmBoard: React.FC = () => {
 
       let webhookPayload: any;
 
+      // Se houver um JSON customizado no gatilho, processa os placeholders
       if (trigger.payloadJson) {
           try {
               let template = trigger.payloadJson;
               
+              // Mapeamento de placeholders dinâmicos
               const replacements: Record<string, string> = {
                   "{{data_venda}}": new Date().toISOString().split('T')[0],
                   "{{deal_number}}": String(deal.deal_number || ""),
@@ -518,6 +534,7 @@ export const CrmBoard: React.FC = () => {
                   "{{codigo_transacao}}": deal.transaction_code || ""
               };
 
+              // Substituição em massa
               Object.keys(replacements).forEach(placeholder => {
                   template = template.split(placeholder).join(replacements[placeholder]);
               });
@@ -528,6 +545,7 @@ export const CrmBoard: React.FC = () => {
               return;
           }
       } else {
+          // Fallback para o formato padrão caso não haja template
           webhookPayload = {
               "data_venda": new Date().toISOString().split('T')[0],  
               "situacao_venda": "Aprovada",                        
@@ -577,10 +595,11 @@ export const CrmBoard: React.FC = () => {
           payment_method: dealFormData.paymentMethod, stage: dealFormData.stage, owner_id: dealFormData.owner, status: dealFormData.status || 'warm',
           next_task: dealFormData.nextTask, source: dealFormData.source, campaign: dealFormData.campaign, entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installmentValue || 0),
-          product_type: dealFormData.productType || null, product_name: dealFormData.product_name, email: dealFormData.email, phone: dealFormData.phone,
-          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receipt_link, transaction_code: dealFormData.transaction_code,
-          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.address_number, registration_data: dealFormData.registration_data,
-          observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.course_city, 
+          product_type: dealFormData.productType || null, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
+          /* FIXED: Corrected property access on dealFormData to match camelCase Deal interface */
+          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode,
+          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber, registration_data: dealFormData.registrationData,
+          observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
           class_mod_1: dealFormData.classMod1, class_mod_2: dealFormData.classMod2, pipeline: dealFormData.pipeline, 
           tasks: dealFormData.tasks || [], billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName
       };
@@ -590,6 +609,7 @@ export const CrmBoard: React.FC = () => {
               if (error) throw error;
               
               if (data) {
+                  // Gatilhos
                   dispatchNegotiationWebhook(data);
                   triggerDigitalSupportTicket(data);
               }
@@ -599,6 +619,7 @@ export const CrmBoard: React.FC = () => {
               if (error) throw error;
               
               if (data) {
+                  // Gatilhos
                   dispatchNegotiationWebhook(data);
                   triggerDigitalSupportTicket(data);
               }
@@ -658,7 +679,7 @@ export const CrmBoard: React.FC = () => {
                     dealId: deal.id,
                     dealTitle: deal.title,
                     dealNumber: deal.dealNumber,
-                    clientName: deal.companyName || deal.contact_name,
+                    clientName: deal.companyName || deal.contactName,
                     ownerName: getOwnerName(deal.owner),
                     parentDeal: deal
                 });
@@ -967,7 +988,7 @@ export const CrmBoard: React.FC = () => {
       {/* --- TEAM MODAL --- */}
       {showTeamModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-lg overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
                   <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                       <h3 className="font-bold text-slate-800 flex items-center gap-2"><Users size={20} className="text-indigo-600" /> {editingTeam ? 'Editar Equipe' : 'Criar Nova Equipe'}</h3>
                       <button onClick={() => setShowTeamModal(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors"><X size={20}/></button>
@@ -1063,27 +1084,27 @@ export const CrmBoard: React.FC = () => {
 
                     {dealFormData.productType === 'Presencial' && (
                         <div className="lg:col-span-3 bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-2">
-                             <div className="md:col-span-4 text-[10px] font-black text-indigo-600 uppercase mb-1 flex items-center gap-2"><MapPin size={12}/> Turmas Presenciais</div>
+                             <div className="md:col-span-4 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={12}/> Turmas Presenciais</div>
                              <div>
-                                <label className="block text-[10px] font-bold text-slate-400 mb-1">UF Curso</label>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">UF Curso</label>
                                 <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.courseState} onChange={e => setDealFormData({...dealFormData, courseState: e.target.value, courseCity: '', classMod1: '', classMod2: ''})}>
                                     <option value="">--</option>{Array.from(new Set(registeredClasses.map(c => c.state))).map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                              </div>
                              <div>
-                                <label className="block text-[10px] font-bold text-slate-400 mb-1">Cidade Curso</label>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Cidade Curso</label>
                                 <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.courseCity} onChange={e => { setDealFormData({...dealFormData, courseCity: e.target.value, classMod1: '', classMod2: '' }); }} disabled={!dealFormData.courseState}>
                                     <option value="">--</option>{Array.from(new Set(registeredClasses.filter(c => c.state === dealFormData.courseState).map(c => c.city))).map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                              </div>
                              <div>
-                                <label className="block text-[10px] font-bold text-slate-400 mb-1">Cód. Turma Mod I</label>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Turma Mod I</label>
                                 <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod1} onChange={e => setDealFormData({...dealFormData, classMod1: e.target.value})} disabled={!dealFormData.courseCity}>
                                     <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c.id} value={c.mod1Code}>{c.mod1Code}</option>)}
                                 </select>
                              </div>
                              <div>
-                                <label className="block text-[10px] font-bold text-slate-400 mb-1">Cód. Turma Mod II</label>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Turma Mod II</label>
                                 <select className="w-full px-2 py-1.5 border rounded text-xs" value={dealFormData.classMod2} onChange={e => setDealFormData({...dealFormData, classMod2: e.target.value})} disabled={!dealFormData.courseCity}>
                                     <option value="">--</option>{registeredClasses.filter(c => c.state === dealFormData.courseState && c.city === dealFormData.courseCity).map(c => <option key={c.id} value={c.mod2Code}>{c.mod2Code}</option>)}
                                 </select>
@@ -1137,6 +1158,7 @@ export const CrmBoard: React.FC = () => {
                     <div className="lg:col-span-3 border-t pt-6">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><ListTodo size={14}/> Tarefas & Agendamentos</h4>
                         <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
+                             {/* Form para adicionar tarefa */}
                              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-white p-4 rounded-xl shadow-sm">
                                  <div className="md:col-span-6">
                                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">O que precisa ser feito?</label>
@@ -1182,6 +1204,7 @@ export const CrmBoard: React.FC = () => {
                                  </div>
                              </div>
 
+                             {/* Lista de tarefas agendadas */}
                              <div className="space-y-2">
                                  {(dealFormData.tasks || []).length === 0 ? (
                                      <div className="text-center py-6 text-slate-400 text-xs italic">Nenhuma tarefa agendada para este negócio.</div>
@@ -1226,7 +1249,7 @@ export const CrmBoard: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Forma Pagamento</label><input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.paymentMethod} onChange={e => setDealFormData({...dealFormData, paymentMethod: e.target.value})} /></div>
                             <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Valor Entrada</label><input type="number" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.entryValue} onChange={e => setDealFormData({...dealFormData, entryValue: parseFloat(e.target.value) || 0})} /></div>
-                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Nº Parcelas</label><input type="number" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.installments} onChange={e => setDealFormData({...dealFormData, installments: parseInt(e.target.value, 10) || 1})} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Nº Parcelas</label><input type="number" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.installments} onChange={e => setDealFormData({...dealFormData, installments: parseInt(e.target.value) || 1})} /></div>
                             <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Valor Parcela</label><input type="number" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.installmentValue} onChange={e => setDealFormData({...dealFormData, installmentValue: parseFloat(e.target.value) || 0})} /></div>
                             <div><label className="block text-[10px] font-bold text-slate-500 mb-1">1º Vencimento</label><input type="date" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.firstDueDate} onChange={e => setDealFormData({...dealFormData, firstDueDate: e.target.value})} /></div>
                             <div className="md:col-span-2"><label className="block text-[10px] font-bold text-slate-500 mb-1">Link do Comprovante</label><input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.receiptLink} onChange={e => setDealFormData({...dealFormData, receiptLink: e.target.value})} /></div>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -17,6 +18,7 @@ export const SalesAnalysis: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [deals, setDeals] = useState<any[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  // FIX: Added collaborators state to replace MOCK_COLLABORATORS
   const [collaborators, setCollaborators] = useState<any[]>([]);
   
   // UI State
@@ -24,7 +26,7 @@ export const SalesAnalysis: React.FC = () => {
 
   // Filters
   const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0],
+    start: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0], // Inicio do ano atual
     end: new Date().toISOString().split('T')[0]
   });
   const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'open'>('all');
@@ -40,6 +42,7 @@ export const SalesAnalysis: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // FIX: Fetch Deals, Teams and Collaborators in parallel
       const [dealsResult, teamsResult, collabResult] = await Promise.all([
         appBackend.client.from('crm_deals').select('*').order('created_at', { ascending: true }),
         appBackend.client.from('crm_teams').select('*'),
@@ -60,6 +63,7 @@ export const SalesAnalysis: React.FC = () => {
     }
   };
 
+  // --- DERIVED OPTIONS FOR FILTERS ---
   const availableTypes = useMemo(() => {
       const types = deals.map(d => d.product_type).filter(Boolean);
       return Array.from(new Set(types)).sort();
@@ -67,6 +71,7 @@ export const SalesAnalysis: React.FC = () => {
 
   const availableProducts = useMemo(() => {
       let filteredDeals = deals;
+      // If a specific type is selected, show only products of that type
       if (filterType !== 'Todos') {
           filteredDeals = deals.filter(d => d.product_type === filterType);
       }
@@ -74,15 +79,18 @@ export const SalesAnalysis: React.FC = () => {
       return Array.from(new Set(products)).sort();
   }, [deals, filterType]);
 
+  // --- DATA PROCESSING ---
   const processedData = useMemo(() => {
-    // Explicit radix 10 for parseInt
-    const [startYear, startMonth, startDay] = dateRange.start.split('-').map(v => parseInt(v, 10));
+    // Correct Date Parsing to Local Time to prevent timezone offset issues
+    const [startYear, startMonth, startDay] = dateRange.start.split('-').map(Number);
     const start = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
 
-    const [endYear, endMonth, endDay] = dateRange.end.split('-').map(v => parseInt(v, 10));
+    const [endYear, endMonth, endDay] = dateRange.end.split('-').map(Number);
     const end = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
 
+    // 1. Filter Data
     const filtered = deals.filter(deal => {
+      // Use closed_at for won deals if available, otherwise created_at
       const dateToCheck = deal.stage === 'closed' && deal.closed_at ? deal.closed_at : deal.created_at;
       const dealDate = new Date(dateToCheck);
       
@@ -92,6 +100,7 @@ export const SalesAnalysis: React.FC = () => {
       if (statusFilter === 'won') isStatusValid = deal.stage === 'closed';
       if (statusFilter === 'open') isStatusValid = deal.stage !== 'closed'; 
       
+      // New Filters Logic
       let isTypeValid = true;
       if (filterType !== 'Todos') {
           isTypeValid = deal.product_type === filterType;
@@ -105,6 +114,7 @@ export const SalesAnalysis: React.FC = () => {
       return isDateValid && isStatusValid && isTypeValid && isProductValid;
     });
 
+    // 2. Metrics General
     const totalRevenue = filtered
         .filter(d => d.stage === 'closed')
         .reduce((acc, curr) => acc + (Number(curr.value) || 0), 0);
@@ -114,19 +124,24 @@ export const SalesAnalysis: React.FC = () => {
     const conversionRate = totalDeals > 0 ? ((closedDeals / totalDeals) * 100).toFixed(1) : '0';
     const avgTicket = closedDeals > 0 ? totalRevenue / closedDeals : 0;
 
+    // 3. Charts Data
+
+    // A) Sales Over Time (Line Chart)
     const salesByDateMap: Record<string, number> = {};
     filtered.forEach(deal => {
         if (deal.stage === 'closed') {
+            // Use closed_at for sales timeline
             const dateObj = new Date(deal.closed_at || deal.created_at);
             const dateKey = dateObj.toLocaleDateString('pt-BR');
             salesByDateMap[dateKey] = (salesByDateMap[dateKey] || 0) + Number(deal.value);
         }
     });
     
+    // Sort dates
     const salesOverTimeData = Object.keys(salesByDateMap)
         .sort((a, b) => {
-            const [da, ma, ya] = a.split('/').map(v => parseInt(v, 10));
-            const [db, mb, yb] = b.split('/').map(v => parseInt(v, 10));
+            const [da, ma, ya] = a.split('/').map(Number);
+            const [db, mb, yb] = b.split('/').map(Number);
             return new Date(ya, ma-1, da).getTime() - new Date(yb, mb-1, db).getTime();
         })
         .map(date => ({
@@ -134,6 +149,7 @@ export const SalesAnalysis: React.FC = () => {
             vendas: salesByDateMap[date]
         }));
 
+    // B) Funnel Stages (Bar Chart)
     const stageCounts: Record<string, number> = { new: 0, contacted: 0, proposal: 0, negotiation: 0, closed: 0 };
     filtered.forEach(deal => {
         const stage = deal.stage || 'new';
@@ -149,9 +165,11 @@ export const SalesAnalysis: React.FC = () => {
         quantidade: stageCounts[key]
     }));
 
+    // C) Sales by Owner (Bar Chart)
     const ownerSales: Record<string, number> = {};
     filtered.forEach(deal => {
         if (deal.stage === 'closed') {
+            // FIX: Use the dynamically fetched collaborators state and full_name property from the database
             const ownerName = collaborators.find(c => c.id === deal.owner_id)?.full_name || 'Desconhecido';
             ownerSales[ownerName] = (ownerSales[ownerName] || 0) + Number(deal.value);
         }
@@ -159,8 +177,9 @@ export const SalesAnalysis: React.FC = () => {
     const topSellersData = Object.keys(ownerSales)
         .map(name => ({ name, valor: ownerSales[name] }))
         .sort((a, b) => b.valor - a.valor)
-        .slice(0, 5); 
+        .slice(0, 5); // Top 5
 
+    // D) Sales by Team (New)
     const teamStats = teams.map(team => {
         const teamDeals = filtered.filter(d => 
             team.members && Array.isArray(team.members) && team.members.includes(d.owner_id)
@@ -188,6 +207,7 @@ export const SalesAnalysis: React.FC = () => {
         metrics: { totalRevenue, totalDeals, conversionRate, avgTicket },
         charts: { salesOverTimeData, funnelData, topSellersData, teamStats }
     };
+    // FIX: Added collaborators to the memoization dependency array
   }, [deals, teams, collaborators, dateRange, statusFilter, filterType, filterProduct]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -195,6 +215,7 @@ export const SalesAnalysis: React.FC = () => {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
       
+      {/* Header & Filters */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
         <div>
             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -204,6 +225,7 @@ export const SalesAnalysis: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+            {/* View Toggle */}
             <div className="bg-slate-100 p-1 rounded-lg flex items-center mr-2">
                 <button 
                     onClick={() => setActiveTab('general')}
@@ -219,6 +241,7 @@ export const SalesAnalysis: React.FC = () => {
                 </button>
             </div>
 
+            {/* PRODUCT TYPE FILTER */}
             <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200 p-1">
                 <div className="flex items-center px-2 text-slate-500 border-r border-slate-200" title="Tipo de Produto">
                     <Tag size={16} />
@@ -233,6 +256,7 @@ export const SalesAnalysis: React.FC = () => {
                 </select>
             </div>
 
+            {/* PRODUCT NAME FILTER */}
             <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200 p-1">
                 <div className="flex items-center px-2 text-slate-500 border-r border-slate-200" title="Produto">
                     <ShoppingBag size={16} />
@@ -247,6 +271,7 @@ export const SalesAnalysis: React.FC = () => {
                 </select>
             </div>
 
+            {/* DATE RANGE */}
             <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200 p-1">
                 <div className="flex items-center px-2 text-slate-500 border-r border-slate-200">
                     <Calendar size={16} className="mr-2" />
@@ -277,8 +302,10 @@ export const SalesAnalysis: React.FC = () => {
         </div>
       </div>
 
+      {/* --- TAB: GENERAL OVERVIEW --- */}
       {activeTab === 'general' && (
         <>
+            {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-left-4">
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group hover:border-teal-300 transition-all">
                     <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -333,8 +360,10 @@ export const SalesAnalysis: React.FC = () => {
                 </div>
             </div>
 
+            {/* Charts Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4">
                 
+                {/* Chart 1: Revenue Timeline */}
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
                     <h3 className="text-lg font-bold text-slate-800 mb-6">Evolução de Receita</h3>
                     <div className="h-[300px] w-full">
@@ -370,6 +399,7 @@ export const SalesAnalysis: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Chart 2: Funnel */}
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <h3 className="text-lg font-bold text-slate-800 mb-6">Pipeline de Oportunidades</h3>
                     <div className="h-[300px] w-full">
@@ -399,6 +429,7 @@ export const SalesAnalysis: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Chart 3: Top Sellers */}
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <h3 className="text-lg font-bold text-slate-800 mb-6">Top Vendedores (Receita)</h3>
                     <div className="h-[300px] w-full">
@@ -428,9 +459,11 @@ export const SalesAnalysis: React.FC = () => {
         </>
       )}
 
+      {/* --- TAB: TEAMS COMPARISON --- */}
       {activeTab === 'teams' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
               
+              {/* Teams Overview Chart */}
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                   <h3 className="text-lg font-bold text-slate-800 mb-2">Receita por Equipe</h3>
                   <p className="text-sm text-slate-500 mb-6">Comparativo de vendas fechadas entre os times comerciais (com filtros aplicados).</p>
@@ -468,6 +501,7 @@ export const SalesAnalysis: React.FC = () => {
                   )}
               </div>
 
+              {/* Detailed Teams Table */}
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="p-6 border-b border-slate-100">
                       <h3 className="text-lg font-bold text-slate-800">Detalhamento de Performance</h3>

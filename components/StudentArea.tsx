@@ -207,22 +207,12 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     <main className="flex-1 overflow-y-auto custom-scrollbar-dark p-8 space-y-8">
                         {activeLesson ? (
                             <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                {/* PLAYER CONTAINER COM CLIPPING (Recorte das bordas do YouTube) */}
-                                <div className="aspect-video bg-black rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/5 relative flex items-center justify-center">
+                                <div className="aspect-video bg-black rounded-[2rem] shadow-2xl overflow-hidden border border-white/5 relative flex items-center justify-center">
                                     {activeLesson.videoUrl ? (
-                                        /* 
-                                           TÉCNICA DE RECORTE:
-                                           O container interno é 10% maior que o container visível.
-                                           Isso joga os controles de topo (compartilhar) e base (logo youtube) para fora do overflow.
-                                        */
-                                        <div className="absolute inset-0 overflow-hidden rounded-[2.5rem]">
-                                            <div 
-                                                className="w-[108%] h-[118%] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 [&>iframe]:w-full [&>iframe]:h-full"
-                                                dangerouslySetInnerHTML={{ __html: activeLesson.videoUrl }}
-                                            />
-                                            {/* Overlay transparente para bloquear cliques em áreas críticas se necessário */}
-                                            <div className="absolute inset-0 pointer-events-none"></div>
-                                        </div>
+                                        <div 
+                                            className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:absolute [&>iframe]:top-0 [&>iframe]:left-0"
+                                            dangerouslySetInnerHTML={{ __html: activeLesson.videoUrl }}
+                                        />
                                     ) : (
                                         <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
                                             <Video size={64} className="opacity-20 mb-4" />

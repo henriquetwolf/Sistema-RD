@@ -117,7 +117,16 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const fetchPipelines = async () => { try { const data = await appBackend.getPipelines(); setPipelines(data); } catch (e) {} };
   const fetchWebhookTriggers = async () => { setIsLoadingTriggers(true); try { const data = await appBackend.getWebhookTriggers(); setWebhookTriggers(data); } catch (e) {} finally { setIsLoadingTriggers(false); } };
   const fetchRoles = async () => { setIsLoadingRoles(true); try { const data = await appBackend.getRoles(); setRoles(data); } catch (e) {} finally { setIsLoadingRoles(false); } };
-  const fetchBanners = async () => { setIsLoadingBanners(true); try { const data = await appBackend.getBanners('instructor'); setBanners(data); } catch (e) {} finally { setIsLoadingBanners(false); } };
+  const fetchBanners = async () => { 
+      setIsLoadingBanners(true); 
+      try { 
+          const [studentBanners, instructorBanners] = await Promise.all([
+              appBackend.getBanners('student'),
+              appBackend.getBanners('instructor')
+          ]);
+          setBanners([...studentBanners, ...instructorBanners]); 
+      } catch (e) {} finally { setIsLoadingBanners(false); } 
+  };
   const fetchCompanies = async () => { 
       setIsLoadingCompanies(true); 
       try { 
@@ -597,6 +606,39 @@ NOTIFY pgrst, 'reload schema';
                               <button onClick={handleSaveCompany} disabled={isSavingItem} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2">
                                   {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Empresa
                               </button>
+                          </div>
+                      )}
+
+                      {/* FORM BANNER */}
+                      {editingBanner && (
+                          <div className="space-y-6">
+                              <div className="flex flex-col items-center gap-4 bg-slate-50 p-6 rounded-2xl border-2 border-dashed border-slate-200">
+                                  <div className="w-full h-40 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
+                                      {editingBanner.imageUrl ? <img src={editingBanner.imageUrl} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-100" size={48} />}
+                                  </div>
+                                  <button onClick={() => bannerFileInputRef.current?.click()} className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-xs font-bold">Trocar Imagem</button>
+                                  <input type="file" ref={bannerFileInputRef} className="hidden" accept="image/*" onChange={handleBannerUpload} />
+                              </div>
+                              <div>
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Título do Banner</label>
+                                  <input className="w-full px-4 py-2.5 border rounded-xl font-bold text-slate-800" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} placeholder="Título do Banner" />
+                              </div>
+                              <div>
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">URL do Link</label>
+                                  <input className="w-full px-4 py-2.5 border rounded-xl text-xs font-mono text-blue-600" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} placeholder="Ex: https://..." />
+                              </div>
+                              <div className="space-y-2">
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Público de Exibição</label>
+                                  <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
+                                      <button onClick={() => setEditingBanner({...editingBanner, targetAudience: 'student'})} className={clsx("flex-1 py-2 text-xs font-bold rounded-lg transition-all", editingBanner.targetAudience === 'student' ? "bg-white shadow text-orange-700" : "text-slate-500")}>Portal do Aluno</button>
+                                      <button onClick={() => setEditingBanner({...editingBanner, targetAudience: 'instructor'})} className={clsx("flex-1 py-2 text-xs font-bold rounded-lg transition-all", editingBanner.targetAudience === 'instructor' ? "bg-white shadow text-orange-700" : "text-slate-500")}>Portal do Instrutor</button>
+                                  </div>
+                              </div>
+                              <div className="pt-4">
+                                  <button onClick={handleSaveBanner} disabled={isSavingItem} className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-orange-600/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+                                      {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Banner
+                                  </button>
+                              </div>
                           </div>
                       )}
 

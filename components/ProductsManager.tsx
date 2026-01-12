@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ShoppingBag, Plus, Search, MoreVertical, Edit2, Trash2, 
@@ -6,7 +5,7 @@ import {
   DollarSign, Globe, Loader2, CheckCircle2, AlertCircle, Award,
   Layers, BookOpen, Video, FileText, List, ChevronRight, GripVertical, Paperclip, 
   Download, ListPlus, LayoutTemplate, Upload, Image as ImageIcon, RefreshCw, AlertTriangle,
-  Settings, Layout, PlayCircle, Youtube
+  Settings, Layout, PlayCircle, Youtube, Code
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -628,17 +627,17 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">URL do Vídeo (YouTube)</label>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Código de Incorporação (YouTube Embed Code)</label>
                             <div className="relative">
-                                <Youtube className="absolute left-4 top-1/2 -translate-y-1/2 text-red-500" size={18}/>
-                                <input 
-                                    type="text" 
-                                    className="w-full pl-12 pr-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-2xl text-sm outline-none transition-all font-mono" 
+                                <Code className="absolute left-4 top-4 text-indigo-500" size={18}/>
+                                <textarea 
+                                    className="w-full pl-12 pr-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-2xl text-sm outline-none transition-all font-mono h-32" 
                                     value={editingLesson?.videoUrl} 
                                     onChange={e => setEditingLesson(prev => prev ? {...prev, videoUrl: e.target.value} : null)} 
-                                    placeholder="https://youtube.com/watch?v=..." 
+                                    placeholder="<iframe ...></iframe>" 
                                 />
                             </div>
+                            <p className="text-[10px] text-slate-400 mt-1 ml-1">Copie o código completo do botão 'Compartilhar' > 'Incorporar' no YouTube.</p>
                         </div>
 
                         <div>

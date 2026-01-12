@@ -190,20 +190,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         return Math.round((completed / allLessons.length) * 100);
     }, [courseStructure, completedLessonIds, playingCourse]);
 
-    const getYouTubeEmbedUrl = (url: string) => {
-        if (!url || typeof url !== 'string') return '';
-        let videoId = '';
-        const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
-        const match = url.match(regex);
-        if (match && match[1]) {
-            videoId = match[1];
-        } else {
-            const cleanUrl = url.trim();
-            if (cleanUrl.length === 11) videoId = cleanUrl;
-        }
-        return videoId ? `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1` : '';
-    };
-
     if (playingCourse && courseStructure) {
         return (
             <div className="min-h-screen bg-slate-900 text-white flex flex-col font-sans animate-in fade-in">
@@ -227,14 +213,11 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     <main className="flex-1 overflow-y-auto custom-scrollbar-dark p-8 space-y-8">
                         {activeLesson ? (
                             <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <div className="aspect-video bg-black rounded-[2rem] shadow-2xl overflow-hidden border border-white/5 relative">
+                                <div className="aspect-video bg-black rounded-[2rem] shadow-2xl overflow-hidden border border-white/5 relative flex items-center justify-center">
                                     {activeLesson.videoUrl ? (
-                                        <iframe 
-                                            src={getYouTubeEmbedUrl(activeLesson.videoUrl)} 
-                                            className="w-full h-full" 
-                                            allowFullScreen 
-                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                            title={activeLesson.title}
+                                        <div 
+                                            className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:absolute [&>iframe]:top-0 [&>iframe]:left-0"
+                                            dangerouslySetInnerHTML={{ __html: activeLesson.videoUrl }}
                                         />
                                     ) : (
                                         <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">

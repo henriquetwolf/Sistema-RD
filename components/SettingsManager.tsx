@@ -20,12 +20,6 @@ interface SettingsManagerProps {
   onDeleteJob: (id: string) => void;
 }
 
-interface UnifiedProduct {
-    id: string;
-    name: string;
-    type: 'Digital' | 'Presencial' | 'Evento';
-}
-
 type SettingsTab = 'visual' | 'company' | 'banners' | 'connection_plug' | 'roles' | 'instructor_levels' | 'course_info' | 'support_tags' | 'logs' | 'database' | 'sql_script';
 
 const DEFAULT_WEBHOOK_PAYLOAD = JSON.stringify({
@@ -79,6 +73,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const bannerFileInputRef = useRef<HTMLInputElement>(null);
 
   const [companies, setCompanies] = useState<CompanySetting[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(true);
   const [isSavingItem, setIsSavingItem] = useState(false); 
   const [editingCompany, setEditingCompany] = useState<Partial<CompanySetting> | null>(null);
@@ -152,7 +147,17 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const fetchWebhookTriggers = async () => { setIsLoadingTriggers(true); try { const data = await appBackend.getWebhookTriggers(); setWebhookTriggers(data); } catch (e) {} finally { setIsLoadingTriggers(false); } };
   const fetchRoles = async () => { setIsLoadingRoles(true); try { const data = await appBackend.getRoles(); setRoles(data); } catch (e) {} finally { setIsLoadingRoles(false); } };
   const fetchBanners = async () => { setIsLoadingBanners(true); try { const data = await appBackend.getBanners('instructor'); setBanners(data); } catch (e) {} finally { setIsLoadingBanners(false); } };
-  const fetchCompanies = async () => { setIsLoadingCompanies(true); try { const data = await appBackend.getCompanies(); setCompanies(data); } catch(e) {} finally { setIsLoadingCompanies(false); } };
+  const fetchCompanies = async () => { 
+      setIsLoadingCompanies(true); 
+      try { 
+          const [comps, prods] = await Promise.all([
+              appBackend.getCompanies(),
+              appBackend.client.from('crm_products').select('id, name')
+          ]);
+          setCompanies(comps); 
+          if (prods.data) setAllProducts(prods.data);
+      } catch(e) {} finally { setIsLoadingCompanies(false); } 
+  };
   const fetchInstructorLevels = async () => { setIsLoadingLevels(true); try { const data = await appBackend.getInstructorLevels(); setInstructorLevels(data); } catch (e) {} finally { setIsLoadingLevels(false); } };
   const fetchCourseInfos = async () => { setIsLoadingCourseInfo(true); try { const data = await appBackend.getCourseInfos(); setCourseInfos(data); } catch (e) {} finally { setIsLoadingCourseInfo(false); } };
   const fetchSupportTags = async () => { setIsLoadingTags(true); try { const data = await appBackend.getSupportTags(); setSupportTags(data); } catch (e) {} finally { setIsLoadingTags(false); } };
@@ -198,7 +203,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   const handleSaveTag = async () => {
       if (!editingTag?.name) return;
       setIsSavingItem(true);
-      // FIXED: Corrected setIsSavingTag to setIsSavingItem to fix TypeScript error
       try { await appBackend.saveSupportTag(editingTag); await fetchSupportTags(); setEditingTag(null); } finally { setIsSavingItem(false); }
   };
 
@@ -348,12 +352,18 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Building2 className="text-teal-600" size={20}/> Empresas e Faturamento</h3>
-                    <button onClick={() => setEditingCompany({ id: '', legalName: '', cnpj: '', productTypes: [], productIds: [] })} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700">+ Nova Empresa</button>
+                    <button onClick={() => setEditingCompany({ id: '', legalName: '', cnpj: '', webhookUrl: '', productTypes: [], productIds: [] })} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700">+ Nova Empresa</button>
                 </div>
                 <div className="space-y-4">
                     {isLoadingCompanies ? <Loader2 className="animate-spin mx-auto text-teal-600"/> : companies.map(c => (
-                        <div key={c.id} className="p-4 border rounded-xl flex items-center justify-between group">
-                            <div><p className="font-bold text-slate-800">{c.legalName}</p><p className="text-xs text-slate-500">CNPJ: {c.cnpj}</p></div>
+                        <div key={c.id} className="p-4 border rounded-xl flex items-center justify-between group hover:border-teal-300 transition-all">
+                            <div>
+                                <p className="font-bold text-slate-800">{c.legalName}</p>
+                                <p className="text-xs text-slate-500 font-mono">CNPJ: {c.cnpj} • Webhook: {c.webhookUrl ? 'Configurado' : 'Pendente'}</p>
+                                <div className="flex gap-1 mt-1">
+                                    {(c.productTypes || []).map(t => <span key={t} className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{t}</span>)}
+                                </div>
+                            </div>
                             <div className="flex gap-2"><button onClick={() => setEditingCompany(c)} className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteCompany(c.id).then(fetchCompanies)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
                         </div>
                     ))}
@@ -462,7 +472,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Tags do Sistema de Suporte</h3>
-                    <button onClick={() => setEditingTag({ id: '', name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">+ Novo Tag</button>
+                    <button onClick={() => setEditingTag({ id: '', name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">+ Nova Tag</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {isLoadingTags ? <Loader2 className="animate-spin mx-auto text-emerald-600"/> : supportTags.map(t => (
@@ -555,6 +565,72 @@ NOTIFY pgrst, 'reload schema';
                       <button onClick={() => { setEditingRole(null); setEditingBanner(null); setEditingCompany(null); setEditingLevel(null); setEditingCourseInfo(null); setEditingTag(null); setEditingTrigger(null); }}><X size={24}/></button>
                   </div>
                   <div className="p-8 overflow-y-auto space-y-6">
+                      
+                      {/* FORM EMPRESA (COMPANY) */}
+                      {editingCompany && (
+                          <div className="space-y-6">
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div className="col-span-2">
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Razão Social / Nome</label>
+                                      <input className="w-full px-4 py-2.5 border rounded-xl font-bold" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} placeholder="Ex: VOLL Pilates Matriz" />
+                                  </div>
+                                  <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">CNPJ</label>
+                                      <input className="w-full px-4 py-2.5 border rounded-xl font-mono text-sm" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} placeholder="00.000.000/0000-00" />
+                                  </div>
+                                  <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Webhook URL (Plug)</label>
+                                      <input className="w-full px-4 py-2.5 border rounded-xl font-mono text-xs" value={editingCompany.webhookUrl} onChange={e => setEditingCompany({...editingCompany, webhookUrl: e.target.value})} placeholder="https://endpoint.com/webhook" />
+                                  </div>
+                              </div>
+                              
+                              <div>
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Tipos de Produtos Atendidos</label>
+                                  <div className="flex gap-3">
+                                      {['Digital', 'Presencial', 'Evento'].map(type => (
+                                          <label key={type} className="flex items-center gap-2 p-2 bg-slate-50 border rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
+                                              <input 
+                                                type="checkbox" 
+                                                checked={(editingCompany.productTypes || []).includes(type)}
+                                                onChange={e => {
+                                                    const current = editingCompany.productTypes || [];
+                                                    const updated = e.target.checked ? [...current, type] : current.filter(t => t !== type);
+                                                    setEditingCompany({...editingCompany, productTypes: updated});
+                                                }}
+                                                className="w-4 h-4 rounded text-teal-600"
+                                              />
+                                              <span className="text-xs font-bold text-slate-700">{type}</span>
+                                          </label>
+                                      ))}
+                                  </div>
+                              </div>
+
+                              <div>
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Vincular Produtos Específicos</label>
+                                  <div className="max-h-40 overflow-y-auto border rounded-xl p-3 bg-slate-50 space-y-1 custom-scrollbar">
+                                      {allProducts.map(p => (
+                                          <label key={p.id} className="flex items-center gap-2 p-1.5 hover:bg-white rounded transition-colors cursor-pointer">
+                                              <input 
+                                                type="checkbox"
+                                                checked={(editingCompany.productIds || []).includes(p.name)}
+                                                onChange={e => {
+                                                    const current = editingCompany.productIds || [];
+                                                    const updated = e.target.checked ? [...current, p.name] : current.filter(id => id !== p.name);
+                                                    setEditingCompany({...editingCompany, productIds: updated});
+                                                }}
+                                                className="w-4 h-4 rounded text-teal-600"
+                                              />
+                                              <span className="text-[10px] font-medium text-slate-600">{p.name}</span>
+                                          </label>
+                                      ))}
+                                  </div>
+                                  <p className="text-[9px] text-slate-400 mt-2">Os negócios desses produtos serão faturados por esta empresa no CRM.</p>
+                              </div>
+
+                              <button onClick={handleSaveCompany} disabled={isSavingItem} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg hover:bg-teal-700 active:scale-95 transition-all">{isSavingItem ? 'Salvando...' : 'Salvar Empresa'}</button>
+                          </div>
+                      )}
+
                       {/* FORM ROLE */}
                       {editingRole && (
                           <div className="space-y-6">
@@ -602,9 +678,12 @@ NOTIFY pgrst, 'reload schema';
                       {editingLevel && (
                           <div className="space-y-6">
                               <input placeholder="Nome do Nível" className="w-full px-4 py-2 border rounded-xl font-bold" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} />
-                              <input type="number" placeholder="Valor Honorário (R$)" className="w-full px-4 py-2 border rounded-xl" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value) || 0})} />
-                              <textarea placeholder="Observações" className="w-full px-4 py-2 border rounded-xl h-24" value={editingLevel.observations} onChange={e => setEditingLevel({...editingLevel, observations: e.target.value})} />
-                              <button onClick={handleSaveLevel} disabled={isSavingItem} className="w-full py-3 bg-rose-600 text-white rounded-xl font-bold">{isSavingItem ? 'Salvando...' : 'Salvar Nível'}</button>
+                              <div className="relative">
+                                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                                  <input type="number" placeholder="Valor Honorário (R$)" className="w-full pl-9 pr-4 py-2 border rounded-xl font-bold text-rose-600" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value) || 0})} />
+                              </div>
+                              <textarea placeholder="Observações e Critérios do Nível..." className="w-full px-4 py-2 border rounded-xl h-32 resize-none outline-none" value={editingLevel.observations} onChange={e => setEditingLevel({...editingLevel, observations: e.target.value})} />
+                              <button onClick={handleSaveLevel} disabled={isSavingItem} className="w-full py-3.5 bg-rose-600 text-white rounded-xl font-bold shadow-lg hover:bg-rose-700 transition-all">{isSavingItem ? 'Salvando...' : 'Salvar Nível Docente'}</button>
                           </div>
                       )}
 
@@ -638,11 +717,26 @@ NOTIFY pgrst, 'reload schema';
                       {editingTrigger && (
                           <div className="space-y-6">
                               <div className="grid grid-cols-2 gap-4">
-                                  <input className="w-full px-4 py-2 border rounded-xl text-sm" value={editingTrigger.pipelineName} onChange={e => setEditingTrigger({...editingTrigger, pipelineName: e.target.value})} placeholder="Pipeline / Funil" />
-                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-mono" value={editingTrigger.stageId} onChange={e => setEditingTrigger({...editingTrigger, stageId: e.target.value})} placeholder="ID da Etapa (Ex: closed)" />
+                                  <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Funil de Vendas</label>
+                                      <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={editingTrigger.pipelineName} onChange={e => setEditingTrigger({...editingTrigger, pipelineName: e.target.value})} placeholder="Pipeline / Funil" />
+                                  </div>
+                                  <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">ID da Etapa (Ex: closed)</label>
+                                      <input className="w-full px-4 py-2 border rounded-xl text-sm font-mono" value={editingTrigger.stageId} onChange={e => setEditingTrigger({...editingTrigger, stageId: e.target.value})} placeholder="Ex: closed" />
+                                  </div>
                               </div>
-                              <textarea className="w-full px-4 py-3 border rounded-2xl text-xs font-mono h-48" value={editingTrigger.payloadJson} onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} placeholder="Payload JSON" />
-                              <button onClick={handleSaveTrigger} disabled={isSavingItem} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl">{isSavingItem ? 'Salvando...' : 'Salvar Gatilho'}</button>
+                              <div>
+                                  <div className="flex justify-between items-center mb-1 ml-1">
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Estrutura do Payload (JSON)</label>
+                                      <button onClick={() => setEditingTrigger({...editingTrigger, payloadJson: DEFAULT_WEBHOOK_PAYLOAD})} className="text-[10px] font-black text-indigo-600 uppercase hover:underline">Resetar Padrão</button>
+                                  </div>
+                                  <textarea className="w-full px-4 py-3 border rounded-2xl text-[11px] font-mono h-64 bg-slate-900 text-emerald-400 custom-scrollbar-dark" value={editingTrigger.payloadJson} onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} placeholder="Payload JSON" />
+                                  <p className="text-[9px] text-slate-400 mt-2">Use {{placeholders}} para mapear campos do CRM automaticamente.</p>
+                              </div>
+                              <button onClick={handleSaveTrigger} disabled={isSavingItem} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2">
+                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Gatilho de Automação
+                              </button>
                           </div>
                       )}
                   </div>

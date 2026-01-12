@@ -104,8 +104,19 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       { id: 'global_settings', label: 'Configurações' }
   ];
 
+  // Carregamento inicial de configurações globais
   useEffect(() => {
-      fetchGlobalSettings();
+    const fetchGlobalSettings = async () => {
+        const margin = await appBackend.getInventorySecurityMargin();
+        setSecurityMargin(margin);
+        const logo = await appBackend.getAppLogo();
+        setPreview(logo);
+    };
+    fetchGlobalSettings();
+  }, []);
+
+  // Carregamento específico por aba
+  useEffect(() => {
       if (activeTab === 'roles') fetchRoles();
       else if (activeTab === 'banners') fetchBanners();
       else if (activeTab === 'company') { fetchCompanies(); fetchUnifiedProducts(); }
@@ -115,13 +126,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       else if (activeTab === 'logs') fetchLogs();
       else if (activeTab === 'connection_plug') { fetchPipelines(); fetchWebhookTriggers(); }
   }, [activeTab]);
-
-  const fetchGlobalSettings = async () => {
-    const margin = await appBackend.getInventorySecurityMargin();
-    setSecurityMargin(margin);
-    const logo = await appBackend.getAppLogo();
-    setPreview(logo);
-  };
 
   const fetchPipelines = async () => {
       try { const data = await appBackend.getPipelines(); setPipelines(data); } catch (e) {}
@@ -409,7 +413,7 @@ NOTIFY pgrst, 'reload schema';
   const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-8 pb-20">
+    <div className="animate-in fade-in duration-300 space-y-8 pb-20">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h2 className="text-2xl font-bold text-slate-800">Configurações</h2>
@@ -428,7 +432,16 @@ NOTIFY pgrst, 'reload schema';
                 { id: 'logs', label: 'Logs', color: 'text-slate-600' },
                 { id: 'database', label: 'Banco', color: 'text-amber-700' }
             ].map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === tab.id ? `bg-white ${tab.color} shadow-sm` : "text-slate-500")}>{tab.label}</button>
+                <button 
+                    key={tab.id} 
+                    onClick={(e) => { e.preventDefault(); setActiveTab(tab.id as SettingsTab); }} 
+                    className={clsx(
+                        "px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", 
+                        activeTab === tab.id ? `bg-white ${tab.color} shadow-sm` : "text-slate-500 hover:text-slate-700"
+                    )}
+                >
+                    {tab.label}
+                </button>
             ))}
         </div>
       </div>
@@ -443,7 +456,7 @@ NOTIFY pgrst, 'reload schema';
                             {preview ? <img src={preview} alt="Logo" className="max-w-full max-h-full object-contain" /> : <ImageIcon className="text-slate-300" size={48} />}
                         </div>
                         <input type="file" className="hidden" id="logo-up" accept="image/*" onChange={handleImageUpload} />
-                        <label htmlFor="logo-up" className="cursor-pointer bg-teal-50 text-teal-700 px-6 py-2 rounded-lg font-bold border border-teal-200">Trocar Logo</label>
+                        <label htmlFor="logo-up" className="cursor-pointer bg-teal-50 text-teal-700 px-6 py-2 rounded-lg font-bold border border-teal-200 hover:bg-teal-100 transition-colors">Trocar Logo</label>
                     </div>
                 </div>
                 <div className="bg-white rounded-xl border border-slate-200 p-8">
@@ -451,7 +464,7 @@ NOTIFY pgrst, 'reload schema';
                     <input type="number" className="w-24 px-4 py-2 border rounded-lg" value={securityMargin} onChange={(e) => setSecurityMargin(parseInt(e.target.value) || 0)} />
                     <p className="text-xs text-slate-400 mt-2">Limite para alerta de "Necessita Remessa" nos Studios.</p>
                 </div>
-                <button onClick={handleSaveGlobal} className="bg-teal-600 text-white px-10 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2">{isSaved ? 'Salvo!' : 'Salvar Geral'}</button>
+                <button onClick={handleSaveGlobal} className="bg-teal-600 text-white px-10 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-teal-700 transition-all">{isSaved ? 'Salvo!' : 'Salvar Geral'}</button>
             </div>
         )}
 
@@ -459,7 +472,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Empresas e Faturamento</h3>
-                    <button onClick={() => setEditingCompany({ legalName: '', cnpj: '', productTypes: [], productIds: [] })} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Nova Empresa</button>
+                    <button onClick={() => setEditingCompany({ legalName: '', cnpj: '', productTypes: [], productIds: [] })} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 transition-all">+ Nova Empresa</button>
                 </div>
                 <div className="space-y-4">
                     {companies.map(c => (
@@ -468,6 +481,7 @@ NOTIFY pgrst, 'reload schema';
                             <div className="flex gap-2"><button onClick={() => setEditingCompany(c)} className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteCompany(c.id).then(fetchCompanies)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
                         </div>
                     ))}
+                    {companies.length === 0 && <div className="text-center py-8 text-slate-400 italic">Nenhuma empresa cadastrada.</div>}
                 </div>
             </div>
         )}
@@ -476,7 +490,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Banners do Portal</h3>
-                    <button onClick={() => setEditingBanner({ title: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Banner</button>
+                    <button onClick={() => setEditingBanner({ title: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-orange-700">+ Novo Banner</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {banners.map(b => (
@@ -502,7 +516,7 @@ NOTIFY pgrst, 'reload schema';
                         <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600"><Zap size={24}/></div>
                         <div><h3 className="text-lg font-bold">Automação: Connection Plug</h3><p className="text-xs text-slate-500">Gatilhos de Webhook por etapa do Funil.</p></div>
                     </div>
-                    <button onClick={() => setEditingTrigger({ pipelineName: 'Padrão', stageId: 'closed' })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Gatilho</button>
+                    <button onClick={() => setEditingTrigger({ pipelineName: 'Padrão', stageId: 'closed' })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700">+ Novo Gatilho</button>
                 </div>
                 <div className="space-y-4">
                     {webhookTriggers.map(t => (
@@ -519,7 +533,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Perfis de Acesso</h3>
-                    <button onClick={() => setEditingRole({ id: crypto.randomUUID(), name: '', permissions: {} })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Perfil</button>
+                    <button onClick={() => setEditingRole({ id: crypto.randomUUID(), name: '', permissions: {} })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700">+ Novo Perfil</button>
                 </div>
                 <div className="space-y-3">
                     {roles.map(r => (
@@ -532,11 +546,57 @@ NOTIFY pgrst, 'reload schema';
             </div>
         )}
 
+        {activeTab === 'database' && (
+            <div className="space-y-6">
+                <div className="bg-white rounded-xl border border-slate-200 p-8">
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-amber-100 p-2 rounded-lg text-amber-600"><Layers size={24}/></div>
+                            <div><h3 className="text-lg font-bold">Conexões Ativas</h3><p className="text-xs text-slate-500">Sincronização automática com planilhas externas.</p></div>
+                        </div>
+                        <button onClick={onStartWizard} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 transition-all flex items-center gap-2"><Plus size={16}/> Nova Conexão</button>
+                    </div>
+                    <div className="space-y-3">
+                        {jobs.map(job => (
+                            <div key={job.id} className="p-4 border rounded-xl flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                <div className="flex items-center gap-4">
+                                    <div className={clsx("w-3 h-3 rounded-full", job.active ? (job.status === 'success' ? "bg-green-500" : "bg-amber-500") : "bg-slate-300")}></div>
+                                    <div>
+                                        <p className="font-bold text-slate-800">{job.name}</p>
+                                        <p className="text-[10px] text-slate-400 uppercase font-black">{job.config.tableName} • {job.intervalMinutes} min</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="text-right mr-4 hidden sm:block">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Última Sincronização</p>
+                                        <p className="text-xs font-mono">{job.lastSync ? new Date(job.lastSync).toLocaleString() : 'Nunca'}</p>
+                                    </div>
+                                    <button onClick={() => onDeleteJob(job.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={18}/></button>
+                                </div>
+                            </div>
+                        ))}
+                        {jobs.length === 0 && <div className="text-center py-10 text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-200">Nenhuma conexão de banco de dados configurada.</div>}
+                    </div>
+                </div>
+
+                <div className="bg-slate-900 rounded-xl border border-slate-800 p-8">
+                    <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold text-white">Manutenção e Reparo do Banco</h3></div>
+                    <p className="text-sm text-slate-400 mb-6">Execute este script no SQL Editor do Supabase se notar erros de colunas ausentes ou falhas estruturais após atualizações.</p>
+                    {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold transition-all">Gerar Script de Reparo V52</button> : (
+                        <div className="relative">
+                            <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto max-h-64">{generateRepairSQL()}</pre>
+                            <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded text-xs transition-all">{sqlCopied ? 'Copiado!' : 'Copiar Script'}</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
         {activeTab === 'instructor_levels' && (
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Níveis Docentes (Honorários)</h3>
-                    <button onClick={() => setEditingLevel({ name: '', honorarium: 0 })} className="bg-rose-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Nível</button>
+                    <button onClick={() => setEditingLevel({ name: '', honorarium: 0 })} className="bg-rose-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-rose-700 transition-all">+ Novo Nível</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {instructorLevels.map(lvl => (
@@ -553,7 +613,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Informações dos Cursos (Portal)</h3>
-                    <button onClick={() => setEditingCourseInfo({ courseName: '', details: '', materials: '', requirements: '' })} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Nova Info</button>
+                    <button onClick={() => setEditingCourseInfo({ courseName: '', details: '', materials: '', requirements: '' })} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-all">+ Nova Info</button>
                 </div>
                 <div className="space-y-4">
                     {courseInfos.map(info => (
@@ -570,7 +630,7 @@ NOTIFY pgrst, 'reload schema';
             <div className="bg-white rounded-xl border border-slate-200 p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Categorias de Suporte (Tags)</h3>
-                    <button onClick={() => setEditingTag({ name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold">+ Novo Tag</button>
+                    <button onClick={() => setEditingTag({ name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">+ Novo Tag</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {supportTags.map(tag => (
@@ -595,19 +655,6 @@ NOTIFY pgrst, 'reload schema';
                         </div>
                     ))}
                 </div>
-            </div>
-        )}
-
-        {activeTab === 'database' && (
-            <div className="bg-white rounded-xl border border-slate-200 p-8">
-                <div className="flex items-center gap-3 mb-4"><Database className="text-amber-600" /><h3 className="text-lg font-bold">Manutenção e Sincronização</h3></div>
-                <p className="text-sm text-slate-500 mb-6">Execute este reparo se notar erros de banco de dados ou colunas ausentes na liberação de alunos.</p>
-                {!showSql ? <button onClick={() => setShowSql(true)} className="w-full py-3 bg-slate-900 text-slate-100 rounded-lg font-bold">Gerar Script de Reparo V52</button> : (
-                    <div className="relative">
-                        <pre className="bg-black text-amber-400 p-4 rounded-lg text-[10px] font-mono overflow-auto">{generateRepairSQL()}</pre>
-                        <button onClick={copySql} className="absolute top-2 right-2 bg-slate-700 text-white px-3 py-1 rounded text-xs">{sqlCopied ? 'Copiado!' : 'Copiar'}</button>
-                    </div>
-                )}
             </div>
         )}
       </div>

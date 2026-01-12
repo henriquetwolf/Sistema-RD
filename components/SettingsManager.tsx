@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-    Upload, Image as ImageIcon, CheckCircle, Save, RotateCcw, Database, 
-    Copy, AlertTriangle, Users, Lock, Unlock, Check, X, ShieldCheck, 
-    Layout, ExternalLink, Trash2, BarChart3, Building2, Plus, Edit2,
-    Monitor, Globe, Target, Info, Shield, TrendingUp, DollarSign,
-    Loader2, Package, Tag, Layers, Palette, History, Clock, User, Search,
-    Play, Pause, Calendar, Smartphone, Table, Link as LinkIcon, ChevronDown, Award, ShoppingBag, Zap, Filter,
-    List, ArrowRight, Braces, Sparkles, RefreshCw, BookOpen, Book, ListTodo, LifeBuoy, Hash, Tag as TagIcon, Terminal
+    Upload, Image as ImageIcon, CheckCircle, Save, Database, 
+    Copy, Users, Lock, Unlock, Check, X, ShieldCheck, 
+    Trash2, Building2, Plus, Edit2, Palette, History, RefreshCw, 
+    Zap, Loader2, Table, DollarSign, Terminal, Tag as TagIcon, Layout, Globe,
+    Search, Info, AlertTriangle, AlertCircle
 } from 'lucide-react';
 import { appBackend, CompanySetting, WebhookTrigger, Pipeline } from '../services/appBackend';
 import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, Product, CourseInfo, SupportTag } from '../types';
@@ -355,7 +353,9 @@ NOTIFY pgrst, 'reload schema';
                     <button onClick={() => setEditingCompany({ id: '', legalName: '', cnpj: '', webhookUrl: '', productTypes: [], productIds: [] })} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700">+ Nova Empresa</button>
                 </div>
                 <div className="space-y-4">
-                    {isLoadingCompanies ? <Loader2 className="animate-spin mx-auto text-teal-600"/> : companies.map(c => (
+                    {isLoadingCompanies ? <Loader2 className="animate-spin mx-auto text-teal-600"/> : companies.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhuma empresa cadastrada.</div>
+                    ) : companies.map(c => (
                         <div key={c.id} className="p-4 border rounded-xl flex items-center justify-between group hover:border-teal-300 transition-all">
                             <div>
                                 <p className="font-bold text-slate-800">{c.legalName}</p>
@@ -378,8 +378,10 @@ NOTIFY pgrst, 'reload schema';
                     <button onClick={() => setEditingBanner({ title: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-orange-700">+ Novo Banner</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {isLoadingBanners ? <Loader2 className="animate-spin mx-auto text-orange-600"/> : banners.map(b => (
-                        <div key={b.id} className="border rounded-xl overflow-hidden group">
+                    {isLoadingBanners ? <Loader2 className="animate-spin mx-auto text-orange-600"/> : banners.length === 0 ? (
+                        <div className="col-span-full p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhum banner cadastrado.</div>
+                    ) : banners.map(b => (
+                        <div key={b.id} className="border rounded-xl overflow-hidden group shadow-sm hover:shadow-md transition-shadow">
                             <img src={b.imageUrl} className="w-full h-32 object-cover" />
                             <div className="p-4 flex items-center justify-between bg-slate-50">
                                 <div><p className="font-bold text-xs">{b.title}</p><p className="text-[10px] text-slate-400 uppercase">{b.targetAudience}</p></div>
@@ -407,7 +409,9 @@ NOTIFY pgrst, 'reload schema';
                     <button onClick={() => setEditingTrigger({ pipelineName: 'Padrão', stageId: 'closed', payloadJson: DEFAULT_WEBHOOK_PAYLOAD })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700">+ Novo Gatilho</button>
                 </div>
                 <div className="space-y-4">
-                    {isLoadingTriggers ? <Loader2 className="animate-spin mx-auto text-indigo-600"/> : webhookTriggers.map(t => (
+                    {isLoadingTriggers ? <Loader2 className="animate-spin mx-auto text-indigo-600"/> : webhookTriggers.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhum gatilho de automação configurado.</div>
+                    ) : webhookTriggers.map(t => (
                         <div key={t.id} className="p-4 border rounded-xl flex items-center justify-between group hover:border-indigo-300 transition-all">
                             <div><p className="font-bold text-slate-800">{t.pipelineName} • {t.stageId}</p><p className="text-[10px] text-slate-400 uppercase">Disparo de Automação Externo</p></div>
                             <div className="flex gap-2"><button onClick={() => setEditingTrigger(t)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteWebhookTrigger(t.id!).then(fetchWebhookTriggers)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
@@ -424,7 +428,9 @@ NOTIFY pgrst, 'reload schema';
                     <button onClick={() => setEditingRole({ id: '', name: '', permissions: {} })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700">+ Novo Perfil</button>
                 </div>
                 <div className="space-y-3">
-                    {isLoadingRoles ? <Loader2 className="animate-spin mx-auto text-indigo-600"/> : roles.map(r => (
+                    {isLoadingRoles ? <Loader2 className="animate-spin mx-auto text-indigo-600"/> : roles.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhum perfil de acesso cadastrado.</div>
+                    ) : roles.map(r => (
                         <div key={r.id} className="p-4 border rounded-xl flex items-center justify-between">
                             <span className="font-bold">{r.name}</span>
                             <div className="flex gap-2"><button onClick={() => setEditingRole(r)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteRole(r.id).then(fetchRoles)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
@@ -441,7 +447,9 @@ NOTIFY pgrst, 'reload schema';
                     <button onClick={() => setEditingLevel({ id: '', name: '', honorarium: 0, observations: '' })} className="bg-rose-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-rose-700">+ Novo Nível</button>
                 </div>
                 <div className="space-y-3">
-                    {isLoadingLevels ? <Loader2 className="animate-spin mx-auto text-rose-600"/> : instructorLevels.map(l => (
+                    {isLoadingLevels ? <Loader2 className="animate-spin mx-auto text-rose-600"/> : instructorLevels.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhum nível cadastrado.</div>
+                    ) : instructorLevels.map(l => (
                         <div key={l.id} className="p-4 border rounded-xl flex items-center justify-between">
                             <div><p className="font-bold">{l.name}</p><p className="text-xs text-slate-500">Remuneração: R$ {l.honorarium}</p></div>
                             <div className="flex gap-2"><button onClick={() => setEditingLevel(l)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteInstructorLevel(l.id).then(fetchInstructorLevels)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
@@ -458,7 +466,9 @@ NOTIFY pgrst, 'reload schema';
                     <button onClick={() => setEditingCourseInfo({ id: '', courseName: '', details: '', materials: '', requirements: '' })} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700">+ Nova Info</button>
                 </div>
                 <div className="space-y-4">
-                    {isLoadingCourseInfo ? <Loader2 className="animate-spin mx-auto text-blue-600"/> : courseInfos.map(i => (
+                    {isLoadingCourseInfo ? <Loader2 className="animate-spin mx-auto text-blue-600"/> : courseInfos.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhuma informação de curso cadastrada.</div>
+                    ) : courseInfos.map(i => (
                         <div key={i.id} className="p-4 border rounded-xl flex items-center justify-between group">
                             <div><p className="font-bold">{i.courseName}</p><p className="text-[10px] text-slate-400 uppercase">Atualizado em: {new Date(i.updatedAt).toLocaleDateString()}</p></div>
                             <div className="flex gap-2"><button onClick={() => setEditingCourseInfo(i)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteCourseInfo(i.id).then(fetchCourseInfos)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
@@ -475,7 +485,9 @@ NOTIFY pgrst, 'reload schema';
                     <button onClick={() => setEditingTag({ id: '', name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">+ Novo Tag</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {isLoadingTags ? <Loader2 className="animate-spin mx-auto text-emerald-600"/> : supportTags.map(t => (
+                    {isLoadingTags ? <Loader2 className="animate-spin mx-auto text-emerald-600"/> : supportTags.length === 0 ? (
+                        <div className="col-span-full p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhuma tag de suporte cadastrada.</div>
+                    ) : supportTags.map(t => (
                         <div key={t.id} className="p-4 border rounded-xl flex items-center justify-between">
                             <div><p className="font-bold text-sm">{t.name}</p><span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded uppercase font-black text-slate-500">Público: {t.role}</span></div>
                             <div className="flex gap-1"><button onClick={() => setEditingTag(t)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded"><Edit2 size={14}/></button><button onClick={() => appBackend.deleteSupportTag(t.id).then(fetchSupportTags)} className="p-1.5 text-red-600 hover:bg-red-50 rounded"><Trash2 size={14}/></button></div>
@@ -529,7 +541,9 @@ NOTIFY pgrst, 'reload schema';
                     <button onClick={fetchLogs} className="p-2 text-slate-400 hover:text-indigo-600 transition-all"><RefreshCw size={18} className={clsx(isLoadingLogs && "animate-spin")} /></button>
                 </div>
                 <div className="space-y-3">
-                    {isLoadingLogs ? <Loader2 className="animate-spin mx-auto text-slate-400"/> : logs.map(log => (
+                    {isLoadingLogs ? <Loader2 className="animate-spin mx-auto text-slate-400"/> : logs.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhum log de auditoria encontrado.</div>
+                    ) : logs.map(log => (
                         <div key={log.id} className="p-3 border-b border-slate-50 text-xs flex items-start gap-4 animate-in fade-in">
                             <span className="text-slate-400 w-32 shrink-0 font-mono">{new Date(log.createdAt).toLocaleString()}</span>
                             <span className="font-bold text-slate-700 w-40 shrink-0 truncate">{log.userName}</span>
@@ -558,13 +572,13 @@ NOTIFY pgrst, 'reload schema';
 
       {/* MODAL GENÉRICO PARA CRUDS */}
       {(editingRole || editingBanner || editingCompany || editingLevel || editingCourseInfo || editingTag || editingTrigger) && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh] my-8">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50 shrink-0">
                       <h3 className="font-bold uppercase text-xs tracking-widest text-slate-500">Configuração de Item</h3>
                       <button onClick={() => { setEditingRole(null); setEditingBanner(null); setEditingCompany(null); setEditingLevel(null); setEditingCourseInfo(null); setEditingTag(null); setEditingTrigger(null); }}><X size={24}/></button>
                   </div>
-                  <div className="p-8 overflow-y-auto space-y-6">
+                  <div className="p-8 overflow-y-auto space-y-6 flex-1">
                       
                       {/* FORM EMPRESA (COMPANY) */}
                       {editingCompany && (
@@ -586,7 +600,7 @@ NOTIFY pgrst, 'reload schema';
                               
                               <div>
                                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Tipos de Produtos Atendidos</label>
-                                  <div className="flex gap-3">
+                                  <div className="flex flex-wrap gap-3">
                                       {['Digital', 'Presencial', 'Evento'].map(type => (
                                           <label key={type} className="flex items-center gap-2 p-2 bg-slate-50 border rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
                                               <input 
@@ -607,7 +621,7 @@ NOTIFY pgrst, 'reload schema';
 
                               <div>
                                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Vincular Produtos Específicos</label>
-                                  <div className="max-h-40 overflow-y-auto border rounded-xl p-3 bg-slate-50 space-y-1 custom-scrollbar">
+                                  <div className="max-h-40 overflow-y-auto border rounded-xl p-3 bg-slate-50 space-y-1 custom-scrollbar shadow-inner">
                                       {allProducts.map(p => (
                                           <label key={p.id} className="flex items-center gap-2 p-1.5 hover:bg-white rounded transition-colors cursor-pointer">
                                               <input 
@@ -627,7 +641,10 @@ NOTIFY pgrst, 'reload schema';
                                   <p className="text-[9px] text-slate-400 mt-2">Os negócios desses produtos serão faturados por esta empresa no CRM.</p>
                               </div>
 
-                              <button onClick={handleSaveCompany} disabled={isSavingItem} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg hover:bg-teal-700 active:scale-95 transition-all">{isSavingItem ? 'Salvando...' : 'Salvar Empresa'}</button>
+                              <button onClick={handleSaveCompany} disabled={isSavingItem} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg hover:bg-teal-700 active:scale-95 transition-all flex items-center justify-center gap-2">
+                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                                  Salvar Empresa
+                              </button>
                           </div>
                       )}
 

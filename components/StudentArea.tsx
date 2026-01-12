@@ -185,9 +185,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     }, [courseStructure, completedLessonIds, playingCourse]);
 
     const studentFirstName = useMemo(() => {
-        if (!student.name) return 'Aluno';
-        const namePart = student.name.trim().split(' ')[0];
-        if (!namePart) return 'Aluno';
+        const rawName = student.name || '';
+        const namePart = rawName.trim().split(' ')[0];
+        if (!namePart || namePart.toLowerCase() === 'aluno') return 'Aluno';
         return namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase();
     }, [student.name]);
 

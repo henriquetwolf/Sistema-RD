@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
@@ -175,10 +174,13 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({
         if (deals && deals.length > 0) {
             const studentDeals = deals.filter((d: any) => (d.cpf ? d.cpf.replace(/\D/g, '') : '') === cleanCpf);
             if (studentDeals.length > 0 && studentDeals.some((d: any) => d.student_access_enabled !== false)) {
+                // Tenta pegar o nome mais completo disponível
+                const bestName = studentDeals[0].company_name || studentDeals[0].contact_name || 'Aluno';
+                
                 const studentInfo: StudentSession = { 
                     email: studentDeals[0].email, 
                     cpf: studentDeals[0].cpf, 
-                    name: studentDeals[0].contact_name, 
+                    name: bestName, 
                     deals: studentDeals 
                 };
                 if (onStudentLogin) onStudentLogin(studentInfo);

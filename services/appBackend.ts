@@ -125,7 +125,7 @@ export const appBackend = {
 
   getFormById: async (id: string): Promise<FormModel | null> => {
     if (!isConfigured) return null;
-    const { data } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
+    const { data } = await supabase.from('crm_forms').select('*, crm_form_submissions(count)').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
       id: data.id, 
@@ -141,14 +141,15 @@ export const appBackend = {
       questions: data.questions, 
       style: data.style, 
       createdAt: data.created_at, 
-      submissionsCount: data.submissions_count || 0, 
+      submissionsCount: data.crm_form_submissions?.[0]?.count || 0, 
       folderId: data.folder_id
     };
   },
 
   getForms: async (): Promise<FormModel[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_forms').select('*').eq('type', 'form').order('created_at', { ascending: false });
+    // Usamos select('*, crm_form_submissions(count)') para obter o valor real de respostas do banco via agregação
+    const { data } = await supabase.from('crm_forms').select('*, crm_form_submissions(count)').eq('type', 'form').order('created_at', { ascending: false });
     return (data || []).map((item: any) => ({
       id: item.id, 
       title: item.title, 
@@ -163,14 +164,15 @@ export const appBackend = {
       questions: item.questions, 
       style: item.style, 
       createdAt: item.created_at, 
-      submissionsCount: item.submissions_count || 0, 
+      submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id
     }));
   },
 
   getSurveys: async (): Promise<SurveyModel[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_forms').select('*').eq('type', 'survey').order('created_at', { ascending: false });
+    // Usamos select('*, crm_form_submissions(count)') para obter o valor real de respostas do banco via agregação
+    const { data } = await supabase.from('crm_forms').select('*, crm_form_submissions(count)').eq('type', 'survey').order('created_at', { ascending: false });
     return (data || []).map((item: any) => ({
       id: item.id, 
       title: item.title, 
@@ -185,7 +187,7 @@ export const appBackend = {
       questions: item.questions, 
       style: item.style, 
       createdAt: item.created_at, 
-      submissionsCount: item.submissions_count || 0, 
+      submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id,
       targetAudience: item.target_audience || 'all',
       targetType: item.target_type || 'all',
@@ -204,7 +206,6 @@ export const appBackend = {
       description: form.description, 
       campaign: form.campaign, 
       is_lead_capture: form.isLeadCapture, 
-      // Fix: Corrected property names to use camelCase from FormModel
       distribution_mode: form.distributionMode, 
       fixed_owner_id: form.fixedOwnerId || null, 
       team_id: form.teamId || null, 
@@ -227,7 +228,6 @@ export const appBackend = {
       description: survey.description,
       campaign: survey.campaign,
       is_lead_capture: survey.isLeadCapture,
-      // Fix: Corrected property name to use camelCase from SurveyModel
       distribution_mode: survey.distributionMode,
       questions: survey.questions,
       style: survey.style,
@@ -861,33 +861,14 @@ export const appBackend = {
         legal_name: studio.legalName,
         cnpj: studio.cnpj,
         studio_phone: studio.studioPhone,
-        address: studio.address,
-        city: studio.city,
-        state: studio.state,
-        country: studio.country,
-        size_m2: studio.sizeM2,
-        student_capacity: studio.studentCapacity,
-        rent_value: studio.rentValue,
-        methodology: studio.methodology,
-        studio_type: studio.studioType,
-        name_on_site: studio.nameOnSite,
-        bank: studio.bank,
-        agency: studio.agency,
-        account: studio.account,
-        beneficiary: studio.beneficiary,
-        pix_key: studio.pixKey,
-        has_reformer: studio.hasReformer,
-        qty_reformer: studio.qtyReformer,
-        has_ladder_barrel: studio.hasLadderBarrel,
-        qty_ladder_barrel: studio.qtyLadderBarrel,
-        has_chair: studio.hasChair,
-        qty_chair: studio.qtyChair,
-        has_cadillac: studio.hasCadillac,
-        qty_cadillac: studio.qtyCadillac,
-        has_chairs_for_course: studio.hasChairsForCourse,
-        has_tv: studio.hasTv,
-        max_kits_capacity: studio.maxKitsCapacity,
-        attachments: studio.attachments
+        address: studio.address, city: studio.city, state: studio.state, country: studio.country,
+        size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue,
+        methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite,
+        bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey,
+        has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel,
+        qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair,
+        has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse,
+        has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
     };
     await supabase.from('crm_partner_studios').upsert(payload);
   },
@@ -1234,7 +1215,6 @@ export const appBackend = {
         item_apostila_classico: record.itemApostilaClassico,
         item_sacochila: record.itemSacochila,
         item_lapis: record.itemLapis,
-        // Fix: Property 'registration_date' does not exist on type 'InventoryRecord'. Use 'registrationDate'.
         registration_date: record.registrationDate,
         studio_id: record.studioId || null,
         tracking_code: record.trackingCode,
@@ -1261,8 +1241,8 @@ export const appBackend = {
         totalInstallments: item.total_installments, dueDate: item.due_date, responsibleAgent: item.responsible_agent,
         identifier_code: item.identifier_code, fullName: item.full_name, productName: item.product_name,
         originalValue: item.original_value, paymentMethod: item.payment_method, observations: item.observations,
-        status: item.status, team: item.team, voucherLink1: item.voucher_link_1, testDate: item.test_date,
-        voucherLink2: item.voucher_link_2, voucherLink3: item.voucher_link_3, boletos_link: item.boletos_link,
+        status: item.status, team: item.team, voucher_link_1: item.voucher_link_1, test_date: item.test_date,
+        voucher_link_2: item.voucher_link_2, voucher_link_3: item.voucher_link_3, boletos_link: item.boletos_link,
         negotiation_reference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at
     }));
   },

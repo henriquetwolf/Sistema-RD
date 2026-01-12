@@ -69,6 +69,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState<FormModel | null>(null);
+  const [showShareModal, setShowShareModal] = useState<FormModel | null>(null);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [submissions, setSubmissions] = useState<any[]>([]);
@@ -114,7 +115,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
           try {
               setLoading(true);
               await appBackend.deleteForm(id); 
-              // Atualiza o estado apenas após sucesso no banco
               setForms(prev => prev.filter(f => f.id !== id));
           } catch (e: any) { 
               alert("Erro ao excluir. Verifique se existem respostas vinculadas ou rode o script de reparo em configurações."); 
@@ -141,7 +141,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const exportToExcel = () => {
     if (submissions.length === 0) return;
     
-    // Mapeia os dados para um formato tabular amigável
     const dataToExport = submissions.map(sub => {
         const row: any = { 'Data': new Date(sub.created_at).toLocaleString() };
         currentForm.questions.forEach(q => {
@@ -348,7 +347,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                           <section>
                               <h3 className="text-lg font-bold flex items-center gap-2 mb-6 border-b pb-4"><Target className="text-teal-600" /> Inteligência Comercial</h3>
                               <div className="space-y-6">
-                                  {/* CAMPO CAMPANHA */}
                                   <div>
                                       <label className="block text-xs font-bold text-slate-500 mb-1 uppercase flex items-center gap-2">
                                           <Megaphone size={14} className="text-teal-500" /> Nome da Campanha (UTM Campaign)
@@ -465,7 +463,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                             <p className="text-[10px] font-bold text-slate-400 uppercase">Respostas</p>
                             <p className="text-xl font-black text-slate-800">{f.submissionsCount || 0}</p>
                         </button>
-                        <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?publicFormId=${f.id}`); alert("Link copiado!"); }} className="bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl flex flex-col items-center justify-center">
+                        <button onClick={() => setShowShareModal(f)} className="bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl flex flex-col items-center justify-center">
                             <Share2 size={20} />
                             <span className="text-[10px] font-black uppercase mt-1">Link Externo</span>
                         </button>
@@ -517,6 +515,40 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                               </button>
                           ))}
                       </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {showShareModal && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
+                      <div className="flex items-center gap-3">
+                          <div className="bg-teal-100 p-2 rounded-xl text-teal-600"><Share2 size={20}/></div>
+                          <h3 className="text-lg font-black text-slate-800">Compartilhar Formulário</h3>
+                      </div>
+                      <button onClick={() => setShowShareModal(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-6">
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Link Público</label>
+                          <div className="flex gap-2">
+                              <input readOnly className="flex-1 px-4 py-2 bg-slate-50 border rounded-xl text-xs font-mono" value={`${window.location.origin}/?publicFormId=${showShareModal.id}`} />
+                              <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?publicFormId=${showShareModal.id}`); alert("Link copiado!"); }} className="p-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 shadow-md active:scale-95 transition-all"><Copy size={16}/></button>
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Código de Incorporação (iFrame)</label>
+                          <div className="flex gap-2">
+                              <textarea readOnly className="flex-1 px-4 py-2 bg-slate-50 border rounded-xl text-[10px] font-mono h-24 resize-none leading-relaxed" value={`<iframe src="${window.location.origin}/?publicFormId=${showShareModal.id}&embed=true" width="100%" height="800" frameborder="0"></iframe>`} />
+                              <button onClick={() => { navigator.clipboard.writeText(`<iframe src="${window.location.origin}/?publicFormId=${showShareModal.id}&embed=true" width="100%" height="800" frameborder="0"></iframe>`); alert("Código de incorporação copiado!"); }} className="p-2.5 bg-slate-800 text-white rounded-xl hover:bg-slate-900 shadow-md active:scale-95 h-fit transition-all"><Copy size={16}/></button>
+                          </div>
+                          <p className="text-[9px] text-slate-400 mt-2 italic px-1">* Use este código para exibir o formulário dentro do seu próprio site ou landing page.</p>
+                      </div>
+                  </div>
+                  <div className="px-8 py-5 bg-slate-50 border-t flex justify-end">
+                      <button onClick={() => setShowShareModal(null)} className="px-6 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs uppercase tracking-widest hover:bg-slate-100 transition-all">Fechar</button>
                   </div>
               </div>
           </div>

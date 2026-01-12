@@ -236,7 +236,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V55
+-- SCRIPT DE FUNDAÇÃO CRM V56
 CREATE TABLE IF NOT EXISTS public.crm_forms (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
@@ -259,6 +259,14 @@ CREATE TABLE IF NOT EXISTS public.crm_forms (
     submissions_count integer DEFAULT 0,
     created_at timestamp with time zone DEFAULT now()
 );
+
+-- Garantir colunas em crm_forms caso a tabela já exista
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_type text DEFAULT 'all';
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_product_type text;
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_product_name text;
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS only_if_finished boolean DEFAULT false;
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS submissions_count integer DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -434,7 +442,7 @@ NOTIFY pgrst, 'reload schema';
                 <div className="space-y-4">
                     {isLoadingTriggers ? <Loader2 className="animate-spin mx-auto text-indigo-600"/> : webhookTriggers.map(t => (
                         <div key={t.id} className="p-4 border rounded-xl flex items-center justify-between group hover:border-indigo-300 transition-all">
-                            <div><p className="font-bold text-slate-800">{t.pipelineName} • {t.stageId}</p><p className="text-[10px] text-slate-400 uppercase">Disparo de Automação Externo</p></div>
+                            <div><p className="font-bold text-slate-800">{t.pipeline_name} • {t.stage_id}</p><p className="text-[10px] text-slate-400 uppercase">Disparo de Automação Externo</p></div>
                             <div className="flex gap-2"><button onClick={() => setEditingTrigger(t)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteWebhookTrigger(t.id!).then(fetchWebhookTriggers)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
                         </div>
                     ))}
@@ -550,7 +558,7 @@ NOTIFY pgrst, 'reload schema';
 
         {activeTab === 'sql_script' && (
             <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 animate-in zoom-in-95 duration-200">
-                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V55</h3></div>
+                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V56</h3></div>
                 <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados, incluindo tabelas de formulários, pesquisas, cursos, logs e automações. Copie e execute no **SQL Editor** do Supabase.</p>
                 <div className="relative">
                     <pre className="bg-black text-emerald-400 p-6 rounded-2xl text-[10px] font-mono overflow-auto max-h-[400px] shadow-inner custom-scrollbar-dark border border-slate-800">

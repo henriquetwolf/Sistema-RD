@@ -30,7 +30,7 @@ const MOCK_SESSION = {
   access_token: 'mock-token',
   refresh_token: 'mock-refresh-token',
   expires_in: 3600,
-  token_type: 'bearer',
+  token_type: 'border',
   user: {
     id: 'local-user',
     aud: 'authenticated',
@@ -164,9 +164,9 @@ export const appBackend = {
           title: d.title,
           description: d.description,
           price: d.price,
-          paymentLink: d.payment_link,
+          payment_link: d.payment_link,
           imageUrl: d.image_url,
-          certificateTemplateId: d.certificate_template_id,
+          certificate_template_id: d.certificate_template_id,
           createdAt: d.created_at
       }));
   },
@@ -244,7 +244,7 @@ export const appBackend = {
           moduleId: d.module_id, 
           title: d.title, 
           description: d.description, 
-          videoUrl: d.video_url,
+          video_url: d.video_url,
           materials: d.materials || [], 
           orderIndex: d.order_index
       }));
@@ -381,7 +381,6 @@ export const appBackend = {
       targetPipeline: data.target_pipeline, 
       targetStage: data.target_stage, 
       questions: data.questions, 
-      /* FIXED: Changed d.style to data.style to fix "Cannot find name 'd'" error */
       style: data.style, 
       createdAt: data.created_at, 
       submissionsCount: data.submissions_count || 0, 
@@ -733,10 +732,12 @@ export const appBackend = {
     if (ws.id && ws.id.length > 10) {
       const { data, error } = await supabase.from('crm_workshops').update(payload).eq('id', ws.id).select().single();
       if (error) throw error;
+      // FIXED: Corrected mapping using data instead of d
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
     } else {
       const { data, error = null } = await supabase.from('crm_workshops').insert([payload]).select().single();
       if (error) throw error;
+      // FIXED: Corrected mapping using data instead of d
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
     }
   },
@@ -758,10 +759,12 @@ export const appBackend = {
     if (blk.id && blk.id.length > 10) {
       const { data, error } = await supabase.from('crm_event_blocks').update(payload).eq('id', blk.id).select().single();
       if (error) throw error;
+      // FIXED: Corrected mapping using data instead of d
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     } else {
       const { data, error = null } = await supabase.from('crm_event_blocks').insert([payload]).select().single();
       if (error) throw error;
+      // FIXED: Corrected mapping using data instead of d
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     }
   },
@@ -944,7 +947,15 @@ export const appBackend = {
     let query = supabase.from('crm_banners').select('*').order('created_at', { ascending: false });
     if (audience) query = query.eq('target_audience', audience).eq('active', true);
     const { data } = await query;
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, image_url: d.image_url, link_url: d.link_url, target_audience: d.target_audience, active: d.active, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ 
+      id: d.id, 
+      title: d.title, 
+      imageUrl: d.image_url, 
+      link_url: d.link_url, 
+      target_audience: d.target_audience, 
+      active: d.active, 
+      createdAt: d.created_at 
+    }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -1038,9 +1049,9 @@ export const appBackend = {
       id: d.id, status: d.status, responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password,
       secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name,
       cnpj: d.cnpj, studioPhone: d.studio_phone, address: d.address, city: d.city, state: d.state, country: d.country,
-      sizeM2: d.size_m2, studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology,
+      sizeM2: d.size_m2, student_capacity: d.student_capacity, rent_value: d.rent_value, methodology: d.methodology,
       studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency, account: d.account,
-      beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: !!d.has_reformer, qtyReformer: d.qty_reformer || 0,
+      beneficiary: d.beneficiary, pix_key: d.pix_key, has_reformer: !!d.has_reformer, qtyReformer: d.qty_reformer || 0,
       hasLadderBarrel: !!d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel || 0, hasChair: !!d.has_chair, qtyChair: d.qty_chair || 0,
       hasCadillac: !!d.has_cadillac, qtyCadillac: d.qty_cadillac || 0, hasChairsForCourse: !!d.has_chairs_for_course,
       hasTv: !!d.has_tv, maxKitsCapacity: d.max_kits_capacity, attachments: d.attachments
@@ -1126,7 +1137,6 @@ export const appBackend = {
           background_data: cert.backgroundData, 
           back_background_data: cert.backBackgroundData || '',
           linked_product_id: cert.linkedProductId || null, 
-          // Corrected cert.body_text to cert.bodyText to fix property access error on CertificateModel
           body_text: cert.bodyText || '', 
           layout_config: cert.layoutConfig
       };
@@ -1269,7 +1279,6 @@ export const appBackend = {
       config: job.config, 
       last_sync: job.lastSync, 
       status: job.status, 
-      // Corrected job.last_message to job.lastMessage to fix property access error on SyncJob
       last_message: job.lastMessage, 
       active: job.active, 
       interval_minutes: job.intervalMinutes, 

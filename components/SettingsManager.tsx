@@ -568,6 +568,11 @@ NOTIFY pgrst, 'reload schema';
                               </div>
                               
                               <div>
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Link de Direcionamento (URL)</label>
+                                  <input type="text" className="w-full px-4 py-3 border rounded-2xl bg-slate-50 font-mono text-xs" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} placeholder="https://exemplo.com" />
+                              </div>
+
+                              <div>
                                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Imagem do Banner</label>
                                   <div className="flex flex-col gap-4">
                                       <div className="flex items-center gap-4">

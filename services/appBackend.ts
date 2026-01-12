@@ -224,7 +224,8 @@ export const appBackend = {
 
   deleteForm: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_forms').delete().eq('id', id);
+    const { error } = await supabase.from('crm_forms').delete().eq('id', id);
+    if (error) throw error;
   },
 
   getFormFolders: async (type: 'form' | 'survey' = 'form'): Promise<FormFolder[]> => {
@@ -345,15 +346,18 @@ export const appBackend = {
 
         } catch (crmErr) {
             console.error("Erro ao processar captura de lead comercial:", crmErr);
-            // Não travamos a submissão do formulário se o CRM falhar, 
-            // mas registramos no log
         }
     }
   },
 
   getFormSubmissions: async (formId: string): Promise<any[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_form_submissions').select('*').eq('form_id', formId).order('created_at', { ascending: false });
+    const { data, error } = await supabase
+        .from('crm_form_submissions')
+        .select('*')
+        .eq('form_id', formId)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
     return data || [];
   },
 

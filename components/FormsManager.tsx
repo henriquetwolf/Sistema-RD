@@ -6,8 +6,7 @@ import {
   Loader2, Check, List, CheckSquare as CheckboxIcon, Inbox, Download, Table, 
   Layout, Folder, FolderPlus, MoveRight, LayoutGrid, X, Type, AlignLeft, 
   Mail, Phone, Calendar, Hash, Palette, Sparkles, Image as ImageIcon,
-  // Added RefreshCw to the imports
-  AlignCenter, Filter, Tag, ArrowRightLeft, User, Users, Info, FileSpreadsheet, RefreshCw
+  AlignCenter, Filter, Tag, ArrowRightLeft, User, Users, Info, FileSpreadsheet, RefreshCw, Megaphone
 } from 'lucide-react';
 import { appBackend, Pipeline } from '../services/appBackend';
 import clsx from 'clsx';
@@ -349,6 +348,21 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                           <section>
                               <h3 className="text-lg font-bold flex items-center gap-2 mb-6 border-b pb-4"><Target className="text-teal-600" /> Inteligência Comercial</h3>
                               <div className="space-y-6">
+                                  {/* CAMPO CAMPANHA */}
+                                  <div>
+                                      <label className="block text-xs font-bold text-slate-500 mb-1 uppercase flex items-center gap-2">
+                                          <Megaphone size={14} className="text-teal-500" /> Nome da Campanha (UTM Campaign)
+                                      </label>
+                                      <input 
+                                          type="text" 
+                                          className="w-full border rounded-lg p-2.5 text-sm bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-teal-100 transition-all" 
+                                          value={currentForm.campaign} 
+                                          onChange={e => setCurrentForm({...currentForm, campaign: e.target.value})} 
+                                          placeholder="Ex: Black_Friday_2024, Instagram_Ads, Indicação..." 
+                                      />
+                                      <p className="text-[10px] text-slate-400 mt-1">Este nome será vinculado aos novos leads gerados por este formulário.</p>
+                                  </div>
+
                                   <label className="flex items-center gap-4 p-5 bg-teal-50 rounded-2xl border border-teal-100 cursor-pointer">
                                       <div className={clsx("p-2 rounded-lg", currentForm.isLeadCapture ? "bg-teal-600 text-white" : "bg-white text-slate-300")}><Target size={24}/></div>
                                       <div className="flex-1"><span className="font-bold text-teal-900 block">Criar Leads no CRM</span><p className="text-xs text-teal-700">Respostas tornam-se negociações automaticamente.</p></div>

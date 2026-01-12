@@ -135,7 +135,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
               appBackend.client.from('crm_products').select('id, name')
           ]);
           setCompanies(comps); 
-          if (prods.data) setAllProducts(prods.data);
+          if (prods.data) setAllProducts(prods.data as any);
       } catch(e) {} finally { setIsLoadingCompanies(false); } 
   };
   const fetchInstructorLevels = async () => { 
@@ -316,7 +316,7 @@ NOTIFY pgrst, 'reload schema';
                     {isLoadingBanners ? <Loader2 className="animate-spin mx-auto text-orange-600"/> : banners.length === 0 ? (
                         <div className="col-span-full p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhum banner cadastrado.</div>
                     ) : banners.map(b => (
-                        <div key={b.id} className="border rounded-xl overflow-hidden group shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
+                        <div key={b.id} className="border rounded-xl overflow-hidden group shadow-sm hover:shadow-md transition-all flex flex-col group">
                             <img src={b.imageUrl} className="w-full h-32 object-cover" />
                             <div className="p-4 flex items-center justify-between bg-slate-50">
                                 <div><p className="font-bold text-xs">{b.title}</p><p className="text-[10px] text-slate-400 uppercase">{b.targetAudience}</p></div>
@@ -603,7 +603,47 @@ NOTIFY pgrst, 'reload schema';
                                   </div>
                               </div>
 
-                              <button onClick={handleSaveCompany} disabled={isSavingItem} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2">
+                              {/* VÍNCULO COM PRODUTOS ESPECÍFICOS */}
+                              <div className="space-y-4">
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Vincular a Produtos Específicos</label>
+                                  <div className="flex gap-2">
+                                      <select 
+                                          className="flex-1 px-4 py-2 border rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-teal-500"
+                                          onChange={(e) => {
+                                              const val = e.target.value;
+                                              if (!val) return;
+                                              const current = editingCompany.productIds || [];
+                                              if (!current.includes(val)) {
+                                                  setEditingCompany({...editingCompany, productIds: [...current, val]});
+                                              }
+                                              e.target.value = '';
+                                          }}
+                                      >
+                                          <option value="">Adicionar produto específico...</option>
+                                          {allProducts.map(p => (
+                                              <option key={p.id} value={p.name}>{p.name}</option>
+                                          ))}
+                                      </select>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                      {(editingCompany.productIds || []).map(prodName => (
+                                          <span key={prodName} className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100 group">
+                                              {prodName}
+                                              <button 
+                                                  onClick={() => setEditingCompany({...editingCompany, productIds: (editingCompany.productIds || []).filter(p => p !== prodName)})}
+                                                  className="hover:text-red-500 transition-colors"
+                                              >
+                                                  <X size={12} />
+                                              </button>
+                                          </span>
+                                      ))}
+                                      {(editingCompany.productIds || []).length === 0 && (
+                                          <p className="text-[10px] text-slate-400 italic">Nenhum produto específico vinculado.</p>
+                                      )}
+                                  </div>
+                              </div>
+
+                              <button onClick={handleSaveCompany} disabled={isSavingItem} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2 transition-all active:scale-95">
                                   {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Empresa
                               </button>
                           </div>

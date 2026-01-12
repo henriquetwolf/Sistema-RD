@@ -156,7 +156,17 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
           if (prods.data) setAllProducts(prods.data);
       } catch(e) {} finally { setIsLoadingCompanies(false); } 
   };
-  const fetchInstructorLevels = async () => { setIsLoadingLevels(true); try { const data = await appBackend.getInstructorLevels(); setInstructorLevels(data); } catch (e) {} finally { setIsLoadingLevels(false); } };
+  const fetchInstructorLevels = async () => { 
+      setIsLoadingLevels(true); 
+      try { 
+          const data = await appBackend.getInstructorLevels(); 
+          setInstructorLevels(data); 
+      } catch (e) {
+          console.error("Erro ao buscar níveis:", e);
+      } finally { 
+          setIsLoadingLevels(false); 
+      } 
+  };
   const fetchCourseInfos = async () => { setIsLoadingCourseInfo(true); try { const data = await appBackend.getCourseInfos(); setCourseInfos(data); } catch (e) {} finally { setIsLoadingCourseInfo(false); } };
   const fetchSupportTags = async () => { setIsLoadingTags(true); try { const data = await appBackend.getSupportTags(); setSupportTags(data); } catch (e) {} finally { setIsLoadingTags(false); } };
   const fetchLogs = async () => { setIsLoadingLogs(true); try { const data = await appBackend.getActivityLogs(100); setLogs(data); } catch (e) {} finally { setIsLoadingLogs(false); } };
@@ -211,7 +221,15 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V60
+-- SCRIPT DE FUNDAÇÃO CRM V61 (INCLUDES INSTRUCTOR LEVELS)
+CREATE TABLE IF NOT EXISTS public.crm_teacher_levels (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    name text NOT NULL,
+    honorarium numeric DEFAULT 0,
+    observations text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.crm_forms (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
@@ -284,6 +302,16 @@ CREATE TABLE IF NOT EXISTS public.crm_webhook_triggers (
     pipeline_name text NOT NULL,
     stage_id text NOT NULL,
     payload_json text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.crm_companies (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    legal_name text NOT NULL,
+    cnpj text NOT NULL,
+    webhook_url text,
+    product_types text[],
+    product_ids text[],
     created_at timestamp with time zone DEFAULT now()
 );
 
@@ -450,7 +478,7 @@ NOTIFY pgrst, 'reload schema';
                     {isLoadingLevels ? <Loader2 className="animate-spin mx-auto text-rose-600"/> : instructorLevels.length === 0 ? (
                         <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhum nível cadastrado.</div>
                     ) : instructorLevels.map(l => (
-                        <div key={l.id} className="p-4 border rounded-xl flex items-center justify-between">
+                        <div key={l.id} className="p-4 border rounded-xl flex items-center justify-between animate-in fade-in">
                             <div><p className="font-bold">{l.name}</p><p className="text-xs text-slate-500">Remuneração: R$ {l.honorarium}</p></div>
                             <div className="flex gap-2"><button onClick={() => setEditingLevel(l)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteInstructorLevel(l.id).then(fetchInstructorLevels)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
                         </div>
@@ -556,7 +584,7 @@ NOTIFY pgrst, 'reload schema';
 
         {activeTab === 'sql_script' && (
             <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 animate-in zoom-in-95 duration-200">
-                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V60</h3></div>
+                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V61</h3></div>
                 <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados, incluindo deleção em cascata e discriminação de tipos. Copie e execute no **SQL Editor** do Supabase.</p>
                 <div className="relative">
                     <pre className="bg-black text-emerald-400 p-6 rounded-2xl text-[10px] font-mono overflow-auto max-h-[400px] shadow-inner custom-scrollbar-dark border border-slate-800">

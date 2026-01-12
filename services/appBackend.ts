@@ -376,12 +376,22 @@ export const appBackend = {
   getInstructorLevels: async (): Promise<InstructorLevel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_levels').select('*').order('name');
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, honorarium: item.honorarium, observations: item.observations }));
+    return (data || []).map((item: any) => ({ 
+        id: item.id, 
+        name: item.name, 
+        honorarium: item.honorarium || item.level_honorarium || 0, 
+        observations: item.observations 
+    }));
   },
 
   saveInstructorLevel: async (level: InstructorLevel): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_teacher_levels').upsert({ id: level.id, name: level.name, honorarium: level.honorarium, observations: level.observations });
+    await supabase.from('crm_teacher_levels').upsert({ 
+        id: level.id, 
+        name: level.name, 
+        honorarium: level.honorarium, 
+        observations: level.observations 
+    });
   },
 
   deleteInstructorLevel: async (id: string): Promise<void> => {
@@ -424,7 +434,7 @@ export const appBackend = {
   getCompanies: async (): Promise<CompanySetting[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_companies').select('*').order('legal_name');
-    return (data || []).map((item: any) => ({ id: item.id, legalName: item.legal_name, cnpj: item.cnpj, webhookUrl: item.webhook_url, productTypes: item.product_types || [], product_ids: item.product_ids || [] }));
+    return (data || []).map((item: any) => ({ id: item.id, legalName: item.legal_name, cnpj: item.cnpj, webhookUrl: item.webhook_url, productTypes: item.product_types || [], productIds: item.product_ids || [] }));
   },
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
@@ -810,6 +820,7 @@ export const appBackend = {
         rent_value: studio.rentValue,
         methodology: studio.methodology,
         studio_type: studio.studioType,
+        // Fixed compilation error: property 'name_on_site' does not exist on type 'PartnerStudio'. Use 'nameOnSite'.
         name_on_site: studio.nameOnSite,
         bank: studio.bank,
         agency: studio.agency,
@@ -872,9 +883,9 @@ export const appBackend = {
         title: item.title, 
         backgroundData: item.background_data, 
         backBackgroundData: item.back_background_data,
-        linked_product_id: item.linked_product_id, 
-        body_text: item.body_text, 
-        layout_config: item.layout_config, 
+        linkedProductId: item.linked_product_id, 
+        bodyText: item.body_text, 
+        layoutConfig: item.layout_config, 
         createdAt: item.created_at
     }));
   },
@@ -945,7 +956,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
     return (data || []).map((item: any) => ({
-        id: item.id, title: item.title, description: item.description, price: item.price, payment_link: item.payment_link,
+        id: item.id, title: item.title, description: item.description, price: item.price, paymentLink: item.payment_link,
         imageUrl: item.image_url, certificateTemplateId: item.certificate_template_id, createdAt: item.created_at
     }));
   },
@@ -1161,7 +1172,7 @@ export const appBackend = {
     return (data || []).map((item: any) => ({
         id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico,
         itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date,
-        studioId: item.studio_id, tracking_code: item.tracking_code, observations: item.observations,
+        studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations,
         conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at
     }));
   },
@@ -1198,7 +1209,7 @@ export const appBackend = {
     return (data || []).map((item: any) => ({
         id: item.id, openInstallments: item.open_installments, totalNegotiatedValue: item.total_negotiated_value,
         totalInstallments: item.total_installments, dueDate: item.due_date, responsibleAgent: item.responsible_agent,
-        identifierCode: item.identifier_code, fullName: item.full_name, productName: item.product_name,
+        identifier_code: item.identifier_code, fullName: item.full_name, productName: item.product_name,
         originalValue: item.original_value, paymentMethod: item.payment_method, observations: item.observations,
         status: item.status, team: item.team, voucherLink1: item.voucher_link_1, testDate: item.test_date,
         voucherLink2: item.voucher_link_2, voucherLink3: item.voucher_link_3, boletosLink: item.boletos_link,

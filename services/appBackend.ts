@@ -246,7 +246,12 @@ export const appBackend = {
 
   deleteForm: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_forms').delete().eq('id', id);
+    // Removemos as dependências primeiro para evitar erro de integridade referencial no Supabase
+    await supabase.from('crm_form_counters').delete().eq('form_id', id);
+    await supabase.from('crm_form_submissions').delete().eq('form_id', id);
+    // Deletamos o registro principal
+    const { error } = await supabase.from('crm_forms').delete().eq('id', id);
+    if (error) throw error;
   },
 
   getFormFolders: async (type: 'form' | 'survey' = 'form'): Promise<FormFolder[]> => {
@@ -415,7 +420,7 @@ export const appBackend = {
   getBanners: async (audience: 'student' | 'instructor'): Promise<Banner[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_banners').select('*').eq('target_audience', audience).eq('active', true).order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, imageUrl: item.image_url, linkUrl: item.link_url, targetAudience: item.target_audience, active: item.active, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title, imageUrl: item.image_url, link_url: item.link_url, targetAudience: item.target_audience, active: item.active, createdAt: item.created_at }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -930,7 +935,7 @@ export const appBackend = {
         backBackgroundData: item.back_background_data,
         linkedProductId: item.linked_product_id, 
         bodyText: item.body_text, 
-        layoutConfig: item.layout_config, 
+        layout_config: item.layout_config, 
         createdAt: item.created_at
     }));
   },

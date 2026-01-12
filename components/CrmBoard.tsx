@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
@@ -9,6 +10,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend, CompanySetting, Pipeline, PipelineStage, WebhookTrigger } from '../services/appBackend';
+import { whatsappService } from '../services/whatsappService';
 
 // --- Types ---
 type DealStage = string; 
@@ -284,6 +286,50 @@ export const CrmBoard: React.FC = () => {
   };
 
   /**
+   * Dispara automações de WhatsApp com base nos critérios da regra
+   */
+  const triggerWhatsAppAutomation = async (deal: any) => {
+    if (!deal.phone) return;
+
+    try {
+        const { data: rules } = await appBackend.client
+            .from('crm_wa_automations')
+            .select('*')
+            .eq('is_active', true)
+            .eq('pipeline_name', deal.pipeline)
+            .eq('stage_id', deal.stage);
+
+        if (!rules || rules.length === 0) return;
+
+        for (const rule of rules) {
+            // Valida filtros de produto
+            if (rule.product_type && rule.product_type !== deal.product_type) continue;
+            if (rule.product_id && rule.product_id !== deal.product_name) continue;
+
+            let message = rule.message_template;
+            message = message.replace(/\{\{nome_cliente\}\}/g, deal.company_name || deal.contact_name || 'Cliente');
+            message = message.replace(/\{\{curso\}\}/g, deal.product_name || 'Curso');
+
+            // Envio via Evolution API
+            await whatsappService.sendTextMessage({ 
+                wa_id: deal.phone.replace(/\D/g, ''),
+                contact_phone: deal.phone.replace(/\D/g, '')
+            }, message);
+
+            // Registrar log de disparo
+            await appBackend.client.from('crm_wa_automation_logs').insert([{
+                rule_name: rule.name,
+                student_name: deal.company_name || deal.contact_name,
+                phone: deal.phone,
+                message: message
+            }]);
+        }
+    } catch (err) {
+        console.error("Erro ao processar automação de WhatsApp:", err);
+    }
+  };
+
+  /**
    * Função para disparar chamado automático para produtos digitais
    */
   const triggerDigitalSupportTicket = async (deal: any) => {
@@ -347,10 +393,9 @@ export const CrmBoard: React.FC = () => {
         if (error) throw error;
 
         if (data) {
-            // Gatilho do Connection Plug
             dispatchNegotiationWebhook(data);
-            // Gatilho do Suporte (Login Digital)
             triggerDigitalSupportTicket(data);
+            triggerWhatsAppAutomation(data);
         }
 
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal.title}" para a etapa: ${newStage}`, recordId: dealId });
@@ -380,10 +425,9 @@ export const CrmBoard: React.FC = () => {
         if (error) throw error;
 
         if (data) {
-            // Gatilho do Connection Plug
             dispatchNegotiationWebhook(data);
-            // Gatilho do Suporte (Login Digital)
             triggerDigitalSupportTicket(data);
+            triggerWhatsAppAutomation(data);
         }
 
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para Funil: ${pipelineName}, Etapa: ${targetStage}`, recordId: draggedDealId });
@@ -606,9 +650,9 @@ export const CrmBoard: React.FC = () => {
               if (error) throw error;
               
               if (data) {
-                  // Gatilhos
                   dispatchNegotiationWebhook(data);
                   triggerDigitalSupportTicket(data);
+                  triggerWhatsAppAutomation(data);
               }
           } else {
               const dealNumber = generateDealNumber();
@@ -616,9 +660,9 @@ export const CrmBoard: React.FC = () => {
               if (error) throw error;
               
               if (data) {
-                  // Gatilhos
                   dispatchNegotiationWebhook(data);
                   triggerDigitalSupportTicket(data);
+                  triggerWhatsAppAutomation(data);
               }
           }
           await fetchData(); setShowDealModal(false);
@@ -676,7 +720,7 @@ export const CrmBoard: React.FC = () => {
                     dealId: deal.id,
                     dealTitle: deal.title,
                     dealNumber: deal.dealNumber,
-                    clientName: deal.companyName || deal.contactName,
+                    clientName: deal.companyName || deal.contact_name,
                     ownerName: getOwnerName(deal.owner),
                     parentDeal: deal
                 });

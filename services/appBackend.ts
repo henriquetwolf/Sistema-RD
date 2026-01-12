@@ -208,7 +208,8 @@ export const appBackend = {
       description: form.description, 
       campaign: form.campaign, 
       is_lead_capture: form.isLeadCapture, 
-      distribution_mode: form.distribution_mode, 
+      // Fixed: changed form.distribution_mode to form.distributionMode
+      distribution_mode: form.distributionMode, 
       fixed_owner_id: form.fixedOwnerId || null, 
       // Fixed: property should be teamId, not team_id
       team_id: form.teamId || null, 
@@ -232,6 +233,7 @@ export const appBackend = {
       description: survey.description,
       campaign: survey.campaign,
       is_lead_capture: survey.isLeadCapture,
+      // Fixed: changed survey.distribution_mode to survey.distributionMode
       distribution_mode: survey.distributionMode,
       questions: survey.questions,
       style: survey.style,
@@ -867,13 +869,13 @@ export const appBackend = {
         cnpj: studio.cnpj,
         studio_phone: studio.studioPhone,
         address: studio.address, city: studio.city, state: studio.state, country: studio.country,
-        size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue,
-        methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite,
-        bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey,
-        has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel,
-        qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair,
-        has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse,
-        has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments
+        size_m2: studio.size_m2, student_capacity: studio.student_capacity, rent_value: studio.rent_value,
+        methodology: studio.methodology, studio_type: studio.studio_type, name_on_site: studio.name_on_site,
+        bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pix_key,
+        has_reformer: studio.has_reformer, qty_reformer: studio.qty_reformer, has_ladder_barrel: studio.has_ladder_barrel,
+        qty_ladder_barrel: studio.qty_ladder_barrel, has_chair: studio.has_chair, qty_chair: studio.qty_chair,
+        has_cadillac: studio.has_cadillac, qty_cadillac: studio.qty_cadillac, has_chairs_for_course: studio.has_chairs_for_course,
+        has_tv: studio.has_tv, max_kits_capacity: studio.max_kits_capacity, attachments: studio.attachments
     };
     await supabase.from('crm_partner_studios').upsert(payload);
   },
@@ -1006,7 +1008,8 @@ export const appBackend = {
       price: course.price,
       payment_link: course.paymentLink,
       image_url: course.imageUrl,
-      certificate_template_id: course.certificate_template_id || null,
+      // Fixed: changed course.certificate_template_id to course.certificateTemplateId
+      certificate_template_id: course.certificateTemplateId || null,
       created_at: course.createdAt || new Date().toISOString()
     }, { onConflict: 'title' });
   },

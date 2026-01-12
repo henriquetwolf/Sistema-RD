@@ -204,9 +204,9 @@ export const appBackend = {
       description: form.description, 
       campaign: form.campaign, 
       is_lead_capture: form.isLeadCapture, 
-      distribution_mode: form.distributionMode, 
+      distribution_mode: form.distribution_mode, 
       fixed_owner_id: form.fixedOwnerId || null, 
-      team_id: form.teamId || null, 
+      team_id: form.team_id || null, 
       target_pipeline: form.targetPipeline, 
       target_stage: form.targetStage, 
       questions: form.questions, 
@@ -226,7 +226,7 @@ export const appBackend = {
       description: survey.description,
       campaign: survey.campaign,
       is_lead_capture: survey.isLeadCapture,
-      distribution_mode: survey.distributionMode,
+      distribution_mode: survey.distribution_mode,
       questions: survey.questions,
       style: survey.style,
       folder_id: survey.folderId,
@@ -579,7 +579,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
     return (data || []).map((j: any) => ({
-      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
+      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, created_by: j.created_by, createdAt: j.created_at
     }));
   },
 
@@ -814,14 +814,14 @@ export const appBackend = {
     return (data || []).map((item: any) => ({
         id: item.id, status: item.status, responsibleName: item.responsible_name, cpf: item.cpf, phone: item.phone, email: item.email,
         password: item.password, secondContactName: item.second_contact_name, secondContactPhone: item.second_contact_phone,
-        fantasyName: item.fantasy_name, legalName: item.legal_name, cnpj: item.cnpj, studioPhone: item.studio_phone,
-        address: item.address, city: item.city, state: item.state, country: item.country, sizeM2: item.size_m2,
-        studentCapacity: item.student_capacity, rentValue: item.rent_value, methodology: item.methodology,
-        studioType: item.studio_type, nameOnSite: item.name_on_site, bank: item.bank, agency: item.agency,
-        account: item.account, beneficiary: item.beneficiary, pixKey: item.pix_key, hasReformer: !!item.has_reformer,
-        qtyReformer: item.qty_reformer, hasLadderBarrel: !!item.has_ladder_barrel, qtyLadderBarrel: item.qty_ladder_barrel,
-        hasChair: !!item.has_chair, qtyChair: item.qty_chair, hasCadillac: !!item.has_cadillac, qtyCadillac: item.qty_cadillac,
-        hasChairsForCourse: !!item.has_chairs_for_course, hasTv: !!item.has_tv, maxKitsCapacity: item.max_kits_capacity,
+        fantasyName: item.fantasy_name, legalName: item.legal_name, cnpj: item.cnpj, studio_phone: item.studio_phone,
+        address: item.address, city: item.city, state: item.state, country: item.country, size_m2: item.size_m2,
+        student_capacity: item.student_capacity, rent_value: item.rent_value, methodology: item.methodology,
+        studio_type: item.studio_type, name_on_site: item.name_on_site, bank: item.bank, agency: item.agency,
+        account: item.account, beneficiary: item.beneficiary, pix_key: item.pix_key, has_reformer: !!item.has_reformer,
+        qty_reformer: item.qty_reformer, has_ladder_barrel: !!item.has_ladder_barrel, qty_ladder_barrel: item.qty_ladder_barrel,
+        has_chair: !!item.has_chair, qty_chair: item.qty_chair, has_cadillac: !!item.has_cadillac, qty_cadillac: item.qty_cadillac,
+        has_chairs_for_course: !!item.has_chairs_for_course, has_tv: !!item.has_tv, max_kits_capacity: item.max_kits_capacity,
         attachments: item.attachments
     }));
   },
@@ -1215,7 +1215,8 @@ export const appBackend = {
         item_apostila_classico: record.itemApostilaClassico,
         item_sacochila: record.itemSacochila,
         item_lapis: record.itemLapis,
-        registration_date: record.registration_date,
+        // Fix: Property 'registration_date' does not exist on type 'InventoryRecord'. Use 'registrationDate'.
+        registration_date: record.registrationDate,
         studio_id: record.studioId || null,
         tracking_code: record.trackingCode,
         observations: record.observations,
@@ -1242,8 +1243,8 @@ export const appBackend = {
         identifier_code: item.identifier_code, fullName: item.full_name, productName: item.product_name,
         originalValue: item.original_value, paymentMethod: item.payment_method, observations: item.observations,
         status: item.status, team: item.team, voucherLink1: item.voucher_link_1, testDate: item.test_date,
-        voucherLink2: item.voucher_link_2, voucherLink3: item.voucher_link_3, boletosLink: item.boletos_link,
-        negotiationReference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at
+        voucherLink2: item.voucher_link_2, voucherLink3: item.voucher_link_3, boletos_link: item.boletos_link,
+        negotiation_reference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at
     }));
   },
 
@@ -1256,7 +1257,7 @@ export const appBackend = {
       total_installments: neg.totalInstallments,
       due_date: neg.dueDate,
       responsible_agent: neg.responsibleAgent,
-      identifier_code: neg.identifier_code,
+      identifier_code: neg.identifierCode,
       full_name: neg.fullName,
       product_name: neg.productName,
       original_value: neg.originalValue,

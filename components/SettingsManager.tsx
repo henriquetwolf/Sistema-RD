@@ -4,7 +4,7 @@ import {
     Copy, Users, Lock, Unlock, Check, X, ShieldCheck, 
     Trash2, Building2, Plus, Edit2, Palette, History, RefreshCw, 
     Zap, Loader2, Table, DollarSign, Terminal, Tag as TagIcon, Layout, Globe,
-    Search, Info, AlertTriangle, AlertCircle
+    Search, Info, AlertTriangle, AlertCircle, ChevronDown, CheckCircle2
 } from 'lucide-react';
 import { appBackend, CompanySetting, WebhookTrigger, Pipeline } from '../services/appBackend';
 import { Role, Role as UserRole, Banner, InstructorLevel, ActivityLog, SyncJob, Product, CourseInfo, SupportTag } from '../types';
@@ -19,33 +19,6 @@ interface SettingsManagerProps {
 }
 
 type SettingsTab = 'visual' | 'company' | 'banners' | 'connection_plug' | 'roles' | 'instructor_levels' | 'course_info' | 'support_tags' | 'logs' | 'database' | 'sql_script';
-
-const DEFAULT_WEBHOOK_PAYLOAD = JSON.stringify({
-  "data_venda": "{{data_venda}}",
-  "situacao_venda": "Aprovada",
-  "numero_venda": "{{deal_number}}",
-  "nome_cliente": "{{nome_cliente}}",
-  "email_cliente": "{{email_cliente}}",
-  "telefone_cliente": "{{telefone_cliente}}",
-  "cpf_cnpj_cliente": "{{cpf_cnpj_cliente}}",
-  "nome_vendedor": "{{nome_vendedor}}",
-  "tipo_produto": "{{tipo_produto}}",
-  "curso_produto": "{{curso_produto}}",
-  "fonte_negociacao": "{{fonte_negociacao}}",
-  "campanha": "{{campanha}}",
-  "funil_vendas": "{{funil_vendas}}",
-  "etapa_funil": "{{etapa_funil}}",
-  "cidade_cliente": "{{cidade_cliente}}",
-  "turma_modulo": "{{turma_modulo}}",
-  "valor_total": "{{valor_total}}",
-  "forma_pagamento": "{{forma_pagamento}}",
-  "valor_entrada": "{{valor_entrada}}",
-  "numero_parcelas": "{{numero_parcelas}}",
-  "valor_parcelas": "{{valor_parcelas}}",
-  "dia_primeiro_vencimento": "{{dia_primeiro_vencimento}}",
-  "link_comprovante": "{{link_comprovante}}",
-  "codigo_transacao": "{{codigo_transacao}}"
-}, null, 2);
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ 
   onLogoChange, 
@@ -237,6 +210,16 @@ NOTIFY pgrst, 'reload schema';
   `.trim();
 
   const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
+
+  const handleBannerUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0] && editingBanner) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setEditingBanner({ ...editingBanner, imageUrl: reader.result as string });
+          };
+          reader.readAsDataURL(e.target.files[0]);
+      }
+  };
 
   return (
     <div className="animate-in fade-in duration-300 space-y-8 pb-20">
@@ -443,8 +426,50 @@ NOTIFY pgrst, 'reload schema';
                       <h3 className="font-bold uppercase text-xs tracking-widest text-slate-500">Configuração de Item</h3>
                       <button onClick={() => { setEditingRole(null); setEditingBanner(null); setEditingCompany(null); setEditingLevel(null); setEditingCourseInfo(null); setEditingTag(null); setEditingTrigger(null); }}><X size={24}/></button>
                   </div>
-                  <div className="p-8 overflow-y-auto space-y-6 flex-1">
+                  <div className="p-8 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
                       
+                      {/* FORM ROLE / ACESSOS */}
+                      {editingRole && (
+                          <div className="space-y-6">
+                              <div>
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome do Perfil de Acesso</label>
+                                  <input 
+                                      className="w-full px-4 py-2.5 border-2 border-slate-100 rounded-xl font-bold text-slate-800 focus:border-indigo-500 outline-none transition-all" 
+                                      value={editingRole.name} 
+                                      onChange={e => setEditingRole({...editingRole, name: e.target.value})} 
+                                      placeholder="Ex: Consultor Comercial, Coordenador Pedagógico..." 
+                                  />
+                              </div>
+
+                              <div className="space-y-4">
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Permissões de Módulos</label>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      {PERMISSION_MODULES.map(module => (
+                                          <label key={module.id} className={clsx(
+                                              "flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer group",
+                                              editingRole.permissions?.[module.id] ? "bg-indigo-50 border-indigo-500 text-indigo-900" : "bg-white border-slate-100 text-slate-500 hover:bg-slate-50"
+                                          )}>
+                                              <span className="text-sm font-bold">{module.label}</span>
+                                              <input 
+                                                  type="checkbox" 
+                                                  className="w-5 h-5 rounded text-indigo-600" 
+                                                  checked={!!editingRole.permissions?.[module.id]} 
+                                                  onChange={e => setEditingRole({
+                                                      ...editingRole, 
+                                                      permissions: { ...editingRole.permissions, [module.id]: e.target.checked }
+                                                  })} 
+                                              />
+                                          </label>
+                                      ))}
+                                  </div>
+                              </div>
+
+                              <button onClick={handleSaveRole} disabled={isSavingItem} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-600/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />} Salvar Perfil de Acesso
+                              </button>
+                          </div>
+                      )}
+
                       {/* FORM LEVEL */}
                       {editingLevel && (
                           <div className="space-y-6">
@@ -458,12 +483,97 @@ NOTIFY pgrst, 'reload schema';
                           </div>
                       )}
 
-                      {/* Outros forms omitidos para brevidade, mantendo funcionalidade anterior */}
+                      {/* FORM COMPANY */}
                       {editingCompany && (
                           <div className="space-y-6">
                               <input className="w-full px-4 py-2.5 border rounded-xl font-bold" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} placeholder="Razão Social" />
                               <input className="w-full px-4 py-2.5 border rounded-xl font-mono text-sm" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} placeholder="CNPJ" />
-                              <button onClick={handleSaveCompany} className="w-full py-3 bg-teal-600 text-white rounded-xl font-bold">Salvar Empresa</button>
+                              <input className="w-full px-4 py-2.5 border rounded-xl text-blue-600 font-mono text-xs" value={editingCompany.webhookUrl} onChange={e => setEditingCompany({...editingCompany, webhookUrl: e.target.value})} placeholder="URL de Webhook" />
+                              
+                              <div className="space-y-4">
+                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Vincular a Tipos de Produto</label>
+                                  <div className="flex flex-wrap gap-2">
+                                      {['Digital', 'Presencial', 'Evento'].map(type => (
+                                          <button 
+                                            key={type}
+                                            onClick={() => {
+                                                const current = editingCompany.productTypes || [];
+                                                const updated = current.includes(type) ? current.filter(t => t !== type) : [...current, type];
+                                                setEditingCompany({...editingCompany, productTypes: updated});
+                                            }}
+                                            className={clsx("px-4 py-1.5 rounded-full text-xs font-bold border-2 transition-all", editingCompany.productTypes?.includes(type) ? "bg-teal-600 border-teal-600 text-white shadow-md" : "bg-white border-slate-100 text-slate-400")}
+                                          >{type}</button>
+                                      ))}
+                                  </div>
+                              </div>
+
+                              <button onClick={handleSaveCompany} disabled={isSavingItem} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2">
+                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Empresa
+                              </button>
+                          </div>
+                      )}
+
+                      {/* FORM BANNER */}
+                      {editingBanner && (
+                          <div className="space-y-6">
+                              <div className="flex flex-col items-center gap-4 bg-slate-50 p-6 rounded-2xl border-2 border-dashed border-slate-200">
+                                  <div className="w-full h-40 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
+                                      {editingBanner.imageUrl ? <img src={editingBanner.imageUrl} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-100" size={48} />}
+                                  </div>
+                                  <button onClick={() => bannerFileInputRef.current?.click()} className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-xs font-bold">Trocar Imagem</button>
+                                  <input type="file" ref={bannerFileInputRef} className="hidden" accept="image/*" onChange={handleBannerUpload} />
+                              </div>
+                              <input className="w-full px-4 py-2.5 border rounded-xl font-bold" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} placeholder="Título do Banner" />
+                              <input className="w-full px-4 py-2.5 border rounded-xl text-xs font-mono" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} placeholder="URL do Link" />
+                              <div className="flex bg-slate-100 p-1 rounded-lg">
+                                  <button onClick={() => setEditingBanner({...editingBanner, targetAudience: 'student'})} className={clsx("flex-1 py-2 text-xs font-bold rounded-md", editingBanner.targetAudience === 'student' ? "bg-white shadow text-slate-800" : "text-slate-500")}>Alunos</button>
+                                  <button onClick={() => setEditingBanner({...editingBanner, targetAudience: 'instructor'})} className={clsx("flex-1 py-2 text-xs font-bold rounded-md", editingBanner.targetAudience === 'instructor' ? "bg-white shadow text-slate-800" : "text-slate-500")}>Instrutores</button>
+                              </div>
+                              <button onClick={handleSaveBanner} disabled={isSavingItem} className="w-full py-3.5 bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-600/20 flex items-center justify-center gap-2">
+                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Banner
+                              </button>
+                          </div>
+                      )}
+
+                      {/* FORM COURSE INFO */}
+                      {editingCourseInfo && (
+                          <div className="space-y-6">
+                              <input className="w-full px-4 py-2.5 border rounded-xl font-bold" value={editingCourseInfo.courseName} onChange={e => setEditingCourseInfo({...editingCourseInfo, courseName: e.target.value})} placeholder="Nome do Curso" />
+                              <textarea className="w-full px-4 py-2.5 border rounded-xl text-sm h-32" value={editingCourseInfo.details} onChange={e => setEditingCourseInfo({...editingCourseInfo, details: e.target.value})} placeholder="Detalhes Técnicos" />
+                              <textarea className="w-full px-4 py-2.5 border rounded-xl text-sm h-32" value={editingCourseInfo.materials} onChange={e => setEditingCourseInfo({...editingCourseInfo, materials: e.target.value})} placeholder="Materiais de Apoio" />
+                              <textarea className="w-full px-4 py-2.5 border rounded-xl text-sm h-32" value={editingCourseInfo.requirements} onChange={e => setEditingCourseInfo({...editingCourseInfo, requirements: e.target.value})} placeholder="Pré-requisitos" />
+                              <button onClick={handleSaveCourseInfo} disabled={isSavingItem} className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2">
+                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Informação
+                              </button>
+                          </div>
+                      )}
+
+                      {/* FORM WEBHOOK TRIGGER */}
+                      {editingTrigger && (
+                          <div className="space-y-6">
+                              <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 flex gap-3 text-indigo-700">
+                                  <Zap size={24} className="shrink-0" />
+                                  <p className="text-xs font-medium">Os gatilhos disparam o webhook das empresas quando um negócio atinge a etapa selecionada.</p>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">1. Selecione o Funil</label>
+                                      <select className="w-full px-4 py-2.5 border rounded-xl bg-white font-bold" value={editingTrigger.pipelineName} onChange={e => setEditingTrigger({...editingTrigger, pipelineName: e.target.value, stageId: ''})}>
+                                          <option value="">Escolha um funil...</option>
+                                          {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                      </select>
+                                  </div>
+                                  <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">2. Selecione a Etapa (Gatilho)</label>
+                                      <select className="w-full px-4 py-2.5 border rounded-xl bg-white disabled:bg-slate-50" value={editingTrigger.stageId} onChange={e => setEditingTrigger({...editingTrigger, stageId: e.target.value})} disabled={!editingTrigger.pipelineName}>
+                                          <option value="">Escolha uma etapa...</option>
+                                          {pipelines.find(p => p.name === editingTrigger.pipelineName)?.stages.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                                      </select>
+                                  </div>
+                              </div>
+                              <button onClick={handleSaveTrigger} disabled={isSavingItem} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2">
+                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Gatilho de Plug
+                              </button>
                           </div>
                       )}
                   </div>

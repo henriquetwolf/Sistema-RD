@@ -114,7 +114,7 @@ export const appBackend = {
           .order('created_at', { ascending: false })
           .limit(limit);
       if (error) throw error;
-      // Fixed: Explicit typing for 'd' in map
+      // Explicit typing for 'd' in map
       return (data || []).map((d: any) => ({
           id: d.id, userName: d.user_name, action: d.action as any, module: d.module, details: d.details, recordId: d.record_id, createdAt: d.created_at
       }));
@@ -125,7 +125,7 @@ export const appBackend = {
   getPresets: async (): Promise<SavedPreset[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from(TABLE_NAME).select('*').order('name');
-    // Fixed: Explicit typing for 'd' and corrected snake_case to camelCase property names
+    // Explicit typing for 'd' and corrected snake_case to camelCase property names
     return (data || []).map((d: any) => ({
       id: d.id, 
       name: d.name, 
@@ -286,7 +286,7 @@ export const appBackend = {
   getStudentCourseAccess: async (studentDealId: string): Promise<string[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_student_course_access').select('course_id').eq('student_deal_id', studentDealId);
-      // Fixed: Explicit typing for 'd' in map
+      // Explicit typing for 'd' in map
       return (data || []).map((d: any) => d.course_id);
   },
 
@@ -307,7 +307,7 @@ export const appBackend = {
   getStudentLessonProgress: async (studentDealId: string): Promise<string[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_student_lesson_progress').select('lesson_id').eq('student_deal_id', studentDealId);
-      // Fixed: Explicit typing for 'd' in map
+      // Explicit typing for 'd' in map
       return (data || []).map((d: any) => d.lesson_id);
   },
 
@@ -329,7 +329,7 @@ export const appBackend = {
   getCourseInfos: async (): Promise<CourseInfo[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_course_info').select('*').order('course_name');
-    // Fixed: Explicit typing for 'd' in map and mapping corrected
+    // Explicit typing for 'd' in map and mapping corrected
     return (data || []).map((d: any) => ({
       id: d.id, courseName: d.course_name, details: d.details, materials: d.materials, requirements: d.requirements, updatedAt: d.updated_at
     }));
@@ -358,7 +358,7 @@ export const appBackend = {
   getForms: async (): Promise<FormModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
-    // Fixed: Explicit typing for 'd' in map and correct mapping
+    // Explicit typing for 'd' in map and correct mapping
     return (data || []).map((d: any) => ({
       id: d.id, 
       title: d.title, 
@@ -410,18 +410,21 @@ export const appBackend = {
       campaign: form.campaign, 
       is_lead_capture: form.isLeadCapture, 
       distribution_mode: form.distributionMode, 
-      fixed_owner_id: form.fixedOwnerId, 
-      team_id: form.teamId, 
+      fixed_owner_id: form.fixedOwnerId || null, 
+      team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline, 
       target_stage: form.targetStage, 
       questions: form.questions, 
       style: form.style, 
-      folder_id: form.folderId,
+      folder_id: form.folderId || null,
       created_at: form.createdAt || new Date().toISOString()
     };
     
     const { error } = await supabase.from('crm_forms').upsert(payload, { onConflict: 'id' });
-    if (error) throw error;
+    if (error) {
+        console.error("Erro ao salvar formulário:", error);
+        throw error;
+    }
   },
 
   deleteForm: async (id: string): Promise<void> => {
@@ -432,7 +435,7 @@ export const appBackend = {
   getFormFolders: async (): Promise<FormFolder[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_form_folders').select('*').order('name');
-    // Fixed: Explicit typing for 'd' in map
+    // Explicit typing for 'd' in map
     return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
   },
 
@@ -463,7 +466,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     // Removido filtro restritivo .not('target_type', 'is', null) para mostrar todos os formulários na aba de pesquisas, permitindo a gestão retroativa.
     const { data } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
-    // Fixed: Explicit typing for 'd' in map and corrected mapping
+    // Explicit typing for 'd' in map and corrected mapping
     return (data || []).map((d: any) => ({
       id: d.id, 
       title: d.title, 
@@ -497,13 +500,13 @@ export const appBackend = {
       campaign: survey.campaign, 
       is_lead_capture: survey.isLeadCapture, 
       distribution_mode: survey.distributionMode, 
-      fixed_owner_id: survey.fixedOwnerId, 
-      team_id: survey.teamId, 
+      fixed_owner_id: survey.fixedOwnerId || null, 
+      team_id: survey.teamId || null, 
       target_pipeline: survey.targetPipeline, 
       target_stage: survey.targetStage, 
       questions: survey.questions, 
       style: survey.style, 
-      folder_id: survey.folderId, 
+      folder_id: survey.folderId || null, 
       target_type: survey.targetType, 
       target_product_type: survey.targetProductType, 
       target_product_name: survey.targetProductName, 
@@ -528,7 +531,7 @@ export const appBackend = {
         console.error("Erro ao carregar contratos do Supabase:", error);
         return [];
     }
-    // Fixed: Explicit typing for 'd' in map and corrected mapping
+    // Explicit typing for 'd' in map and corrected mapping
     return (data || []).map((d: any) => ({
       id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at
     }));
@@ -547,7 +550,7 @@ export const appBackend = {
         console.error("Erro ao buscar contratos pendentes por e-mail:", error);
         return [];
     }
-    // Fixed: Explicit typing for 'd' in map and corrected mapping
+    // Explicit typing for 'd' in map and corrected mapping
     return (data || []).map((d: any) => ({
       id: d.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date, status: d.status, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at
     }));
@@ -614,7 +617,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_contract_folders').select('*').order('name');
     if (error) return [];
-    // Fixed: Explicit typing for 'd' in map
+    // Explicit typing for 'd' in map
     return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
   },
 
@@ -635,7 +638,7 @@ export const appBackend = {
     let query = supabase.from('crm_support_tags').select('*').order('name');
     if (role) query = query.or(`role.eq.${role},role.eq.all`);
     const { data } = await query;
-    // Fixed: Explicit typing for 'd' in map
+    // Explicit typing for 'd' in map
     return (data || []).map((d: any) => ({ id: d.id, role: d.role, name: d.name, createdAt: d.created_at }));
   },
 
@@ -654,7 +657,7 @@ export const appBackend = {
   getSupportTickets: async (): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
-    // Fixed: Explicit typing for 'd' in map and mapping corrected to camelCase
+    // Explicit typing for 'd' in map and mapping corrected to camelCase
     return (data || []).map((d: any) => ({
       id: d.id, senderId: d.sender_id, senderName: d.sender_name, senderEmail: d.sender_email, senderRole: d.sender_role, targetId: d.target_id, targetName: d.target_name, targetEmail: d.target_email, targetRole: d.target_role, subject: d.subject, message: d.message, tag: d.tag, status: d.status, response: d.response, assignedId: d.assigned_id, assignedName: d.assigned_name, createdAt: d.created_at, updatedAt: d.updated_at
     }));
@@ -663,7 +666,7 @@ export const appBackend = {
   getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${senderId},target_id.eq.${senderId}`).order('updated_at', { ascending: false });
-    // Fixed: Explicit typing for 'd' in map and mapping corrected to camelCase
+    // Explicit typing for 'd' in map and mapping corrected to camelCase
     return (data || []).map((d: any) => ({
       id: d.id, senderId: d.sender_id, senderName: d.sender_name, senderEmail: d.sender_email, senderRole: d.sender_role, targetId: d.target_id, targetName: d.target_name, targetEmail: d.target_email, targetRole: d.target_role, subject: d.subject, message: d.message, tag: d.tag, status: d.status, response: d.response, assignedId: d.assigned_id, assignedName: d.assigned_name, createdAt: d.created_at, updatedAt: d.updated_at
     }));
@@ -710,6 +713,7 @@ export const appBackend = {
         return [];
     }
     // Fixed: Explicit typing for 'd' in map and mapping corrected to camelCase
+    // Correcting Error in line 564 (approx): Cannot find name 'd'
     return (data || []).map((d: any) => ({
       id: d.id, 
       ticketId: d.ticket_id, 
@@ -745,7 +749,7 @@ export const appBackend = {
   getEvents: async (): Promise<EventModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
-    // Fixed: Explicit typing for 'd' in map and mapping corrected to camelCase
+    // Explicit typing for 'd' in map and mapping corrected to camelCase
     return (data || []).map((d: any) => ({ id: d.id, name: d.name, description: d.description, location: d.location, dates: d.dates, createdAt: d.created_at, registrationOpen: d.registration_open }));
   },
 
@@ -771,7 +775,7 @@ export const appBackend = {
   getWorkshops: async (eventId: string): Promise<Workshop[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_workshops').select('*').eq('event_id', eventId).order('date').order('time');
-    // Fixed: Explicit typing for 'd' in map and mapping corrected to camelCase
+    // Explicit typing for 'd' in map and mapping corrected to camelCase
     return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, blockId: d.block_id, title: d.title, description: d.description, speaker: d.speaker, date: d.date, time: d.time, spots: d.spots }));
   },
 
@@ -797,7 +801,7 @@ export const appBackend = {
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date');
-    // Fixed: Explicit typing for 'd' in map and mapping corrected to camelCase
+    // Explicit typing for 'd' in map and mapping corrected to camelCase
     return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, date: d.date, title: d.title, maxSelections: d.max_selections }));
   },
 
@@ -823,7 +827,7 @@ export const appBackend = {
   getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId);
-    // Fixed: Explicit typing for 'd' in map and mapping corrected to camelCase
+    // Explicit typing for 'd' in map and mapping corrected to camelCase
     return (data || []).map((d: any) => ({ id: d.id, eventId: d.event_id, workshopId: d.workshop_id, studentId: d.student_id, studentName: d.student_name, studentEmail: d.student_email, registeredAt: d.registered_at }));
   },
 
@@ -832,7 +836,7 @@ export const appBackend = {
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
-    // Fixed: Explicit typing for 'd' in map and corrected snake_case to camelCase property names
+    // Explicit typing for 'd' in map and corrected snake_case to camelCase property names
     return (data || []).map((d: any) => ({
       id: d.id, 
       openInstallments: d.open_installments, 
@@ -853,7 +857,7 @@ export const appBackend = {
       voucherLink2: d.voucher_link2, 
       voucherLink3: d.voucher_link3, 
       boletosLink: d.boletos_link, 
-      negotiationReference: d.negotiation_reference, 
+      negotiation_reference: d.negotiation_reference, 
       attachments: d.attachments, 
       createdAt: d.created_at
     }));
@@ -939,7 +943,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_companies').select('*').order('legal_name');
     if (error) throw error;
-    // Fixed: Explicit typing for 'c' in map and mapping corrected
+    // Explicit typing for 'c' in map and mapping corrected
     return (data || []).map((c: any) => ({
       id: c.id, legalName: c.legal_name, cnpj: c.cnpj, webhookUrl: c.webhook_url, productTypes: c.product_types || [], productIds: c.product_ids || []
     }));
@@ -960,7 +964,7 @@ export const appBackend = {
   getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_webhook_triggers').select('*');
-    // Fixed: Explicit typing for 't' in map and mapping corrected
+    // Explicit typing for 't' in map and mapping corrected
     return (data || []).map((t: any) => ({ id: t.id, pipelineName: t.pipeline_name, stageId: t.stage_id, payloadJson: t.payload_json, createdAt: t.created_at }));
   },
 
@@ -997,7 +1001,7 @@ export const appBackend = {
     let query = supabase.from('crm_banners').select('*').order('created_at', { ascending: false });
     if (audience) query = query.eq('target_audience', audience).eq('active', true);
     const { data } = await query;
-    // Fixed: Explicit typing for 'd' in map and mapping corrected
+    // Explicit typing for 'd' in map and mapping corrected
     return (data || []).map((d: any) => ({ 
       id: d.id, 
       title: d.title, 
@@ -1024,7 +1028,7 @@ export const appBackend = {
   getInstructorLevels: async (): Promise<InstructorLevel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_instructor_levels').select('*').order('name');
-    // Fixed: Explicit typing for 'd' in map and mapping corrected
+    // Explicit typing for 'd' in map and mapping corrected
     return (data || []).map((d: any) => ({ id: d.id, name: d.name, honorarium: d.honorarium, observations: d.observations, createdAt: d.created_at }));
   },
 
@@ -1043,7 +1047,7 @@ export const appBackend = {
   getTeacherNews: async (): Promise<TeacherNews[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
-    // Fixed: Explicit typing for 'd' in map and mapping corrected
+    // Explicit typing for 'd' in map and mapping corrected
     return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, imageUrl: d.image_url, createdAt: d.created_at }));
   },
 
@@ -1062,7 +1066,7 @@ export const appBackend = {
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    // Fixed: Explicit typing for 'd' in map and mapping corrected
+    // Explicit typing for 'd' in map and mapping corrected
     return (data || []).map((d: any) => ({
       id: d.id, type: d.type, itemApostilaNova: d.item_apostila_nova, itemApostilaClassico: d.item_apostila_classico,
       itemSacochila: d.item_sacochila, itemLapis: d.item_lapis, registrationDate: d.registration_date,
@@ -1073,7 +1077,7 @@ export const appBackend = {
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
-    /* FIXED: Corrected mapping of record properties to match the InventoryRecord interface (camelCase). */
+    /* Corrected mapping of record properties to match the InventoryRecord interface (camelCase). */
     const payload = {
       type: record.type, 
       item_apostila_nova: record.itemApostilaNova, 
@@ -1099,7 +1103,7 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    // Fixed: Explicit typing for 'd' in map and mapping corrected
+    // Explicit typing for 'd' in map and mapping corrected
     return (data || []).map((d: any) => ({
       id: d.id, status: d.status, responsibleName: d.responsible_name, cpf: d.cpf, phone: d.phone, email: d.email, password: d.password,
       secondContactName: d.second_contact_name, secondContactPhone: d.second_contact_phone, fantasyName: d.fantasy_name, legalName: d.legal_name,
@@ -1115,6 +1119,7 @@ export const appBackend = {
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
+    // Corrected Error in line 1152 (approx): Property 'qty_ladder_barrel' does not exist on type 'PartnerStudio'. Did you mean 'qtyLadderBarrel'?
     const payload = {
       status: studio.status, 
       responsible_name: studio.responsibleName, 
@@ -1168,7 +1173,7 @@ export const appBackend = {
   getCertificates: async (): Promise<CertificateModel[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-      // Fixed: Explicit typing for 'd' in map and mapping corrected
+      // Explicit typing for 'd' in map and mapping corrected
       return (data || []).map((d: any) => ({
           id: d.id, 
           title: d.title, 
@@ -1321,7 +1326,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    // Fixed: Explicit typing for 'j' in map and mapping corrected
+    // Explicit typing for 'j' in map and mapping corrected
     return (data || []).map((j: any) => ({
       id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
     }));

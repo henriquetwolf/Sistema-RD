@@ -80,7 +80,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const [companies, setCompanies] = useState<CompanySetting[]>([]);
   const [allProducts, setAllProducts] = useState<UnifiedProduct[]>([]);
-  const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
+  const [isLoadingCompanies, setIsLoadingCompanies] = useState(true);
   const [isSavingItem, setIsSavingItem] = useState(false); 
   const [editingCompany, setEditingCompany] = useState<Partial<CompanySetting> | null>(null);
   const [productSearch, setProductSearch] = useState('');
@@ -236,7 +236,44 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V54
+-- SCRIPT DE FUNDAÇÃO CRM V55
+CREATE TABLE IF NOT EXISTS public.crm_forms (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    title text NOT NULL,
+    description text,
+    campaign text,
+    is_lead_capture boolean DEFAULT false,
+    distribution_mode text,
+    fixed_owner_id uuid,
+    team_id uuid,
+    target_pipeline text,
+    target_stage text,
+    questions jsonb DEFAULT '[]'::jsonb,
+    style jsonb DEFAULT '{}'::jsonb,
+    folder_id uuid,
+    target_type text DEFAULT 'all',
+    target_product_type text,
+    target_product_name text,
+    only_if_finished boolean DEFAULT false,
+    is_active boolean DEFAULT true,
+    submissions_count integer DEFAULT 0,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.crm_form_submissions (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    form_id uuid REFERENCES public.crm_forms(id) ON DELETE CASCADE,
+    student_id text,
+    answers jsonb DEFAULT '[]'::jsonb,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.crm_form_folders (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    name text NOT NULL,
+    created_at timestamp with time zone DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.crm_online_courses (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
@@ -513,8 +550,8 @@ NOTIFY pgrst, 'reload schema';
 
         {activeTab === 'sql_script' && (
             <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 animate-in zoom-in-95 duration-200">
-                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V54</h3></div>
-                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados, criando as tabelas necessárias para as novas funcionalidades (Cursos, Logs, Banners e Plug). Copie e execute no **SQL Editor** do Supabase.</p>
+                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V55</h3></div>
+                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados, incluindo tabelas de formulários, pesquisas, cursos, logs e automações. Copie e execute no **SQL Editor** do Supabase.</p>
                 <div className="relative">
                     <pre className="bg-black text-emerald-400 p-6 rounded-2xl text-[10px] font-mono overflow-auto max-h-[400px] shadow-inner custom-scrollbar-dark border border-slate-800">
                         {generateRepairSQL()}

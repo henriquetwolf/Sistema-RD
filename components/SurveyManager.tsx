@@ -135,7 +135,10 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
           await appBackend.saveSurvey(currentSurvey); 
           await loadSurveys(); 
           setView('list'); 
-      } catch (e: any) { alert("Erro ao salvar pesquisa."); } finally { setIsSaving(false); }
+      } catch (e: any) { 
+          console.error("Erro ao salvar pesquisa:", e);
+          alert("Erro ao salvar pesquisa: " + (e.message || "Verifique os logs do console.")); 
+      } finally { setIsSaving(false); }
   };
 
   const updateQuestion = (id: string, field: keyof FormQuestion, value: any) => {

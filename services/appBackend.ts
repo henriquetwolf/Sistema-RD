@@ -444,7 +444,8 @@ export const appBackend = {
 
   getSurveys: async (): Promise<SurveyModel[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_forms').select('*').not('target_type', 'is', null).order('created_at', { ascending: false });
+    // Removido filtro restritivo .not('target_type', 'is', null) para mostrar todos os formulários na aba de pesquisas, permitindo a gestão retroativa.
+    const { data } = await supabase.from('crm_forms').select('*').order('created_at', { ascending: false });
     return (data || []).map(d => ({
       id: d.id, 
       title: d.title, 
@@ -461,11 +462,11 @@ export const appBackend = {
       createdAt: d.created_at, 
       submissionsCount: d.submissions_count || 0, 
       folderId: d.folder_id, 
-      targetType: d.target_type, 
+      targetType: d.target_type || 'all', 
       targetProductType: d.target_product_type, 
       targetProductName: d.target_product_name, 
-      onlyIfFinished: d.only_if_finished, 
-      isActive: d.is_active
+      onlyIfFinished: d.only_if_finished || false, 
+      isActive: d.is_active !== false
     }));
   },
 

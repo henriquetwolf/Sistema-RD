@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { SurveyModel, FormQuestion, QuestionType, FormStyle, FormAnswer, Product } from '../types';
 import { FormViewer } from './FormViewer';
@@ -86,7 +85,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
 
   const loadSurveys = async () => { 
       setLoading(true); 
-      try { const data = await appBackend.getSurveys(); setSurveys(data); } catch (e) { console.error(e); } finally { setLoading(false); }
+      try { const data = await appBackend.getSurveys(); setSurveys(data || []); } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
   const loadProducts = async () => {
@@ -238,7 +237,6 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                   <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
                                       <td className="px-6 py-4 text-center text-slate-400 border-r">{submissions.length - idx}</td>
                                       <td className="px-6 py-4 text-slate-500 border-r">{new Date(sub.created_at).toLocaleString('pt-BR')}</td>
-                                      {/* CORREÇÃO: Busca dinâmica da resposta pelo ID da pergunta para garantir alinhamento */}
                                       {currentSurvey.questions.map(q => {
                                           const ans = (sub.answers as FormAnswer[] || []).find(a => a.questionId === q.id);
                                           return (
@@ -315,7 +313,6 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                                 >
                                                     {SYSTEM_MAPPINGS.map(sm => <option key={sm.value} value={sm.value}>{sm.label}</option>)}
                                                 </select>
-                                                {/* Wrapped Info in span to fix: Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>' */}
                                                 <span title="O sistema preencherá este campo automaticamente para o aluno." className="hidden md:block">
                                                     <Info size={14} className="text-blue-300" />
                                                 </span>
@@ -431,40 +428,56 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
             <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
             <div><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><PieChart className="text-amber-500" /> Pesquisas de Satisfação</h2><p className="text-slate-500 text-sm">Crie NPS e feedbacks para o Portal do Aluno.</p></div>
         </div>
-        <button onClick={() => { setCurrentSurvey(INITIAL_SURVEY); setView('editor'); setEditorStep('editor'); }} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-amber-600/20 transition-all active:scale-95"><Plus size={18} /> Nova Pesquisa</button>
+        <div className="flex gap-2">
+            <button onClick={loadSurveys} className="p-2 text-slate-400 hover:text-amber-600 transition-all" title="Atualizar"><RefreshCw size={20} className={clsx(loading && "animate-spin")} /></button>
+            <button onClick={() => { setCurrentSurvey(INITIAL_SURVEY); setView('editor'); setEditorStep('editor'); }} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-amber-600/20 transition-all active:scale-95"><Plus size={18} /> Nova Pesquisa</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {loading ? <div className="col-span-full flex justify-center py-20"><Loader2 className="animate-spin text-amber-500" size={32}/></div> : surveys.map(f => (
-          <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-amber-200 transition-all flex flex-col group overflow-hidden">
-            <div className="p-6 flex-1">
-                <div className="flex justify-between items-start mb-4">
-                    <span className={clsx("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border", f.isActive ? "bg-green-50 text-green-700 border-green-100" : "bg-slate-50 text-slate-400 border-slate-100")}>
-                        {f.isActive ? 'ATIVA' : 'PAUSADA'}
-                    </span>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-100 rounded-lg"><Edit2 size={16} /></button>
-                        <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-400 hover:text-red-500 bg-slate-100 rounded-lg"><Trash2 size={16} /></button>
-                    </div>
-                </div>
-                <h3 className="font-black text-slate-800 text-lg mb-1 line-clamp-1">{f.title}</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase mb-4 flex items-center gap-1">
-                    <Target size={10}/> {f.targetType === 'all' ? 'Todos Alunos' : f.targetType === 'product_type' ? `Categoria: ${f.targetProductType}` : `Produto: ${f.targetProductName}`}
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => handleViewResponses(f)} className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center transition-colors">
-                        <Table size={20} className="mb-1 text-amber-500" />
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Respostas</p>
-                        <p className="text-xl font-black text-slate-800">{f.submissionsCount || 0}</p>
-                    </button>
-                    <button onClick={() => copyToClipboard(f.id)} className={clsx("rounded-xl flex flex-col items-center justify-center transition-all shadow-sm border", copiedLink ? "bg-green-50 text-green-700 border-green-200" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50")}>
-                        {copiedLink ? <CheckCircle2 size={20}/> : <Share2 size={20} />}
-                        <span className="text-[10px] font-black uppercase mt-1">{copiedLink ? 'Copiado' : 'Link Externo'}</span>
-                    </button>
-                </div>
+        {loading ? (
+            <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
+                <Loader2 className="animate-spin text-amber-500" size={40}/>
+                <p className="font-bold text-sm uppercase tracking-widest">Carregando pesquisas...</p>
             </div>
-          </div>
-        ))}
+        ) : surveys.length === 0 ? (
+            <div className="col-span-full text-center py-24 bg-white rounded-[2rem] border-2 border-dashed border-slate-200 text-slate-400">
+                <PieChart className="mx-auto mb-4 opacity-10" size={64} />
+                <p className="font-bold text-lg">Nenhuma pesquisa encontrada</p>
+                <p className="text-sm">Clique em "+ Nova Pesquisa" para começar a ouvir seus alunos.</p>
+            </div>
+        ) : (
+            surveys.map(f => (
+                <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-amber-200 transition-all flex flex-col group overflow-hidden">
+                  <div className="p-6 flex-1">
+                      <div className="flex justify-between items-start mb-4">
+                          <span className={clsx("text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border", f.isActive ? "bg-green-50 text-green-700 border-green-200" : "bg-slate-50 text-slate-400 border-slate-100")}>
+                              {f.isActive ? 'ATIVA' : 'PAUSADA'}
+                          </span>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => handleEdit(f)} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-100 rounded-lg"><Edit2 size={16} /></button>
+                              <button onClick={() => handleDelete(f.id)} className="p-1.5 text-slate-400 hover:text-red-500 bg-slate-100 rounded-lg"><Trash2 size={16} /></button>
+                          </div>
+                      </div>
+                      <h3 className="font-black text-slate-800 text-lg mb-1 line-clamp-1">{f.title}</h3>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase mb-4 flex items-center gap-1">
+                          <Target size={10}/> {f.targetType === 'all' ? 'Todos Alunos' : f.targetType === 'product_type' ? `Categoria: ${f.targetProductType}` : `Produto: ${f.targetProductName}`}
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => handleViewResponses(f)} className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center transition-colors">
+                              <Table size={20} className="mb-1 text-amber-500" />
+                              <p className="text-[10px] font-bold text-slate-400 uppercase">Respostas</p>
+                              <p className="text-xl font-black text-slate-800">{f.submissionsCount || 0}</p>
+                          </button>
+                          <button onClick={() => copyToClipboard(f.id)} className={clsx("rounded-xl flex flex-col items-center justify-center transition-all shadow-sm border", copiedLink ? "bg-green-50 text-green-700 border-green-200" : "bg-white text-slate-500 border-slate-200 hover:bg-teal-50")}>
+                              {copiedLink ? <CheckCircle2 size={20}/> : <Share2 size={20} />}
+                              <span className="text-[10px] font-black uppercase mt-1">{copiedLink ? 'Copiado' : 'Link Externo'}</span>
+                          </button>
+                      </div>
+                  </div>
+                </div>
+            ))
+        )}
       </div>
     </div>
   );

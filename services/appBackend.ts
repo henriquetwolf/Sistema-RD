@@ -204,9 +204,10 @@ export const appBackend = {
       description: form.description, 
       campaign: form.campaign, 
       is_lead_capture: form.isLeadCapture, 
-      distribution_mode: form.distribution_mode, 
+      // Fix: Corrected property names to use camelCase from FormModel
+      distribution_mode: form.distributionMode, 
       fixed_owner_id: form.fixedOwnerId || null, 
-      team_id: form.team_id || null, 
+      team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline, 
       target_stage: form.targetStage, 
       questions: form.questions, 
@@ -226,7 +227,8 @@ export const appBackend = {
       description: survey.description,
       campaign: survey.campaign,
       is_lead_capture: survey.isLeadCapture,
-      distribution_mode: survey.distribution_mode,
+      // Fix: Corrected property name to use camelCase from SurveyModel
+      distribution_mode: survey.distributionMode,
       questions: survey.questions,
       style: survey.style,
       folder_id: survey.folderId,
@@ -478,6 +480,12 @@ export const appBackend = {
     });
   },
 
+  // Fix: Added deleteWebhookTrigger
+  deleteWebhookTrigger: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_webhook_triggers').delete().eq('id', id);
+  },
+
   // --- COURSE INFO ---
 
   getCourseInfos: async (): Promise<CourseInfo[]> => {
@@ -523,6 +531,12 @@ export const appBackend = {
       role: tag.role,
       created_at: tag.createdAt || new Date().toISOString()
     });
+  },
+
+  // Fix: Added deleteSupportTag
+  deleteSupportTag: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_support_tags').delete().eq('id', id);
   },
 
   // --- PIPELINES ---
@@ -813,7 +827,7 @@ export const appBackend = {
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
     return (data || []).map((item: any) => ({
         id: item.id, status: item.status, responsibleName: item.responsible_name, cpf: item.cpf, phone: item.phone, email: item.email,
-        password: item.password, secondContactName: item.second_contact_name, secondContactPhone: item.second_contact_phone,
+        password: item.password, secondContactName: item.second_contact_name, second_contact_phone: item.second_contact_phone,
         fantasyName: item.fantasy_name, legalName: item.legal_name, cnpj: item.cnpj, studio_phone: item.studio_phone,
         address: item.address, city: item.city, state: item.state, country: item.country, size_m2: item.size_m2,
         student_capacity: item.student_capacity, rent_value: item.rent_value, methodology: item.methodology,

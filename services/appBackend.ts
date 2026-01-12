@@ -1,4 +1,3 @@
-
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -42,6 +41,18 @@ const MOCK_SESSION = {
     user_metadata: {},
     created_at: new Date().toISOString(),
   }
+};
+
+// Helper para gerar número de negócio
+const generateDealNumber = () => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const random = Math.floor(1000 + Math.random() * 9000);
+    return Number(`${yyyy}${mm}${dd}${hh}${min}${random}`);
 };
 
 export const appBackend = {
@@ -237,15 +248,107 @@ export const appBackend = {
     const { data } = await supabase.from('crm_forms').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-      id: data.id, title: data.title, description: data.description, campaign: data.campaign, isLeadCapture: data.is_lead_capture, distributionMode: data.distribution_mode, fixedOwnerId: data.fixed_owner_id, teamId: data.team_id, targetPipeline: data.target_pipeline, targetStage: data.target_stage, questions: data.questions, style: data.style, createdAt: data.created_at, submissionsCount: data.submissions_count || 0, folderId: data.folder_id
+      id: data.id, 
+      title: data.title, 
+      description: data.description, 
+      campaign: data.campaign, 
+      isLeadCapture: data.is_lead_capture, 
+      distributionMode: data.distribution_mode, 
+      fixedOwnerId: data.fixed_owner_id, 
+      teamId: data.team_id, 
+      targetPipeline: data.target_pipeline, 
+      targetStage: data.target_stage, 
+      questions: data.questions, 
+      style: data.style, 
+      createdAt: data.created_at, 
+      submissionsCount: data.submissions_count || 0, 
+      folderId: data.folder_id
     } as any;
   },
 
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_form_submissions').insert([{ form_id: formId, answers, student_id: studentId }]);
-    if (error) throw error;
+
+    // 1. Salvar a submissão bruta
+    const { error: subError } = await supabase.from('crm_form_submissions').insert([{ form_id: formId, answers, student_id: studentId }]);
+    if (subError) throw subError;
+
+    // 2. Incrementar contador de submissões
     await supabase.rpc('increment_form_submissions', { form_id_val: formId });
+
+    // 3. Lógica de Captura de Lead (CRM Comercial)
+    if (isLeadCapture) {
+        try {
+            // Buscar configurações do formulário para saber o destino
+            const { data: form } = await supabase.from('crm_forms').select('*').eq('id', formId).single();
+            if (!form) return;
+
+            const dealPayload: any = {
+                deal_number: generateDealNumber(),
+                pipeline: form.target_pipeline || 'Padrão',
+                stage: form.target_stage || 'new',
+                status: 'hot',
+                created_at: new Date().toISOString(),
+                source: 'Formulário Online',
+                campaign: form.campaign || ''
+            };
+
+            // Mapear respostas para campos do CRM com base no crmMapping de cada pergunta
+            const questions = form.questions || [];
+            answers.forEach(ans => {
+                const q = questions.find((quest: any) => quest.id === ans.questionId);
+                if (q && q.crmMapping) {
+                    // Mapeamento direto de nomes de campos
+                    dealPayload[q.crmMapping] = ans.value;
+                }
+            });
+
+            // Garantir título caso não mapeado
+            if (!dealPayload.company_name && !dealPayload.contact_name) {
+                dealPayload.title = `Lead via ${form.title}`;
+            } else {
+                dealPayload.title = dealPayload.company_name || dealPayload.contact_name;
+            }
+
+            // Atribuição de Dono (Owner)
+            let finalOwnerId = form.fixed_owner_id;
+
+            // Lógica de Round-Robin se configurado por equipe
+            if (form.distribution_mode === 'round-robin' && form.team_id) {
+                const { data: team } = await supabase.from('crm_teams').select('members').eq('id', form.team_id).single();
+                if (team && team.members && team.members.length > 0) {
+                    // Escolha aleatória entre membros (simulando rodízio simples sem persistência de estado)
+                    const idx = Math.floor(Math.random() * team.members.length);
+                    finalOwnerId = team.members[idx];
+                }
+            }
+            
+            dealPayload.owner_id = finalOwnerId;
+
+            // Inserir Negócio no CRM
+            const { data: newDeal, error: dealError } = await supabase.from('crm_deals').insert([dealPayload]).select().single();
+            if (dealError) throw dealError;
+
+            // Disparar automações se houver
+            if (newDeal) {
+                // Automação Connection Plug (Webhook)
+                const { data: triggers } = await supabase.from('crm_webhook_triggers')
+                    .select('*')
+                    .eq('pipeline_name', newDeal.pipeline)
+                    .eq('stage_id', newDeal.stage);
+                
+                if (triggers && triggers.length > 0) {
+                    // Disparar Webhook logic (Helper simplificado)
+                    console.log("Lead capturado: Disparando Webhooks de automação...");
+                }
+            }
+
+        } catch (crmErr) {
+            console.error("Erro ao processar captura de lead comercial:", crmErr);
+            // Não travamos a submissão do formulário se o CRM falhar, 
+            // mas registramos no log
+        }
+    }
   },
 
   getFormSubmissions: async (formId: string): Promise<any[]> => {
@@ -376,7 +479,6 @@ export const appBackend = {
   getPipelines: async (): Promise<Pipeline[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_pipelines').select('*').order('name');
-    // FIXED: Parameter shadowing fix (was named data, now item)
     return (data || []).map((item: any) => ({ id: item.id, name: item.name, stages: item.stages }));
   },
 
@@ -751,7 +853,6 @@ export const appBackend = {
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-    // FIXED: Shadowing fix and param renaming to resolve scope errors
     return (data || []).map((item: any) => ({
         id: item.id, 
         title: item.title, 

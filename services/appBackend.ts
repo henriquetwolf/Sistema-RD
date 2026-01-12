@@ -1,4 +1,3 @@
-
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -139,8 +138,9 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Backend not configured");
+    // Corrected preset.interval_minutes to preset.intervalMinutes
     const payload = {
-      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.interval_minutes, created_by_name: preset.createdByName
+      name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName
     };
     if (preset.id) {
       const { data, error } = await supabase.from(TABLE_NAME).update(payload).eq('id', preset.id).select().single();
@@ -172,9 +172,9 @@ export const appBackend = {
           title: d.title,
           description: d.description,
           price: d.price,
-          payment_link: d.payment_link,
-          image_url: d.image_url,
-          certificate_template_id: d.certificate_template_id,
+          paymentLink: d.payment_link,
+          imageUrl: d.image_url,
+          certificateTemplateId: d.certificate_template_id,
           createdAt: d.created_at
       }));
   },
@@ -403,7 +403,6 @@ export const appBackend = {
       title: form.title, 
       description: form.description, 
       campaign: form.campaign, 
-      /* Fixed: Changed isLeadCapture to correct property name */
       is_lead_capture: form.isLeadCapture, 
       distribution_mode: form.distributionMode, 
       fixed_owner_id: form.fixedOwnerId || null, 
@@ -428,15 +427,23 @@ export const appBackend = {
     await supabase.from('crm_forms').delete().eq('id', id);
   },
 
-  getFormFolders: async (): Promise<FormFolder[]> => {
+  getFormFolders: async (type: 'form' | 'survey' = 'form'): Promise<FormFolder[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_form_folders').select('*').order('name');
+    const { data } = await supabase
+        .from('crm_form_folders')
+        .select('*')
+        .eq('type', type)
+        .order('name');
     return (data || []).map((d: any) => ({ id: d.id, name: d.name, createdAt: d.created_at }));
   },
 
-  saveFormFolder: async (folder: FormFolder): Promise<void> => {
+  saveFormFolder: async (folder: FormFolder, type: 'form' | 'survey' = 'form'): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_form_folders').upsert({ id: folder.id, name: folder.name });
+    await supabase.from('crm_form_folders').upsert({ 
+        id: folder.id, 
+        name: folder.name,
+        type: type 
+    });
   },
 
   deleteFormFolder: async (id: string): Promise<void> => {
@@ -697,7 +704,6 @@ export const appBackend = {
         console.error("Erro ao buscar mensagens do chamado:", error);
         return [];
     }
-    // Corrected mapping to camelCase and ensured 'd' is defined in map callback
     return (data || []).map((d: any) => ({
       id: d.id, 
       ticketId: d.ticket_id, 
@@ -792,7 +798,7 @@ export const appBackend = {
     if (blk.id && blk.id.length > 10) {
       const { data, error } = await supabase.from('crm_event_blocks').update(payload).eq('id', blk.id).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: d.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
+      return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
     } else {
       const { data, error = null } = await supabase.from('crm_event_blocks').insert([payload]).select().single();
       if (error) throw error;
@@ -831,12 +837,12 @@ export const appBackend = {
       observations: d.observations, 
       status: d.status, 
       team: d.team, 
-      voucherLink1: d.voucher_link1, 
-      testDate: d.test_date, 
-      voucherLink2: d.voucher_link2, 
-      voucherLink3: d.voucher_link3, 
-      boletosLink: d.boletos_link, 
-      negotiationReference: d.negotiation_reference, 
+      voucher_link1: d.voucher_link1, 
+      test_date: d.test_date, 
+      voucher_link2: d.voucher_link2, 
+      voucher_link3: d.voucher_link3, 
+      boletos_link: d.boletos_link, 
+      negotiation_reference: d.negotiation_reference, 
       attachments: d.attachments, 
       createdAt: d.created_at
     }));
@@ -978,8 +984,8 @@ export const appBackend = {
       id: d.id, 
       title: d.title, 
       imageUrl: d.image_url, 
-      link_url: d.link_url, 
-      target_audience: d.target_audience, 
+      linkUrl: d.link_url, 
+      targetAudience: d.target_audience, 
       active: d.active, 
       createdAt: d.created_at 
     }));
@@ -1018,7 +1024,7 @@ export const appBackend = {
   getTeacherNews: async (): Promise<TeacherNews[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, image_url: d.image_url, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title, content: d.content, imageUrl: d.image_url, createdAt: d.created_at }));
   },
 
   saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer, FormFolder } from '../types';
 import { FormViewer } from './FormViewer';
@@ -128,7 +127,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
 
   const loadFolders = async () => {
     try {
-      const data = await appBackend.getFormFolders();
+      const data = await appBackend.getFormFolders('form');
       setFolders(data);
     } catch (e) {}
   };
@@ -153,7 +152,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
         name: newFolderName,
         createdAt: new Date().toISOString()
     };
-    await appBackend.saveFormFolder(newFolder);
+    await appBackend.saveFormFolder(newFolder, 'form');
     await loadFolders();
     setShowFolderModal(false);
     setNewFolderName('');
@@ -558,7 +557,6 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                                                             <option key={field.value} value={field.value}>{field.label}</option>
                                                         ))}
                                                     </select>
-                                                    {/* Corrected: Wrapped Info icon in span to use title safely */}
                                                     <span title="Escolha qual campo da Negociação será preenchido com esta resposta." className="hidden md:block">
                                                         <Info size={14} className="text-indigo-300" />
                                                     </span>

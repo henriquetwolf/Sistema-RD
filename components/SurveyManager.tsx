@@ -98,7 +98,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
 
   const loadFolders = async () => {
       try {
-          const data = await appBackend.getFormFolders();
+          const data = await appBackend.getFormFolders('survey');
           setFolders(data || []);
       } catch (e) {}
   };
@@ -117,7 +117,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
         name: newFolderName,
         createdAt: new Date().toISOString()
     };
-    await appBackend.saveFormFolder(newFolder);
+    await appBackend.saveFormFolder(newFolder, 'survey');
     await loadFolders();
     setShowFolderModal(false);
     setNewFolderName('');

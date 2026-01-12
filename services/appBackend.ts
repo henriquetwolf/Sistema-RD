@@ -1,6 +1,8 @@
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
+  // Added ContractSigner to imports to fix "Cannot find name 'ContractSigner'" error
+  ContractSigner,
   CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, 
   EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, 
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
@@ -188,7 +190,7 @@ export const appBackend = {
       description: survey.description, 
       campaign: survey.campaign, 
       is_lead_capture: survey.isLeadCapture, 
-      distribution_mode: survey.distributionMode, 
+      distribution_mode: survey.distribution_mode, 
       fixed_owner_id: survey.fixedOwnerId || null, 
       team_id: survey.teamId || null, 
       target_pipeline: survey.targetPipeline, 
@@ -303,7 +305,7 @@ export const appBackend = {
   getCompanies: async (): Promise<CompanySetting[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_companies').select('*').order('legal_name');
-    return (data || []).map((d: any) => ({ id: d.id, legalName: d.legal_name, cnpj: d.cnpj, webhookUrl: d.webhook_url, productTypes: d.product_types || [], productIds: d.product_ids || [] }));
+    return (data || []).map((d: any) => ({ id: d.id, legalName: d.legal_name, cnpj: d.cnpj, webhookUrl: d.webhook_url, productTypes: d.product_types || [], product_ids: d.product_ids || [] }));
   },
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
@@ -417,7 +419,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
     return (data || []).map((j: any) => ({
-      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
+      id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at
     }));
   },
 
@@ -523,6 +525,7 @@ export const appBackend = {
     const { data: contract } = await supabase.from('crm_contracts').select('signers').eq('id', contractId).single();
     if (!contract) throw new Error("Contrato não encontrado");
     
+    // Use ContractSigner type here, which is now imported
     const signers = (contract.signers as ContractSigner[]).map(s => {
         if (s.id === signerId) {
             return { ...s, status: 'signed', signatureData, signedAt: new Date().toISOString() };
@@ -655,11 +658,11 @@ export const appBackend = {
         fantasyName: d.fantasy_name, legalName: d.legal_name, cnpj: d.cnpj, studioPhone: d.studio_phone,
         address: d.address, city: d.city, state: d.state, country: d.country, sizeM2: d.size_m2,
         studentCapacity: d.student_capacity, rentValue: d.rent_value, methodology: d.methodology,
-        studioType: d.studio_type, nameOnSite: d.name_on_site, bank: d.bank, agency: d.agency,
-        account: d.account, beneficiary: d.beneficiary, pixKey: d.pix_key, hasReformer: !!d.has_reformer,
-        qtyReformer: d.qty_reformer, hasLadderBarrel: !!d.has_ladder_barrel, qtyLadderBarrel: d.qty_ladder_barrel,
-        hasChair: !!d.has_chair, qtyChair: d.qty_chair, hasCadillac: !!d.has_cadillac, qtyCadillac: d.qty_cadillac,
-        hasChairsForCourse: !!d.has_chairs_for_course, hasTv: !!d.has_tv, maxKitsCapacity: d.max_kits_capacity,
+        studio_type: d.studio_type, name_on_site: d.name_on_site, bank: d.bank, agency: d.agency,
+        account: d.account, beneficiary: d.beneficiary, pix_key: d.pix_key, has_reformer: !!d.has_reformer,
+        qty_reformer: d.qty_reformer, has_ladder_barrel: !!d.has_ladder_barrel, qty_ladder_barrel: d.qty_ladder_barrel,
+        has_chair: !!d.has_chair, qty_chair: d.qty_chair, has_cadillac: !!d.has_cadillac, qty_cadillac: d.qty_cadillac,
+        has_chairs_for_course: !!d.has_chairs_for_course, has_tv: !!d.has_tv, max_kits_capacity: d.max_kits_capacity,
         attachments: d.attachments
     }));
   },
@@ -1071,7 +1074,7 @@ export const appBackend = {
     return (data || []).map((d: any) => ({
         id: d.id, openInstallments: d.open_installments, totalNegotiatedValue: d.total_negotiated_value,
         totalInstallments: d.total_installments, dueDate: d.due_date, responsibleAgent: d.responsible_agent,
-        identifierCode: d.identifier_code, fullName: d.full_name, productName: d.product_name,
+        identifier_code: d.identifier_code, fullName: d.full_name, productName: d.product_name,
         originalValue: d.original_value, paymentMethod: d.payment_method, observations: d.observations,
         status: d.status, team: d.team, voucherLink1: d.voucher_link_1, testDate: d.test_date,
         voucherLink2: d.voucher_link_2, voucherLink3: d.voucher_link_3, boletosLink: d.boletos_link,

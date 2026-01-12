@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Eye, Edit2, ArrowLeft, Save, Copy, Target, Share2, 
   Loader2, Check, List, CheckSquare as CheckboxIcon, Inbox, Download, Table, 
   Layout, Folder, FolderPlus, MoveRight, LayoutGrid, X, PieChart, Type,
-  AlignLeft, Hash, Palette, RefreshCw, Sparkle, Info
+  AlignLeft, Hash, Palette, RefreshCw, Sparkles, Info, Lock, Zap
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -32,6 +32,16 @@ const INITIAL_SURVEY: SurveyModel = {
       backgroundType: 'color', backgroundColor: '#fff7ed', cardTransparent: false, primaryColor: '#f59e0b', textColor: '#451a03', fontFamily: 'sans', titleAlignment: 'left', borderRadius: 'medium', buttonText: 'Enviar Pesquisa', shadowIntensity: 'soft', successTitle: 'Obrigado!', successMessage: 'Sua opinião é fundamental.', successButtonText: 'Fechar'
   }
 };
+
+const SYSTEM_FIELDS = [
+    { value: '', label: 'Campo Manual (Aluno preenche)' },
+    { value: 'student_name', label: 'Nome do Aluno (Automático)' },
+    { value: 'student_email', label: 'E-mail do Aluno (Automático)' },
+    { value: 'course_name', label: 'Nome do Curso (Automático)' },
+    { value: 'class_code', label: 'Cód. Turma (Automático)' },
+    { value: 'city', label: 'Cidade do Curso (Automático)' },
+    { value: 'state', label: 'UF do Curso (Automático)' },
+];
 
 const QUESTION_TYPES: { id: QuestionType; label: string; icon: any }[] = [
     { id: 'text', label: 'Pergunta Curta', icon: Type },
@@ -128,9 +138,9 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                   <button onClick={() => setView('list')} className="text-slate-500 hover:text-slate-700 font-medium text-sm flex items-center gap-1"><ArrowLeft size={16} /> Sair</button>
                   <div className="h-6 w-px bg-slate-200"></div>
                   <div className="flex bg-slate-100 p-1 rounded-lg">
-                      <button onClick={() => setEditorStep('editor')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md", editorStep === 'editor' ? "bg-white shadow text-amber-700" : "text-slate-500")}>Perguntas</button>
-                      <button onClick={() => setEditorStep('design')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md", editorStep === 'design' ? "bg-white shadow text-amber-700" : "text-slate-500")}>Design</button>
-                      <button onClick={() => setEditorStep('targeting')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md", editorStep === 'targeting' ? "bg-white shadow text-amber-700" : "text-slate-500")}>Público & Alvo</button>
+                      <button onClick={() => setEditorStep('editor')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", editorStep === 'editor' ? "bg-white shadow text-amber-700" : "text-slate-500")}>Perguntas</button>
+                      <button onClick={() => setEditorStep('design')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", editorStep === 'design' ? "bg-white shadow text-amber-700" : "text-slate-500")}>Design</button>
+                      <button onClick={() => setEditorStep('targeting')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", editorStep === 'targeting' ? "bg-white shadow text-amber-700" : "text-slate-500")}>Público & Alvo</button>
                   </div>
               </div>
               <div className="flex gap-3">
@@ -167,7 +177,40 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                             <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase">Pergunta {idx + 1}</span>
                                             <button onClick={() => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.filter(x => x.id !== q.id)})} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
                                         </div>
-                                        <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-lg text-sm font-bold" value={q.title} onChange={e => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.map(x => x.id === q.id ? {...x, title: e.target.value} : x)})} />
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Assunto / Pergunta</label>
+                                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-lg text-sm font-bold" value={q.title} onChange={e => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.map(x => x.id === q.id ? {...x, title: e.target.value} : x)})} />
+                                            </div>
+                                            
+                                            <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-100">
+                                                <label className="block text-[10px] font-black text-amber-700 uppercase mb-2 flex items-center gap-1.5"><Lock size={12}/> Vincular Informação Automática</label>
+                                                <select 
+                                                    className="w-full px-3 py-2 border rounded-lg text-xs bg-white font-medium outline-none focus:ring-2 focus:ring-amber-200"
+                                                    value={q.systemMapping || ''}
+                                                    onChange={e => {
+                                                        const mapping = e.target.value;
+                                                        const field = SYSTEM_FIELDS.find(f => f.value === mapping);
+                                                        setCurrentSurvey({
+                                                            ...currentSurvey, 
+                                                            questions: currentSurvey.questions.map(x => x.id === q.id ? {
+                                                                ...x, 
+                                                                systemMapping: mapping,
+                                                                title: mapping ? field?.label || x.title : x.title,
+                                                                required: !!mapping 
+                                                            } : x)
+                                                        });
+                                                    }}
+                                                >
+                                                    {SYSTEM_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                                                </select>
+                                                {q.systemMapping && (
+                                                    <p className="mt-2 text-[10px] text-amber-600 font-medium leading-tight">
+                                                        * Este campo será ocultado para o aluno e preenchido automaticamente pelo sistema.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -254,7 +297,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                         </button>
                         <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?publicFormId=${s.id}`); alert("Link copiado!"); }} className="bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl flex flex-col items-center justify-center">
                             <Share2 size={20} />
-                            <span className="text-[10px] font-black uppercase mt-1">Link Interno</span>
+                            <span className="text-[10px] font-black uppercase mt-1">Link Externo</span>
                         </button>
                     </div>
                 </div>

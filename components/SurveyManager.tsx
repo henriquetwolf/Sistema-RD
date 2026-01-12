@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Eye, Edit2, ArrowLeft, Save, Copy, Target, Share2, 
   Loader2, Check, List, CheckSquare as CheckboxIcon, Inbox, Download, Table, 
   Layout, Folder, FolderPlus, MoveRight, LayoutGrid, X, PieChart, Type,
-  AlignLeft, Hash, Palette, RefreshCw, Sparkles, Info, Lock, Zap
+  AlignLeft, Hash, Palette, RefreshCw, Sparkles, Info, Lock, Zap, Minus
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -104,8 +104,52 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
   };
 
   const addQuestion = (type: QuestionType) => {
-      const newQ: FormQuestion = { id: crypto.randomUUID(), title: 'Nova Pergunta', type, required: true, options: (type === 'select' || type === 'checkbox') ? ['Excelente', 'Bom', 'Regular'] : undefined };
+      const newQ: FormQuestion = { 
+        id: crypto.randomUUID(), 
+        title: 'Nova Pergunta', 
+        type, 
+        required: true, 
+        options: (type === 'select' || type === 'checkbox') ? ['Opção 1'] : undefined 
+      };
       setCurrentSurvey(prev => ({ ...prev, questions: [...prev.questions, newQ] }));
+  };
+
+  const updateQuestionOption = (qId: string, optIdx: number, newValue: string) => {
+    setCurrentSurvey(prev => ({
+        ...prev,
+        questions: prev.questions.map(q => {
+            if (q.id === qId && q.options) {
+                const newOpts = [...q.options];
+                newOpts[optIdx] = newValue;
+                return { ...q, options: newOpts };
+            }
+            return q;
+        })
+    }));
+  };
+
+  const addOptionToQuestion = (qId: string) => {
+    setCurrentSurvey(prev => ({
+        ...prev,
+        questions: prev.questions.map(q => {
+            if (q.id === qId) {
+                return { ...q, options: [...(q.options || []), `Opção ${(q.options?.length || 0) + 1}`] };
+            }
+            return q;
+        })
+    }));
+  };
+
+  const removeOptionFromQuestion = (qId: string, optIdx: number) => {
+    setCurrentSurvey(prev => ({
+        ...prev,
+        questions: prev.questions.map(q => {
+            if (q.id === qId && q.options) {
+                return { ...q, options: q.options.filter((_, i) => i !== optIdx) };
+            }
+            return q;
+        })
+    }));
   };
 
   const filteredSurveys = useMemo(() => {
@@ -120,13 +164,6 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
     await loadFolders();
     setShowFolderModal(false);
     setNewFolderName('');
-  };
-
-  const handleMoveSurvey = async (survey: SurveyModel, folderId: string | null) => {
-    const updated = { ...survey, folderId: folderId || null };
-    await appBackend.saveSurvey(updated);
-    await loadSurveys();
-    setShowMoveModal(null);
   };
 
   if (view === 'preview') return <FormViewer form={currentSurvey} onBack={() => setView('editor')} />;
@@ -171,48 +208,109 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                 <textarea className="w-full text-slate-500 border-none focus:ring-0 p-0 resize-none h-12 outline-none" value={currentSurvey.description} onChange={e => setCurrentSurvey({...currentSurvey, description: e.target.value})} placeholder="Instruções para o aluno..." />
                             </div>
                             <div className="space-y-4 pb-20">
-                                {currentSurvey.questions.map((q, idx) => (
-                                    <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm group hover:border-amber-300 transition-all">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase">Pergunta {idx + 1}</span>
-                                            <button onClick={() => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.filter(x => x.id !== q.id)})} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
-                                        </div>
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Assunto / Pergunta</label>
-                                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-lg text-sm font-bold" value={q.title} onChange={e => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.map(x => x.id === q.id ? {...x, title: e.target.value} : x)})} />
+                                {currentSurvey.questions.map((q, idx) => {
+                                    const typeInfo = QUESTION_TYPES.find(t => t.id === q.type);
+                                    const Icon = typeInfo?.icon || Type;
+                                    
+                                    return (
+                                        <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm group hover:border-amber-300 transition-all">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase">Pergunta {idx + 1}</span>
+                                                    <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase">
+                                                        <Icon size={12}/> {typeInfo?.label}
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.filter(x => x.id !== q.id)})} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
                                             </div>
                                             
-                                            <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-100">
-                                                <label className="block text-[10px] font-black text-amber-700 uppercase mb-2 flex items-center gap-1.5"><Lock size={12}/> Vincular Informação Automática</label>
-                                                <select 
-                                                    className="w-full px-3 py-2 border rounded-lg text-xs bg-white font-medium outline-none focus:ring-2 focus:ring-amber-200"
-                                                    value={q.systemMapping || ''}
-                                                    onChange={e => {
-                                                        const mapping = e.target.value;
-                                                        const field = SYSTEM_FIELDS.find(f => f.value === mapping);
-                                                        setCurrentSurvey({
-                                                            ...currentSurvey, 
-                                                            questions: currentSurvey.questions.map(x => x.id === q.id ? {
-                                                                ...x, 
-                                                                systemMapping: mapping,
-                                                                title: mapping ? field?.label || x.title : x.title,
-                                                                required: !!mapping 
-                                                            } : x)
-                                                        });
-                                                    }}
-                                                >
-                                                    {SYSTEM_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                                                </select>
-                                                {q.systemMapping && (
-                                                    <p className="mt-2 text-[10px] text-amber-600 font-medium leading-tight">
-                                                        * Este campo será ocultado para o aluno e preenchido automaticamente pelo sistema.
-                                                    </p>
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Assunto / Pergunta</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full px-4 py-2 bg-slate-50 border rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-amber-100 outline-none transition-all" 
+                                                        value={q.title} 
+                                                        onChange={e => setCurrentSurvey({...currentSurvey, questions: currentSurvey.questions.map(x => x.id === q.id ? {...x, title: e.target.value} : x)})} 
+                                                    />
+                                                </div>
+
+                                                {/* GERENCIAMENTO DE OPÇÕES PARA SELECT E CHECKBOX */}
+                                                {(q.type === 'select' || q.type === 'checkbox') && (
+                                                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
+                                                        <div className="flex items-center justify-between">
+                                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Opções de Resposta</label>
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => addOptionToQuestion(q.id)}
+                                                                className="text-[10px] font-black text-amber-600 uppercase hover:underline flex items-center gap-1"
+                                                            >
+                                                                <Plus size={12}/> Adicionar Opção
+                                                            </button>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            {(q.options || []).map((opt, optIdx) => (
+                                                                <div key={optIdx} className="flex items-center gap-2 animate-in slide-in-from-left-2">
+                                                                    <div className="w-6 h-6 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-400 shrink-0">
+                                                                        {optIdx + 1}
+                                                                    </div>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-amber-100 outline-none"
+                                                                        value={opt}
+                                                                        onChange={e => updateQuestionOption(q.id, optIdx, e.target.value)}
+                                                                    />
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => removeOptionFromQuestion(q.id, optIdx)}
+                                                                        className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
+                                                                    >
+                                                                        <Minus size={14}/>
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
                                                 )}
+                                                
+                                                <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-100">
+                                                    <label className="block text-[10px] font-black text-amber-700 uppercase mb-2 flex items-center gap-1.5"><Lock size={12}/> Vincular Informação Automática</label>
+                                                    <select 
+                                                        className="w-full px-3 py-2 border rounded-lg text-xs bg-white font-medium outline-none focus:ring-2 focus:ring-amber-200"
+                                                        value={q.systemMapping || ''}
+                                                        onChange={e => {
+                                                            const mapping = e.target.value;
+                                                            const field = SYSTEM_FIELDS.find(f => f.value === mapping);
+                                                            setCurrentSurvey({
+                                                                ...currentSurvey, 
+                                                                questions: currentSurvey.questions.map(x => x.id === q.id ? {
+                                                                    ...x, 
+                                                                    systemMapping: mapping,
+                                                                    title: mapping ? field?.label || x.title : x.title,
+                                                                    required: !!mapping 
+                                                                } : x)
+                                                            });
+                                                        }}
+                                                    >
+                                                        {SYSTEM_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                                                    </select>
+                                                    {q.systemMapping && (
+                                                        <p className="mt-2 text-[10px] text-amber-600 font-medium leading-tight">
+                                                            * Este campo será ocultado para o aluno e preenchido automaticamente pelo sistema com base no login.
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
+                                    );
+                                })}
+                                {currentSurvey.questions.length === 0 && (
+                                    <div className="py-20 text-center text-slate-400 bg-white rounded-2xl border-2 border-dashed border-slate-100">
+                                        <Sparkles size={48} className="mx-auto mb-4 opacity-10"/>
+                                        <p className="font-bold">Comece a construir sua pesquisa</p>
+                                        <p className="text-sm">Selecione um tipo de campo à esquerda.</p>
                                     </div>
-                                ))}
+                                )}
                             </div>
                         </div>
                     </main>
@@ -297,7 +395,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                         </button>
                         <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?publicFormId=${s.id}`); alert("Link copiado!"); }} className="bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl flex flex-col items-center justify-center">
                             <Share2 size={20} />
-                            <span className="text-[10px] font-black uppercase mt-1">Link Externo</span>
+                            <span className="text-[10px] font-black uppercase mt-1">Link Interno</span>
                         </button>
                     </div>
                 </div>
@@ -313,6 +411,47 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                   <div className="flex justify-end gap-2">
                       <button onClick={() => setShowFolderModal(false)} className="px-3 py-1.5 text-sm text-slate-600">Cancelar</button>
                       <button onClick={handleCreateFolder} className="px-3 py-1.5 bg-amber-600 text-white rounded text-sm font-bold">Criar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {showMoveModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
+                  <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800">Mover Pesquisa</h3>
+                      <button onClick={() => setShowMoveModal(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  </div>
+                  <div className="p-5">
+                      <p className="text-sm text-slate-500 mb-4">Selecione o destino para: <br/><strong className="text-slate-800">{showMoveModal.title}</strong></p>
+                      <div className="space-y-1">
+                          <button 
+                              onClick={async () => {
+                                const updated = { ...showMoveModal, folderId: null };
+                                await appBackend.saveSurvey(updated);
+                                await loadSurveys();
+                                setShowMoveModal(null);
+                              }}
+                              className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition-colors", !showMoveModal.folderId ? "bg-amber-50 text-amber-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                          >
+                              <LayoutGrid size={16} /> Sem Pasta (Raiz)
+                          </button>
+                          {folders.map(f => (
+                              <button 
+                                  key={f.id}
+                                  onClick={async () => {
+                                    const updated = { ...showMoveModal, folderId: f.id };
+                                    await appBackend.saveSurvey(updated);
+                                    await loadSurveys();
+                                    setShowMoveModal(null);
+                                  }}
+                                  className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition-colors", showMoveModal.folderId === f.id ? "bg-amber-50 text-amber-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                              >
+                                  <Folder size={16} /> {f.name}
+                              </button>
+                          ))}
+                      </div>
                   </div>
               </div>
           </div>

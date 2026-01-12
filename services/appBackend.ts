@@ -190,7 +190,8 @@ export const appBackend = {
       description: survey.description, 
       campaign: survey.campaign, 
       is_lead_capture: survey.isLeadCapture, 
-      distribution_mode: survey.distribution_mode, 
+      // Fix: Changed survey.distribution_mode to survey.distributionMode to match SurveyModel type definition
+      distribution_mode: survey.distributionMode, 
       fixed_owner_id: survey.fixedOwnerId || null, 
       team_id: survey.teamId || null, 
       target_pipeline: survey.targetPipeline, 
@@ -494,8 +495,8 @@ export const appBackend = {
     const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
     return {
-        id: data.id, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date,
-        status: data.status, folderId: data.folder_id, signers: data.signers, createdAt: data.created_at
+        id: data.id, title: d.title, content: d.content, city: d.city, contractDate: d.contract_date,
+        status: d.status, folderId: d.folder_id, signers: d.signers, createdAt: d.created_at
     };
   },
 
@@ -1078,7 +1079,7 @@ export const appBackend = {
         originalValue: d.original_value, paymentMethod: d.payment_method, observations: d.observations,
         status: d.status, team: d.team, voucherLink1: d.voucher_link_1, testDate: d.test_date,
         voucherLink2: d.voucher_link_2, voucherLink3: d.voucher_link_3, boletosLink: d.boletos_link,
-        negotiationReference: d.negotiation_reference, attachments: d.attachments, createdAt: d.created_at
+        negotiation_reference: d.negotiation_reference, attachments: d.attachments, createdAt: d.created_at
     }));
   },
 

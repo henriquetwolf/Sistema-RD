@@ -169,7 +169,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     if (!alreadyHasCert) {
                         await appBackend.issueCertificate(mainDealId, playingCourse.certificateTemplateId);
                         await loadCertificates(); 
-                        alert("🎉 Parabéns! Você concluiu 100% das aulas e seu certificado já está disponível na aba 'Meus Diplomas'!");
+                        alert("🎉 Parabéns! Você concluuiu 100% das aulas e seu certificado já está disponível na aba 'Meus Diplomas'!");
                     }
                 }
             }
@@ -183,6 +183,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         const completed = allLessons.filter(l => completedLessonIds.includes(l.id)).length;
         return Math.round((completed / allLessons.length) * 100);
     }, [courseStructure, completedLessonIds, playingCourse]);
+
+    const studentFirstName = useMemo(() => {
+        if (!student.name) return 'Aluno';
+        const namePart = student.name.trim().split(' ')[0];
+        if (!namePart) return 'Aluno';
+        return namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase();
+    }, [student.name]);
 
     if (playingCourse && courseStructure) {
         return (
@@ -353,7 +360,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
                         <div className="relative z-10">
                             <div className="inline-flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-4 border border-white/30 backdrop-blur-md"><Sparkles size={12} className="text-amber-400" /> Bem-vindo de volta!</div>
-                            <h2 className="text-3xl font-black mb-3 tracking-tight leading-tight">Olá, <span className="text-purple-200">{student.name.split(' ')[0]}</span>!</h2>
+                            <h2 className="text-3xl font-black mb-3 tracking-tight leading-tight">Olá, <span className="text-white">{studentFirstName}</span>!</h2>
                             <p className="text-purple-100/80 text-base leading-relaxed font-medium">Continue sua jornada acadêmica na maior rede de Pilates do mundo.</p>
                         </div>
                     </section>

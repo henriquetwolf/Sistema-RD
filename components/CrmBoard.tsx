@@ -289,7 +289,9 @@ export const CrmBoard: React.FC = () => {
    * Dispara automações de WhatsApp com base nos critérios da regra
    */
   const triggerWhatsAppAutomation = async (deal: any) => {
-    if (!deal.phone) return;
+    // IMPORTANTE: deal aqui é o retorno direto do Supabase (snake_case)
+    const phone = deal.phone || deal.contact_phone;
+    if (!phone) return;
 
     try {
         const { data: rules } = await appBackend.client
@@ -307,20 +309,30 @@ export const CrmBoard: React.FC = () => {
             if (rule.product_id && rule.product_id !== deal.product_name) continue;
 
             let message = rule.message_template;
-            message = message.replace(/\{\{nome_cliente\}\}/g, deal.company_name || deal.contact_name || 'Cliente');
-            message = message.replace(/\{\{curso\}\}/g, deal.product_name || 'Curso');
+            if (!message) continue;
+
+            // Substituição precisa das Tags para os campos:
+            // Nome Completo do Cliente -> company_name
+            // Produto / Curso -> product_name
+            const clientName = deal.company_name || deal.contact_name || 'Cliente';
+            const courseName = deal.product_name || 'Curso';
+
+            // Regex case-insensitive para abranger {{NOME_CLIENTE}} e {{nome_cliente}}
+            message = message.replace(/\{\{nome_cliente\}\}/gi, clientName);
+            message = message.replace(/\{\{curso\}\}/gi, courseName);
 
             // Envio via Evolution API
+            const cleanPhone = phone.replace(/\D/g, '');
             await whatsappService.sendTextMessage({ 
-                wa_id: deal.phone.replace(/\D/g, ''),
-                contact_phone: deal.phone.replace(/\D/g, '')
+                wa_id: cleanPhone,
+                contact_phone: cleanPhone
             }, message);
 
             // Registrar log de disparo
             await appBackend.client.from('crm_wa_automation_logs').insert([{
                 rule_name: rule.name,
-                student_name: deal.company_name || deal.contact_name,
-                phone: deal.phone,
+                student_name: clientName,
+                phone: phone,
                 message: message
             }]);
         }
@@ -899,7 +911,7 @@ export const CrmBoard: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {allPendingTasks.length === 0 ? (
-                                    <tr><td colSpan={6} className="py-20 text-center text-slate-400 italic">Nenhum agendamento pendente.</td></tr>
+                                    <tr><td colSpan={6} className="p-20 text-center text-slate-400 italic">Nenhum agendamento pendente.</td></tr>
                                 ) : allPendingTasks.map(task => {
                                     const isOverdue = task.dueDate < new Date().toISOString().split('T')[0];
                                     const isToday = task.dueDate === new Date().toISOString().split('T')[0];

@@ -478,7 +478,7 @@ export const WhatsAppAutomation: React.FC = () => {
                         <div className="space-y-8">
                             <div>
                                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome Identificador da Regra</label>
-                                <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={editingRule?.name} onChange={e => setEditingRule(prev => prev ? {...prev, name: e.target.value} : null)} placeholder="Ex: Boas Vindas - Formação Pilates" />
+                                <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={editingRule?.name || ''} onChange={e => setEditingRule(prev => prev ? {...prev, name: e.target.value} : null)} placeholder="Ex: Boas Vindas - Formação Pilates" />
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -486,7 +486,7 @@ export const WhatsAppAutomation: React.FC = () => {
                                     <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Funil de Vendas (Pipeline)</label>
                                     <div className="relative group">
                                         <Filter className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={20} />
-                                        <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all" value={editingRule?.pipelineName} onChange={e => setEditingRule(prev => prev ? {...prev, pipelineName: e.target.value, stageId: ''} : null)}>
+                                        <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all" value={editingRule?.pipelineName || ''} onChange={e => setEditingRule(prev => prev ? {...prev, pipelineName: e.target.value, stageId: ''} : null)}>
                                             {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                         </select>
                                         <ChevronRight className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 rotate-90" size={20}/>
@@ -497,7 +497,7 @@ export const WhatsAppAutomation: React.FC = () => {
                                     <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Etapa de Gatilho (Trigger)</label>
                                     <div className="relative group">
                                         <Target className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={20} />
-                                        <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all disabled:opacity-50" value={editingRule?.stageId} onChange={e => setEditingRule(prev => prev ? {...prev, stageId: e.target.value} : null)} disabled={!editingRule?.pipelineName}>
+                                        <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all disabled:opacity-50" value={editingRule?.stageId || ''} onChange={e => setEditingRule(prev => prev ? {...prev, stageId: e.target.value} : null)} disabled={!editingRule?.pipelineName}>
                                             <option value="">Selecione a etapa...</option>
                                             {currentPipelineStages.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
                                         </select>
@@ -509,7 +509,7 @@ export const WhatsAppAutomation: React.FC = () => {
                                     <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Tipo de Produto (Filtro)</label>
                                     <div className="relative group">
                                         <LayoutGrid className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={20} />
-                                        <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all" value={editingRule?.productType} onChange={e => setEditingRule(prev => prev ? {...prev, productType: e.target.value as any, productId: ''} : null)}>
+                                        <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all" value={editingRule?.productType || ''} onChange={e => setEditingRule(prev => prev ? {...prev, productType: e.target.value as any, productId: ''} : null)}>
                                             <option value="">Qualquer tipo de produto</option>
                                             <option value="Digital">Digital (Online)</option>
                                             <option value="Presencial">Presencial (Turmas)</option>
@@ -523,7 +523,7 @@ export const WhatsAppAutomation: React.FC = () => {
                                     <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Produto / Curso de Origem</label>
                                     <div className="relative group">
                                         <ShoppingBag className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={20} />
-                                        <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all" value={editingRule?.productId} onChange={e => setEditingRule(prev => prev ? {...prev, productId: e.target.value} : null)}>
+                                        <select className="w-full pl-14 pr-10 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none appearance-none cursor-pointer transition-all" value={editingRule?.productId || ''} onChange={e => setEditingRule(prev => prev ? {...prev, productId: e.target.value} : null)}>
                                             <option value="">Qualquer produto comercial...</option>
                                             {productOptions.map(p => <option key={p} value={p}>{p}</option>)}
                                         </select>
@@ -537,7 +537,12 @@ export const WhatsAppAutomation: React.FC = () => {
                                     <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Texto da Mensagem (Template)</label>
                                     <span className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">Tags: {"{{nome_cliente}}"}, {"{{curso}}"}</span>
                                 </div>
-                                <textarea className="w-full px-6 py-5 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[2rem] text-sm font-medium h-48 resize-none outline-none leading-relaxed transition-all" value={editingRule?.messageTemplate} onChange={e => setEditingRule(prev => prev ? {...prev, messageTemplate: e.target.value} : null)} placeholder="Olá {{nome_cliente}}, parabéns pela compra do curso {{curso}}! ..." />
+                                <textarea 
+                                    className="w-full px-6 py-5 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[2rem] text-sm font-medium h-48 resize-none outline-none leading-relaxed transition-all" 
+                                    value={editingRule?.messageTemplate || ''} 
+                                    onChange={e => setEditingRule(prev => prev ? {...prev, messageTemplate: e.target.value} : null)} 
+                                    placeholder="Olá {{nome_cliente}}, parabéns pela compra do curso {{curso}}! ..." 
+                                />
                                 <div className="mt-4 flex items-start gap-3 px-2">
                                     <Info size={16} className="text-indigo-500 shrink-0 mt-0.5" />
                                     <p className="text-[11px] text-slate-400 leading-relaxed font-medium">As variáveis entre chaves serão substituídas pelos dados reais do cliente no momento do disparo.</p>
@@ -552,7 +557,7 @@ export const WhatsAppAutomation: React.FC = () => {
                                     <span className="font-black text-slate-800 text-sm uppercase tracking-widest">Automação Ativa</span>
                                     <p className="text-[11px] text-slate-400 font-bold uppercase mt-0.5">O robô disparará as mensagens enquanto o status for ATIVO.</p>
                                 </div>
-                                <input type="checkbox" className="w-6 h-6 rounded-lg text-indigo-600 focus:ring-offset-0 focus:ring-0 border-2" checked={editingRule?.isActive} onChange={e => setEditingRule(prev => prev ? {...prev, isActive: e.target.checked} : null)} />
+                                <input type="checkbox" className="w-6 h-6 rounded-lg text-indigo-600 focus:ring-offset-0 focus:ring-0 border-2" checked={editingRule?.isActive || false} onChange={e => setEditingRule(prev => prev ? {...prev, isActive: e.target.checked} : null)} />
                             </label>
                         </div>
                     </div>

@@ -562,7 +562,7 @@ function App() {
                                             <span className="text-teal-100 text-xs font-black uppercase tracking-[0.2em]">Painel de Controle</span>
                                         </div>
                                         <h2 className="text-4xl font-black tracking-tight mb-2">
-                                            <span className="text-white">Bem-vindo</span>, <span className="text-teal-200">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
+                                            <span className="text-green-400">Bem-vindo</span>, <span className="text-teal-200">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
                                         </h2>
                                         <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed">
                                             Seu centro de comando está pronto. Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.

@@ -32,6 +32,15 @@ interface StudentDeal {
     class_mod_2?: string;
 }
 
+interface GroupedStudent {
+    email: string;
+    name: string;
+    deals: StudentDeal[];
+    presential: string[];
+    digital: string[];
+    events: string[];
+}
+
 interface CertStatus {
     hash: string;
     issuedAt: string;
@@ -39,7 +48,7 @@ interface CertStatus {
 
 export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'cpf_search'>('list');
-  const [students, setStudents] = useState<StudentDeal[]>([]);
+  const [deals, setDeals] = useState<StudentDeal[]>([]);
   const [onlineCourses, setOnlineCourses] = useState<OnlineCourse[]>([]);
   const [certificates, setCertificates] = useState<Record<string, CertStatus>>({});
   const [productTemplates, setProductTemplates] = useState<Record<string, string>>({});
@@ -53,7 +62,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const [isSearchingCpf, setIsSearchingCpf] = useState(false);
 
   // Unlock Modal State
-  const [unlockModalStudent, setUnlockModalStudent] = useState<StudentDeal | null>(null);
+  const [unlockModalStudent, setUnlockModalStudent] = useState<GroupedStudent | null>(null);
   const [studentAccessedIds, setStudentAccessedIds] = useState<string[]>([]);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
 
@@ -68,11 +77,11 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
         const { data, error } = await appBackend.client.from('crm_deals').select('*').order('contact_name', { ascending: true });
         if (error) throw error;
         
-        const deals = data.map((s: any) => ({ ...s, student_access_enabled: s.student_access_enabled !== false }));
-        setStudents(deals);
+        const mappedDeals = data.map((s: any) => ({ ...s, student_access_enabled: s.student_access_enabled !== false }));
+        setDeals(mappedDeals);
 
-        if (deals.length > 0) {
-            const { data: issuedCerts } = await appBackend.client.from('crm_student_certificates').select('student_deal_id, hash, issued_at').in('student_deal_id', deals.map(d => d.id));
+        if (mappedDeals.length > 0) {
+            const { data: issuedCerts } = await appBackend.client.from('crm_student_certificates').select('student_deal_id, hash, issued_at').in('student_deal_id', mappedDeals.map(d => d.id));
             const certMap: Record<string, CertStatus> = {};
             issuedCerts?.forEach((c: any) => { certMap[c.student_deal_id] = { hash: c.hash, issuedAt: c.issued_at }; });
             setCertificates(certMap);
@@ -89,6 +98,45 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       const data = await appBackend.getOnlineCourses();
       setOnlineCourses(data || []);
   };
+
+  const groupedStudents = useMemo(() => {
+      const groups: Record<string, GroupedStudent> = {};
+
+      deals.forEach(deal => {
+          const key = deal.email?.toLowerCase().trim() || deal.id;
+          if (!groups[key]) {
+              groups[key] = {
+                  email: deal.email || '',
+                  name: deal.company_name || deal.contact_name || 'Sem Nome',
+                  deals: [],
+                  presential: [],
+                  digital: [],
+                  events: []
+              };
+          }
+          
+          groups[key].deals.push(deal);
+          
+          const prodName = deal.product_name || 'Produto Indefinido';
+          if (deal.product_type === 'Presencial') {
+              if (!groups[key].presential.includes(prodName)) groups[key].presential.push(prodName);
+          } else if (deal.product_type === 'Digital') {
+              if (!groups[key].digital.includes(prodName)) groups[key].digital.push(prodName);
+          } else if (deal.product_type === 'Evento') {
+              if (!groups[key].events.includes(prodName)) groups[key].events.push(prodName);
+          } else {
+              // Fallback se não houver tipo definido
+              if (!groups[key].digital.includes(prodName)) groups[key].digital.push(prodName);
+          }
+      });
+
+      return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
+  }, [deals]);
+
+  const filtered = groupedStudents.filter(s => 
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    s.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const formatCPF = (val: string) => {
       const numbers = val.replace(/\D/g, '');
@@ -114,8 +162,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       setIsSearchingCpf(true);
       try {
           const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-          
-          // Busca por CPF limpo OU formatado para garantir compatibilidade com registros manuais e importados
           const { data, error } = await appBackend.client
               .from('crm_deals')
               .select('*')
@@ -131,14 +177,18 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       }
   };
 
-  const openUnlockModal = async (student: StudentDeal) => {
+  const openUnlockModal = async (student: GroupedStudent) => {
       setUnlockModalStudent(student);
       setIsSavingAccess(true);
+      // Usamos o ID do primeiro negócio para vincular acessos
+      const mainDealId = student.deals[0]?.id;
+      if (!mainDealId) return;
+
       try {
           const { data, error } = await appBackend.client
               .from('crm_student_course_access')
               .select('course_id')
-              .eq('student_deal_id', student.id);
+              .eq('student_deal_id', mainDealId);
           
           if (error) throw error;
           setStudentAccessedIds((data || []).map(d => d.course_id));
@@ -155,18 +205,21 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
   const saveAccessChanges = async () => {
       if (!unlockModalStudent) return;
+      const mainDealId = unlockModalStudent.deals[0]?.id;
+      if (!mainDealId) return;
+
       setIsSavingAccess(true);
       try {
           const { error: delErr } = await appBackend.client
             .from('crm_student_course_access')
             .delete()
-            .eq('student_deal_id', unlockModalStudent.id);
+            .eq('student_deal_id', mainDealId);
           
           if (delErr) throw delErr;
 
           if (studentAccessedIds.length > 0) {
               const inserts = studentAccessedIds.map(cid => ({ 
-                  student_deal_id: unlockModalStudent.id, 
+                  student_deal_id: mainDealId, 
                   course_id: cid, 
                   unlocked_at: new Date().toISOString() 
               }));
@@ -186,21 +239,19 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       }
   };
 
-  const handleIssueCertificate = async (student: StudentDeal) => {
-      const templateId = productTemplates[student.product_name || ''];
+  const handleIssueCertificate = async (dealId: string, contactName: string, productName: string) => {
+      const templateId = productTemplates[productName];
       if (!templateId) {
           alert("Este produto não possui um modelo de certificado vinculado.");
           return;
       }
-      if (!window.confirm(`Deseja emitir agora o certificado para ${student.contact_name}?`)) return;
+      if (!window.confirm(`Deseja emitir agora o certificado para ${contactName}?`)) return;
       try {
-          const hash = await appBackend.issueCertificate(student.id, templateId);
-          setCertificates(prev => ({ ...prev, [student.id]: { hash, issuedAt: new Date().toISOString() } }));
+          const hash = await appBackend.issueCertificate(dealId, templateId);
+          setCertificates(prev => ({ ...prev, [dealId]: { hash, issuedAt: new Date().toISOString() } }));
           alert("Certificado emitido com sucesso!");
       } catch (e: any) { alert(e.message); }
   };
-
-  const filtered = students.filter(s => (s.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (s.email || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -240,64 +291,83 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto min-h-[400px]">
                     {isLoading ? <div className="flex justify-center items-center h-64"><Loader2 size={32} className="animate-spin text-teal-600" /></div> : (
                         <table className="w-full text-left text-sm text-slate-600">
-                            <thead className="bg-slate-50 text-xs uppercase font-bold text-slate-500">
+                            <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
                                 <tr>
-                                    <th className="px-6 py-4">Nome</th>
-                                    <th className="px-6 py-4">Produto Base</th>
-                                    <th className="px-6 py-4 text-center">Certificado</th>
-                                    <th className="px-6 py-4 text-center">Cursos Online</th>
+                                    <th className="px-6 py-4">Nome do Aluno</th>
+                                    <th className="px-6 py-4">Curso Presencial</th>
+                                    <th className="px-6 py-4">Produtos Digitais</th>
+                                    <th className="px-6 py-4">Eventos</th>
+                                    <th className="px-6 py-4 text-center">Certificados</th>
+                                    <th className="px-6 py-4 text-center">Ações</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {filtered.map(s => {
-                                    const cert = certificates[s.id];
-                                    return (
-                                        <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-4 font-bold text-slate-800">{s.contact_name || s.company_name}</td>
-                                            <td className="px-6 py-4"><span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-[10px] font-black uppercase border border-indigo-100">{s.product_name || 'Geral'}</span></td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center justify-center gap-2">
-                                                    {cert ? (
-                                                        <>
-                                                            <a 
-                                                                href={`/?certificateHash=${cert.hash}`} 
-                                                                target="_blank" 
-                                                                className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-teal-600 hover:border-teal-200 transition-all shadow-sm" 
-                                                                title="Visualizar Certificado"
-                                                            >
-                                                                <Eye size={16}/>
-                                                            </a>
-                                                            <button 
-                                                                onClick={() => { 
-                                                                    navigator.clipboard.writeText(`${window.location.origin}/?certificateHash=${cert.hash}`); 
-                                                                    setCopiedLink(cert.hash); 
-                                                                    setTimeout(() => setCopiedLink(null), 2000); 
-                                                                }} 
-                                                                className={clsx(
-                                                                    "p-1.5 border rounded-lg transition-all shadow-sm", 
-                                                                    copiedLink === cert.hash ? "bg-green-50 text-green-600 border-green-200" : "bg-white text-slate-500 border-slate-200 hover:bg-teal-50"
-                                                                )}
-                                                                title="Copiar Link de Autenticidade"
-                                                            >
-                                                                {copiedLink === cert.hash ? <CheckCircle size={16}/> : <ExternalLink size={16}/>}
-                                                            </button>
-                                                        </>
-                                                    ) : (
-                                                        <button 
-                                                            onClick={() => handleIssueCertificate(s)}
-                                                            className="px-3 py-1 bg-amber-50 text-amber-700 text-[10px] font-black uppercase rounded-lg border border-amber-100 hover:bg-amber-100 transition-all"
-                                                        >
-                                                            Liberar Agora
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <button onClick={() => openUnlockModal(s)} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:bg-indigo-700 active:scale-95 transition-all"><MonitorPlay size={14}/> Liberar Cursos</button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                {filtered.map(s => (
+                                    <tr key={s.email || s.name} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-slate-800">{s.name}</span>
+                                                <span className="text-[10px] text-slate-400">{s.email}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-wrap gap-1">
+                                                {s.presential.map(p => <span key={p} className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-purple-100">{p}</span>)}
+                                                {s.presential.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-wrap gap-1">
+                                                {s.digital.map(p => <span key={p} className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-indigo-100">{p}</span>)}
+                                                {s.digital.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-wrap gap-1">
+                                                {s.events.map(p => <span key={p} className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-amber-100">{p}</span>)}
+                                                {s.events.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col gap-2 items-center justify-center">
+                                                {s.deals.filter(d => !!productTemplates[d.product_name]).map(d => {
+                                                    const cert = certificates[d.id];
+                                                    return (
+                                                        <div key={d.id} className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100 w-full max-w-[200px]">
+                                                            <span className="text-[8px] font-bold text-slate-500 truncate flex-1">{d.product_name}</span>
+                                                            {cert ? (
+                                                                <div className="flex gap-1">
+                                                                    <a href={`/?certificateHash=${cert.hash}`} target="_blank" className="p-1 bg-white border border-slate-200 rounded text-slate-500 hover:text-teal-600 transition-colors shadow-sm" title="Visualizar"><Eye size={12}/></a>
+                                                                    <button 
+                                                                        onClick={() => { 
+                                                                            navigator.clipboard.writeText(`${window.location.origin}/?certificateHash=${cert.hash}`); 
+                                                                            setCopiedLink(cert.hash); 
+                                                                            setTimeout(() => setCopiedLink(null), 2000); 
+                                                                        }} 
+                                                                        className={clsx("p-1 border rounded transition-all shadow-sm", copiedLink === cert.hash ? "bg-green-50 text-green-600 border-green-200" : "bg-white text-slate-500 border-slate-200 hover:bg-teal-50")}
+                                                                    >
+                                                                        {copiedLink === cert.hash ? <CheckCircle size={12}/> : <ExternalLink size={12}/>}
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <button 
+                                                                    onClick={() => handleIssueCertificate(d.id, s.name, d.product_name)}
+                                                                    className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[8px] font-black uppercase rounded border border-amber-100 hover:bg-amber-100"
+                                                                >
+                                                                    Liberar
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                                {s.deals.every(d => !productTemplates[d.product_name]) && <span className="text-slate-300 italic text-[10px]">--</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <button onClick={() => openUnlockModal(s)} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:bg-indigo-700 active:scale-95 transition-all"><MonitorPlay size={14}/> Liberar Cursos</button>
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     )}
@@ -376,7 +446,14 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                     </div>
                                     <div className="flex gap-2 border-t pt-4">
                                         <button 
-                                            onClick={() => openUnlockModal(deal)}
+                                            onClick={() => openUnlockModal({
+                                                email: deal.email || '',
+                                                name: deal.company_name || deal.contact_name,
+                                                deals: [deal],
+                                                presential: [],
+                                                digital: [],
+                                                events: []
+                                            })}
                                             className="flex-1 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
                                         >
                                             Gerenciar Acesso
@@ -407,7 +484,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
                 <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
                     <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
-                        <div><h3 className="text-xl font-black text-slate-800">Liberar Cursos Online</h3><p className="text-sm text-slate-500">Aluno: <strong className="text-indigo-600">{unlockModalStudent.company_name || unlockModalStudent.contact_name}</strong></p></div>
+                        <div><h3 className="text-xl font-black text-slate-800">Liberar Cursos Online</h3><p className="text-sm text-slate-500">Aluno: <strong className="text-indigo-600">{unlockModalStudent.name}</strong></p></div>
                         <button onClick={() => setUnlockModalStudent(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                     </div>
                     <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-4">

@@ -33,6 +33,7 @@ interface StudentDeal {
 }
 
 interface GroupedStudent {
+    cpf: string;
     email: string;
     name: string;
     deals: StudentDeal[];
@@ -103,9 +104,13 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       const groups: Record<string, GroupedStudent> = {};
 
       deals.forEach(deal => {
-          const key = deal.email?.toLowerCase().trim() || deal.id;
+          // Normaliza o CPF para usar como chave de agrupamento, se não houver CPF usa e-mail ou ID
+          const cleanCpf = deal.cpf ? deal.cpf.replace(/\D/g, '') : null;
+          const key = cleanCpf || deal.email?.toLowerCase().trim() || deal.id;
+
           if (!groups[key]) {
               groups[key] = {
+                  cpf: deal.cpf || '',
                   email: deal.email || '',
                   name: deal.company_name || deal.contact_name || 'Sem Nome',
                   deals: [],
@@ -125,7 +130,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           } else if (deal.product_type === 'Evento') {
               if (!groups[key].events.includes(prodName)) groups[key].events.push(prodName);
           } else {
-              // Fallback se não houver tipo definido
               if (!groups[key].digital.includes(prodName)) groups[key].digital.push(prodName);
           }
       });
@@ -135,10 +139,12 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
   const filtered = groupedStudents.filter(s => 
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    s.email.toLowerCase().includes(searchTerm.toLowerCase())
+    s.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.cpf.replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''))
   );
 
   const formatCPF = (val: string) => {
+      if (!val) return '';
       const numbers = val.replace(/\D/g, '');
       return numbers
           .replace(/(\d{3})(\d)/, '$1.$2')
@@ -180,7 +186,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const openUnlockModal = async (student: GroupedStudent) => {
       setUnlockModalStudent(student);
       setIsSavingAccess(true);
-      // Usamos o ID do primeiro negócio para vincular acessos
       const mainDealId = student.deals[0]?.id;
       if (!mainDealId) return;
 
@@ -283,7 +288,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-4">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <input type="text" placeholder="Buscar aluno pelo nome ou e-mail..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 transition-all text-sm font-medium" />
+                        <input type="text" placeholder="Buscar aluno pelo nome, e-mail ou CPF..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 transition-all text-sm font-medium" />
                     </div>
                     <button onClick={fetchData} className="p-2 text-slate-400 hover:text-teal-600 transition-all"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
                 </div>
@@ -294,6 +299,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
                                 <tr>
                                     <th className="px-6 py-4">Nome do Aluno</th>
+                                    <th className="px-6 py-4">CPF</th>
                                     <th className="px-6 py-4">Curso Presencial</th>
                                     <th className="px-6 py-4">Produtos Digitais</th>
                                     <th className="px-6 py-4">Eventos</th>
@@ -303,12 +309,15 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filtered.map(s => (
-                                    <tr key={s.email || s.name} className="hover:bg-slate-50 transition-colors">
+                                    <tr key={s.cpf || s.email || s.name} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
                                                 <span className="font-bold text-slate-800">{s.name}</span>
                                                 <span className="text-[10px] text-slate-400">{s.email}</span>
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="font-medium text-slate-700 whitespace-nowrap">{formatCPF(s.cpf) || '--'}</span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1">
@@ -447,6 +456,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                     <div className="flex gap-2 border-t pt-4">
                                         <button 
                                             onClick={() => openUnlockModal({
+                                                cpf: deal.cpf || '',
                                                 email: deal.email || '',
                                                 name: deal.company_name || deal.contact_name,
                                                 deals: [deal],

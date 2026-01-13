@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
@@ -64,7 +65,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-        const { data, error } = await appBackend.client.from('crm_deals').select('*').eq('stage', 'closed').order('contact_name', { ascending: true });
+        const { data, error } = await appBackend.client.from('crm_deals').select('*').order('contact_name', { ascending: true });
         if (error) throw error;
         
         const deals = data.map((s: any) => ({ ...s, student_access_enabled: s.student_access_enabled !== false }));

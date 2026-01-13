@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LogOut, Calendar, MapPin, Loader2, BookOpen, User, 
@@ -503,7 +504,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
 
       {selectedClass && (
           <ClassStudentsViewer 
-              classItem={selectedClass} 
+              classItems={[selectedClass]} 
               onClose={() => setSelectedClass(null)} 
               variant="modal"
               hideFinancials={true} 

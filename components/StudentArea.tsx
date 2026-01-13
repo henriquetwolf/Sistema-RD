@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock } from '../types';
 import { appBackend } from '../services/appBackend';
@@ -525,7 +526,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
                         { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length }
                     ].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === 'id' ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
                             {tab.label}
                             {tab.badge ? (
@@ -757,30 +758,4 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                                 </div>
                                                                 <h5 className="font-black text-slate-800 text-base mb-1 leading-tight">{ws.title}</h5>
                                                                 <p className="text-xs text-indigo-600 font-bold mb-4 flex items-center gap-1"><Mic size={14}/> {ws.speaker}</p>
-                                                                <button onClick={() => handleToggleRegistration(ws)} disabled={isDisabled && !isSelected} className={clsx("mt-auto w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2", isSelected ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none")}>
-                                                                    {isRegistering === ws.id ? <Loader2 size={14} className="animate-spin"/> : isSelected ? "Cancelar Inscricao" : remaining <= 0 ? "Lotado" : "Confirmar Presenca"}
-                                                                </button>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                        <div className="px-8 py-5 bg-slate-50 border-t flex justify-end shrink-0"><button onClick={() => setViewingEvent(null)} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-lg">Concluir Escolhas</button></div>
-                    </div>
-                </div>
-            )}
-            {signingContract && (
-                <div className="fixed inset-0 z-[300] bg-white overflow-y-auto">
-                    <div className="bg-slate-50 border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10"><button onClick={() => setSigningContract(null)} className="flex items-center gap-2 text-slate-500 font-bold hover:text-slate-800"><ChevronLeft size={20}/> Voltar ao Portal</button><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Processo Seguro</span></div>
-                    <ContractSigning contract={signingContract} onFinish={() => { setSigningContract(null); fetchPendingContracts(); }} />
-                </div>
-            )}
-            <SupportTicketModal isOpen={showSupportModal} onClose={() => { setShowSupportModal(false); fetchSupportNotifications(); }} senderId={mainDealId ? String(mainDealId) : 'guest'} senderName={student.name} senderEmail={student.email} senderRole="student" />
-        </div>
-    );
-};
+                                                                <button onClick={() => handleToggleRegistration(ws)} disabled={isDisabled && !isSelected} className={clsx("mt-auto w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2", is

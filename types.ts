@@ -206,6 +206,12 @@ export interface StudentCertificate {
   issued_at: string;
 }
 
+// Added to resolve error in components/ClassStudentsViewer.tsx
+export interface StudentCertificateStatus {
+  hash: string;
+  issuedAt: string;
+}
+
 export interface EventModel {
   id: string;
   name: string;

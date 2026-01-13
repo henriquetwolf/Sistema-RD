@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle, Phone, Mail } from 'lucide-react';
+import { X, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle, Phone, Mail, FileSpreadsheet } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { StudentCertificateStatus } from '../types';
 import clsx from 'clsx';
+
+declare const XLSX: any;
 
 interface ClassItem {
   id: string;
@@ -216,6 +218,42 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
       setTimeout(() => setCopiedLink(null), 2000);
   };
 
+  const exportToExcel = () => {
+    if (students.length === 0) return;
+
+    const dataToExport = students.map((student, idx) => {
+        const studentClasses = classItems.map(item => {
+            const isMod1 = student.class_mod_1 === item.mod1Code;
+            const isMod2 = student.class_mod_2 === item.mod2Code;
+            if (!isMod1 && !isMod2) return null;
+            let modules = "";
+            if (isMod1 && isMod2) modules = "M1+M2";
+            else if (isMod1) modules = "M1";
+            else if (isMod2) modules = "M2";
+            return `${item.city} (T: ${item.classCode || '--'}) [${modules}]`;
+        }).filter(Boolean).join(' | ');
+
+        return {
+            '#': idx + 1,
+            'Nome': student.company_name || student.contact_name,
+            'E-mail': student.email || '--',
+            'Telefone': student.phone || '--',
+            'Turmas/Módulos': studentClasses,
+            'Status': student.stage === 'closed' ? 'Matriculado' : 'Lead'
+        };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Alunos");
+    
+    const fileName = classItems.length === 1 
+        ? `Alunos_${classItems[0].city}_${classItems[0].classCode || 'SemNum'}.xlsx`
+        : `Lista_Consolidada_Alunos_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    XLSX.writeFile(workbook, fileName);
+  };
+
   const formatDateSimple = (dateStr: string) => { if (!dateStr) return ''; const [y, m, d] = dateStr.split('-'); return `${d}/${m}`; };
 
   const getModuleBadgeForClass = (student: StudentDeal, item: ClassItem) => {
@@ -252,7 +290,12 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                         <button onClick={() => { setAttendanceMode(true); setIsReadOnly(false); }} className={clsx("px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors border", attendanceMode && !isReadOnly ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-white hover:bg-orange-50 text-slate-600 border-slate-200")}><CheckSquare size={18} /> Editar</button>
                     </>
                 )}
-                {!attendanceMode && <button onClick={() => window.print()} className="p-2 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors"><Printer size={20} /></button>}
+                {!attendanceMode && (
+                    <>
+                        <button onClick={exportToExcel} className="p-2 hover:bg-emerald-50 hover:text-emerald-600 rounded-lg text-slate-600 transition-colors border border-transparent hover:border-emerald-200" title="Exportar para Excel"><FileSpreadsheet size={20} /></button>
+                        <button onClick={() => window.print()} className="p-2 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors"><Printer size={20} /></button>
+                    </>
+                )}
                 <button onClick={onClose} className="p-2 hover:bg-red-100 hover:text-red-600 rounded-lg text-slate-400 transition-colors"><X size={24} /></button>
             </div>
         </div>

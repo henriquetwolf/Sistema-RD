@@ -5,7 +5,7 @@ import {
   Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
   Edit2, Trash2, Hash, Loader2, Users, Filter, ChevronRight,
   LayoutList, ChevronLeft, ChevronRight as ChevronRightIcon,
-  CheckCircle2, Globe, Eraser
+  CheckCircle2, Globe, Eraser, Building
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
@@ -59,12 +59,13 @@ interface ClassesManagerProps {
 
 export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [deals, setDeals] = useState<any[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'capacity'>('list');
   const [calendarDate, setCalendarDate] = useState(new Date());
 
   // Multi-selection state
@@ -108,8 +109,16 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       fetchClasses();
       fetchInstructors();
       fetchPartnerStudios();
+      fetchDeals();
       ibgeService.getStates().then(setStates);
   }, []);
+
+  const fetchDeals = async () => {
+      try {
+          const { data } = await appBackend.client.from('crm_deals').select('id, class_mod_1, class_mod_2, stage');
+          if (data) setDeals(data);
+      } catch (e) { console.error(e); }
+  };
 
   const fetchClasses = async () => {
       setIsLoadingData(true);
@@ -169,7 +178,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     if (!formData.course || !formData.city) { alert("Preencha ao menos o Curso e a Cidade."); return; }
     setIsSaving(true);
     const payload = {
-        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studioMod1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffeeMod1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.dateMod2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffeeMod2, hotel_mod_2: formData.hotelMod2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
+        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studioMod1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffeeMod1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotel_mod_2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
     };
     try {
         if (formData.id) await appBackend.client.from('crm_classes').update(payload).eq('id', formData.id);
@@ -219,6 +228,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             <div className="bg-slate-100 p-1 rounded-lg flex items-center mr-2">
                 <button onClick={() => setViewMode('list')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutList size={16} /> Lista</button>
                 <button onClick={() => setViewMode('calendar')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'calendar' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><CalendarIcon size={16} /> Calendário</button>
+                <button onClick={() => setViewMode('capacity')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'capacity' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Users size={16} /> Capacidade dos Estúdios</button>
             </div>
             <button onClick={handleOpenNew} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"><Plus size={18} /> Nova Turma</button>
         </div>
@@ -258,6 +268,69 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                           );
                       })}
                   </div>
+              </div>
+          </div>
+      ) : viewMode === 'capacity' ? (
+          <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Building className="text-teal-600" /> Capacidade dos Estúdios</h3>
+                  <div className="relative max-w-sm w-full">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input type="text" placeholder="Buscar turma ou cidade..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm" />
+                  </div>
+              </div>
+              <div className="flex-1 overflow-auto custom-scrollbar">
+                  <table className="w-full text-left text-sm border-collapse">
+                      <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold sticky top-0 z-10">
+                          <tr>
+                              <th className="px-6 py-4 border-b">Estado</th>
+                              <th className="px-6 py-4 border-b">Cidade</th>
+                              <th className="px-6 py-4 border-b">Nº Turma</th>
+                              <th className="px-6 py-4 border-b">Estúdio Parceiro</th>
+                              <th className="px-6 py-4 border-b text-center">Capacidade</th>
+                              <th className="px-6 py-4 border-b text-center">Inscritos</th>
+                              <th className="px-6 py-4 border-b text-center">Ocupação</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                          {filteredClasses.map(cls => {
+                              const enrolledCount = deals.filter(d => (d.class_mod_1 === cls.mod1Code || d.class_mod_2 === cls.mod2Code) && d.stage === 'closed').length;
+                              const studioInfo = partnerStudios.find(s => s.fantasyName === cls.studioMod1);
+                              const capacityNum = parseInt(studioInfo?.studentCapacity || '0');
+                              const percent = capacityNum > 0 ? Math.round((enrolledCount / capacityNum) * 100) : 0;
+                              
+                              return (
+                                  <tr key={cls.id} className="hover:bg-slate-50 transition-colors">
+                                      <td className="px-6 py-4 font-bold text-slate-700">{cls.state}</td>
+                                      <td className="px-6 py-4 text-slate-600">{cls.city}</td>
+                                      <td className="px-6 py-4 font-mono font-bold text-slate-500">#{cls.classCode}</td>
+                                      <td className="px-6 py-4">
+                                          <div className="flex flex-col">
+                                              <span className="font-bold text-slate-800">{cls.studioMod1}</span>
+                                              <span className="text-[10px] text-slate-400 uppercase font-black">{studioInfo?.studioType || 'Parceiro'}</span>
+                                          </div>
+                                      </td>
+                                      <td className="px-6 py-4 text-center font-black text-slate-700">{studioInfo?.studentCapacity || '--'}</td>
+                                      <td className="px-6 py-4 text-center font-black text-purple-600">{enrolledCount}</td>
+                                      <td className="px-6 py-4">
+                                          <div className="flex flex-col items-center gap-1">
+                                              <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                  <div 
+                                                      className={clsx("h-full transition-all", percent > 100 ? "bg-red-500" : percent > 80 ? "bg-orange-500" : "bg-teal-500")}
+                                                      style={{ width: `${Math.min(percent, 100)}%` }}
+                                                  ></div>
+                                              </div>
+                                              <span className={clsx("text-[10px] font-black", percent > 100 ? "text-red-600" : "text-slate-500")}>{percent}%</span>
+                                          </div>
+                                      </td>
+                                  </tr>
+                              );
+                          })}
+                          {filteredClasses.length === 0 && (
+                              <tr><td colSpan={7} className="py-20 text-center text-slate-400 italic">Nenhuma turma encontrada.</td></tr>
+                          )}
+                      </tbody>
+                  </table>
               </div>
           </div>
       ) : (

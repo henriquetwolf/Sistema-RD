@@ -130,8 +130,11 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             ]);
             setEventWorkshops(ws);
             setEventBlocks(blks);
-            // Filtra as inscrições comparando Strings para evitar erros de tipo e verifica em todos os deals do aluno
-            setMyRegistrations(regs.filter(r => studentDealIds.includes(String(r.studentId))));
+            
+            // Filtro Definitivo: Usamos o e-mail do aluno para identificar suas inscrições
+            // Isso ignora inconsistências de IDs entre sessões e banco de dados.
+            const userEmail = student.email.toLowerCase();
+            setMyRegistrations(regs.filter(r => r.studentEmail?.toLowerCase() === userEmail));
         } catch (e) {
             console.error(e);
         } finally {
@@ -189,7 +192,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 
                 await appBackend.client.from('crm_event_registrations').insert([dbPayload]);
                 
-                // Atualiza estado local garantindo que studentId seja string para consistência na filtragem futura
+                // Atualiza estado local
                 setMyRegistrations(prev => [...prev, {
                     id: dbPayload.id,
                     eventId: dbPayload.event_id,
@@ -769,9 +772,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 <div className="fixed inset-0 z-[300] bg-white overflow-y-auto">
                     <div className="bg-slate-50 border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
                         <button onClick={() => setSigningContract(null)} className="flex items-center gap-2 text-slate-500 font-bold hover:text-slate-800">
-                            <ChevronLeft size={20}/> Cancelar Assinatura
+                            <ChevronLeft size={20}/> Voltar ao Portal
                         </button>
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assinatura Digital Segura</span>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Processo de Assinatura Segura</span>
                     </div>
                     <ContractSigning 
                         contract={signingContract} 

@@ -2,11 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
   Award, Eye, Download, ExternalLink, CheckCircle, Trash2, Wand2, Calendar, BookOpen, X, MonitorPlay, Zap, ChevronRight, Check, Save, FileText, ShoppingBag, CreditCard,
-  List, DollarSign, XCircle, Tag, MapPin, Building, User, Briefcase, Hash, Info, Map
+  List, DollarSign, XCircle, Tag, MapPin, Building, User, Briefcase, Hash, Info, Map, FileSpreadsheet
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { OnlineCourse } from '../types';
 import clsx from 'clsx';
+
+declare const XLSX: any;
 
 interface StudentsManagerProps {
   onBack: () => void;
@@ -343,6 +345,24 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       if (deal) setViewingDeal(deal);
   };
 
+  const exportToExcel = () => {
+    if (filtered.length === 0) return;
+
+    const dataToExport = filtered.map(s => ({
+        'Nome': s.name,
+        'E-mail': s.email,
+        'CPF': formatCPF(s.cpf),
+        'Produtos Presenciais': s.presential.map(p => p.name).join(', '),
+        'Produtos Digitais': s.digital.map(p => p.name).join(', '),
+        'Eventos': s.events.map(p => p.name).join(', ')
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Alunos");
+    XLSX.writeFile(workbook, `Lista_Alunos_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
@@ -375,7 +395,16 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input type="text" placeholder="Buscar aluno pelo nome, e-mail ou CPF..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 transition-all text-sm font-medium" />
                     </div>
-                    <button onClick={fetchData} className="p-2 text-slate-400 hover:text-teal-600 transition-all"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={exportToExcel}
+                            disabled={filtered.length === 0}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all shadow-sm"
+                        >
+                            <FileSpreadsheet size={16} /> Exportar Excel
+                        </button>
+                        <button onClick={fetchData} className="p-2 text-slate-400 hover:text-teal-600 transition-all"><RefreshCw size={20} className={clsx(isLoading && "animate-spin")} /></button>
+                    </div>
                 </div>
 
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto min-h-[400px]">
@@ -757,19 +786,19 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 border-b pb-2"><Hash size={14}/> Administrativo</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                     <div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Status</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1.5">Status</p>
                                         <span className="text-xs font-black bg-slate-100 px-2 py-0.5 rounded border uppercase">{viewingDeal.status}</span>
                                     </div>
                                     <div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Etapa Funil</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1.5">Etapa Funil</p>
                                         <span className="text-xs font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100 uppercase">{viewingDeal.stage}</span>
                                     </div>
                                     <div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Fonte</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1.5">Fonte</p>
                                         <p className="text-sm font-bold text-slate-800">{viewingDeal.source || '--'}</p>
                                     </div>
                                     <div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Campanha</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1.5">Campanha</p>
                                         <p className="text-sm font-bold text-slate-800">{viewingDeal.campaign || '--'}</p>
                                     </div>
                                 </div>

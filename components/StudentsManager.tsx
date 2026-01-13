@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
@@ -80,7 +81,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack, onOpen
   const fetchData = async () => {
     setIsLoading(true);
     try {
-        // Buscamos todas as negociações que tenham student_access_enabled como true
         const { data, error } = await appBackend.client
             .from('crm_deals')
             .select('*')
@@ -158,7 +158,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack, onOpen
               groups[key].digital.push(itemRef);
           }
 
-          // Incluir cursos liberados manualmente na coluna de Produtos Digitais
           const manualCourses = courseAccessMap[deal.id] || [];
           manualCourses.forEach(cName => {
               if (!groups[key].digital.some(d => d.name === cName)) {
@@ -186,40 +185,43 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack, onOpen
           .replace(/(-\d{2})\d+?$/, '$1');
   };
 
+  const handleProductClick = (id: string) => {
+    if (id.startsWith('manual_')) {
+        alert("Este curso foi liberado manualmente através do Portal. Não há uma negociação comercial vinculada no CRM para visualizar.");
+        return;
+    }
+    onOpenDeal(id);
+  };
+
   const handleDeleteItem = async (dealId: string, itemName: string) => {
       if (dealId.startsWith('manual_')) {
           alert("Este item foi liberado manualmente através do modal 'Liberar Cursos'. Para removê-lo, acesse o botão 'Liberar Cursos' deste aluno.");
           return;
       }
-      if (!window.confirm(`Remover o acesso de "${itemName}" deste aluno? A negociação continuará existindo no CRM comercial.`)) return;
+      if (!window.confirm(`Tem certeza que deseja remover o acesso do aluno ao produto "${itemName}"? O registro da negociação continuará existindo normalmente no CRM comercial.`)) return;
       
       try {
-          // Em vez de delete, fazemos update para false para manter a negociação no CRM
+          // Independência: atualiza apenas a flag de acesso, não exclui o Deal
           const { error } = await appBackend.client.from('crm_deals').update({ student_access_enabled: false }).eq('id', dealId);
           if (error) throw error;
           fetchData();
       } catch (e: any) {
-          alert("Erro ao remover acesso: " + e.message);
+          alert("Erro ao remover item: " + e.message);
       }
   };
 
   const handleDeleteStudent = async (student: GroupedStudent) => {
-      if (!window.confirm(`Remover o aluno ${student.name} desta lista? Todos os seus acessos ao portal serão desativados, mas as negociações permanecerão no CRM.`)) return;
+      if (!window.confirm(`Deseja remover ${student.name} desta lista de alunos? Todos os produtos vinculados deixarão de ser exibidos aqui e o acesso ao portal será suspenso, mas as negociações permanecerão intactas no CRM comercial.`)) return;
       
       try {
           const dealIds = student.deals.map(d => d.id);
-          // Em vez de delete, fazemos update para false para manter as negociações no CRM
+          // Independência: desativa acesso de todos os deals do aluno
           const { error } = await appBackend.client.from('crm_deals').update({ student_access_enabled: false }).in('id', dealIds);
           if (error) throw error;
           fetchData();
       } catch (e: any) {
           alert("Erro ao remover aluno: " + e.message);
       }
-  };
-
-  const handleProductClick = (id: string) => {
-    const realId = id.startsWith('manual_') ? id.replace('manual_', '') : id;
-    onOpenDeal(realId);
   };
 
   const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -269,6 +271,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack, onOpen
       } catch (e) {
           console.error("Erro ao carregar acessos:", e);
       } finally {
+          setIsSearchingCpf(false);
           setIsSavingAccess(false);
       }
   };

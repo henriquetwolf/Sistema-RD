@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, MoreHorizontal, Calendar, 
@@ -5,7 +6,8 @@ import {
   AlertCircle, ChevronRight, GripVertical, Users, Target, LayoutGrid,
   Building, X, Save, Trash2, Briefcase, CreditCard, Loader2, RefreshCw,
   MapPin, Hash, Link as LinkIcon, FileText, GraduationCap, ShoppingBag, Mic, ListTodo, Clock, Edit2, Palette, Settings as SettingsIcon, ChevronDown, CheckCircle, Circle,
-  CheckSquare, AlertTriangle, Bell
+  /* Added Kanban and Info to the imports below to fix the "Cannot find name" errors */
+  CheckSquare, AlertTriangle, Bell, ExternalLink, Kanban, Info
 } from 'lucide-react';
 import { appBackend, CompanySetting, Pipeline, PipelineStage, WebhookTrigger } from '../services/appBackend';
 import { whatsappService } from '../services/whatsappService';
@@ -89,12 +91,6 @@ interface CollaboratorSimple {
     department: string;
 }
 
-interface Team {
-  id: string;
-  name: string;
-  members: string[]; 
-}
-
 const formatCPF = (value: string = '') => {
     return value
         .replace(/\D/g, '')
@@ -106,13 +102,7 @@ const formatCPF = (value: string = '') => {
 
 const handleDbError = (e: any) => {
     console.error("Erro de Banco de Dados:", e);
-    const msg = e.message || "Erro desconhecido";
-    
-    if (msg.includes('stages') && msg.includes('column')) {
-        alert("Erro Estrutural: A coluna 'stages' não foi encontrada. Vá em 'Configurações' > 'Banco de Dados' e rode o script de reparo para atualizar as tabelas do CRM.");
-    } else {
-        alert(`Erro: ${msg}`);
-    }
+    alert(`Erro: ${e.message || "Erro desconhecido"}`);
 };
 
 const generateDealNumber = () => {
@@ -149,7 +139,6 @@ interface CrmBoardProps {
 export const CrmBoard: React.FC<CrmBoardProps> = ({ initialDealId, onClearNavigation }) => {
   const [activeView, setActiveView] = useState<'pipeline' | 'teams' | 'pipelines_config' | 'tasks'>('pipeline');
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [collaborators, setCollaborators] = useState<CollaboratorSimple[]>([]);
   const [companies, setCompanies] = useState<CompanySetting[]>([]);
@@ -163,34 +152,14 @@ export const CrmBoard: React.FC<CrmBoardProps> = ({ initialDealId, onClearNaviga
   
   // Modals
   const [showDealModal, setShowDealModal] = useState(false);
-  const [showTeamModal, setShowTeamModal] = useState(false);
-  const [showPipelineModal, setShowPipelineModal] = useState(false);
-  
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormData, setDealFormData] = useState<Partial<Deal>>(INITIAL_FORM_STATE);
-  
-  // Tasks Form State
-  const [newTaskDesc, setNewTaskDesc] = useState('');
-  const [newTaskDate, setNewTaskDate] = useState(new Date().toISOString().split('T')[0]);
-  const [newTaskType, setNewTaskType] = useState<DealTask['type']>('todo');
-
-  // Team form
-  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
-  const [teamName, setTeamName] = useState('');
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
-  const [isSavingTeam, setIsSavingTeam] = useState(false);
-
-  // Pipeline form
-  const [editingPipeline, setEditingPipeline] = useState<Pipeline | null>(null);
-  const [pipelineName, setPipelineName] = useState('');
-  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
-  const [isSavingPipeline, setIsSavingPipeline] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  // Abre negociação vinda de navegação externa (Deep Link)
   useEffect(() => {
     if (initialDealId && deals.length > 0) {
         const deal = deals.find(d => d.id === initialDealId);
@@ -201,44 +170,11 @@ export const CrmBoard: React.FC<CrmBoardProps> = ({ initialDealId, onClearNaviga
     }
   }, [initialDealId, deals]);
 
-  // Lógica de preenchimento automático de CNPJ e Empresa
-  useEffect(() => {
-      if (companies.length > 0) {
-          let matched: CompanySetting | undefined;
-
-          // 1. Prioridade Máxima: Tenta encontrar por PRODUTO ESPECÍFICO
-          if (dealFormData.productName) {
-              matched = companies.find(c => (c.productIds || []).includes(dealFormData.productName!));
-          }
-
-          // 2. Fallback: Se não encontrou por produto, tenta por TIPO DE PRODUTO
-          if (!matched && dealFormData.productType) {
-              matched = companies.find(c => (c.productTypes || []).includes(dealFormData.productType!));
-          }
-
-          if (matched) {
-              setDealFormData(prev => ({
-                  ...prev,
-                  billingCnpj: matched!.cnpj,
-                  billingCompanyName: matched!.legalName
-              }));
-          } else {
-              // Se não houver match algum, limpa os campos automáticos
-              setDealFormData(prev => ({
-                  ...prev,
-                  billingCnpj: '',
-                  billingCompanyName: ''
-              }));
-          }
-      }
-  }, [dealFormData.productName, dealFormData.productType, companies]);
-
   const fetchData = async () => {
       setIsLoading(true);
       try {
-          const [dealsResult, teamsResult, pipelinesResult, classesResult, productsResult, eventsResult, collabResult, companiesResult, triggersResult] = await Promise.all([
+          const [dealsResult, pipelinesResult, classesResult, productsResult, eventsResult, collabResult, companiesResult, triggersResult] = await Promise.all([
               appBackend.client.from('crm_deals').select('*').order('created_at', { ascending: false }),
-              appBackend.client.from('crm_teams').select('*').order('name', { ascending: true }),
               appBackend.getPipelines(),
               appBackend.client.from('crm_classes').select('id, course, state, city, mod_1_code, mod_2_code'),
               appBackend.client.from('crm_products').select('id, name').eq('status', 'active'),
@@ -261,35 +197,13 @@ export const CrmBoard: React.FC<CrmBoardProps> = ({ initialDealId, onClearNaviga
                   classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
               })));
-          } else {
-              setDeals([]);
           }
 
-          setTeams(teamsResult.data || []);
           setPipelines(pipelinesResult || []);
-          
-          if (classesResult.data) {
-              setRegisteredClasses(classesResult.data.map((c: any) => ({
-                  id: c.id,
-                  course: c.course,
-                  state: c.state,
-                  city: c.city,
-                  mod1Code: c.mod_1_code,
-                  mod2Code: c.mod_2_code
-              })));
-          }
-
-          setDigitalProducts(productsResult.data || []);
-          setEventsList(eventsResult.data || []);
-          
-          if (collabResult.data) {
-            setCollaborators(collabResult.data.map((c: any) => ({
-                id: c.id,
-                fullName: c.full_name || 'Sem Nome',
-                department: c.department || 'Geral'
-            })));
-          }
-
+          if (classesResult.data) setRegisteredClasses(classesResult.data as any);
+          if (productsResult.data) setDigitalProducts(productsResult.data as any);
+          if (eventsResult.data) setEventsList(eventsResult.data as any);
+          if (collabResult.data) setCollaborators(collabResult.data as any);
           setCompanies(companiesResult || []);
           setWebhookTriggers(triggersResult || []);
 
@@ -300,332 +214,201 @@ export const CrmBoard: React.FC<CrmBoardProps> = ({ initialDealId, onClearNaviga
       }
   };
 
-  /**
-   * Dispara automações de WhatsApp com base nos critérios da regra
-   */
-  const triggerWhatsAppAutomation = async (deal: any) => {
-    // IMPORTANTE: deal aqui é o retorno direto do Supabase (snake_case)
-    const rawPhone = deal.phone || deal.contact_phone || deal.cellphone;
-    if (!rawPhone) return;
-
-    try {
-        const { data: rules } = await appBackend.client
-            .from('crm_wa_automations')
-            .select('*')
-            .eq('is_active', true)
-            .eq('pipeline_name', deal.pipeline)
-            .eq('stage_id', deal.stage);
-
-        if (!rules || rules.length === 0) return;
-
-        for (const rule of rules) {
-            // Valida filtros de produto
-            if (rule.product_type && rule.product_type !== deal.product_type) continue;
-            if (rule.product_id && rule.product_id !== deal.product_name) continue;
-
-            let message = rule.message_template;
-            if (!message) continue;
-
-            // Substituição precisa das Tags para os campos:
-            // Nome Completo do Cliente -> company_name
-            // Produto / Curso -> product_name
-            const clientName = deal.company_name || deal.contact_name || 'Cliente';
-            const courseName = deal.product_name || 'Curso';
-
-            // Regex global e case-insensitive para abranger as tags solicitadas
-            message = message.replace(/\{\{nome_cliente\}\}/gi, clientName);
-            message = message.replace(/\{\{curso\}\}/gi, courseName);
-
-            try {
-                // Envio via Evolution API
-                const cleanPhone = rawPhone.replace(/\D/g, '');
-                
-                // Primeiro enviamos a mensagem
-                await whatsappService.sendTextMessage({ 
-                    wa_id: cleanPhone,
-                    contact_phone: cleanPhone
-                }, message);
-
-                // SE O ENVIO FUNCIONOU, gravamos no histórico (Logs)
-                // Utilizamos o método centralizado no backend para garantir gravação
-                await appBackend.logWAAutomation({
-                    ruleName: rule.name,
-                    studentName: clientName,
-                    phone: rawPhone,
-                    message: message
-                });
-                
-                console.log(`[CRM] Automação "${rule.name}" disparada e registrada para ${clientName}.`);
-            } catch (sendErr: any) {
-                console.error(`[CRM] Falha ao disparar ou registrar automação "${rule.name}":`, sendErr);
-            }
-        }
-    } catch (err) {
-        console.error("[CRM] Erro fatal no processamento da automação de WhatsApp:", err);
-    }
-  };
-
-  /**
-   * Função para disparar chamado automático para produtos digitais
-   */
-  const triggerDigitalSupportTicket = async (deal: any) => {
-      // Verifica se o estágio é fechamento (normalmente id 'closed') e o produto é digital
-      if (deal.product_type === 'Digital' && deal.stage === 'closed') {
-          try {
-              await appBackend.saveSupportTicket({
-                  senderId: 'crm_automation',
-                  senderName: 'Integração Comercial',
-                  senderEmail: 'crm@vollpilates.com.br',
-                  senderRole: 'admin',
-                  subject: `🔒 Criação de Login: ${deal.product_name || 'Produto Digital'}`,
-                  message: `Solicitação automática de criação de login para novo cliente digital.\n\n` +
-                           `Nº Negócio: #${deal.deal_number}\n` +
-                           `Cliente: ${deal.company_name || deal.contact_name}\n` +
-                           `E-mail: ${deal.email || 'Não informado'}\n` +
-                           `Telefone: ${deal.phone || 'Não informado'}\n` +
-                           `Produto: ${deal.product_name}\n\n` +
-                           `Favor providenciar os acessos e notificar o cliente.`,
-                  tag: 'Suporte Técnico',
-                  status: 'open'
-              });
-              console.log("Chamado automático de login criado com sucesso.");
-          } catch (err) {
-              console.error("Erro ao criar chamado automático de login:", err);
-          }
-      }
-  };
-
-  // Fix: Added missing function dispatchNegotiationWebhook to handle Connection Plug webhooks
-  /**
-   * Dispara webhooks de integração comercial (Connection Plug)
-   */
-  const dispatchNegotiationWebhook = async (deal: any) => {
-    if (!deal || !webhookTriggers || !companies) return;
-
-    // 1. Procura se existe gatilho configurado para este Funil e Etapa
-    const trigger = webhookTriggers.find(t => t.pipelineName === deal.pipeline && t.stageId === deal.stage);
-    if (!trigger) return;
-
-    // 2. Procura as empresas que devem receber este gatilho
-    const targetCompanies = companies.filter(c => {
-        const matchesProduct = deal.product_name && (c.productIds || []).includes(deal.product_name);
-        const matchesType = !matchesProduct && deal.product_type && (c.productTypes || []).includes(deal.product_type);
-        return matchesProduct || matchesType;
-    });
-
-    if (targetCompanies.length === 0) return;
-
-    // 3. Processa o Payload (Substituição de Tags)
-    let payloadStr = trigger.payloadJson || '{}';
-    const tagsMap: Record<string, any> = {
-        '{{data_venda}}': new Date().toISOString(),
-        '{{deal_number}}': deal.deal_number,
-        '{{nome_cliente}}': deal.company_name || deal.contact_name,
-        '{{email_cliente}}': deal.email,
-        '{{telefone_cliente}}': deal.phone,
-        '{{cpf_cnpj_cliente}}': deal.cpf,
-        '{{nome_vendedor}}': getOwnerName(deal.owner_id),
-        '{{tipo_produto}}': deal.product_type,
-        '{{curso_produto}}': deal.product_name,
-        '{{fonte_negociacao}}': deal.source,
-        '{{campanha}}': deal.campaign,
-        '{{funil_vendas}}': deal.pipeline,
-        '{{etapa_funil}}': deal.stage,
-        '{{cidade_cliente}}': deal.course_city,
-        '{{turma_modulo}}': deal.class_mod_1 || deal.class_mod_2,
-        '{{valor_total}}': deal.value,
-        '{{forma_pagamento}}': deal.payment_method,
-        '{{valor_entrada}}': deal.entry_value,
-        '{{numero_parcelas}}': deal.installments,
-        '{{valor_parcelas}}': deal.installment_value,
-        '{{dia_primeiro_vencimento}}': deal.first_due_date,
-        '{{link_comprovante}}': deal.receipt_link,
-        '{{codigo_transacao}}': deal.transaction_code
-    };
-
-    Object.keys(tagsMap).forEach(tag => {
-        const value = tagsMap[tag] === null || tagsMap[tag] === undefined ? '' : String(tagsMap[tag]);
-        const safeTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(safeTag, 'g');
-        payloadStr = payloadStr.replace(regex, value);
-    });
-
-    let finalPayload;
-    try {
-        finalPayload = JSON.parse(payloadStr);
-    } catch (e) {
-        console.error("[Plug] Erro ao processar JSON do Payload:", e);
+  const handleSaveDeal = async () => {
+    if (!dealFormData.contactName && !dealFormData.companyName) {
+        alert("Preencha o nome do cliente ou empresa.");
         return;
     }
+    setIsSaving(true);
+    const payload = {
+        deal_number: dealFormData.dealNumber || generateDealNumber(),
+        title: dealFormData.title || dealFormData.companyName || dealFormData.contactName,
+        contact_name: dealFormData.contactName,
+        company_name: dealFormData.companyName,
+        value: dealFormData.value,
+        stage: dealFormData.stage,
+        owner_id: dealFormData.owner,
+        status: dealFormData.status,
+        pipeline: dealFormData.pipeline,
+        source: dealFormData.source,
+        campaign: dealFormData.campaign,
+        entry_value: dealFormData.entryValue,
+        payment_method: dealFormData.paymentMethod,
+        installments: dealFormData.installments,
+        installment_value: dealFormData.installmentValue,
+        product_type: dealFormData.productType,
+        product_name: dealFormData.productName,
+        email: dealFormData.email,
+        phone: dealFormData.phone,
+        cpf: dealFormData.cpf,
+        first_due_date: dealFormData.firstDueDate,
+        receipt_link: dealFormData.receiptLink,
+        transaction_code: dealFormData.transactionCode,
+        zip_code: dealFormData.zipCode,
+        address: dealFormData.address,
+        address_number: dealFormData.address_number,
+        registration_data: dealFormData.registrationData,
+        observation: dealFormData.observation,
+        course_state: dealFormData.courseState,
+        course_city: dealFormData.courseCity,
+        class_mod_1: dealFormData.classMod1,
+        class_mod_2: dealFormData.classMod2,
+        billing_cnpj: dealFormData.billingCnpj,
+        billing_company_name: dealFormData.billingCompanyName,
+        tasks: dealFormData.tasks || []
+    };
 
-    // 4. Dispara para cada empresa configurada
-    for (const company of targetCompanies) {
-        if (!company.webhookUrl) continue;
-        try {
-            await fetch(company.webhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(finalPayload)
-            });
-        } catch (err) {
-            console.error(`[Plug] Falha ao enviar para ${company.legalName}:`, err);
+    try {
+        if (editingDealId) {
+            const { error } = await appBackend.client.from('crm_deals').update(payload).eq('id', editingDealId);
+            if (error) throw error;
+        } else {
+            const { error } = await appBackend.client.from('crm_deals').insert([payload]);
+            if (error) throw error;
         }
+        await fetchData();
+        setShowDealModal(false);
+    } catch (e: any) {
+        handleDbError(e);
+    } finally {
+        setIsSaving(false);
     }
-  };
-
-  const productOptions = useMemo(() => {
-      if (dealFormData.productType === 'Digital') return (digitalProducts || []).map(p => p.name).sort();
-      if (dealFormData.productType === 'Evento') return (eventsList || []).map(e => e.name).sort();
-      if (dealFormData.productType === 'Presencial') return Array.from(new Set((registeredClasses || []).map(c => c.course).filter(Boolean))).sort();
-      return [];
-  }, [dealFormData.productType, digitalProducts, registeredClasses, eventsList]);
-
-  const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-  const getOwnerName = (id: string) => (collaborators || []).find(c => c.id === id)?.fullName || 'Desconhecido';
-
-  const moveDeal = async (dealId: string, currentStage: DealStage, pipelineName: string, direction: 'next' | 'prev') => {
-    const pipeline = pipelines.find(p => p.name === pipelineName);
-    if (!pipeline) return;
-    
-    const stageOrder = (pipeline.stages || []).map(s => s.id);
-    const currentIndex = stageOrder.indexOf(currentStage);
-    let newIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
-    if (newIndex < 0 || newIndex >= stageOrder.length) return;
-    const newStage = stageOrder[newIndex];
-    const now = new Date();
-    const deal = deals.find(d => d.id === dealId);
-
-    if (!deal) return;
-
-    setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage, closedAt: newStage === 'closed' ? now : (currentStage === 'closed' ? undefined : d.closedAt) } : d));
-
-    try {
-        const updates: any = { stage: newStage };
-        if (newStage === 'closed') updates.closed_at = now.toISOString();
-        if (currentStage === 'closed' && newStage !== 'closed') updates.closed_at = null;
-        const { data, error = null } = await appBackend.client.from('crm_deals').update(updates).eq('id', dealId).select().single();
-        if (error) throw error;
-
-        if (data) {
-            // Fix: Call missing function
-            dispatchNegotiationWebhook(data);
-            triggerDigitalSupportTicket(data);
-            triggerWhatsAppAutomation(data);
-        }
-
-        await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal.title}" para a etapa: ${newStage}`, recordId: dealId });
-    } catch (e: any) { handleDbError(e); fetchData(); }
-  };
-
-  const getStageSummary = (pipelineName: string, stageId: string) => {
-    const stageDeals = (deals || []).filter(d => d.pipeline === pipelineName && d.stage === stageId);
-    return { count: stageDeals.length, total: stageDeals.reduce((acc, curr) => acc + (curr.value || 0), 0) };
-  };
-
-  const handleDragStart = (e: React.DragEvent, dealId: string) => { setDraggedDealId(dealId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dealId); };
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  
-  const handleDrop = async (e: React.DragEvent, pipelineName: string, targetStage: DealStage) => {
-    e.preventDefault();
-    if (!draggedDealId) return;
-    const currentDeal = (deals || []).find(d => d.id === draggedDealId);
-    if (!currentDeal || (currentDeal.stage === targetStage && currentDeal.pipeline === pipelineName)) { setDraggedDealId(null); return; }
-    const now = new Date();
-    setDeals(prev => prev.map(d => d.id === draggedDealId ? { ...d, pipeline: pipelineName, stage: targetStage, closedAt: targetStage === 'closed' ? now : (d.stage === 'closed' ? undefined : d.closedAt) } : d));
-    try {
-        const updates: any = { pipeline: pipelineName, stage: targetStage };
-        if (targetStage === 'closed') updates.closed_at = now.toISOString();
-        else if (currentDeal.stage === 'closed') updates.closed_at = null;
-        const { data, error = null } = await appBackend.client.from('crm_deals').update(updates).eq('id', draggedDealId).select().single();
-        if (error) throw error;
-
-        if (data) {
-            // Fix: Call missing function
-            dispatchNegotiationWebhook(data);
-            triggerDigitalSupportTicket(data);
-            triggerWhatsAppAutomation(data);
-        }
-
-        await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para Funil: ${pipelineName}, Etapa: ${targetStage}`, recordId: draggedDealId });
-    } catch (e) { handleDbError(e); fetchData(); }
-    setDraggedDealId(null);
   };
 
   const openNewDealModal = () => { 
     setEditingDealId(null); 
-    const firstComercial = (collaborators || []).find(c => c.department === 'Comercial');
-    const firstPipeObj = pipelines.length > 0 ? pipelines[0] : null;
-    const firstPipeline = firstPipeObj?.name || 'Padrão';
-    const firstStage = firstPipeObj?.stages?.[0]?.id || 'new';
-    
-    setDealFormData({ 
-        ...INITIAL_FORM_STATE, 
-        owner: firstComercial?.id || '', 
-        pipeline: firstPipeline, 
-        stage: firstStage,
-        tasks: []
-    }); 
+    const firstPipe = pipelines[0]?.name || 'Padrão';
+    const firstStage = pipelines[0]?.stages[0]?.id || 'new';
+    setDealFormData({ ...INITIAL_FORM_STATE, pipeline: firstPipe, stage: firstStage }); 
     setShowDealModal(true); 
   };
 
-  const openEditDealModal = (deal: Deal) => { setEditingDealId(deal.id); setDealFormData({ ...deal, tasks: deal.tasks || [] }); setShowDealModal(true); };
-
-  const openNewTeamModal = () => { setEditingTeam(null); setTeamName(''); setSelectedMembers([]); setShowTeamModal(true); };
-  const openEditTeamModal = (team: Team) => { setEditingTeam(team); setTeamName(team.name || ''); setSelectedMembers(team.members || []); setShowTeamModal(true); };
-
-  const openNewPipelineModal = () => {
-    setEditingPipeline(null);
-    setPipelineName('');
-    setPipelineStages([
-        { id: 'new', title: 'Sem Contato', color: 'border-slate-300' },
-        { id: 'closed', title: 'Fechamento', color: 'border-green-500' }
-    ]);
-    setShowPipelineModal(true);
+  const openEditDealModal = (deal: Deal) => { 
+      setEditingDealId(deal.id); 
+      setDealFormData({ ...deal }); 
+      setShowDealModal(true); 
   };
 
-  const openEditPipelineModal = (p: Pipeline) => {
-    setEditingPipeline(p);
-    setPipelineName(p.name);
-    setPipelineStages(p.stages || []);
-    setShowPipelineModal(true);
-  };
+  const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const getOwnerName = (id: string) => collaborators.find(c => c.id === id)?.fullName || 'Desconhecido';
+
+  const productOptions = useMemo(() => {
+    if (dealFormData.productType === 'Digital') return digitalProducts.map(p => p.name).sort();
+    if (dealFormData.productType === 'Evento') return eventsList.map(e => e.name).sort();
+    if (dealFormData.productType === 'Presencial') return Array.from(new Set(registeredClasses.map(c => c.course).filter(Boolean))).sort();
+    return [];
+  }, [dealFormData.productType, digitalProducts, registeredClasses, eventsList]);
 
   return (
-    <div className="h-full flex flex-col">
-        {/* CRM Board logic here... file was truncated in source, closed properly for stability */}
-        {activeView === 'pipeline' && (
-            <div className="p-4">
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold">CRM Comercial</h2>
-                    <button onClick={openNewDealModal} className="bg-teal-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                        <Plus size={18}/> Novo Negócio
-                    </button>
+    <div className="h-full flex flex-col bg-slate-50">
+        <header className="p-6 bg-white border-b border-slate-200 flex justify-between items-center shrink-0">
+            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Kanban className="text-indigo-600" /> CRM Comercial</h2>
+            <div className="flex gap-2">
+                <div className="relative max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input type="text" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2 bg-slate-50 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-64" />
                 </div>
-                <div className="flex gap-4 overflow-x-auto pb-4">
-                    {pipelines.find(p => p.name === 'Padrão')?.stages.map(stage => (
-                        <div 
-                            key={stage.id} 
-                            onDragOver={handleDragOver}
-                            onDrop={(e) => handleDrop(e, 'Padrão', stage.id)}
-                            className="w-80 shrink-0 bg-slate-100 rounded-xl p-4 min-h-[500px]"
-                        >
-                            <h3 className="font-bold mb-4">{stage.title}</h3>
-                            <div className="space-y-4">
-                                {deals.filter(d => d.pipeline === 'Padrão' && d.stage === stage.id).map(deal => (
-                                    <div 
-                                        key={deal.id} 
-                                        draggable
-                                        onDragStart={(e) => handleDragStart(e, deal.id)}
-                                        onClick={() => openEditDealModal(deal)}
-                                        className="bg-white p-4 rounded-lg shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-                                    >
-                                        <p className="font-bold">{deal.title}</p>
-                                        <p className="text-sm text-slate-500">{formatCurrency(deal.value)}</p>
+                <button onClick={openNewDealModal} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95"><Plus size={18}/> Novo Negócio</button>
+            </div>
+        </header>
+
+        <div className="flex-1 overflow-x-auto p-6 flex gap-6 custom-scrollbar">
+            {pipelines.length > 0 && pipelines[0].stages.map(stage => {
+                const stageDeals = deals.filter(d => d.pipeline === pipelines[0].name && d.stage === stage.id && d.title.toLowerCase().includes(searchTerm.toLowerCase()));
+                const totalValue = stageDeals.reduce((acc, curr) => acc + curr.value, 0);
+                return (
+                    <div key={stage.id} className="w-80 shrink-0 flex flex-col gap-4">
+                        <div className="flex items-center justify-between border-b-2 border-slate-200 pb-2">
+                            <h4 className="font-black text-[10px] uppercase tracking-widest text-slate-500">{stage.title}</h4>
+                            <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-black">{stageDeals.length}</span>
+                        </div>
+                        <p className="text-[11px] font-bold text-slate-400">{formatCurrency(totalValue)}</p>
+                        <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1">
+                            {stageDeals.map(deal => (
+                                <div key={deal.id} onClick={() => openEditDealModal(deal)} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group">
+                                    <h5 className="font-bold text-slate-800 text-sm mb-1 truncate">{deal.title}</h5>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-3">{deal.productName || 'S/ Produto'}</p>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-black text-emerald-600">{formatCurrency(deal.value)}</span>
+                                        <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold">
+                                            <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center border">{getOwnerName(deal.owner).charAt(0)}</div>
+                                            {getOwnerName(deal.owner).split(' ')[0]}
+                                        </div>
                                     </div>
-                                ))}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+
+        {/* MODAL DE NEGOCIAÇÃO / CADASTRO */}
+        {showDealModal && (
+            <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-5xl my-8 animate-in zoom-in-95 flex flex-col max-h-[95vh] overflow-hidden">
+                    <div className="px-8 py-6 border-b bg-slate-50 flex justify-between items-center shrink-0">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-800">{editingDealId ? `Negociação #${dealFormData.dealNumber}` : 'Nova Negociação'}</h3>
+                            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Cadastro Comercial Direto</p>
+                        </div>
+                        <button onClick={() => setShowDealModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
+                    </div>
+
+                    <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-10">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="md:col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Título da Negociação</label><input type="text" className="w-full px-4 py-2 border rounded-xl font-bold" value={dealFormData.title} onChange={e => setDealFormData({...dealFormData, title: e.target.value})} /></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Valor Total (R$)</label><input type="number" className="w-full px-4 py-2 border rounded-xl font-black text-emerald-600" value={dealFormData.value} onChange={e => setDealFormData({...dealFormData, value: parseFloat(e.target.value) || 0})} /></div>
+                            
+                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Tipo do Produto</label>
+                                <select className="w-full px-4 py-2 border rounded-xl bg-white text-sm" value={dealFormData.productType} onChange={e => setDealFormData({...dealFormData, productType: e.target.value as any, productName: ''})}>
+                                    <option value="">Selecione...</option><option value="Presencial">Presencial</option><option value="Digital">Digital</option><option value="Evento">Evento</option>
+                                </select>
+                            </div>
+                            <div className="md:col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Produto / Curso</label>
+                                <select className="w-full px-4 py-2 border rounded-xl bg-white text-sm font-bold" value={dealFormData.productName} onChange={e => setDealFormData({...dealFormData, productName: e.target.value})}>
+                                    <option value="">Escolha um item...</option>
+                                    {productOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
                             </div>
                         </div>
-                    ))}
+
+                        <div className="space-y-6">
+                            <h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest border-b pb-2">Dados do Cliente</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <div className="md:col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Completo</label><input type="text" className="w-full px-4 py-2 border rounded-xl text-sm" value={dealFormData.companyName} onChange={e => setDealFormData({...dealFormData, companyName: e.target.value})} /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">CPF</label><input type="text" className="w-full px-4 py-2 border rounded-xl text-sm" value={dealFormData.cpf} onChange={e => setDealFormData({...dealFormData, cpf: e.target.value})} /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">E-mail</label><input type="email" className="w-full px-4 py-2 border rounded-xl text-sm" value={dealFormData.email} onChange={e => setDealFormData({...dealFormData, email: e.target.value})} /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Telefone</label><input type="text" className="w-full px-4 py-2 border rounded-xl text-sm" value={dealFormData.phone} onChange={e => setDealFormData({...dealFormData, phone: e.target.value})} /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Vendedor</label>
+                                    <select className="w-full px-4 py-2 border rounded-xl bg-white text-sm" value={dealFormData.owner} onChange={e => setDealFormData({...dealFormData, owner: e.target.value})}>
+                                        <option value="">Selecione...</option>
+                                        {collaborators.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+                                    </select>
+                                </div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Etapa Atual</label>
+                                    <select className="w-full px-4 py-2 border rounded-xl bg-white text-sm font-bold" value={dealFormData.stage} onChange={e => setDealFormData({...dealFormData, stage: e.target.value})}>
+                                        {pipelines[0]?.stages.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Observações Internas</label>
+                            <textarea className="w-full px-4 py-2 border rounded-2xl text-sm h-32 resize-none" value={dealFormData.observation} onChange={e => setDealFormData({...dealFormData, observation: e.target.value})} />
+                        </div>
+                    </div>
+
+                    <div className="px-8 py-5 bg-slate-50 border-t flex justify-between items-center shrink-0">
+                        <div className="flex items-center gap-2 text-xs text-slate-400 italic"><Info size={14}/><span>Todas as alterações são sincronizadas com o histórico de vendas.</span></div>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowDealModal(false)} className="px-6 py-2.5 text-slate-600 font-bold text-sm">Cancelar</button>
+                            <button onClick={handleSaveDeal} disabled={isSaving} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl active:scale-95 transition-all flex items-center gap-2">
+                                {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18}/>} Salvar Cadastro
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         )}

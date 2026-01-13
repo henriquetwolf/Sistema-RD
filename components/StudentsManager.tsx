@@ -51,6 +51,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'cpf_search'>('list');
   const [deals, setDeals] = useState<StudentDeal[]>([]);
   const [onlineCourses, setOnlineCourses] = useState<OnlineCourse[]>([]);
+  const [courseAccessMap, setCourseAccessMap] = useState<Record<string, string[]>>({});
   const [certificates, setCertificates] = useState<Record<string, CertStatus>>({});
   const [productTemplates, setProductTemplates] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -69,7 +70,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
   useEffect(() => {
     fetchData();
-    loadCourses();
   }, []);
 
   const fetchData = async () => {
@@ -82,29 +82,41 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
         setDeals(mappedDeals);
 
         if (mappedDeals.length > 0) {
-            const { data: issuedCerts } = await appBackend.client.from('crm_student_certificates').select('student_deal_id, hash, issued_at').in('student_deal_id', mappedDeals.map(d => d.id));
+            const [issuedCertsRes, prodsRes, coursesRes, accessesRes] = await Promise.all([
+                appBackend.client.from('crm_student_certificates').select('student_deal_id, hash, issued_at').in('student_deal_id', mappedDeals.map(d => d.id)),
+                appBackend.client.from('crm_products').select('name, certificate_template_id').not('certificate_template_id', 'is', null),
+                appBackend.getOnlineCourses(),
+                appBackend.client.from('crm_student_course_access').select('student_deal_id, course_id').in('student_deal_id', mappedDeals.map(d => d.id))
+            ]);
+
             const certMap: Record<string, CertStatus> = {};
-            issuedCerts?.forEach((c: any) => { certMap[c.student_deal_id] = { hash: c.hash, issuedAt: c.issued_at }; });
+            issuedCertsRes.data?.forEach((c: any) => { certMap[c.student_deal_id] = { hash: c.hash, issuedAt: c.issued_at }; });
             setCertificates(certMap);
 
-            const { data: prods } = await appBackend.client.from('crm_products').select('name, certificate_template_id').not('certificate_template_id', 'is', null);
             const templateMap: Record<string, string> = {};
-            prods?.forEach((p: any) => { templateMap[p.name] = p.certificate_template_id; });
+            prodsRes.data?.forEach((p: any) => { templateMap[p.name] = p.certificate_template_id; });
             setProductTemplates(templateMap);
+
+            const courses = coursesRes || [];
+            setOnlineCourses(courses);
+
+            const accMap: Record<string, string[]> = {};
+            accessesRes.data?.forEach((acc: any) => {
+                const course = courses.find(c => c.id === acc.course_id);
+                if (course) {
+                    if (!accMap[acc.student_deal_id]) accMap[acc.student_deal_id] = [];
+                    accMap[acc.student_deal_id].push(course.title);
+                }
+            });
+            setCourseAccessMap(accMap);
         }
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
-  };
-
-  const loadCourses = async () => {
-      const data = await appBackend.getOnlineCourses();
-      setOnlineCourses(data || []);
   };
 
   const groupedStudents = useMemo(() => {
       const groups: Record<string, GroupedStudent> = {};
 
       deals.forEach(deal => {
-          // Normaliza o CPF para usar como chave de agrupamento, se não houver CPF usa e-mail ou ID
           const cleanCpf = deal.cpf ? deal.cpf.replace(/\D/g, '') : null;
           const key = cleanCpf || deal.email?.toLowerCase().trim() || deal.id;
 
@@ -132,10 +144,18 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           } else {
               if (!groups[key].digital.includes(prodName)) groups[key].digital.push(prodName);
           }
+
+          // Incluir cursos liberados manualmente na coluna de Produtos Digitais
+          const manualCourses = courseAccessMap[deal.id] || [];
+          manualCourses.forEach(cName => {
+              if (!groups[key].digital.includes(cName)) {
+                  groups[key].digital.push(cName);
+              }
+          });
       });
 
       return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
-  }, [deals]);
+  }, [deals, courseAccessMap]);
 
   const filtered = groupedStudents.filter(s => 
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -237,6 +257,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           }
           alert("Acessos atualizados com sucesso!");
           setUnlockModalStudent(null);
+          fetchData(); // Atualiza a listagem principal para refletir os novos cursos na coluna digital
       } catch (e: any) { 
           alert("Erro ao salvar acessos: " + e.message); 
       } finally { 
@@ -295,7 +316,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto min-h-[400px]">
                     {isLoading ? <div className="flex justify-center items-center h-64"><Loader2 size={32} className="animate-spin text-teal-600" /></div> : (
-                        <table className="w-full text-left text-sm text-slate-600">
+                        <table className="w-full text-left text-sm text-slate-600 border-collapse">
                             <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
                                 <tr>
                                     <th className="px-6 py-4">Nome do Aluno</th>

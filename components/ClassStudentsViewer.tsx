@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
@@ -36,7 +35,7 @@ interface StudentCertificateStatus {
 }
 
 interface ClassStudentsViewerProps {
-  classItem: ClassItem;
+  classItems: ClassItem[]; // Changed from single classItem to array
   onClose: () => void;
   variant?: 'modal' | 'embedded'; 
   hideFinancials?: boolean;
@@ -55,7 +54,7 @@ const addDays = (dateStr: string, days: number): string => {
 };
 
 export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({ 
-    classItem, 
+    classItems, 
     onClose, 
     variant = 'modal',
     hideFinancials = false,
@@ -73,32 +72,41 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   const [issuingFor, setIssuingFor] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
+  // If multi-selection, only show attendance if 1 is selected to avoid complexity
+  const canShowAttendance = canTakeAttendance && classItems.length === 1;
+
   const courseDates = useMemo(() => {
+      if (classItems.length !== 1) return { allActiveDates: [] };
+      const item = classItems[0];
       const dates = {
-          mod1Day1: classItem.dateMod1 || '',
-          mod1Day2: classItem.dateMod1 ? addDays(classItem.dateMod1, 1) : '',
-          mod2Day1: classItem.dateMod2 || '',
-          mod2Day2: classItem.dateMod2 ? addDays(classItem.dateMod2, 1) : '',
+          mod1Day1: item.dateMod1 || '',
+          mod1Day2: item.dateMod1 ? addDays(item.dateMod1, 1) : '',
+          mod2Day1: item.dateMod2 || '',
+          mod2Day2: item.dateMod2 ? addDays(item.dateMod2, 1) : '',
       };
       const allActiveDates = [dates.mod1Day1, dates.mod1Day2, dates.mod2Day1, dates.mod2Day2].filter(Boolean);
       return { ...dates, allActiveDates };
-  }, [classItem.dateMod1, classItem.dateMod2]);
+  }, [classItems]);
 
   useEffect(() => {
     fetchStudents();
-  }, [classItem]);
+  }, [classItems]);
 
   useEffect(() => {
-      if (attendanceMode) fetchAttendance();
-  }, [attendanceMode, classItem]);
+      if (attendanceMode && classItems.length === 1) fetchAttendance();
+  }, [attendanceMode, classItems]);
 
   const fetchStudents = async () => {
     setIsLoading(true);
     try {
+      const mod1Codes = classItems.map(c => c.mod1Code).filter(Boolean);
+      const mod2Codes = classItems.map(c => c.mod2Code).filter(Boolean);
+
+      if (mod1Codes.length === 0 && mod2Codes.length === 0) { setStudents([]); setIsLoading(false); return; }
+
       const filters = [];
-      if (classItem.mod1Code) filters.push(`class_mod_1.eq."${classItem.mod1Code}"`);
-      if (classItem.mod2Code) filters.push(`class_mod_2.eq."${classItem.mod2Code}"`);
-      if (filters.length === 0) { setStudents([]); setIsLoading(false); return; }
+      if (mod1Codes.length > 0) filters.push(`class_mod_1.in.(${mod1Codes.map(c => `"${c}"`).join(',')})`);
+      if (mod2Codes.length > 0) filters.push(`class_mod_2.in.(${mod2Codes.map(c => `"${c}"`).join(',')})`);
 
       const { data: dealsData, error } = await appBackend.client
         .from('crm_deals')
@@ -107,15 +115,20 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
         .order('contact_name', { ascending: true });
 
       if (error) throw error;
-      const deals = (dealsData || []).sort((a: any, b: any) => {
-          const nameA = (a.company_name || a.contact_name || '').toLowerCase();
-          const nameB = (b.company_name || b.contact_name || '').toLowerCase();
-          return nameA.localeCompare(nameB);
-      });
-      setStudents(deals);
+      
+      // Remove duplicates by ID in case a student belongs to multiple categories
+      // Fix: Explicitly cast 'item' as any to resolve property 'id' access error on type 'unknown'
+      const uniqueDeals = Array.from(new Map((dealsData || []).map((item: any) => [item.id, item])).values())
+        .sort((a: any, b: any) => {
+            const nameA = (a.company_name || a.contact_name || '').toLowerCase();
+            const nameB = (b.company_name || b.contact_name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
 
-      if (deals.length > 0) {
-          const productNames = Array.from(new Set(deals.map((d: any) => d.product_name).filter(Boolean)));
+      setStudents(uniqueDeals as any);
+
+      if (uniqueDeals.length > 0) {
+          const productNames = Array.from(new Set(uniqueDeals.map((d: any) => d.product_name).filter(Boolean)));
           if (productNames.length > 0) {
               const { data: products } = await appBackend.client.from('crm_products').select('name, certificate_template_id').in('name', productNames);
               const templatesMap: Record<string, string> = {};
@@ -124,7 +137,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
               directCerts?.forEach((c: any) => { if (c.linked_product_id) templatesMap[c.linked_product_id] = c.id; });
               setProductTemplates(templatesMap);
           }
-          const { data: issuedCerts } = await appBackend.client.from('crm_student_certificates').select('student_deal_id, hash, issued_at').in('student_deal_id', deals.map(d => d.id));
+          const { data: issuedCerts } = await appBackend.client.from('crm_student_certificates').select('student_deal_id, hash, issued_at').in('student_deal_id', uniqueDeals.map(d => d.id));
           const certMap: Record<string, StudentCertificateStatus> = {};
           issuedCerts?.forEach((c: any) => { certMap[c.student_deal_id] = { hash: c.hash, issuedAt: c.issued_at }; });
           setCertificates(certMap);
@@ -134,8 +147,8 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
 
   const fetchAttendance = async () => {
       try {
-          if (courseDates.allActiveDates.length === 0) return;
-          const { data, error } = await appBackend.client.from('crm_attendance').select('student_id, date, present').eq('class_id', classItem.id).in('date', courseDates.allActiveDates);
+          if (courseDates.allActiveDates.length === 0 || classItems.length !== 1) return;
+          const { data, error } = await appBackend.client.from('crm_attendance').select('student_id, date, present').eq('class_id', classItems[0].id).in('date', courseDates.allActiveDates);
           if (error) throw error;
           const map: Record<string, boolean> = {};
           data.forEach((row: any) => { map[`${row.student_id}_${row.date}`] = row.present; });
@@ -144,7 +157,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   };
 
   const saveAttendance = async () => {
-      if (isReadOnly) return;
+      if (isReadOnly || classItems.length !== 1) return;
       setIsSavingAttendance(true);
       try {
           const updates: any[] = [];
@@ -153,7 +166,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
           students.forEach(student => {
               courseDates.allActiveDates.forEach(dateStr => {
                   updates.push({
-                      class_id: classItem.id,
+                      class_id: classItems[0].id,
                       student_id: student.id,
                       date: dateStr,
                       present: !!presenceMap[`${student.id}_${dateStr}`]
@@ -161,21 +174,15 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
               });
           });
 
-          const { error } = await appBackend.client
-              .from('crm_attendance')
-              .upsert(updates, { onConflict: 'class_id,student_id,date' });
-
+          const { error } = await appBackend.client.from('crm_attendance').upsert(updates, { onConflict: 'class_id,student_id,date' });
           if (error) throw error;
           
-          // Lógica de Emissão Automática de Certificado:
-          // Se o aluno tiver presença marcada em TODOS os dias ativos da chamada, emitimos o certificado.
           let autoIssuedCount = 0;
           for (const student of students) {
               const alreadyHasCert = !!certificates[student.id];
               if (!alreadyHasCert) {
                   const isFullyPresent = courseDates.allActiveDates.every(d => !!presenceMap[`${student.id}_${d}`]);
                   const templateId = productTemplates[student.product_name || ''];
-                  
                   if (isFullyPresent && templateId) {
                       await appBackend.issueCertificate(student.id, templateId);
                       autoIssuedCount++;
@@ -185,11 +192,8 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
 
           alert(`Chamada salva com sucesso!${autoIssuedCount > 0 ? ` ${autoIssuedCount} certificados foram emitidos automaticamente para alunos com 100% de frequência.` : ""}`);
           setAttendanceMode(false);
-          await fetchStudents(); // Recarrega para mostrar os novos ícones de certificado
-      } catch(e: any) {
-          console.error(e);
-          alert(`Erro ao salvar: ${e.message}`);
-      } finally { setIsSavingAttendance(false); }
+          await fetchStudents();
+      } catch(e: any) { alert(`Erro ao salvar: ${e.message}`); } finally { setIsSavingAttendance(false); }
   };
 
   const togglePresence = (studentId: string, dateStr: string) => {
@@ -215,16 +219,15 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
       setTimeout(() => setCopiedLink(null), 2000);
   };
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   const formatDateSimple = (dateStr: string) => { if (!dateStr) return ''; const [y, m, d] = dateStr.split('-'); return `${d}/${m}`; };
 
-  const getModuleBadge = (student: StudentDeal) => {
-    const isMod1 = student.class_mod_1 === classItem.mod1Code;
-    const isMod2 = student.class_mod_2 === classItem.mod2Code;
-    if (isMod1 && isMod2) return <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-bold border border-purple-200">Completo (M1+M2)</span>;
-    if (isMod1) return <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] font-bold border border-blue-200">Módulo 1</span>;
-    if (isMod2) return <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-[10px] font-bold border border-orange-200">Módulo 2</span>;
-    return <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px]">Indefinido</span>;
+  const getModuleBadgeForClass = (student: StudentDeal, item: ClassItem) => {
+    const isMod1 = student.class_mod_1 === item.mod1Code;
+    const isMod2 = student.class_mod_2 === item.mod2Code;
+    if (isMod1 && isMod2) return <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-[8px] font-bold border border-purple-200">M1+M2</span>;
+    if (isMod1) return <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[8px] font-bold border border-blue-200">M1</span>;
+    if (isMod2) return <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[8px] font-bold border border-orange-200">M2</span>;
+    return null;
   };
 
   const containerClasses = variant === 'modal' 
@@ -240,13 +243,17 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
       <div className={contentWrapperClasses}>
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 print:bg-white shrink-0">
             <div>
-                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><BookOpen className="text-purple-600" /> Lista de Alunos</h3>
-                <p className="text-sm text-slate-500">{classItem.course} • {classItem.city}</p>
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><BookOpen className="text-purple-600" /> Lista Consolidada de Alunos</h3>
+                <p className="text-sm text-slate-500">
+                    {classItems.length === 1 ? `${classItems[0].course} • ${classItems[0].city}` : `${classItems.length} turmas selecionadas`}
+                </p>
             </div>
             <div className="flex items-center gap-2 print:hidden">
-                <button onClick={() => { setAttendanceMode(true); setIsReadOnly(true); }} className={clsx("px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors border", attendanceMode && isReadOnly ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-white hover:bg-blue-50 text-slate-600 border-slate-200")}><Eye size={18} /> Chamada</button>
-                {canTakeAttendance && (
-                    <button onClick={() => { setAttendanceMode(true); setIsReadOnly(false); }} className={clsx("px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors border", attendanceMode && !isReadOnly ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-white hover:bg-orange-50 text-slate-600 border-slate-200")}><CheckSquare size={18} /> Editar</button>
+                {canShowAttendance && (
+                    <>
+                        <button onClick={() => { setAttendanceMode(true); setIsReadOnly(true); }} className={clsx("px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors border", attendanceMode && isReadOnly ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-white hover:bg-blue-50 text-slate-600 border-slate-200")}><Eye size={18} /> Chamada</button>
+                        <button onClick={() => { setAttendanceMode(true); setIsReadOnly(false); }} className={clsx("px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors border", attendanceMode && !isReadOnly ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-white hover:bg-orange-50 text-slate-600 border-slate-200")}><CheckSquare size={18} /> Editar</button>
+                    </>
                 )}
                 {!attendanceMode && <button onClick={() => window.print()} className="p-2 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors"><Printer size={20} /></button>}
                 <button onClick={onClose} className="p-2 hover:bg-red-100 hover:text-red-600 rounded-lg text-slate-400 transition-colors"><X size={24} /></button>
@@ -284,8 +291,8 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                     {courseDates.mod2Day2 && <th className="px-2 py-3 border-b text-center bg-orange-50 text-orange-800 border-r border-orange-100">M2 D2<br/><span className="text-[9px]">{formatDateSimple(courseDates.mod2Day2)}</span></th>}
                                 </>
                             )}
+                            <th className="px-6 py-3 border-b">Turmas / Módulos</th>
                             <th className="px-6 py-3 border-b">Status</th>
-                            <th className="px-6 py-3 border-b">Módulo</th>
                             {!attendanceMode && <th className="px-6 py-3 border-b print:hidden text-center">Certificado</th>}
                         </tr>
                     </thead>
@@ -303,7 +310,12 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                             return (
                                 <tr key={student.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-3 text-slate-400 text-center">{idx + 1}</td>
-                                    <td className="px-6 py-3 font-bold text-slate-800">{student.company_name || student.contact_name}</td>
+                                    <td className="px-6 py-3">
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-slate-800">{student.company_name || student.contact_name}</span>
+                                            <span className="text-[10px] text-slate-400">{student.email}</span>
+                                        </div>
+                                    </td>
                                     {attendanceMode && (
                                         <>
                                             {renderCheck(courseDates.mod1Day1, "bg-purple-50")}
@@ -312,8 +324,21 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                             {renderCheck(courseDates.mod2Day2, "bg-orange-50")}
                                         </>
                                     )}
+                                    <td className="px-6 py-3">
+                                        <div className="flex flex-wrap gap-1">
+                                            {classItems.map(item => {
+                                                const badge = getModuleBadgeForClass(student, item);
+                                                if (!badge) return null;
+                                                return (
+                                                    <div key={item.id} className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded px-1.5 py-0.5">
+                                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{item.city}</span>
+                                                        {badge}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-3"><span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border uppercase", student.stage === 'closed' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500')}>{student.stage === 'closed' ? 'Matriculado' : 'Lead'}</span></td>
-                                    <td className="px-6 py-3">{getModuleBadge(student)}</td>
                                     {!attendanceMode && (
                                         <td className="px-6 py-3 text-center print:hidden">
                                             {certificates[student.id] ? (

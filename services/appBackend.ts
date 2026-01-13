@@ -1,3 +1,4 @@
+
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -184,7 +185,7 @@ export const appBackend = {
     if (!isConfigured) return;
     await supabase.from('crm_forms').upsert({
       id: (form.id && form.id.length > 10) ? form.id : crypto.randomUUID(),
-      title: form.title, description: form.description, campaign: form.campaign, is_lead_capture: form.is_lead_capture, distribution_mode: form.distribution_mode, fixed_owner_id: form.fixedOwnerId || null, team_id: form.teamId || null, target_pipeline: form.targetPipeline, target_stage: form.targetStage, questions: form.questions, style: form.style, folder_id: form.folderId || null, created_at: form.createdAt || new Date().toISOString(), type: 'form'
+      title: form.title, description: form.description, campaign: form.campaign, is_lead_capture: form.isLeadCapture, distribution_mode: form.distributionMode, fixed_owner_id: form.fixedOwnerId || null, team_id: form.teamId || null, target_pipeline: form.targetPipeline, target_stage: form.targetStage, questions: form.questions, style: form.style, folder_id: form.folderId || null, created_at: form.createdAt || new Date().toISOString(), type: 'form'
     });
   },
 
@@ -192,7 +193,7 @@ export const appBackend = {
     if (!isConfigured) return;
     await supabase.from('crm_forms').upsert({
       id: (survey.id && survey.id.length > 10) ? survey.id : crypto.randomUUID(),
-      title: survey.title, description: survey.description, campaign: survey.campaign, is_lead_capture: survey.is_lead_capture, distribution_mode: survey.distribution_mode, questions: survey.questions, style: survey.style, folder_id: survey.folderId, target_audience: survey.targetAudience, target_type: survey.targetType, target_product_type: survey.targetProductType, target_product_name: survey.targetProductName, only_if_finished: survey.onlyIfFinished, is_active: survey.isActive, type: 'survey', created_at: survey.createdAt || new Date().toISOString()
+      title: survey.title, description: survey.description, campaign: survey.campaign, is_lead_capture: survey.isLeadCapture, distribution_mode: survey.distributionMode, questions: survey.questions, style: survey.style, folder_id: survey.folderId, target_audience: survey.targetAudience, target_type: survey.targetType, target_product_type: survey.targetProductType, target_product_name: survey.targetProductName, only_if_finished: survey.onlyIfFinished, is_active: survey.isActive, type: 'survey', created_at: survey.createdAt || new Date().toISOString()
     });
   },
 
@@ -534,7 +535,7 @@ export const appBackend = {
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-    return (data || []).map((item: any) => ({ id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role, content: item.content, attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role, content: item.content, attachment_url: item.attachment_url, attachment_name: item.attachment_name, createdAt: item.created_at }));
   },
 
   saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
@@ -679,7 +680,7 @@ export const appBackend = {
   getEvents: async (): Promise<EventModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, description: item.description, location: item.location, dates: item.dates || [], createdAt: item.created_at, registration_open: item.registration_open }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name, description: item.description, location: item.location, dates: item.dates || [], createdAt: item.created_at, registrationOpen: item.registration_open }));
   },
 
   saveEvent: async (event: EventModel): Promise<EventModel> => {
@@ -698,7 +699,7 @@ export const appBackend = {
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date');
-    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, date: item.date, title: item.title, maxSelections: item.max_selections }));
+    return (data || []).map((item: any) => ({ id: item.id, event_id: item.event_id, date: item.date, title: item.title, max_selections: item.max_selections }));
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
@@ -783,7 +784,7 @@ export const appBackend = {
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studio_id: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
   },
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {

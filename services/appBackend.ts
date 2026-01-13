@@ -207,16 +207,15 @@ export const appBackend = {
       title: form.title, 
       description: form.description, 
       campaign: form.campaign, 
+      // Fixed: Use camelCase properties from FormModel interface for values
       is_lead_capture: form.isLeadCapture, 
       distribution_mode: form.distributionMode, 
       fixed_owner_id: form.fixedOwnerId || null, 
-      // Fixed: property should be teamId, not team_id
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline, 
       target_stage: form.targetStage, 
       questions: form.questions, 
       style: form.style, 
-      // Fixed: property should be folderId, not folder_id
       folder_id: form.folderId || null,
       created_at: form.createdAt || new Date().toISOString(),
       type: 'form'
@@ -231,6 +230,7 @@ export const appBackend = {
       title: survey.title,
       description: survey.description,
       campaign: survey.campaign,
+      // Fixed: Use camelCase properties from SurveyModel interface for values
       is_lead_capture: survey.isLeadCapture,
       distribution_mode: survey.distributionMode,
       questions: survey.questions,
@@ -1255,6 +1255,17 @@ export const appBackend = {
       message: d.message,
       createdAt: d.created_at
     }));
+  },
+
+  logWAAutomation: async (log: Omit<WAAutomationLog, 'id' | 'createdAt'>): Promise<void> => {
+      if (!isConfigured) return;
+      const { error } = await supabase.from('crm_wa_automation_logs').insert([{
+          rule_name: log.ruleName,
+          student_name: log.studentName,
+          phone: log.phone,
+          message: log.message
+      }]);
+      if (error) console.error("Erro ao gravar log no backend:", error);
   },
 
   // --- INVENTORY ---

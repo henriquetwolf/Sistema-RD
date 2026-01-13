@@ -240,9 +240,9 @@ export const CrmBoard: React.FC = () => {
                   nextTask: d.next_task || '', createdAt: new Date(d.created_at), closedAt: d.closed_at ? new Date(d.closed_at) : undefined,
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
-                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
+                  email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receipt_link: d.receipt_link,
                   transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
-                  registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
+                  registrationData: d.registration_data, observation: d.observation, course_state: d.course_state, courseCity: d.course_city,
                   classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
               })));
@@ -290,8 +290,8 @@ export const CrmBoard: React.FC = () => {
    */
   const triggerWhatsAppAutomation = async (deal: any) => {
     // IMPORTANTE: deal aqui é o retorno direto do Supabase (snake_case)
-    const phone = deal.phone || deal.contact_phone || deal.cellphone;
-    if (!phone) return;
+    const rawPhone = deal.phone || deal.contact_phone || deal.cellphone;
+    if (!rawPhone) return;
 
     try {
         const { data: rules } = await appBackend.client
@@ -317,33 +317,36 @@ export const CrmBoard: React.FC = () => {
             const clientName = deal.company_name || deal.contact_name || 'Cliente';
             const courseName = deal.product_name || 'Curso';
 
-            // Regex case-insensitive para abranger {{NOME_CLIENTE}} e {{nome_cliente}}
+            // Regex global e case-insensitive para abranger as tags solicitadas
             message = message.replace(/\{\{nome_cliente\}\}/gi, clientName);
             message = message.replace(/\{\{curso\}\}/gi, courseName);
 
             try {
                 // Envio via Evolution API
-                const cleanPhone = phone.replace(/\D/g, '');
+                const cleanPhone = rawPhone.replace(/\D/g, '');
+                
+                // Primeiro enviamos a mensagem
                 await whatsappService.sendTextMessage({ 
                     wa_id: cleanPhone,
                     contact_phone: cleanPhone
                 }, message);
 
-                // Registrar log de disparo
-                const { error: logError } = await appBackend.client.from('crm_wa_automation_logs').insert([{
-                    rule_name: rule.name,
-                    student_name: clientName,
-                    phone: phone,
+                // SE O ENVIO FUNCIONOU, gravamos no histórico (Logs)
+                // Utilizamos o método centralizado no backend para garantir gravação
+                await appBackend.logWAAutomation({
+                    ruleName: rule.name,
+                    studentName: clientName,
+                    phone: rawPhone,
                     message: message
-                }]);
+                });
                 
-                if (logError) console.error("Erro ao gravar log de automação:", logError);
-            } catch (sendErr) {
-                console.error("Falha ao enviar mensagem ou gravar log:", sendErr);
+                console.log(`[CRM] Automação "${rule.name}" disparada e registrada para ${clientName}.`);
+            } catch (sendErr: any) {
+                console.error(`[CRM] Falha ao disparar ou registrar automação "${rule.name}":`, sendErr);
             }
         }
     } catch (err) {
-        console.error("Erro ao processar automação de WhatsApp:", err);
+        console.error("[CRM] Erro fatal no processamento da automação de WhatsApp:", err);
     }
   };
 
@@ -917,7 +920,7 @@ export const CrmBoard: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {allPendingTasks.length === 0 ? (
-                                    <tr><td colSpan={6} className="py-20 text-center text-slate-400 italic">Nenhum agendamento pendente.</td></tr>
+                                    <tr><td colSpan={6} className="p-20 text-center text-slate-400 italic">Nenhum agendamento pendente.</td></tr>
                                 ) : allPendingTasks.map(task => {
                                     const isOverdue = task.dueDate < new Date().toISOString().split('T')[0];
                                     const isToday = task.dueDate === new Date().toISOString().split('T')[0];
@@ -1074,7 +1077,7 @@ export const CrmBoard: React.FC = () => {
                   </div>
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                       <button onClick={() => setShowTeamModal(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
-                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all">
+                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all">
                           {isSavingTeam ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                           Salvar Equipe
                       </button>

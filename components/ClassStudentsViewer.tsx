@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle, Phone, Mail, FileSpreadsheet } from 'lucide-react';
+import { X, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle, Phone, Mail, FileSpreadsheet, Hash } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { StudentCertificateStatus } from '../types';
 import clsx from 'clsx';
@@ -34,7 +34,7 @@ interface StudentDeal {
 }
 
 interface ClassStudentsViewerProps {
-  classItems: ClassItem[]; // Changed from single classItem to array
+  classItems: ClassItem[];
   onClose: () => void;
   variant?: 'modal' | 'embedded'; 
   hideFinancials?: boolean;
@@ -71,7 +71,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
   const [issuingFor, setIssuingFor] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
-  // If multi-selection, only show attendance if 1 is selected to avoid complexity
   const canShowAttendance = canTakeAttendance && classItems.length === 1;
 
   const courseDates = useMemo(() => {
@@ -115,8 +114,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
 
       if (error) throw error;
       
-      // Remove duplicates by ID in case a student belongs to multiple categories
-      // Fix: Explicitly cast dealsData to any array to resolve property 'id' access error on type 'unknown' during Map construction
       const uniqueDeals = Array.from(new Map((dealsData as any[] || []).map((item: any) => [item.id, item])).values())
         .sort((a: any, b: any) => {
             const nameA = (a.company_name || a.contact_name || '').toLowerCase();
@@ -236,8 +233,8 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
         return {
             '#': idx + 1,
             'Nome': student.company_name || student.contact_name,
-            'E-mail': student.email || '--',
             'Telefone': student.phone || '--',
+            'E-mail': student.email || '--',
             'Turmas/Módulos': studentClasses,
             'Status': student.stage === 'closed' ? 'Matriculado' : 'Lead'
         };
@@ -322,9 +319,10 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                     <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold sticky top-0 z-10">
                         <tr>
                             <th className="px-4 py-3 border-b w-12 text-center">#</th>
-                            <th className="px-4 py-3 border-b min-w-[180px]">Nome do Aluno</th>
+                            <th className="px-4 py-3 border-b min-w-[150px]">Nome do Aluno</th>
                             <th className="px-4 py-3 border-b min-w-[120px]">Telefone</th>
-                            <th className="px-4 py-3 border-b min-w-[180px]">E-mail</th>
+                            <th className="px-4 py-3 border-b min-w-[150px]">E-mail</th>
+                            <th className="px-4 py-3 border-b text-center">Turma</th>
                             {attendanceMode && (
                                 <>
                                     {courseDates.mod1Day1 && <th className="px-2 py-3 border-b text-center bg-purple-50 text-purple-800 border-x border-purple-100">M1 D1<br/><span className="text-[9px]">{formatDateSimple(courseDates.mod1Day1)}</span></th>}
@@ -353,18 +351,32 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                 <tr key={student.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-4 py-3 text-slate-400 text-center font-mono text-[10px]">{idx + 1}</td>
                                     <td className="px-4 py-3">
-                                        <span className="font-bold text-slate-800 text-xs truncate block max-w-[180px]">{student.company_name || student.contact_name}</span>
+                                        <span className="font-bold text-slate-800 text-xs truncate block max-w-[150px]">{student.company_name || student.contact_name}</span>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <div className="flex items-center gap-1.5 text-slate-600 text-xs">
+                                        <div className="flex items-center gap-1.5 text-slate-600 text-[10px]">
                                             <Phone size={10} className="text-slate-300" />
                                             <span className="font-medium">{student.phone || '--'}</span>
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <div className="flex items-center gap-1.5 text-slate-600 text-xs">
+                                        <div className="flex items-center gap-1.5 text-slate-600 text-[10px]">
                                             <Mail size={10} className="text-slate-300" />
-                                            <span className="truncate max-w-[180px]">{student.email || '--'}</span>
+                                            <span className="truncate max-w-[150px]">{student.email || '--'}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                        <div className="flex flex-col gap-1 items-center">
+                                            {classItems.map(item => {
+                                                if (student.class_mod_1 === item.mod1Code || student.class_mod_2 === item.mod2Code) {
+                                                    return (
+                                                        <span key={item.id} className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[9px] font-black font-mono border border-slate-200">
+                                                            #{item.classCode || '--'}
+                                                        </span>
+                                                    );
+                                                }
+                                                return null;
+                                            })}
                                         </div>
                                     </td>
                                     {attendanceMode && (
@@ -383,7 +395,6 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                                 return (
                                                     <div key={item.id} className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded px-1.5 py-0.5">
                                                         <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{item.city}</span>
-                                                        <span className="text-[8px] font-bold text-slate-500 bg-white border border-slate-200 px-1 rounded">T: {item.classCode || '--'}</span>
                                                         {badge}
                                                     </div>
                                                 );

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock } from '../types';
 import { appBackend } from '../services/appBackend';
@@ -526,7 +525,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
                         { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length }
                     ].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === 'id' ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
                             {tab.label}
                             {tab.badge ? (
@@ -758,4 +757,63 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                                 </div>
                                                                 <h5 className="font-black text-slate-800 text-base mb-1 leading-tight">{ws.title}</h5>
                                                                 <p className="text-xs text-indigo-600 font-bold mb-4 flex items-center gap-1"><Mic size={14}/> {ws.speaker}</p>
-                                                                <button onClick={() => handleToggleRegistration(ws)} disabled={isDisabled && !isSelected} className={clsx("mt-auto w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2", is
+                                                                <button 
+                                                                    onClick={() => handleToggleRegistration(ws)} 
+                                                                    disabled={isDisabled && !isSelected} 
+                                                                    className={clsx("mt-auto w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2", isSelected ? "bg-red-50 text-red-600 border border-red-100 hover:bg-red-100" : "bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-400")}
+                                                                >
+                                                                    {isRegistering === ws.id ? <Loader2 size={16} className="animate-spin"/> : isSelected ? <><X size={16}/> Cancelar</> : remaining <= 0 ? 'Lotado' : 'Selecionar'}
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-8 py-5 bg-slate-50 border-t flex justify-between items-center shrink-0 rounded-b-[2.5rem]">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Escolha com atencao. Algumas vagas sao limitadas.</p>
+                            <button onClick={() => setViewingEvent(null)} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all active:scale-95 shadow-lg">Finalizar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Assinatura Digital */}
+            {signingContract && (
+                <div className="fixed inset-0 z-[400] bg-white overflow-y-auto animate-in zoom-in-95">
+                    <div className="bg-slate-50 border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+                        <button onClick={() => setSigningContract(null)} className="flex items-center gap-2 text-slate-500 font-bold hover:text-slate-800">
+                            <ChevronLeft size={20}/> Cancelar e Voltar
+                        </button>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ambiente de Assinatura Digital Segura</span>
+                    </div>
+                    <ContractSigning 
+                        contract={signingContract} 
+                        onFinish={() => {
+                            setSigningContract(null);
+                            fetchPendingContracts();
+                            setActiveTab('dashboard');
+                        }}
+                    />
+                </div>
+            )}
+
+            <SupportTicketModal 
+                isOpen={showSupportModal} 
+                onClose={() => { setShowSupportModal(false); fetchSupportNotifications(); }}
+                senderId={String(mainDealId)}
+                senderName={student.name}
+                senderEmail={student.email}
+                senderRole="student"
+            />
+
+            <footer className="py-12 text-center text-slate-300">
+                <p className="text-[10px] font-black uppercase tracking-[0.4em]">VOLL Pilates Group &copy; {new Date().getFullYear()}</p>
+            </footer>
+        </div>
+    );
+};

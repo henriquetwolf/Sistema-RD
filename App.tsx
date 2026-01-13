@@ -28,6 +28,7 @@ import { CertificateViewer } from './components/CertificateViewer';
 import { EventsManager } from './components/EventsManager';
 import { WhatsAppInbox } from './components/WhatsAppInbox'; 
 import { WhatsAppAutomation } from './components/WhatsAppAutomation';
+import { BulkWhatsAppSender } from './components/BulkWhatsAppSender';
 import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
@@ -43,11 +44,11 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap
+  LifeBuoy, Zap, Send
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno';
 
 function App() {
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
@@ -521,7 +522,7 @@ function App() {
                 </div>
             </header>
 
-            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation') && "max-w-full")}>
+            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk') && "max-w-full")}>
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                     <aside className="w-full md:w-64 flex-shrink-0">
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
@@ -534,6 +535,7 @@ function App() {
                                 {canAccess('suporte_interno') && <button onClick={() => setDashboardTab('suporte_interno')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'suporte_interno' ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LifeBuoy size={18} /> Suporte Interno</button>}
                                 {canAccess('whatsapp') && <button onClick={() => setDashboardTab('whatsapp')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'whatsapp' ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MessageCircle size={18} /> Atendimento</button>}
                                 {canAccess('whatsapp_automation') && <button onClick={() => setDashboardTab('whatsapp_automation')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'whatsapp_automation' ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Zap size={18} /> Automação WhatsApp</button>}
+                                {canAccess('whatsapp_bulk') && <button onClick={() => setDashboardTab('whatsapp_bulk')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'whatsapp_bulk' ? "bg-orange-50 text-orange-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Send size={18} /> Envio em Massa</button>}
                                 {canAccess('analysis') && <button onClick={() => setDashboardTab('analysis')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'analysis' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><PieChart size={18} /> Análise de Vendas</button>}
                                 {canAccess('forms') && <button onClick={() => setDashboardTab('forms')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'forms' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><FileText size={18} /> Formulários</button>}
                                 {canAccess('surveys') && <button onClick={() => setDashboardTab('surveys')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'surveys' ? "bg-amber-50 text-amber-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><PieChart size={18} /> Pesquisas</button>}
@@ -564,7 +566,7 @@ function App() {
                                             <span className="text-teal-100 text-xs font-black uppercase tracking-[0.2em]">Painel de Controle</span>
                                         </div>
                                         <h2 className="text-4xl font-black tracking-tight mb-2">
-                                            <span className="text-green-400">Bem-vindo</span>, <span className="text-teal-200">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
+                                            <span className="text-white">Bem-vindo</span>, <span className="text-teal-200">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
                                         </h2>
                                         <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed">
                                             Seu centro de comando está pronto. Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.
@@ -659,6 +661,7 @@ function App() {
                         {dashboardTab === 'analysis' && <SalesAnalysis />}
                         {dashboardTab === 'whatsapp' && <WhatsAppInbox onNavigateToRecord={handleDeepNavigation} currentAgentName={currentUserName} />}
                         {dashboardTab === 'whatsapp_automation' && <WhatsAppAutomation />}
+                        {dashboardTab === 'whatsapp_bulk' && <BulkWhatsAppSender />}
                     </div>
                 </div>
             </main>

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Send, Users, School, Store, Building2, MessageSquare, 
   Loader2, CheckCircle2, AlertCircle, Info, RefreshCw, X, Play, Pause, ChevronRight,
-  Zap, History, Settings, Smartphone, Wifi, WifiOff, Save, Link2, Copy, Image as ImageIcon
+  Zap, History, Settings, Smartphone, Wifi, WifiOff, Save, Link2, Copy, Image as ImageIcon, Filter, Tag, ShoppingBag, Award, MapPin
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -15,6 +15,10 @@ interface Contact {
   name: string;
   phone: string;
   email: string;
+  productType?: string;
+  productName?: string;
+  teacherLevel?: string;
+  state?: string;
 }
 
 interface WAConfig {
@@ -39,6 +43,16 @@ export const BulkWhatsAppSender: React.FC = () => {
   const [logs, setLogs] = useState<{ name: string, status: 'success' | 'error', message: string }[]>([]);
   const [isPaused, setIsPaused] = useState(false);
 
+  // Filter States for Students
+  const [filterType, setFilterType] = useState<string>('');
+  const [filterProduct, setFilterProduct] = useState<string>('');
+  
+  // Filter States for Teachers
+  const [filterTeacherLevel, setFilterTeacherLevel] = useState<string>('');
+
+  // Filter States for Studios
+  const [filterStudioState, setFilterStudioState] = useState<string>('');
+
   // Config States
   const [config, setConfig] = useState<WAConfig>({
       mode: 'evolution',
@@ -58,12 +72,16 @@ export const BulkWhatsAppSender: React.FC = () => {
   const audiences = [
     { id: 'students', label: 'Alunos / Leads', icon: Users, color: 'text-purple-600', bg: 'bg-purple-50' },
     { id: 'teachers', label: 'Professores', icon: School, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { id: 'franchises', label: 'Franqueados', icon: Store, color: 'text-teal-600', bg: 'bg-teal-50' },
+    { id: 'franchises', label: 'Franquias', icon: Store, color: 'text-teal-600', bg: 'bg-teal-50' },
     { id: 'studios', label: 'Studios Parceiros', icon: Building2, color: 'text-indigo-600', bg: 'bg-indigo-50' },
   ];
 
   useEffect(() => {
     if (selectedAudience && activeSubTab === 'sender') {
+      setFilterType('');
+      setFilterProduct('');
+      setFilterTeacherLevel('');
+      setFilterStudioState('');
       fetchContacts(selectedAudience);
     }
   }, [selectedAudience, activeSubTab]);
@@ -172,12 +190,12 @@ export const BulkWhatsAppSender: React.FC = () => {
 
       switch (type) {
         case 'students':
-          const resS = await appBackend.client.from('crm_deals').select('id, contact_name, company_name, phone, email').order('contact_name');
+          const resS = await appBackend.client.from('crm_deals').select('id, contact_name, company_name, phone, email, product_type, product_name').order('contact_name');
           data = resS.data || [];
           error = resS.error;
           break;
         case 'teachers':
-          const resT = await appBackend.client.from('crm_teachers').select('id, full_name, phone, email').eq('is_active', true).order('full_name');
+          const resT = await appBackend.client.from('crm_teachers').select('id, full_name, phone, email, teacher_level').eq('is_active', true).order('full_name');
           data = resT.data || [];
           error = resT.error;
           break;
@@ -187,7 +205,7 @@ export const BulkWhatsAppSender: React.FC = () => {
           error = resF.error;
           break;
         case 'studios':
-          const resSt = await appBackend.client.from('crm_partner_studios').select('id, fantasy_name, phone, email').eq('status', 'active').order('fantasy_name');
+          const resSt = await appBackend.client.from('crm_partner_studios').select('id, fantasy_name, phone, email, state').eq('status', 'active').order('fantasy_name');
           data = resSt.data || [];
           error = resSt.error;
           break;
@@ -199,7 +217,11 @@ export const BulkWhatsAppSender: React.FC = () => {
         id: item.id,
         name: item.full_name || item.contact_name || item.company_name || item.franchisee_name || item.fantasy_name || 'Sem Nome',
         phone: item.phone?.replace(/\D/g, '') || '',
-        email: item.email || ''
+        email: item.email || '',
+        productType: item.product_type || '',
+        productName: item.product_name || '',
+        teacherLevel: item.teacher_level || '',
+        state: item.state || ''
       })).filter(c => c.phone.length >= 10);
 
       setContacts(mapped);
@@ -213,13 +235,55 @@ export const BulkWhatsAppSender: React.FC = () => {
     }
   };
 
+  const filteredContactsList = useMemo(() => {
+      return contacts.filter(c => {
+          if (selectedAudience === 'students') {
+              const matchesType = !filterType || c.productType === filterType;
+              const matchesProduct = !filterProduct || c.productName === filterProduct;
+              return matchesType && matchesProduct;
+          }
+          if (selectedAudience === 'teachers') {
+              const matchesLevel = !filterTeacherLevel || c.teacherLevel === filterTeacherLevel;
+              return matchesLevel;
+          }
+          if (selectedAudience === 'studios') {
+              const matchesState = !filterStudioState || c.state === filterStudioState;
+              return matchesState;
+          }
+          return true;
+      });
+  }, [contacts, selectedAudience, filterType, filterProduct, filterTeacherLevel, filterStudioState]);
+
+  const studentTypeOptions = useMemo(() => {
+      if (selectedAudience !== 'students') return [];
+      return Array.from(new Set(contacts.map(c => c.productType).filter(Boolean))).sort();
+  }, [contacts, selectedAudience]);
+
+  const studentProductOptions = useMemo(() => {
+      if (selectedAudience !== 'students') return [];
+      const filteredForOptions = filterType 
+          ? contacts.filter(c => c.productType === filterType)
+          : contacts;
+      return Array.from(new Set(filteredForOptions.map(c => c.productName).filter(Boolean))).sort();
+  }, [contacts, selectedAudience, filterType]);
+
+  const teacherLevelOptions = useMemo(() => {
+      if (selectedAudience !== 'teachers') return [];
+      return Array.from(new Set(contacts.map(c => c.teacherLevel).filter(Boolean))).sort();
+  }, [contacts, selectedAudience]);
+
+  const studioStateOptions = useMemo(() => {
+      if (selectedAudience !== 'studios') return [];
+      return Array.from(new Set(contacts.map(c => c.state).filter(Boolean))).sort();
+  }, [contacts, selectedAudience]);
+
   const handleToggleSelect = (id: string) => {
     setSelectedContacts(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
   const handleSelectAll = () => {
-    if (selectedContacts.length === contacts.length) setSelectedContacts([]);
-    else setSelectedContacts(contacts.map(c => c.id));
+    if (selectedContacts.length === filteredContactsList.length) setSelectedContacts([]);
+    else setSelectedContacts(filteredContactsList.map(c => c.id));
   };
 
   const addLog = (name: string, status: 'success' | 'error', msg: string) => {
@@ -243,7 +307,7 @@ export const BulkWhatsAppSender: React.FC = () => {
     setProgress({ current: 0, total: selectedContacts.length, success: 0, error: 0 });
     setLogs([]);
 
-    const targetContacts = contacts.filter(c => selectedContacts.includes(c.id));
+    const targetContacts = filteredContactsList.filter(c => selectedContacts.includes(c.id));
 
     for (let i = 0; i < targetContacts.length; i++) {
       while (isPaused) {
@@ -315,6 +379,80 @@ export const BulkWhatsAppSender: React.FC = () => {
                   </button>
                 ))}
               </div>
+
+              {selectedAudience === 'students' && (
+                  <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <Filter size={14} className="text-indigo-500"/> Filtros para Alunos
+                      </h4>
+                      <div className="space-y-3">
+                          <div className="relative">
+                              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                              <select 
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                                value={filterType}
+                                onChange={e => { setFilterType(e.target.value); setFilterProduct(''); }}
+                              >
+                                  <option value="">Todos os Tipos</option>
+                                  {studentTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                          </div>
+                          <div className="relative">
+                              <ShoppingBag className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                              <select 
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                                value={filterProduct}
+                                onChange={e => setFilterProduct(e.target.value)}
+                              >
+                                  <option value="">Todos os Cursos/Produtos</option>
+                                  {studentProductOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                              </select>
+                          </div>
+                      </div>
+                  </div>
+              )}
+
+              {selectedAudience === 'teachers' && (
+                  <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <Filter size={14} className="text-indigo-500"/> Filtros para Professores
+                      </h4>
+                      <div className="space-y-3">
+                          <div className="relative">
+                              <Award className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                              <select 
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                                value={filterTeacherLevel}
+                                onChange={e => setFilterTeacherLevel(e.target.value)}
+                              >
+                                  <option value="">Todos os Níveis</option>
+                                  {teacherLevelOptions.map(l => <option key={l} value={l}>{l}</option>)}
+                              </select>
+                          </div>
+                      </div>
+                  </div>
+              )}
+
+              {selectedAudience === 'studios' && (
+                  <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <Filter size={14} className="text-indigo-500"/> Filtros para Studios
+                      </h4>
+                      <div className="space-y-3">
+                          <div className="relative">
+                              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                              <select 
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                                value={filterStudioState}
+                                onChange={e => setFilterStudioState(e.target.value)}
+                              >
+                                  <option value="">Todos os Estados</option>
+                                  {studioStateOptions.map(st => <option key={st} value={st}>{st}</option>)}
+                              </select>
+                          </div>
+                      </div>
+                  </div>
+              )}
             </section>
 
             {selectedAudience && (
@@ -382,13 +520,13 @@ export const BulkWhatsAppSender: React.FC = () => {
                         Lista de Contatos: {audiences.find(a => a.id === selectedAudience)?.label}
                       </h3>
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        {selectedContacts.length} de {contacts.length} selecionados
+                        {selectedContacts.length} de {filteredContactsList.length} exibidos selecionados
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                       <button onClick={handleSelectAll} disabled={isSending} className="text-[10px] font-black uppercase text-orange-600 hover:underline">
-                          {selectedContacts.length === contacts.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                          {selectedContacts.length === filteredContactsList.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
                       </button>
                       <button onClick={() => fetchContacts(selectedAudience)} disabled={isSending} className="p-2 text-slate-400 hover:text-orange-600 transition-all hover:bg-white rounded-xl">
                           <RefreshCw size={20} className={isLoading ? "animate-spin" : ""}/>
@@ -424,14 +562,14 @@ export const BulkWhatsAppSender: React.FC = () => {
                       <Loader2 size={48} className="animate-spin text-orange-600" />
                       <p className="font-black uppercase text-xs tracking-widest">Sincronizando Lista...</p>
                     </div>
-                  ) : contacts.length === 0 ? (
+                  ) : filteredContactsList.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400 opacity-20 italic">
                       <Users size={64} />
-                      <p>Nenhum contato ativo encontrado.</p>
+                      <p>Nenhum contato ativo encontrado com os filtros atuais.</p>
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-50">
-                      {contacts.map(c => {
+                      {filteredContactsList.map(c => {
                         const isSelected = selectedContacts.includes(c.id);
                         return (
                           <div 
@@ -450,12 +588,23 @@ export const BulkWhatsAppSender: React.FC = () => {
                               )}>
                                 {isSelected && <CheckCircle2 size={14} />}
                               </div>
-                              <div>
-                                  <p className="font-bold text-slate-800 text-sm">{c.name}</p>
+                              <div className="min-w-0">
+                                  <p className="font-bold text-slate-800 text-sm truncate max-w-[200px]">{c.name}</p>
                                   <p className="text-[10px] font-mono text-slate-400">{c.phone}</p>
                               </div>
                             </div>
-                            <span className="text-[9px] font-black text-slate-300 uppercase truncate max-w-[150px]">{c.email}</span>
+                            <div className="text-right shrink-0">
+                                <span className="text-[9px] font-black text-slate-300 uppercase block truncate max-w-[150px]">{c.email}</span>
+                                {selectedAudience === 'students' && c.productName && (
+                                    <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest block truncate max-w-[150px]">{c.productName}</span>
+                                )}
+                                {selectedAudience === 'teachers' && c.teacherLevel && (
+                                    <span className="text-[8px] font-black text-orange-400 uppercase tracking-widest block truncate max-w-[150px]">{c.teacherLevel}</span>
+                                )}
+                                {selectedAudience === 'studios' && c.state && (
+                                    <span className="text-[8px] font-black text-teal-500 uppercase tracking-widest block truncate max-w-[150px]">{c.state}</span>
+                                )}
+                            </div>
                           </div>
                         );
                       })}

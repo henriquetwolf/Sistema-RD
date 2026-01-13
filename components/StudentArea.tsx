@@ -1,13 +1,13 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventBlock, EventRegistration } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, Award, ExternalLink, Calendar, MapPin, 
     Video, Download, Loader2, CheckCircle, Clock, X, Info, Layers, 
     PieChart, Send, ArrowRight, Sparkles, Bell, Trophy, ChevronRight, Book, ListTodo, LifeBuoy,
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
-    Mic, RefreshCw, FileSignature
+    Mic, RefreshCw, FileSignature, CheckSquare, Users
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
@@ -27,6 +27,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [pendingContracts, setPendingContracts] = useState<Contract[]>([]);
     const [signingContract, setSigningContract] = useState<Contract | null>(null);
     
+    // States para Eventos e Workshops
+    const [viewingEvent, setViewingEvent] = useState<EventModel | null>(null);
+    const [eventWorkshops, setEventWorkshops] = useState<Workshop[]>([]);
+    const [eventBlocks, setEventBlocks] = useState<EventBlock[]>([]);
+    const [myRegistrations, setMyRegistrations] = useState<EventRegistration[]>([]);
+    const [isRegistering, setIsRegistering] = useState<string | null>(null);
+
     // Online Courses State
     const [allCourses, setAllCourses] = useState<OnlineCourse[]>([]);
     const [unlockedCourseIds, setUnlockedCourseIds] = useState<string[]>([]);
@@ -102,9 +109,86 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const loadEvents = async () => {
         try {
             const data = await appBackend.getEvents();
-            setEventsList(data || []);
+            // Filtrar apenas eventos que o aluno adquiriu (baseado no nome do produto/negócio)
+            const purchasedProductNames = student.deals.map(d => d.product_name);
+            const filtered = (data || []).filter(evt => purchasedProductNames.includes(evt.name));
+            setEventsList(filtered);
         } catch (e) {
             console.error("Erro ao carregar eventos:", e);
+        }
+    };
+
+    const handleOpenEventProgram = async (evt: EventModel) => {
+        setViewingEvent(evt);
+        setIsLoading(true);
+        try {
+            const [ws, blks, regs] = await Promise.all([
+                appBackend.getWorkshops(evt.id),
+                appBackend.getBlocks(evt.id),
+                appBackend.getEventRegistrations(evt.id)
+            ]);
+            setEventWorkshops(ws);
+            setEventBlocks(blks);
+            setMyRegistrations(regs.filter(r => r.studentId === mainDealId));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleToggleRegistration = async (workshop: Workshop) => {
+        if (!mainDealId) return;
+        const isRegistered = myRegistrations.some(r => r.workshopId === workshop.id);
+        
+        if (isRegistered) {
+            if (!window.confirm("Deseja cancelar sua inscrição neste workshop?")) return;
+            setIsRegistering(workshop.id);
+            try {
+                const reg = myRegistrations.find(r => r.workshopId === workshop.id);
+                if (reg) {
+                    await appBackend.client.from('crm_event_registrations').delete().eq('id', reg.id);
+                    setMyRegistrations(prev => prev.filter(r => r.id !== reg.id));
+                }
+            } catch (e) { alert("Erro ao cancelar."); }
+            finally { setIsRegistering(null); }
+        } else {
+            // Verificar limite do bloco
+            const block = eventBlocks.find(b => b.id === workshop.blockId);
+            const blockRegs = myRegistrations.filter(r => {
+                const ws = eventWorkshops.find(w => w.id === r.workshopId);
+                return ws?.blockId === workshop.blockId;
+            });
+
+            if (block && blockRegs.length >= block.maxSelections) {
+                alert(`Você já atingiu o limite de ${block.maxSelections} inscrição(ões) para este bloco (${block.title}).`);
+                return;
+            }
+
+            // Verificar vagas (simples, idealmente via RPC no banco)
+            // Aqui fazemos um check local para agilizar a UI
+            setIsRegistering(workshop.id);
+            try {
+                const { data: currentRegs } = await appBackend.client.from('crm_event_registrations').select('id').eq('workshopId', workshop.id);
+                if (currentRegs && currentRegs.length >= workshop.spots) {
+                    alert("Desculpe, este workshop já está lotado.");
+                    return;
+                }
+
+                const newReg = {
+                    id: crypto.randomUUID(),
+                    eventId: viewingEvent!.id,
+                    workshopId: workshop.id,
+                    studentId: mainDealId,
+                    studentName: student.name,
+                    studentEmail: student.email,
+                    registeredAt: new Date().toISOString()
+                };
+                
+                await appBackend.client.from('crm_event_registrations').insert([newReg]);
+                setMyRegistrations(prev => [...prev, newReg as EventRegistration]);
+            } catch (e) { alert("Erro ao realizar inscrição."); }
+            finally { setIsRegistering(null); }
         }
     };
 
@@ -508,7 +592,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                         <div className="flex items-center gap-2 text-xs text-slate-600 font-bold"><MapPin size={14} className="text-amber-500" /> {evt.location}</div>
                                         <div className="flex items-center gap-2 text-xs text-slate-600 font-bold"><Calendar size={14} className="text-amber-500" /> {evt.dates?.length > 0 ? `${evt.dates.length} dia(s) de evento` : 'Data a definir'}</div>
                                     </div>
-                                    <button className="mt-auto w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all active:scale-95 shadow-lg">
+                                    <button 
+                                        onClick={() => handleOpenEventProgram(evt)}
+                                        className="mt-auto w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all active:scale-95 shadow-lg"
+                                    >
                                         Ver Programação / Inscrição
                                     </button>
                                 </div>
@@ -570,6 +657,101 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     )}
                 </div>
             </main>
+
+            {/* Modal de Workshops do Evento */}
+            {viewingEvent && (
+                <div className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95">
+                        <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50 shrink-0">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-800">{viewingEvent.name}</h3>
+                                <p className="text-sm text-slate-500 font-medium">Escolha os workshops que deseja participar.</p>
+                            </div>
+                            <button onClick={() => setViewingEvent(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
+                        </div>
+                        <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
+                            {isLoading ? (
+                                <div className="py-20 flex flex-col items-center justify-center text-slate-400">
+                                    <Loader2 className="animate-spin text-amber-500 mb-4" size={40}/>
+                                    <p className="font-bold">Carregando programação...</p>
+                                </div>
+                            ) : eventBlocks.length === 0 ? (
+                                <div className="py-20 text-center text-slate-400 italic">Programação em breve.</div>
+                            ) : (
+                                <div className="space-y-10">
+                                    {eventBlocks.sort((a, b) => a.date.localeCompare(b.date)).map(block => {
+                                        const blockWS = eventWorkshops.filter(w => w.blockId === block.id);
+                                        const myBlockRegs = myRegistrations.filter(r => blockWS.some(w => w.id === r.workshopId));
+                                        
+                                        return (
+                                            <div key={block.id} className="space-y-4">
+                                                <div className="flex flex-col md:flex-row md:items-center justify-between border-b pb-2 gap-2">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600"><Clock size={18}/></div>
+                                                        <div>
+                                                            <h4 className="font-black text-slate-800 uppercase tracking-tight">{block.title}</h4>
+                                                            <p className="text-[10px] text-slate-400 font-bold uppercase">{new Date(block.date).toLocaleDateString('pt-BR')}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-100">
+                                                        {myBlockRegs.length} / {block.maxSelections} Inscrição(ões)
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {blockWS.map(ws => {
+                                                        const isSelected = myRegistrations.some(r => r.workshopId === ws.id);
+                                                        const isDisabled = isRegistering !== null || (!isSelected && myBlockRegs.length >= block.maxSelections);
+                                                        
+                                                        return (
+                                                            <div 
+                                                                key={ws.id} 
+                                                                className={clsx(
+                                                                    "p-5 rounded-3xl border-2 transition-all flex flex-col group",
+                                                                    isSelected ? "border-teal-500 bg-teal-50/30" : "border-slate-100 hover:border-indigo-200 bg-white"
+                                                                )}
+                                                            >
+                                                                <div className="flex justify-between items-start mb-4">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className={clsx("w-8 h-8 rounded-full flex items-center justify-center transition-all", isSelected ? "bg-teal-500 text-white" : "bg-slate-100 text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600")}>
+                                                                            <CheckSquare size={16}/>
+                                                                        </div>
+                                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{ws.time}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase">
+                                                                        <Users size={12}/> {ws.spots} Vagas
+                                                                    </div>
+                                                                </div>
+                                                                <h5 className="font-black text-slate-800 text-base mb-1 leading-tight">{ws.title}</h5>
+                                                                <p className="text-xs text-indigo-600 font-bold mb-4 flex items-center gap-1"><Mic size={14}/> {ws.speaker}</p>
+                                                                {ws.description && <p className="text-[10px] text-slate-500 leading-relaxed mb-6 line-clamp-2 italic">{ws.description}</p>}
+                                                                
+                                                                <button 
+                                                                    onClick={() => handleToggleRegistration(ws)}
+                                                                    disabled={isDisabled && !isSelected}
+                                                                    className={clsx(
+                                                                        "mt-auto w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2",
+                                                                        isSelected ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none"
+                                                                    )}
+                                                                >
+                                                                    {isRegistering === ws.id ? <Loader2 size={14} className="animate-spin"/> : isSelected ? "Cancelar Inscrição" : "Confirmar Presença"}
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-8 py-5 bg-slate-50 border-t flex justify-end shrink-0">
+                            <button onClick={() => setViewingEvent(null)} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-lg">Concluir Escolhas</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             
             {signingContract && (
                 <div className="fixed inset-0 z-[300] bg-white overflow-y-auto">

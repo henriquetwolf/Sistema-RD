@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, MapPin, Users, Mic, Clock, Plus, Search, 
@@ -122,15 +121,15 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   const fetchReportData = async (eventId: string) => {
       setReportLoading(true);
       try {
-          const [wsRes, regsRes] = await Promise.all([
-              appBackend.client.from('crm_workshops').select('*').eq('event_id', eventId),
+          // Usamos os métodos do appBackend para garantir o mapeamento de snake_case para camelCase
+          const [ws, blks, regsRes] = await Promise.all([
+              appBackend.getWorkshops(eventId),
+              appBackend.getBlocks(eventId),
               appBackend.client.from('crm_event_registrations').select('*').eq('event_id', eventId)
           ]);
           
-          if (wsRes.error) console.error("Erro workshops:", wsRes.error);
-          if (regsRes.error) console.error("Erro inscrições:", regsRes.error);
-
-          setWorkshops(wsRes.data || []);
+          setWorkshops(ws || []);
+          setBlocks(blks || []);
           setRegistrations(regsRes.data || []);
       } catch(e) {
           console.error(e);
@@ -760,9 +759,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6 pb-20">
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-                <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
-                    <ArrowLeft size={20} />
-                </button>
+                <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
                 <div>
                     <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                         <Calendar className="text-indigo-600" /> Eventos & Workshops

@@ -112,11 +112,17 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   const fetchReportData = async (eventId: string) => {
       setReportLoading(true);
       try {
-          const { data: ws } = await appBackend.client.from('crm_workshops').select('*').eq('event_id', eventId);
-          const { data: regs } = await appBackend.client.from('crm_event_registrations').select('*, crm_deals(phone)').eq('event_id', eventId);
+          // Simplifica a consulta removendo joins que podem falhar no Supabase se não estiverem explícitos
+          const [wsRes, regsRes] = await Promise.all([
+              appBackend.client.from('crm_workshops').select('*').eq('event_id', eventId),
+              appBackend.client.from('crm_event_registrations').select('*').eq('event_id', eventId)
+          ]);
           
-          setWorkshops(ws || []);
-          setRegistrations(regs || []);
+          if (wsRes.error) console.error("Erro workshops:", wsRes.error);
+          if (regsRes.error) console.error("Erro inscrições:", regsRes.error);
+
+          setWorkshops(wsRes.data || []);
+          setRegistrations(regsRes.data || []);
       } catch(e) {
           console.error(e);
       } finally {
@@ -283,26 +289,30 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
     const map: Record<string, any> = {};
     
     registrations.forEach(reg => {
-        const sId = reg.student_id; 
+        // Robusto para aceitar tanto snake_case quanto camelCase
+        const sId = reg.student_id || reg.studentId; 
         if (!sId) return;
 
         if (!map[sId]) {
             map[sId] = {
                 id: sId,
-                name: reg.student_name || 'Aluno s/ Nome',
-                email: reg.student_email || '--',
-                phone: reg.crm_deals?.phone || '--',
-                registrationDate: reg.created_at,
+                name: reg.student_name || reg.studentName || 'Aluno s/ Nome',
+                email: reg.student_email || reg.studentEmail || '--',
+                phone: reg.contact_phone || reg.phone || '--',
+                registrationDate: reg.created_at || reg.registeredAt,
                 workshops: []
             };
         }
         
-        const ws = workshops.find(w => String(w.id) === String(reg.workshop_id));
+        const workshopId = reg.workshop_id || reg.workshopId;
+        const ws = workshops.find(w => String(w.id) === String(workshopId));
         if (ws) {
             map[sId].workshops.push(ws.title);
         }
-        if (new Date(reg.created_at) < new Date(map[sId].registrationDate)) {
-            map[sId].registrationDate = reg.created_at;
+        
+        const regDate = reg.created_at || reg.registeredAt;
+        if (regDate && new Date(regDate) < new Date(map[sId].registrationDate)) {
+            map[sId].registrationDate = regDate;
         }
     });
 
@@ -368,7 +378,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
               {reportTab === 'workshops' ? (
                   <div className="space-y-6">
                       {workshops.map(w => {
-                          const wRegs = registrations.filter(r => String(r.workshop_id) === String(w.id));
+                          const wRegs = registrations.filter(r => String(r.workshop_id || r.workshopId) === String(w.id));
                           const occupation = (wRegs.length / (w.spots || 1)) * 100;
                           const isFull = wRegs.length >= (w.spots || 0);
                           return (
@@ -407,8 +417,8 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                                   wRegs.map(r => (
                                                       <div key={r.id} className="flex items-center gap-2 text-sm text-slate-700 border-b border-slate-100 pb-1 last:border-0">
                                                           <User size={12} className="text-slate-400" />
-                                                          <span className="font-medium">{r.student_name}</span>
-                                                          <span className="text-slate-400 text-xs">({r.student_email})</span>
+                                                          <span className="font-medium">{r.student_name || r.studentName}</span>
+                                                          <span className="text-slate-400 text-xs">({r.student_email || r.studentEmail})</span>
                                                       </div>
                                                   ))
                                               )}
@@ -554,7 +564,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                             </div>
                         )}
                     </div>
-                    <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100"><button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Fechar</button></div>
+                    <div className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100"><button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Fechar</button></div>
                 </div>
             </div>
         )}

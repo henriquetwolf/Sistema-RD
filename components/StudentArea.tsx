@@ -7,7 +7,7 @@ import {
     Video, Download, Loader2, CheckCircle, Clock, X, Info, Layers, 
     PieChart, Send, ArrowRight, Sparkles, Bell, Trophy, ChevronRight, Book, ListTodo, LifeBuoy,
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
-    Mic, RefreshCw, FileSignature, CheckSquare, Users
+    Mic, RefreshCw, FileSignature, CheckSquare, Users, Building, User
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
@@ -27,6 +27,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [pendingContracts, setPendingContracts] = useState<Contract[]>([]);
     const [signingContract, setSigningContract] = useState<Contract | null>(null);
     
+    // Logística de Turmas
+    const [viewingClassDetails, setViewingClassDetails] = useState<any | null>(null);
+
     const [viewingEvent, setViewingEvent] = useState<EventModel | null>(null);
     const [eventWorkshops, setEventWorkshops] = useState<Workshop[]>([]);
     const [eventBlocks, setEventBlocks] = useState<EventBlock[]>([]);
@@ -514,7 +517,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
                         { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length }
                     ].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
                             {tab.label}
                             {tab.badge ? (
@@ -533,19 +536,27 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                     <p className="font-bold">Nenhuma formacao presencial ativa.</p>
                                 </div>
                             ) : classes.map(cls => (
-                                <div key={cls.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all overflow-hidden border-b-8 border-b-purple-500">
-                                    <h3 className="text-xl font-black text-slate-800 mb-4 leading-tight">{cls.course}</h3>
-                                    <div className="flex items-center gap-2 text-slate-500 text-sm mb-6 font-bold uppercase tracking-widest"><MapPin size={16} className="text-purple-500" /> {cls.city}, {cls.state}</div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
-                                            <span className="block text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Modulo 01</span>
-                                            <div className="flex items-center gap-2 font-black text-slate-700 text-xs"><Calendar size={14} className="text-purple-500" /> {cls.date_mod_1 ? new Date(cls.date_mod_1).toLocaleDateString('pt-BR') : 'A confirmar'}</div>
-                                        </div>
-                                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
-                                            <span className="block text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Modulo 02</span>
-                                            <div className="flex items-center gap-2 font-black text-slate-700 text-xs"><Calendar size={14} className="text-orange-500" /> {cls.date_mod_2 ? new Date(cls.date_mod_2).toLocaleDateString('pt-BR') : 'A confirmar'}</div>
+                                <div key={cls.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all overflow-hidden border-b-8 border-b-purple-500 flex flex-col">
+                                    <div className="flex-1">
+                                        <h3 className="text-xl font-black text-slate-800 mb-4 leading-tight">{cls.course}</h3>
+                                        <div className="flex items-center gap-2 text-slate-500 text-sm mb-6 font-bold uppercase tracking-widest"><MapPin size={16} className="text-purple-500" /> {cls.city}, {cls.state}</div>
+                                        <div className="grid grid-cols-2 gap-4 mb-6">
+                                            <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                                                <span className="block text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Modulo 01</span>
+                                                <div className="flex items-center gap-2 font-black text-slate-700 text-xs"><Calendar size={14} className="text-purple-500" /> {cls.date_mod_1 ? new Date(cls.date_mod_1).toLocaleDateString('pt-BR') : 'A confirmar'}</div>
+                                            </div>
+                                            <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                                                <span className="block text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Modulo 02</span>
+                                                <div className="flex items-center gap-2 font-black text-slate-700 text-xs"><Calendar size={14} className="text-orange-500" /> {cls.date_mod_2 ? new Date(cls.date_mod_2).toLocaleDateString('pt-BR') : 'A confirmar'}</div>
+                                            </div>
                                         </div>
                                     </div>
+                                    <button 
+                                        onClick={() => setViewingClassDetails(cls)}
+                                        className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-purple-600 transition-all active:scale-95 shadow-lg flex items-center justify-center gap-2"
+                                    >
+                                        <Info size={16}/> Ver Informações Completas
+                                    </button>
                                 </div>
                             ))}
                         </div>
@@ -618,6 +629,78 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     )}
                 </div>
             </main>
+
+            {/* Modal de Detalhes da Turma Presencial */}
+            {viewingClassDetails && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                        <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 rounded-t-[2.5rem]">
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-800 leading-tight">{viewingClassDetails.course}</h3>
+                                <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">Informações Logísticas da Turma</p>
+                            </div>
+                            <button onClick={() => setViewingClassDetails(null)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><X size={24} /></button>
+                        </div>
+                        <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-10">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                                <div className="space-y-6">
+                                    <h4 className="text-xs font-black text-purple-600 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-purple-100">
+                                        <Calendar size={16}/> Módulo 1
+                                    </h4>
+                                    <div className="grid grid-cols-1 gap-4">
+                                        <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Local do Curso (Studio)</p>
+                                            <p className="text-base font-bold text-slate-800 flex items-center gap-2"><Building size={18} className="text-purple-600"/> {viewingClassDetails.studio_mod_1 || 'A definir'}</p>
+                                        </div>
+                                        <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Instrutor(a)</p>
+                                            <p className="text-base font-bold text-slate-800 flex items-center gap-2"><User size={18} className="text-purple-600"/> {viewingClassDetails.instructor_mod_1 || 'A definir'}</p>
+                                        </div>
+                                        <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Data</p>
+                                            <p className="text-base font-bold text-slate-800 flex items-center gap-2"><Calendar size={18} className="text-purple-600"/> {viewingClassDetails.date_mod_1 ? new Date(viewingClassDetails.date_mod_1).toLocaleDateString('pt-BR') : 'A definir'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-6">
+                                    <h4 className="text-xs font-black text-orange-600 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-orange-100">
+                                        <Calendar size={16}/> Módulo 2
+                                    </h4>
+                                    <div className="grid grid-cols-1 gap-4">
+                                        <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Local do Curso (Studio)</p>
+                                            <p className="text-base font-bold text-slate-800 flex items-center gap-2"><Building size={18} className="text-orange-600"/> {viewingClassDetails.studio_mod_1 || 'A definir'}</p>
+                                        </div>
+                                        <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Instrutor(a)</p>
+                                            <p className="text-base font-bold text-slate-800 flex items-center gap-2"><User size={18} className="text-orange-600"/> {viewingClassDetails.instructor_mod_2 || 'A definir'}</p>
+                                        </div>
+                                        <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Data</p>
+                                            <p className="text-base font-bold text-slate-800 flex items-center gap-2"><Calendar size={18} className="text-orange-600"/> {viewingClassDetails.date_mod_2 ? new Date(viewingClassDetails.date_mod_2).toLocaleDateString('pt-BR') : 'A definir'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {viewingClassDetails.observations && (
+                                <div className="bg-amber-50 p-6 rounded-[2rem] border border-amber-100">
+                                    <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                        <Info size={16}/> Avisos Importantes para o Aluno
+                                    </h4>
+                                    <p className="text-sm text-amber-900 leading-relaxed font-medium italic whitespace-pre-wrap">{viewingClassDetails.observations}</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-10 py-6 bg-slate-50 border-t border-slate-100 rounded-b-[2.5rem] flex justify-end">
+                            <button onClick={() => setViewingClassDetails(null)} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-purple-600 transition-all active:scale-95 shadow-lg">
+                                Entendi
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {viewingEvent && (
                 <div className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

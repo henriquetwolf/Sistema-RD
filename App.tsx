@@ -379,7 +379,10 @@ function App() {
 
           await appBackend.saveSyncJob(newJob);
           
-          setJobs(prev => [...prev, newJob]);
+          setJobs(prev => prev.map(j => j.id === newJob.id ? newJob : j));
+          if (!jobs.find(j => j.id === newJob.id)) {
+              setJobs(prev => [...prev, newJob]);
+          }
           setStep(AppStep.DASHBOARD);
           setDashboardTab('global_settings'); 
           setStatus('idle');
@@ -457,7 +460,7 @@ function App() {
       />;
   }
   if (currentInstructor) return <InstructorArea instructor={currentInstructor} onLogout={handleLogout} />;
-  if (currentStudent) return <StudentArea student={currentStudent} onLogout={handleLogout} />;
+  if (currentStudent) return <StudentArea student={currentStudent} onLogout={handleLogout} logoUrl={appLogo} />;
   if (currentStudio) return <PartnerStudioArea studio={currentStudio} onLogout={handleLogout} />;
 
   const currentUserName = currentCollaborator 

@@ -1,6 +1,5 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventBlock, EventRegistration } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, Award, ExternalLink, Calendar, MapPin, 
@@ -16,9 +15,10 @@ import clsx from 'clsx';
 interface StudentAreaProps {
     student: StudentSession;
     onLogout: () => void;
+    logoUrl?: string;
 }
 
-export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) => {
+export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, logoUrl }) => {
     const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts'>('classes');
     const [classes, setClasses] = useState<any[]>([]);
     const [eventsList, setEventsList] = useState<EventModel[]>([]);
@@ -454,7 +454,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30 shadow-sm">
                 <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-6">
-                        <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-8" />
+                        <img src={logoUrl || "https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png"} alt="VOLL" className="h-8 max-w-[150px] object-contain" />
                         <div className="hidden md:flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest">
                             <GraduationCap size={14} className="text-purple-600" /> Portal do Aluno
                         </div>

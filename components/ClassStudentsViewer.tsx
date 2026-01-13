@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle } from 'lucide-react';
+import { X, BookOpen, Download, Printer, Loader2, AlertCircle, Calendar, CheckSquare, Save, Eye, Award, ExternalLink, CheckCircle, Phone, Mail } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
+import { StudentCertificateStatus } from '../types';
 import clsx from 'clsx';
 
 interface ClassItem {
@@ -12,6 +13,7 @@ interface ClassItem {
   mod2Code?: string;
   dateMod1: string;
   dateMod2: string;
+  classCode?: string;
 }
 
 interface StudentDeal {
@@ -27,11 +29,6 @@ interface StudentDeal {
   class_mod_2: string;
   phone?: string;
   product_name?: string; 
-}
-
-interface StudentCertificateStatus {
-    hash: string;
-    issuedAt: string;
 }
 
 interface ClassStudentsViewerProps {
@@ -117,13 +114,13 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
       if (error) throw error;
       
       // Remove duplicates by ID in case a student belongs to multiple categories
-      // Fix: Explicitly cast 'item' as any to resolve property 'id' access error on type 'unknown'
-      const uniqueDeals = Array.from(new Map((dealsData || []).map((item: any) => [item.id, item])).values())
+      // Fix: Explicitly cast dealsData to any array to resolve property 'id' access error on type 'unknown' during Map construction
+      const uniqueDeals = Array.from(new Map((dealsData as any[] || []).map((item: any) => [item.id, item])).values())
         .sort((a: any, b: any) => {
             const nameA = (a.company_name || a.contact_name || '').toLowerCase();
             const nameB = (b.company_name || b.contact_name || '').toLowerCase();
             return nameA.localeCompare(nameB);
-        });
+        }) as any[];
 
       setStudents(uniqueDeals as any);
 
@@ -235,7 +232,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
     : "h-full flex flex-col bg-white rounded-r-xl overflow-hidden border-l border-slate-200"; 
 
   const contentWrapperClasses = variant === 'modal'
-    ? "bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 print:shadow-none print:max-w-none print:h-auto print:max-h-none"
+    ? "bg-white rounded-xl shadow-2xl w-full max-w-[95vw] max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 print:shadow-none print:max-w-none print:h-auto print:max-h-none"
     : "flex flex-col h-full w-full";
 
   return (
@@ -279,10 +276,12 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                 <div className="flex flex-col items-center justify-center py-20"><Loader2 size={40} className="animate-spin text-purple-600 mb-2" /><p className="text-slate-500">Buscando...</p></div>
             ) : (
                 <table className="w-full text-left text-sm border-collapse">
-                    <thead className="bg-slate-100 text-slate-600 uppercase text-xs font-bold sticky top-0 z-10">
+                    <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold sticky top-0 z-10">
                         <tr>
-                            <th className="px-6 py-3 border-b w-12 text-center">#</th>
-                            <th className="px-6 py-3 border-b min-w-[200px]">Nome do Aluno</th>
+                            <th className="px-4 py-3 border-b w-12 text-center">#</th>
+                            <th className="px-4 py-3 border-b min-w-[180px]">Nome do Aluno</th>
+                            <th className="px-4 py-3 border-b min-w-[120px]">Telefone</th>
+                            <th className="px-4 py-3 border-b min-w-[180px]">E-mail</th>
                             {attendanceMode && (
                                 <>
                                     {courseDates.mod1Day1 && <th className="px-2 py-3 border-b text-center bg-purple-50 text-purple-800 border-x border-purple-100">M1 D1<br/><span className="text-[9px]">{formatDateSimple(courseDates.mod1Day1)}</span></th>}
@@ -291,9 +290,9 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                     {courseDates.mod2Day2 && <th className="px-2 py-3 border-b text-center bg-orange-50 text-orange-800 border-r border-orange-100">M2 D2<br/><span className="text-[9px]">{formatDateSimple(courseDates.mod2Day2)}</span></th>}
                                 </>
                             )}
-                            <th className="px-6 py-3 border-b">Turmas / Módulos</th>
-                            <th className="px-6 py-3 border-b">Status</th>
-                            {!attendanceMode && <th className="px-6 py-3 border-b print:hidden text-center">Certificado</th>}
+                            <th className="px-4 py-3 border-b">Turmas / Módulos</th>
+                            <th className="px-4 py-3 border-b">Status</th>
+                            {!attendanceMode && <th className="px-4 py-3 border-b print:hidden text-center">Certificado</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -309,11 +308,20 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                             };
                             return (
                                 <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-3 text-slate-400 text-center">{idx + 1}</td>
-                                    <td className="px-6 py-3">
-                                        <div className="flex flex-col">
-                                            <span className="font-bold text-slate-800">{student.company_name || student.contact_name}</span>
-                                            <span className="text-[10px] text-slate-400">{student.email}</span>
+                                    <td className="px-4 py-3 text-slate-400 text-center font-mono text-[10px]">{idx + 1}</td>
+                                    <td className="px-4 py-3">
+                                        <span className="font-bold text-slate-800 text-xs truncate block max-w-[180px]">{student.company_name || student.contact_name}</span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex items-center gap-1.5 text-slate-600 text-xs">
+                                            <Phone size={10} className="text-slate-300" />
+                                            <span className="font-medium">{student.phone || '--'}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex items-center gap-1.5 text-slate-600 text-xs">
+                                            <Mail size={10} className="text-slate-300" />
+                                            <span className="truncate max-w-[180px]">{student.email || '--'}</span>
                                         </div>
                                     </td>
                                     {attendanceMode && (
@@ -324,7 +332,7 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                             {renderCheck(courseDates.mod2Day2, "bg-orange-50")}
                                         </>
                                     )}
-                                    <td className="px-6 py-3">
+                                    <td className="px-4 py-3">
                                         <div className="flex flex-wrap gap-1">
                                             {classItems.map(item => {
                                                 const badge = getModuleBadgeForClass(student, item);
@@ -332,19 +340,20 @@ export const ClassStudentsViewer: React.FC<ClassStudentsViewerProps> = ({
                                                 return (
                                                     <div key={item.id} className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded px-1.5 py-0.5">
                                                         <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{item.city}</span>
+                                                        <span className="text-[8px] font-bold text-slate-500 bg-white border border-slate-200 px-1 rounded">T: {item.classCode || '--'}</span>
                                                         {badge}
                                                     </div>
                                                 );
                                             })}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-3"><span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border uppercase", student.stage === 'closed' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500')}>{student.stage === 'closed' ? 'Matriculado' : 'Lead'}</span></td>
+                                    <td className="px-4 py-3"><span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border uppercase", student.stage === 'closed' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500')}>{student.stage === 'closed' ? 'Matriculado' : 'Lead'}</span></td>
                                     {!attendanceMode && (
-                                        <td className="px-6 py-3 text-center print:hidden">
+                                        <td className="px-4 py-3 text-center print:hidden">
                                             {certificates[student.id] ? (
                                                 <button onClick={() => copyCertLink(certificates[student.id].hash)} className={clsx("p-1.5 rounded transition-colors text-xs font-bold", copiedLink === certificates[student.id].hash ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-400")}><CheckCircle size={14} /></button>
                                             ) : productTemplates[student.product_name || ''] ? (
-                                                <button onClick={() => handleIssueCertificate(student)} disabled={issuingFor === student.id} className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded hover:bg-amber-200 border border-amber-200 disabled:opacity-50">{issuingFor === student.id ? <Loader2 size={12} className="animate-spin" /> : <Award size={12} />} Liberar</button>
+                                                <button onClick={() => handleIssueCertificate(student)} disabled={issuingFor === student.id} className="px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-bold rounded hover:bg-amber-200 border border-amber-200 disabled:opacity-50">{issuingFor === student.id ? <Loader2 size={10} className="animate-spin" /> : <Award size={10} />} Liberar</button>
                                             ) : <span className="text-[10px] text-slate-300">N/A</span>}
                                         </td>
                                     )}

@@ -3,7 +3,7 @@ import {
   Calendar, MapPin, Users, Mic, Clock, Plus, Search, 
   MoreVertical, Edit2, Trash2, ArrowLeft, Save, X, 
   Loader2, ChevronRight, Hash, BarChart3, User, RefreshCw, Lock, Unlock, Layers, FileText,
-  FileSpreadsheet
+  FileSpreadsheet, UserMinus
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { EventModel, Workshop, EventRegistration, EventBlock } from '../types';
@@ -112,7 +112,6 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   const fetchReportData = async (eventId: string) => {
       setReportLoading(true);
       try {
-          // Simplifica a consulta removendo joins que podem falhar no Supabase se não estiverem explícitos
           const [wsRes, regsRes] = await Promise.all([
               appBackend.client.from('crm_workshops').select('*').eq('event_id', eventId),
               appBackend.client.from('crm_event_registrations').select('*').eq('event_id', eventId)
@@ -128,6 +127,35 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
       } finally {
           setReportLoading(false);
       }
+  };
+
+  const handleRemoveStudentFromEvent = async (studentId: string, studentName: string) => {
+    if (!selectedEventId) return;
+    if (!window.confirm(`Deseja remover ${studentName} deste evento? Todas as inscrições em workshops serão canceladas e as vagas liberadas.`)) return;
+    
+    setReportLoading(true);
+    try {
+        const { error } = await appBackend.client
+            .from('crm_event_registrations')
+            .delete()
+            .eq('event_id', selectedEventId)
+            .eq('student_id', studentId);
+
+        if (error) throw error;
+        
+        // Atualiza o estado local para refletir a remoção sem precisar de um novo fetch pesado
+        setRegistrations(prev => prev.filter(r => (r.student_id || r.studentId) !== studentId));
+        await appBackend.logActivity({ 
+            action: 'delete', 
+            module: 'eventos', 
+            details: `Removeu aluno ${studentName} do evento ID: ${selectedEventId}`,
+            recordId: studentId
+        });
+    } catch (e: any) {
+        alert("Erro ao remover aluno: " + e.message);
+    } finally {
+        setReportLoading(false);
+    }
   };
 
   const handleSaveEvent = async () => {
@@ -283,13 +311,11 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
       setViewMode('report');
   };
 
-  // --- REPORT AGGREGATION ---
   const studentsList = useMemo(() => {
     if (viewMode !== 'report') return [];
     const map: Record<string, any> = {};
     
     registrations.forEach(reg => {
-        // Robusto para aceitar tanto snake_case quanto camelCase
         const sId = reg.student_id || reg.studentId; 
         if (!sId) return;
 
@@ -319,7 +345,6 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
     return Object.values(map).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
   }, [registrations, workshops, viewMode]);
 
-  // --- RENDER REPORT VIEW ---
   if (viewMode === 'report' && selectedEventId) {
       const currentEvent = events.find(e => e.id === selectedEventId);
       const totalCapacity = workshops.reduce((acc, w) => acc + (w.spots || 0), 0);
@@ -350,7 +375,6 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                   </div>
               </div>
 
-              {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                   <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                       <p className="text-xs text-slate-500 font-bold uppercase">Workshops</p>
@@ -415,10 +439,12 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                                   <p className="text-xs text-slate-400 italic">Nenhum inscrito.</p>
                                               ) : (
                                                   wRegs.map(r => (
-                                                      <div key={r.id} className="flex items-center gap-2 text-sm text-slate-700 border-b border-slate-100 pb-1 last:border-0">
-                                                          <User size={12} className="text-slate-400" />
-                                                          <span className="font-medium">{r.student_name || r.studentName}</span>
-                                                          <span className="text-slate-400 text-xs">({r.student_email || r.studentEmail})</span>
+                                                      <div key={r.id} className="flex items-center justify-between text-sm text-slate-700 border-b border-slate-100 pb-1 last:border-0">
+                                                          <div className="flex items-center gap-2">
+                                                            <User size={12} className="text-slate-400" />
+                                                            <span className="font-medium">{r.student_name || r.studentName}</span>
+                                                            <span className="text-slate-400 text-xs">({r.student_email || r.studentEmail})</span>
+                                                          </div>
                                                       </div>
                                                   ))
                                               )}
@@ -439,8 +465,8 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                       <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Nome do Aluno</th>
                                       <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Email</th>
                                       <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Telefone</th>
-                                      <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Evento</th>
                                       <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Workshops Selecionados</th>
+                                      <th className="px-6 py-4 text-right">Ações</th>
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
@@ -454,13 +480,21 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                           <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-800">{s.name}</td>
                                           <td className="px-6 py-4 whitespace-nowrap text-slate-600">{s.email}</td>
                                           <td className="px-6 py-4 whitespace-nowrap font-mono text-xs text-slate-500">{s.phone}</td>
-                                          <td className="px-6 py-4 whitespace-nowrap text-slate-600">{currentEvent?.name}</td>
                                           <td className="px-6 py-4">
                                               <div className="flex flex-wrap gap-1">
                                                   {s.workshops.map((w: string, i: number) => (
                                                       <span key={i} className="bg-indigo-50 text-indigo-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-indigo-100">{w}</span>
                                                   ))}
                                               </div>
+                                          </td>
+                                          <td className="px-6 py-4 text-right">
+                                              <button 
+                                                onClick={() => handleRemoveStudentFromEvent(s.id, s.name)}
+                                                className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                title="Remover aluno do evento"
+                                              >
+                                                  <UserMinus size={16} />
+                                              </button>
                                           </td>
                                       </tr>
                                   ))}
@@ -564,7 +598,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                             </div>
                         )}
                     </div>
-                    <div className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100"><button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Fechar</button></div>
+                    <div className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0 border-t border-slate-100"><button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Fechar</button></div>
                 </div>
             </div>
         )}

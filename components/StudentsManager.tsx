@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
   Award, Eye, Download, ExternalLink, CheckCircle, Trash2, Wand2, Calendar, BookOpen, X, MonitorPlay, Zap, ChevronRight, Check, Save, FileText, ShoppingBag, CreditCard,
-  List, DollarSign, XCircle
+  List, DollarSign, XCircle, Tag, MapPin, Building, User, Briefcase, Hash, Info, Map
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { OnlineCourse } from '../types';
@@ -15,6 +14,7 @@ interface StudentsManagerProps {
 
 interface StudentDeal {
     id: string;
+    deal_number?: number;
     contact_name: string;
     company_name: string;
     cpf: string;
@@ -30,11 +30,30 @@ interface StudentDeal {
     student_access_enabled: boolean;
     class_mod_1?: string;
     class_mod_2?: string;
+    // Campos adicionais do CRM
+    source?: string;
+    campaign?: string;
+    entry_value?: number;
+    installments?: number;
+    installment_value?: number;
+    first_due_date?: string;
+    receipt_link?: string;
+    transaction_code?: string;
+    zip_code?: string;
+    address?: string;
+    address_number?: string;
+    registration_data?: string;
+    observation?: string;
+    course_state?: string;
+    course_city?: string;
+    billing_cnpj?: string;
+    billing_company_name?: string;
 }
 
 interface ItemRef {
     id: string;
     name: string;
+    isCrm: boolean;
 }
 
 interface GroupedStudent {
@@ -72,6 +91,9 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const [unlockModalStudent, setUnlockModalStudent] = useState<GroupedStudent | null>(null);
   const [studentAccessedIds, setStudentAccessedIds] = useState<string[]>([]);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
+
+  // View Only Deal State
+  const [viewingDeal, setViewingDeal] = useState<StudentDeal | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -140,7 +162,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           groups[key].deals.push(deal);
           
           const prodName = deal.product_name || 'Produto Indefinido';
-          const itemRef = { id: deal.id, name: prodName };
+          const itemRef: ItemRef = { id: deal.id, name: prodName, isCrm: true };
 
           if (deal.product_type === 'Presencial') {
               groups[key].presential.push(itemRef);
@@ -157,7 +179,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           manualCourses.forEach(cName => {
               // Verifica se já não existe na lista para não duplicar visualmente
               if (!groups[key].digital.some(d => d.name === cName)) {
-                  groups[key].digital.push({ id: `manual_${deal.id}`, name: cName });
+                  groups[key].digital.push({ id: `manual_${deal.id}`, name: cName, isCrm: false });
               }
           });
       });
@@ -316,6 +338,11 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       } catch (e: any) { alert(e.message); }
   };
 
+  const handleViewDealDetails = (dealId: string) => {
+      const deal = deals.find(d => d.id === dealId) || searchResultDeals.find(d => d.id === dealId);
+      if (deal) setViewingDeal(deal);
+  };
+
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
@@ -380,10 +407,18 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1">
                                                 {s.presential.map(p => (
-                                                    <span key={p.id} className="inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-purple-100">
+                                                    <button 
+                                                        key={p.id} 
+                                                        onClick={() => p.isCrm && handleViewDealDetails(p.id)}
+                                                        className={clsx(
+                                                            "inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-purple-100 transition-all",
+                                                            p.isCrm && "hover:bg-purple-100 hover:border-purple-300"
+                                                        )}
+                                                    >
+                                                        {p.isCrm && <span className="bg-purple-600 text-white px-1 rounded-[2px] text-[7px] mr-0.5">CRM</span>}
                                                         {p.name}
-                                                        <button onClick={() => handleDeleteItem(p.id, p.name)} className="hover:text-red-600 transition-colors"><X size={10} /></button>
-                                                    </span>
+                                                        <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />
+                                                    </button>
                                                 ))}
                                                 {s.presential.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
                                             </div>
@@ -391,10 +426,18 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1">
                                                 {s.digital.map(p => (
-                                                    <span key={p.id} className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-indigo-100">
+                                                    <button 
+                                                        key={p.id} 
+                                                        onClick={() => p.isCrm && handleViewDealDetails(p.id)}
+                                                        className={clsx(
+                                                            "inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-indigo-100 transition-all",
+                                                            p.isCrm && "hover:bg-indigo-100 hover:border-indigo-300"
+                                                        )}
+                                                    >
+                                                        {p.isCrm && <span className="bg-indigo-600 text-white px-1 rounded-[2px] text-[7px] mr-0.5">CRM</span>}
                                                         {p.name}
-                                                        {!p.id.startsWith('manual_') && <button onClick={() => handleDeleteItem(p.id, p.name)} className="hover:text-red-600 transition-colors"><X size={10} /></button>}
-                                                    </span>
+                                                        {!p.id.startsWith('manual_') && <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />}
+                                                    </button>
                                                 ))}
                                                 {s.digital.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
                                             </div>
@@ -402,10 +445,18 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1">
                                                 {s.events.map(p => (
-                                                    <span key={p.id} className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-amber-100">
+                                                    <button 
+                                                        key={p.id} 
+                                                        onClick={() => p.isCrm && handleViewDealDetails(p.id)}
+                                                        className={clsx(
+                                                            "inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-amber-100 transition-all",
+                                                            p.isCrm && "hover:bg-amber-100 hover:border-amber-300"
+                                                        )}
+                                                    >
+                                                        {p.isCrm && <span className="bg-amber-600 text-white px-1 rounded-[2px] text-[7px] mr-0.5">CRM</span>}
                                                         {p.name}
-                                                        <button onClick={() => handleDeleteItem(p.id, p.name)} className="hover:text-red-600 transition-colors"><X size={10} /></button>
-                                                    </span>
+                                                        <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />
+                                                    </button>
                                                 ))}
                                                 {s.events.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
                                             </div>
@@ -502,11 +553,12 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         </div>
                                         <div className="flex flex-col items-end gap-1">
                                             <span className={clsx(
-                                                "text-[8px] font-black px-2 py-0.5 rounded-full uppercase border",
+                                                "text-[8px] font-black px-2 py-0.5 rounded-full uppercase border flex items-center gap-1",
                                                 deal.product_type === 'Evento' ? "bg-amber-50 text-amber-700 border-amber-200" : 
                                                 deal.product_type === 'Digital' ? "bg-indigo-50 text-indigo-700 border-indigo-200" :
                                                 "bg-teal-50 text-teal-700 border-teal-200"
                                             )}>
+                                                <span className="bg-indigo-600 text-white px-1 rounded-[2px] text-[7px]">CRM</span>
                                                 {deal.product_type || 'Produto'}
                                             </span>
                                             <span className={clsx(
@@ -517,7 +569,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                             </span>
                                         </div>
                                     </div>
-                                    <h4 className="font-black text-slate-800 text-lg leading-tight mb-2">{deal.product_name || 'Produto Não Identificado'}</h4>
+                                    <h4 className="font-black text-slate-800 text-lg leading-tight mb-2 cursor-pointer hover:text-teal-600" onClick={() => handleViewDealDetails(deal.id)}>{deal.product_name || 'Produto Não Identificado'}</h4>
                                     <div className="space-y-1.5 mb-6 flex-1">
                                         <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
                                             <Calendar size={14} className="text-slate-300"/> Adquirido em: {new Date(deal.created_at).toLocaleDateString()}
@@ -582,6 +634,163 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
                     <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-3xl"><button onClick={() => setUnlockModalStudent(null)} className="px-6 py-2.5 text-slate-500 font-bold text-sm">Cancelar</button><button onClick={saveAccessChanges} disabled={isSavingAccess} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl shadow-indigo-600/20 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50">{isSavingAccess ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Acessos</button></div>
+                </div>
+            </div>
+        )}
+
+        {/* VIEW ONLY DEAL MODAL */}
+        {viewingDeal && (
+            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+                    <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-600/20"><Briefcase size={24}/></div>
+                            <div>
+                                <h3 className="text-xl font-black text-slate-800 tracking-tight">Negociação Comercial</h3>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    Nº {viewingDeal.deal_number} • <span className="text-indigo-600">Visualização de Registro</span>
+                                </p>
+                            </div>
+                        </div>
+                        <button onClick={() => setViewingDeal(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={24}/></button>
+                    </div>
+
+                    <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            
+                            {/* DADOS DO CLIENTE */}
+                            <div className="lg:col-span-3">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 border-b pb-2"><User size={14}/> Dados do Cliente</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div className="lg:col-span-2">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Nome / Empresa</p>
+                                        <p className="text-sm font-bold text-slate-800">{viewingDeal.company_name || viewingDeal.contact_name}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">CPF</p>
+                                        <p className="text-sm font-bold text-slate-800">{formatCPF(viewingDeal.cpf) || '--'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">E-mail</p>
+                                        <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5"><Mail size={12} className="text-slate-300"/> {viewingDeal.email || '--'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Telefone</p>
+                                        <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5"><Phone size={12} className="text-slate-300"/> {viewingDeal.phone || '--'}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* DADOS DA COMPRA */}
+                            <div className="lg:col-span-3">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 border-b pb-2"><ShoppingBag size={14}/> Detalhes da Compra</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                    <div className="lg:col-span-2">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Produto / Curso</p>
+                                        <p className="text-sm font-bold text-indigo-700">{viewingDeal.product_name || '--'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Tipo</p>
+                                        <p className="text-sm font-bold text-slate-800">{viewingDeal.product_type || '--'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Valor Total</p>
+                                        <p className="text-sm font-black text-green-700">{formatCurrency(viewingDeal.value)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Data Venda</p>
+                                        <p className="text-sm font-bold text-slate-800">{new Date(viewingDeal.created_at).toLocaleDateString()}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Forma Pagto.</p>
+                                        <p className="text-sm font-bold text-slate-800">{viewingDeal.payment_method || '--'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Entrada</p>
+                                        <p className="text-sm font-bold text-slate-800">{formatCurrency(viewingDeal.entry_value || 0)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Parcelamento</p>
+                                        <p className="text-sm font-bold text-slate-800">{viewingDeal.installments || 1}x {formatCurrency(viewingDeal.installment_value || 0)}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* TURMA E LOCALIZAÇÃO */}
+                            {(viewingDeal.class_mod_1 || viewingDeal.course_city) && (
+                                <div className="lg:col-span-3">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 border-b pb-2"><MapPin size={14}/> Turma e Localização</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div>
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Cidade / UF</p>
+                                            <p className="text-sm font-bold text-slate-800">{viewingDeal.course_city || '--'} / {viewingDeal.course_state || '--'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Cód. Turma Mod 1</p>
+                                            <p className="text-sm font-mono font-bold text-slate-600">{viewingDeal.class_mod_1 || '--'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Cód. Turma Mod 2</p>
+                                            <p className="text-sm font-mono font-bold text-slate-600">{viewingDeal.class_mod_2 || '--'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* DADOS DE FATURAMENTO */}
+                            <div className="lg:col-span-3">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 border-b pb-2"><Building size={14}/> Faturamento Interno</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Empresa</p>
+                                        <p className="text-sm font-bold text-slate-800">{viewingDeal.billing_company_name || '--'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">CNPJ</p>
+                                        <p className="text-sm font-mono font-bold text-slate-800">{viewingDeal.billing_cnpj || '--'}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* ADMIN E STATUS */}
+                            <div className="lg:col-span-3">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 border-b pb-2"><Hash size={14}/> Administrativo</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Status</p>
+                                        <span className="text-xs font-black bg-slate-100 px-2 py-0.5 rounded border uppercase">{viewingDeal.status}</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Etapa Funil</p>
+                                        <span className="text-xs font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100 uppercase">{viewingDeal.stage}</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Fonte</p>
+                                        <p className="text-sm font-bold text-slate-800">{viewingDeal.source || '--'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Campanha</p>
+                                        <p className="text-sm font-bold text-slate-800">{viewingDeal.campaign || '--'}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* OBSERVAÇÕES */}
+                            {viewingDeal.observation && (
+                                <div className="lg:col-span-3">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Info size={14}/> Observações</h4>
+                                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 text-sm text-amber-900 leading-relaxed italic whitespace-pre-wrap">
+                                        {viewingDeal.observation}
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    </div>
+
+                    <div className="px-10 py-6 bg-slate-50 border-t flex justify-end shrink-0 rounded-b-3xl">
+                        <button onClick={() => setViewingDeal(null)} className="bg-slate-800 hover:bg-slate-900 text-white px-10 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg active:scale-95">Fechar Visualização</button>
+                    </div>
                 </div>
             </div>
         )}

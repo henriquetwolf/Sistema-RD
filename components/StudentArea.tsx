@@ -32,6 +32,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [eventWorkshops, setEventWorkshops] = useState<Workshop[]>([]);
     const [eventBlocks, setEventBlocks] = useState<EventBlock[]>([]);
     const [myRegistrations, setMyRegistrations] = useState<EventRegistration[]>([]);
+    const [allEventRegistrations, setAllEventRegistrations] = useState<Record<string, number>>({});
     const [isRegistering, setIsRegistering] = useState<string | null>(null);
 
     // Online Courses State
@@ -131,15 +132,16 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             setEventWorkshops(ws);
             setEventBlocks(blks);
             
-            // Filtro Híbrido: Compara por ID de Negócio (todos do aluno) OU por e-mail
-            // Usamos String() para garantir que comparações entre IDs numéricos e UUIDs funcionem
+            // Mapeia ocupação de cada workshop
+            const occupationMap: Record<string, number> = {};
+            regs.forEach(r => {
+                occupationMap[r.workshopId] = (occupationMap[r.workshopId] || 0) + 1;
+            });
+            setAllEventRegistrations(occupationMap);
+
+            // Filtro por email (Chave mais estável)
             const userEmail = (student.email || '').toLowerCase().trim();
-            setMyRegistrations(regs.filter(r => {
-                const regEmail = (r.studentEmail || '').toLowerCase().trim();
-                const isEmailMatch = regEmail !== '' && regEmail === userEmail;
-                const isIdMatch = studentDealIds.includes(String(r.studentId));
-                return isEmailMatch || isIdMatch;
-            }));
+            setMyRegistrations(regs.filter(r => (r.studentEmail || '').toLowerCase().trim() === userEmail));
         } catch (e) {
             console.error(e);
         } finally {
@@ -148,9 +150,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     };
 
     const handleToggleRegistration = async (workshop: Workshop) => {
-        if (!mainDealId) return;
+        if (!mainDealId || !viewingEvent) return;
         
-        // Comparação robusta de ID para verificar se já está inscrito
         const currentReg = myRegistrations.find(r => String(r.workshopId) === String(workshop.id));
         const isRegistered = !!currentReg;
         
@@ -158,10 +159,14 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             if (!window.confirm("Deseja cancelar sua inscrição neste workshop?")) return;
             setIsRegistering(workshop.id);
             try {
-                if (currentReg) {
-                    await appBackend.client.from('crm_event_registrations').delete().eq('id', currentReg.id);
-                    setMyRegistrations(prev => prev.filter(r => r.id !== currentReg.id));
-                }
+                const { error } = await appBackend.client.from('crm_event_registrations').delete().eq('id', currentReg.id);
+                if (error) throw error;
+                
+                setMyRegistrations(prev => prev.filter(r => r.id !== currentReg.id));
+                setAllEventRegistrations(prev => ({
+                    ...prev,
+                    [workshop.id]: Math.max(0, (prev[workshop.id] || 1) - 1)
+                }));
             } catch (e) { alert("Erro ao cancelar."); }
             finally { setIsRegistering(null); }
         } else {
@@ -177,18 +182,18 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 return;
             }
 
-            // Verificar vagas no banco
+            // Verificar vagas restantes
+            const currentOccupancy = allEventRegistrations[workshop.id] || 0;
+            if (currentOccupancy >= workshop.spots) {
+                alert("Desculpe, este workshop já está lotado.");
+                return;
+            }
+
             setIsRegistering(workshop.id);
             try {
-                const { data: currentRegs } = await appBackend.client.from('crm_event_registrations').select('id').eq('workshop_id', workshop.id);
-                if (currentRegs && currentRegs.length >= workshop.spots) {
-                    alert("Desculpe, este workshop já está lotado.");
-                    return;
-                }
-
                 const dbPayload = {
                     id: crypto.randomUUID(),
-                    event_id: viewingEvent!.id,
+                    event_id: viewingEvent.id,
                     workshop_id: workshop.id,
                     student_id: mainDealId,
                     student_name: student.name,
@@ -196,10 +201,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     registered_at: new Date().toISOString()
                 };
                 
-                await appBackend.client.from('crm_event_registrations').insert([dbPayload]);
+                const { error } = await appBackend.client.from('crm_event_registrations').insert([dbPayload]);
+                if (error) throw error;
                 
-                // Atualiza estado local garantindo a estrutura correta para o filter do handleOpenEventProgram
-                setMyRegistrations(prev => [...prev, {
+                const newReg = {
                     id: dbPayload.id,
                     eventId: dbPayload.event_id,
                     workshopId: String(dbPayload.workshop_id),
@@ -207,7 +212,13 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     studentName: dbPayload.student_name,
                     studentEmail: dbPayload.student_email,
                     registeredAt: dbPayload.registered_at
-                }]);
+                };
+
+                setMyRegistrations(prev => [...prev, newReg]);
+                setAllEventRegistrations(prev => ({
+                    ...prev,
+                    [workshop.id]: (prev[workshop.id] || 0) + 1
+                }));
             } catch (e) { alert("Erro ao realizar inscrição."); }
             finally { setIsRegistering(null); }
         }
@@ -508,7 +519,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
                         { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length }
                     ].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("flex-1 min-w-[140px] py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
                             {tab.label}
                             {tab.badge ? (
@@ -722,14 +733,17 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     {blockWS.map(ws => {
                                                         const isSelected = myRegistrations.some(r => String(r.workshopId) === String(ws.id));
-                                                        const isDisabled = isRegistering !== null || (!isSelected && myBlockRegs.length >= block.maxSelections);
+                                                        const currentOccupancy = allEventRegistrations[ws.id] || 0;
+                                                        const remainingSpots = Math.max(0, ws.spots - currentOccupancy);
+                                                        const isDisabled = isRegistering !== null || (!isSelected && (myBlockRegs.length >= block.maxSelections || remainingSpots <= 0));
                                                         
                                                         return (
                                                             <div 
                                                                 key={ws.id} 
                                                                 className={clsx(
                                                                     "p-5 rounded-3xl border-2 transition-all flex flex-col group",
-                                                                    isSelected ? "border-teal-500 bg-teal-50/30" : "border-slate-100 hover:border-indigo-200 bg-white"
+                                                                    isSelected ? "border-teal-500 bg-teal-50/30" : "border-slate-100 hover:border-indigo-200 bg-white",
+                                                                    !isSelected && remainingSpots <= 0 && "opacity-60 grayscale"
                                                                 )}
                                                             >
                                                                 <div className="flex justify-between items-start mb-4">
@@ -739,8 +753,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                                         </div>
                                                                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{ws.time}</span>
                                                                     </div>
-                                                                    <div className="flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase">
-                                                                        <Users size={12}/> {ws.spots} Vagas
+                                                                    <div className={clsx("flex items-center gap-1 text-[10px] font-black uppercase", remainingSpots <= 5 ? "text-red-500" : "text-slate-400")}>
+                                                                        <Users size={12}/> {remainingSpots} / {ws.spots} Vagas Restantes
                                                                     </div>
                                                                 </div>
                                                                 <h5 className="font-black text-slate-800 text-base mb-1 leading-tight">{ws.title}</h5>
@@ -752,10 +766,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                                     disabled={isDisabled && !isSelected}
                                                                     className={clsx(
                                                                         "mt-auto w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2",
-                                                                        isSelected ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none"
+                                                                        isSelected ? "bg-red-50 text-red-600 hover:bg-red-100" : remainingSpots <= 0 ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none"
                                                                     )}
                                                                 >
-                                                                    {isRegistering === ws.id ? <Loader2 size={14} className="animate-spin"/> : isSelected ? "Cancelar Inscrição" : "Confirmar Presença"}
+                                                                    {isRegistering === ws.id ? <Loader2 size={14} className="animate-spin"/> : remainingSpots <= 0 && !isSelected ? "Esgotado" : isSelected ? "Cancelar Inscrição" : "Confirmar Presença"}
                                                                 </button>
                                                             </div>
                                                         );

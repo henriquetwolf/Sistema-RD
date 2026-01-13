@@ -21,6 +21,7 @@ interface Contact {
   state?: string;
   pipeline?: string;
   stage?: string;
+  franchiseStatus?: string;
 }
 
 interface WAConfig {
@@ -57,6 +58,10 @@ export const BulkWhatsAppSender: React.FC = () => {
   // Filter States for Studios
   const [filterStudioState, setFilterStudioState] = useState<string>('');
 
+  // Filter States for Franchises
+  const [filterFranchiseStatus, setFilterFranchiseStatus] = useState<string>('');
+  const [filterFranchiseState, setFilterFranchiseState] = useState<string>('');
+
   // Config States
   const [config, setConfig] = useState<WAConfig>({
       mode: 'evolution',
@@ -89,6 +94,8 @@ export const BulkWhatsAppSender: React.FC = () => {
       setFilterStage('');
       setFilterTeacherLevel('');
       setFilterStudioState('');
+      setFilterFranchiseStatus('');
+      setFilterFranchiseState('');
       fetchContacts(selectedAudience);
     }
   }, [selectedAudience, activeSubTab]);
@@ -212,7 +219,7 @@ export const BulkWhatsAppSender: React.FC = () => {
           error = resT.error;
           break;
         case 'franchises':
-          const resF = await appBackend.client.from('crm_franchises').select('id, franchisee_name, phone, email').order('franchisee_name');
+          const resF = await appBackend.client.from('crm_franchises').select('id, franchisee_name, phone, email, studio_status, commercial_state').order('franchisee_name');
           data = resF.data || [];
           error = resF.error;
           break;
@@ -233,9 +240,10 @@ export const BulkWhatsAppSender: React.FC = () => {
         productType: item.product_type || '',
         productName: item.product_name || '',
         teacherLevel: item.teacher_level || '',
-        state: item.state || '',
+        state: item.state || item.commercial_state || '',
         pipeline: item.pipeline || '',
-        stage: item.stage || ''
+        stage: item.stage || '',
+        franchiseStatus: item.studio_status || ''
       })).filter(c => c.phone.length >= 10);
 
       setContacts(mapped);
@@ -266,9 +274,14 @@ export const BulkWhatsAppSender: React.FC = () => {
               const matchesState = !filterStudioState || c.state === filterStudioState;
               return matchesState;
           }
+          if (selectedAudience === 'franchises') {
+              const matchesStatus = !filterFranchiseStatus || c.franchiseStatus === filterFranchiseStatus;
+              const matchesState = !filterFranchiseState || c.state === filterFranchiseState;
+              return matchesStatus && matchesState;
+          }
           return true;
       });
-  }, [contacts, selectedAudience, filterType, filterProduct, filterPipeline, filterStage, filterTeacherLevel, filterStudioState]);
+  }, [contacts, selectedAudience, filterType, filterProduct, filterPipeline, filterStage, filterTeacherLevel, filterStudioState, filterFranchiseStatus, filterFranchiseState]);
 
   const studentTypeOptions = useMemo(() => {
       if (selectedAudience !== 'students' && selectedAudience !== 'leads') return [];
@@ -304,6 +317,16 @@ export const BulkWhatsAppSender: React.FC = () => {
   const studioStateOptions = useMemo(() => {
       if (selectedAudience !== 'studios') return [];
       return Array.from(new Set(contacts.map(c => c.state).filter(Boolean))).sort();
+  }, [contacts, selectedAudience]);
+
+  const franchiseStatusOptions = useMemo(() => {
+    if (selectedAudience !== 'franchises') return [];
+    return Array.from(new Set(contacts.map(c => c.franchiseStatus).filter(Boolean))).sort();
+  }, [contacts, selectedAudience]);
+
+  const franchiseStateOptions = useMemo(() => {
+    if (selectedAudience !== 'franchises') return [];
+    return Array.from(new Set(contacts.map(c => c.state).filter(Boolean))).sort();
   }, [contacts, selectedAudience]);
 
   const handleToggleSelect = (id: string) => {
@@ -484,6 +507,38 @@ export const BulkWhatsAppSender: React.FC = () => {
                   </div>
               )}
 
+              {selectedAudience === 'franchises' && (
+                  <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <Filter size={14} className="text-indigo-500"/> Filtros para Franquias
+                      </h4>
+                      <div className="space-y-3">
+                          <div className="relative">
+                              <CheckCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                              <select 
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                                value={filterFranchiseStatus}
+                                onChange={e => setFilterFranchiseStatus(e.target.value)}
+                              >
+                                  <option value="">Todos os Status</option>
+                                  {franchiseStatusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                          </div>
+                          <div className="relative">
+                              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                              <select 
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                                value={filterFranchiseState}
+                                onChange={e => setFilterFranchiseState(e.target.value)}
+                              >
+                                  <option value="">Todos os Estados</option>
+                                  {franchiseStateOptions.map(st => <option key={st} value={st}>{st}</option>)}
+                              </select>
+                          </div>
+                      </div>
+                  </div>
+              )}
+
               {selectedAudience === 'studios' && (
                   <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
@@ -657,6 +712,9 @@ export const BulkWhatsAppSender: React.FC = () => {
                                 )}
                                 {selectedAudience === 'studios' && c.state && (
                                     <span className="text-[8px] font-black text-teal-500 uppercase tracking-widest block truncate max-w-[150px]">{c.state}</span>
+                                )}
+                                {selectedAudience === 'franchises' && c.franchiseStatus && (
+                                    <span className="text-[8px] font-black text-teal-600 uppercase tracking-widest block truncate max-w-[150px]">{c.franchiseStatus}</span>
                                 )}
                             </div>
                           </div>

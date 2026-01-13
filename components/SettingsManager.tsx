@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Upload, Image as ImageIcon, CheckCircle, Save, Database, 
@@ -204,7 +203,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V63 (INCLUDES AUTOMATION TABLES)
+-- SCRIPT DE FUNDAÇÃO CRM V64 (INCLUDES LOCK COLUMN)
 CREATE TABLE IF NOT EXISTS public.crm_teacher_levels (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text NOT NULL,
@@ -236,6 +235,9 @@ CREATE TABLE IF NOT EXISTS public.crm_wa_automation_logs (
     message text,
     created_at timestamp with time zone DEFAULT now()
 );
+
+-- Adiciona coluna de bloqueio de escolhas para alunos em eventos
+ALTER TABLE IF EXISTS public.crm_event_registrations ADD COLUMN IF NOT EXISTS locked boolean DEFAULT false;
 
 -- Garante que a coluna de honorarium esteja no formato correto
 ALTER TABLE IF EXISTS public.crm_teacher_levels ALTER COLUMN honorarium SET DEFAULT 0;
@@ -525,8 +527,8 @@ NOTIFY pgrst, 'reload schema';
 
         {activeTab === 'sql_script' && (
             <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 animate-in zoom-in-95 duration-200">
-                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V63</h3></div>
-                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados para os níveis de instrutores e tabelas de automação. Copie e execute no **SQL Editor** do Supabase.</p>
+                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V64</h3></div>
+                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados para os níveis de instrutores e tabelas de automação e bloqueio de eventos. Copie e execute no **SQL Editor** do Supabase.</p>
                 <div className="relative">
                     <pre className="bg-black text-emerald-400 p-6 rounded-2xl text-[10px] font-mono overflow-auto max-h-[400px] shadow-inner custom-scrollbar-dark border border-slate-800">
                         {generateRepairSQL()}

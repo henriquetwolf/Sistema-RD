@@ -1,5 +1,6 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, Award, ExternalLink, Calendar, MapPin, 
@@ -20,6 +21,7 @@ interface StudentAreaProps {
 export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) => {
     const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts'>('classes');
     const [classes, setClasses] = useState<any[]>([]);
+    const [eventsList, setEventsList] = useState<EventModel[]>([]);
     const [certificates, setCertificates] = useState<any[]>([]);
     const [banners, setBanners] = useState<Banner[]>([]);
     const [pendingContracts, setPendingContracts] = useState<Contract[]>([]);
@@ -45,6 +47,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         loadBaseData();
         loadBanners();
         loadOnlineCourses();
+        loadEvents();
         fetchSupportNotifications();
         fetchPendingContracts();
     }, [student]);
@@ -55,6 +58,9 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         }
         if (activeTab === 'contracts') {
             fetchPendingContracts();
+        }
+        if (activeTab === 'events') {
+            loadEvents();
         }
     }, [activeTab]);
 
@@ -90,6 +96,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             setCertificates(issuedCerts || []);
         } catch (err) {
             console.error("Erro ao carregar diplomas:", err);
+        }
+    };
+
+    const loadEvents = async () => {
+        try {
+            const data = await appBackend.getEvents();
+            setEventsList(data || []);
+        } catch (e) {
+            console.error("Erro ao carregar eventos:", e);
         }
     };
 
@@ -467,6 +482,37 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                     </div>
                                 );
                             })}
+                        </div>
+                    )}
+
+                    {activeTab === 'events' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {eventsList.length === 0 ? (
+                                <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300">
+                                    <Mic size={48} className="mb-4 opacity-20"/> 
+                                    <p className="font-bold">Nenhum evento disponível no momento.</p>
+                                </div>
+                            ) : eventsList.map(evt => (
+                                <div key={evt.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all flex flex-col border-b-8 border-b-amber-500">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="p-3 bg-amber-50 rounded-2xl text-amber-600">
+                                            <Mic size={24} />
+                                        </div>
+                                        {evt.registrationOpen && (
+                                            <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-[10px] font-black uppercase">Inscrições Abertas</span>
+                                        )}
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-800 mb-2 leading-tight">{evt.name}</h3>
+                                    <p className="text-xs text-slate-500 mb-6 line-clamp-2">{evt.description}</p>
+                                    <div className="space-y-2 mb-8">
+                                        <div className="flex items-center gap-2 text-xs text-slate-600 font-bold"><MapPin size={14} className="text-amber-500" /> {evt.location}</div>
+                                        <div className="flex items-center gap-2 text-xs text-slate-600 font-bold"><Calendar size={14} className="text-amber-500" /> {evt.dates?.length > 0 ? `${evt.dates.length} dia(s) de evento` : 'Data a definir'}</div>
+                                    </div>
+                                    <button className="mt-auto w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all active:scale-95 shadow-lg">
+                                        Ver Programação / Inscrição
+                                    </button>
+                                </div>
+                            ))}
                         </div>
                     )}
 

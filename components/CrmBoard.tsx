@@ -290,7 +290,7 @@ export const CrmBoard: React.FC = () => {
    */
   const triggerWhatsAppAutomation = async (deal: any) => {
     // IMPORTANTE: deal aqui é o retorno direto do Supabase (snake_case)
-    const phone = deal.phone || deal.contact_phone;
+    const phone = deal.phone || deal.contact_phone || deal.cellphone;
     if (!phone) return;
 
     try {
@@ -321,20 +321,26 @@ export const CrmBoard: React.FC = () => {
             message = message.replace(/\{\{nome_cliente\}\}/gi, clientName);
             message = message.replace(/\{\{curso\}\}/gi, courseName);
 
-            // Envio via Evolution API
-            const cleanPhone = phone.replace(/\D/g, '');
-            await whatsappService.sendTextMessage({ 
-                wa_id: cleanPhone,
-                contact_phone: cleanPhone
-            }, message);
+            try {
+                // Envio via Evolution API
+                const cleanPhone = phone.replace(/\D/g, '');
+                await whatsappService.sendTextMessage({ 
+                    wa_id: cleanPhone,
+                    contact_phone: cleanPhone
+                }, message);
 
-            // Registrar log de disparo
-            await appBackend.client.from('crm_wa_automation_logs').insert([{
-                rule_name: rule.name,
-                student_name: clientName,
-                phone: phone,
-                message: message
-            }]);
+                // Registrar log de disparo
+                const { error: logError } = await appBackend.client.from('crm_wa_automation_logs').insert([{
+                    rule_name: rule.name,
+                    student_name: clientName,
+                    phone: phone,
+                    message: message
+                }]);
+                
+                if (logError) console.error("Erro ao gravar log de automação:", logError);
+            } catch (sendErr) {
+                console.error("Falha ao enviar mensagem ou gravar log:", sendErr);
+            }
         }
     } catch (err) {
         console.error("Erro ao processar automação de WhatsApp:", err);
@@ -650,10 +656,10 @@ export const CrmBoard: React.FC = () => {
           next_task: dealFormData.nextTask, source: dealFormData.source, campaign: dealFormData.campaign, entry_value: Number(dealFormData.entryValue) || 0,
           installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installmentValue || 0),
           product_type: dealFormData.productType || null, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
-          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode,
-          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber, registration_data: dealFormData.registrationData,
-          observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
-          class_mod_1: dealFormData.classMod1, class_mod_2: dealFormData.classMod2, pipeline: dealFormData.pipeline, 
+          cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receipt_link, transaction_code: dealFormData.transaction_code,
+          zip_code: dealFormData.zip_code, address: dealFormData.address, address_number: dealFormData.address_number, registration_data: dealFormData.registration_data,
+          observation: dealFormData.observation, course_state: dealFormData.course_state, course_city: dealFormData.course_city, 
+          class_mod_1: dealFormData.class_mod_1, class_mod_2: dealFormData.class_mod_2, pipeline: dealFormData.pipeline, 
           tasks: dealFormData.tasks || [], billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName
       };
       try {
@@ -911,7 +917,7 @@ export const CrmBoard: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {allPendingTasks.length === 0 ? (
-                                    <tr><td colSpan={6} className="p-20 text-center text-slate-400 italic">Nenhum agendamento pendente.</td></tr>
+                                    <tr><td colSpan={6} className="py-20 text-center text-slate-400 italic">Nenhum agendamento pendente.</td></tr>
                                 ) : allPendingTasks.map(task => {
                                     const isOverdue = task.dueDate < new Date().toISOString().split('T')[0];
                                     const isToday = task.dueDate === new Date().toISOString().split('T')[0];
@@ -1068,7 +1074,7 @@ export const CrmBoard: React.FC = () => {
                   </div>
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                       <button onClick={() => setShowTeamModal(false)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button>
-                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all">
+                      <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition-all">
                           {isSavingTeam ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                           Salvar Equipe
                       </button>

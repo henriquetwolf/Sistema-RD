@@ -179,7 +179,6 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: Access properties from FormModel using camelCase (isLeadCapture, distributionMode, fixedOwnerId, teamId, targetPipeline, targetStage, folderId)
     await supabase.from('crm_forms').upsert({
       id: (form.id && form.id.length > 10) ? form.id : crypto.randomUUID(),
       title: form.title, description: form.description, campaign: form.campaign, is_lead_capture: form.isLeadCapture, distribution_mode: form.distributionMode, fixed_owner_id: form.fixedOwnerId || null, team_id: form.teamId || null, target_pipeline: form.targetPipeline, target_stage: form.targetStage, questions: form.questions, style: form.style, folder_id: form.folderId || null, created_at: form.createdAt || new Date().toISOString(), type: 'form'
@@ -188,7 +187,6 @@ export const appBackend = {
 
   saveSurvey: async (survey: SurveyModel): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: Access properties from SurveyModel using camelCase (isLeadCapture, distributionMode, folderId, targetAudience, targetType, targetProductType, targetProductName, onlyIfFinished)
     await supabase.from('crm_forms').upsert({
       id: (survey.id && survey.id.length > 10) ? survey.id : crypto.randomUUID(),
       title: survey.title, description: survey.description, campaign: survey.campaign, is_lead_capture: survey.isLeadCapture, distribution_mode: survey.distributionMode, questions: survey.questions, style: survey.style, folder_id: survey.folderId, target_audience: survey.targetAudience, target_type: survey.targetType, target_product_type: survey.targetProductType, target_product_name: survey.targetProductName, only_if_finished: survey.onlyIfFinished, is_active: survey.isActive, type: 'survey', created_at: survey.createdAt || new Date().toISOString()
@@ -701,7 +699,7 @@ export const appBackend = {
   getEvents: async (): Promise<EventModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, description: item.description, location: item.location, dates: item.dates || [], createdAt: item.created_at, registration_open: item.registration_open }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name, description: item.description, location: item.location, dates: item.dates || [], createdAt: item.created_at, registrationOpen: item.registration_open }));
   },
 
   saveEvent: async (event: EventModel): Promise<EventModel> => {
@@ -807,7 +805,7 @@ export const appBackend = {
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, openInstallments: item.open_installments, totalNegotiatedValue: item.total_negotiated_value, totalInstallments: item.total_installments, dueDate: item.due_date, responsibleAgent: item.responsible_agent, identifierCode: item.identifier_code, fullName: item.full_name, productName: item.product_name, originalValue: item.original_value, paymentMethod: item.payment_method, observations: item.observations, status: item.status, team: item.team, voucherLink1: item.voucher_link_1, testDate: item.test_date, voucherLink2: item.voucher_link_2, voucherLink3: item.voucher_link_3, boletos_link: item.boletos_link, negotiationReference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, openInstallments: item.open_installments, totalNegotiatedValue: item.total_negotiated_value, totalInstallments: item.total_installments, dueDate: item.due_date, responsibleAgent: item.responsible_agent, identifierCode: item.identifier_code, fullName: item.full_name, productName: item.product_name, originalValue: item.original_value, paymentMethod: item.payment_method, observations: item.observations, status: item.status, team: item.team, voucherLink1: item.voucher_link_1, testDate: item.test_date, voucherLink2: item.voucher_link_2, voucherLink3: item.voucher_link_3, boletosLink: item.boletos_link, negotiationReference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at }));
   },
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {

@@ -2,13 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Send, Users, School, Store, Building2, MessageSquare, 
   Loader2, CheckCircle2, AlertCircle, Info, RefreshCw, X, Play, Pause, ChevronRight,
-  Zap, History, Settings, Smartphone, Wifi, WifiOff, Save, Link2, Copy, Image as ImageIcon, Filter, Tag, ShoppingBag, Award, MapPin
+  Zap, History, Settings, Smartphone, Wifi, WifiOff, Save, Link2, Copy, Image as ImageIcon, Filter, Tag, ShoppingBag, Award, MapPin, Kanban, Target, UserX
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { whatsappService } from '../services/whatsappService';
 
-type AudienceType = 'students' | 'teachers' | 'franchises' | 'studios';
+type AudienceType = 'students' | 'teachers' | 'franchises' | 'studios' | 'leads';
 
 interface Contact {
   id: string;
@@ -19,6 +19,8 @@ interface Contact {
   productName?: string;
   teacherLevel?: string;
   state?: string;
+  pipeline?: string;
+  stage?: string;
 }
 
 interface WAConfig {
@@ -43,9 +45,11 @@ export const BulkWhatsAppSender: React.FC = () => {
   const [logs, setLogs] = useState<{ name: string, status: 'success' | 'error', message: string }[]>([]);
   const [isPaused, setIsPaused] = useState(false);
 
-  // Filter States for Students
+  // Filter States for Students/Leads
   const [filterType, setFilterType] = useState<string>('');
   const [filterProduct, setFilterProduct] = useState<string>('');
+  const [filterPipeline, setFilterPipeline] = useState<string>('');
+  const [filterStage, setFilterStage] = useState<string>('');
   
   // Filter States for Teachers
   const [filterTeacherLevel, setFilterTeacherLevel] = useState<string>('');
@@ -70,7 +74,8 @@ export const BulkWhatsAppSender: React.FC = () => {
   const [connLogs, setConnLogs] = useState<string[]>([]);
 
   const audiences = [
-    { id: 'students', label: 'Alunos / Leads', icon: Users, color: 'text-purple-600', bg: 'bg-purple-50' },
+    { id: 'students', label: 'Alunos Matriculados', icon: Users, color: 'text-purple-600', bg: 'bg-purple-50' },
+    { id: 'leads', label: 'Leads (Não Comprados)', icon: UserX, color: 'text-red-600', bg: 'bg-red-50' },
     { id: 'teachers', label: 'Professores', icon: School, color: 'text-orange-600', bg: 'bg-orange-50' },
     { id: 'franchises', label: 'Franquias', icon: Store, color: 'text-teal-600', bg: 'bg-teal-50' },
     { id: 'studios', label: 'Studios Parceiros', icon: Building2, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -80,6 +85,8 @@ export const BulkWhatsAppSender: React.FC = () => {
     if (selectedAudience && activeSubTab === 'sender') {
       setFilterType('');
       setFilterProduct('');
+      setFilterPipeline('');
+      setFilterStage('');
       setFilterTeacherLevel('');
       setFilterStudioState('');
       fetchContacts(selectedAudience);
@@ -190,9 +197,14 @@ export const BulkWhatsAppSender: React.FC = () => {
 
       switch (type) {
         case 'students':
-          const resS = await appBackend.client.from('crm_deals').select('id, contact_name, company_name, phone, email, product_type, product_name').order('contact_name');
+          const resS = await appBackend.client.from('crm_deals').select('id, contact_name, company_name, phone, email, product_type, product_name, pipeline, stage').eq('stage', 'closed').order('contact_name');
           data = resS.data || [];
           error = resS.error;
+          break;
+        case 'leads':
+          const resL = await appBackend.client.from('crm_deals').select('id, contact_name, company_name, phone, email, product_type, product_name, pipeline, stage').neq('stage', 'closed').order('contact_name');
+          data = resL.data || [];
+          error = resL.error;
           break;
         case 'teachers':
           const resT = await appBackend.client.from('crm_teachers').select('id, full_name, phone, email, teacher_level').eq('is_active', true).order('full_name');
@@ -221,7 +233,9 @@ export const BulkWhatsAppSender: React.FC = () => {
         productType: item.product_type || '',
         productName: item.product_name || '',
         teacherLevel: item.teacher_level || '',
-        state: item.state || ''
+        state: item.state || '',
+        pipeline: item.pipeline || '',
+        stage: item.stage || ''
       })).filter(c => c.phone.length >= 10);
 
       setContacts(mapped);
@@ -237,10 +251,12 @@ export const BulkWhatsAppSender: React.FC = () => {
 
   const filteredContactsList = useMemo(() => {
       return contacts.filter(c => {
-          if (selectedAudience === 'students') {
+          if (selectedAudience === 'students' || selectedAudience === 'leads') {
               const matchesType = !filterType || c.productType === filterType;
               const matchesProduct = !filterProduct || c.productName === filterProduct;
-              return matchesType && matchesProduct;
+              const matchesPipeline = !filterPipeline || c.pipeline === filterPipeline;
+              const matchesStage = !filterStage || c.stage === filterStage;
+              return matchesType && matchesProduct && matchesPipeline && matchesStage;
           }
           if (selectedAudience === 'teachers') {
               const matchesLevel = !filterTeacherLevel || c.teacherLevel === filterTeacherLevel;
@@ -252,20 +268,33 @@ export const BulkWhatsAppSender: React.FC = () => {
           }
           return true;
       });
-  }, [contacts, selectedAudience, filterType, filterProduct, filterTeacherLevel, filterStudioState]);
+  }, [contacts, selectedAudience, filterType, filterProduct, filterPipeline, filterStage, filterTeacherLevel, filterStudioState]);
 
   const studentTypeOptions = useMemo(() => {
-      if (selectedAudience !== 'students') return [];
+      if (selectedAudience !== 'students' && selectedAudience !== 'leads') return [];
       return Array.from(new Set(contacts.map(c => c.productType).filter(Boolean))).sort();
   }, [contacts, selectedAudience]);
 
   const studentProductOptions = useMemo(() => {
-      if (selectedAudience !== 'students') return [];
+      if (selectedAudience !== 'students' && selectedAudience !== 'leads') return [];
       const filteredForOptions = filterType 
           ? contacts.filter(c => c.productType === filterType)
           : contacts;
       return Array.from(new Set(filteredForOptions.map(c => c.productName).filter(Boolean))).sort();
   }, [contacts, selectedAudience, filterType]);
+
+  const pipelineOptions = useMemo(() => {
+      if (selectedAudience !== 'students' && selectedAudience !== 'leads') return [];
+      return Array.from(new Set(contacts.map(c => c.pipeline).filter(Boolean))).sort();
+  }, [contacts, selectedAudience]);
+
+  const stageOptions = useMemo(() => {
+      if (selectedAudience !== 'students' && selectedAudience !== 'leads') return [];
+      const filteredForOptions = filterPipeline 
+          ? contacts.filter(c => c.pipeline === filterPipeline)
+          : contacts;
+      return Array.from(new Set(filteredForOptions.map(c => c.stage).filter(Boolean))).sort();
+  }, [contacts, selectedAudience, filterPipeline]);
 
   const teacherLevelOptions = useMemo(() => {
       if (selectedAudience !== 'teachers') return [];
@@ -375,15 +404,15 @@ export const BulkWhatsAppSender: React.FC = () => {
                     )}
                   >
                     <aud.icon size={24} className={selectedAudience === aud.id ? "text-orange-600" : aud.color} />
-                    <span className="text-[10px] font-black uppercase tracking-tight">{aud.label}</span>
+                    <span className="text-[10px] font-black uppercase tracking-tight leading-tight">{aud.label}</span>
                   </button>
                 ))}
               </div>
 
-              {selectedAudience === 'students' && (
+              {(selectedAudience === 'students' || selectedAudience === 'leads') && (
                   <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <Filter size={14} className="text-indigo-500"/> Filtros para Alunos
+                          <Filter size={14} className="text-indigo-500"/> Filtros para {selectedAudience === 'students' ? 'Alunos' : 'Leads'}
                       </h4>
                       <div className="space-y-3">
                           <div className="relative">
@@ -406,6 +435,28 @@ export const BulkWhatsAppSender: React.FC = () => {
                               >
                                   <option value="">Todos os Cursos/Produtos</option>
                                   {studentProductOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                              </select>
+                          </div>
+                          <div className="relative">
+                              <Kanban className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                              <select 
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                                value={filterPipeline}
+                                onChange={e => { setFilterPipeline(e.target.value); setFilterStage(''); }}
+                              >
+                                  <option value="">Todos os Funis</option>
+                                  {pipelineOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                              </select>
+                          </div>
+                          <div className="relative">
+                              <Target className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                              <select 
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                                value={filterStage}
+                                onChange={e => setFilterStage(e.target.value)}
+                              >
+                                  <option value="">Todas as Etapas</option>
+                                  {stageOptions.map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
                           </div>
                       </div>
@@ -516,7 +567,7 @@ export const BulkWhatsAppSender: React.FC = () => {
                       <Users size={24} />
                     </div>
                     <div>
-                      <h3 className="text-lg font-black text-slate-800">
+                      <h3 className="text-lg font-black text-slate-800 leading-tight">
                         Lista de Contatos: {audiences.find(a => a.id === selectedAudience)?.label}
                       </h3>
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
@@ -595,8 +646,11 @@ export const BulkWhatsAppSender: React.FC = () => {
                             </div>
                             <div className="text-right shrink-0">
                                 <span className="text-[9px] font-black text-slate-300 uppercase block truncate max-w-[150px]">{c.email}</span>
-                                {selectedAudience === 'students' && c.productName && (
+                                {(selectedAudience === 'students' || selectedAudience === 'leads') && c.productName && (
                                     <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest block truncate max-w-[150px]">{c.productName}</span>
+                                )}
+                                {(selectedAudience === 'students' || selectedAudience === 'leads') && c.stage && (
+                                    <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter block truncate max-w-[150px]">F: {c.pipeline} | E: {c.stage}</span>
                                 )}
                                 {selectedAudience === 'teachers' && c.teacherLevel && (
                                     <span className="text-[8px] font-black text-orange-400 uppercase tracking-widest block truncate max-w-[150px]">{c.teacherLevel}</span>

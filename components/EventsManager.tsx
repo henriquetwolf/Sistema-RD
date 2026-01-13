@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, MapPin, Users, Mic, Clock, Plus, Search, 
@@ -113,15 +112,11 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   const fetchReportData = async (eventId: string) => {
       setReportLoading(true);
       try {
-          const [ws, regsRes] = await Promise.all([
-              appBackend.getWorkshops(eventId),
-              appBackend.client
-                .from('crm_event_registrations')
-                .select('*, crm_deals(phone)')
-                .eq('event_id', eventId)
-          ]);
-          setWorkshops(ws);
-          setRegistrations(regsRes.data || []);
+          const { data: ws } = await appBackend.client.from('crm_workshops').select('*').eq('event_id', eventId);
+          const { data: regs } = await appBackend.client.from('crm_event_registrations').select('*, crm_deals(phone)').eq('event_id', eventId);
+          
+          setWorkshops(ws || []);
+          setRegistrations(regs || []);
       } catch(e) {
           console.error(e);
       } finally {
@@ -288,18 +283,21 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
     const map: Record<string, any> = {};
     
     registrations.forEach(reg => {
-        const sId = reg.student_id; // Chave snake_case vinda do banco
+        const sId = reg.student_id; 
+        if (!sId) return;
+
         if (!map[sId]) {
             map[sId] = {
                 id: sId,
-                name: reg.student_name,
-                email: reg.student_email,
+                name: reg.student_name || 'Aluno s/ Nome',
+                email: reg.student_email || '--',
                 phone: reg.crm_deals?.phone || '--',
                 registrationDate: reg.created_at,
                 workshops: []
             };
         }
-        const ws = workshops.find(w => w.id === reg.workshop_id);
+        
+        const ws = workshops.find(w => String(w.id) === String(reg.workshop_id));
         if (ws) {
             map[sId].workshops.push(ws.title);
         }
@@ -308,13 +306,13 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
         }
     });
 
-    return Object.values(map).sort((a: any, b: any) => a.name.localeCompare(b.name));
+    return Object.values(map).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
   }, [registrations, workshops, viewMode]);
 
   // --- RENDER REPORT VIEW ---
   if (viewMode === 'report' && selectedEventId) {
       const currentEvent = events.find(e => e.id === selectedEventId);
-      const totalCapacity = workshops.reduce((acc, w) => acc + w.spots, 0);
+      const totalCapacity = workshops.reduce((acc, w) => acc + (w.spots || 0), 0);
       const totalRegistrations = registrations.length;
       const uniqueStudentsCount = studentsList.length;
       const occupancyRate = totalCapacity > 0 ? (totalRegistrations / totalCapacity) * 100 : 0;
@@ -370,9 +368,9 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
               {reportTab === 'workshops' ? (
                   <div className="space-y-6">
                       {workshops.map(w => {
-                          const wRegs = registrations.filter(r => r.workshop_id === w.id);
-                          const occupation = (wRegs.length / w.spots) * 100;
-                          const isFull = wRegs.length >= w.spots;
+                          const wRegs = registrations.filter(r => String(r.workshop_id) === String(w.id));
+                          const occupation = (wRegs.length / (w.spots || 1)) * 100;
+                          const isFull = wRegs.length >= (w.spots || 0);
                           return (
                               <div key={w.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                                   <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -551,7 +549,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                     <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-6"><h5 className="text-xs font-bold text-indigo-700 mb-3 uppercase">Configurar Bloco</h5><div className="grid grid-cols-1 md:grid-cols-4 gap-3"><div className="md:col-span-2"><input type="text" placeholder="Título (ex: Manhã)" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={blockForm.title} onChange={e => setBlockForm({...blockForm, title: e.target.value})} /></div><div><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={blockForm.date} onChange={e => setBlockForm({...blockForm, date: e.target.value})}><option value="">Data...</option>{formData.dates.map(d => (<option key={d} value={d}>{formatDateDisplay(d)}</option>))}</select></div><div><input type="number" placeholder="Max Escolhas" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={blockForm.maxSelections} onChange={e => setBlockForm({...blockForm, maxSelections: parseInt(e.target.value) || 1})} min={1} /></div><div className="md:col-span-4 flex justify-end gap-2 mt-2"><button onClick={() => setShowBlockForm(false)} className="px-4 py-2 text-slate-500 text-sm hover:text-slate-700">Cancelar</button><button onClick={handleSaveBlock} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700">Salvar Bloco</button></div></div></div>
                                 )}
                                 {blocks.length === 0 ? (<div className="text-center py-8 text-slate-400 border-2 border-dashed border-slate-100 rounded-xl"><Layers size={32} className="mx-auto mb-2 opacity-50"/><p className="text-sm">Nenhum bloco de horário criado.</p><p className="text-xs">Crie blocos (ex: Manhã, Tarde) para agrupar os workshops.</p></div>) : (
-                                    <div className="space-y-6">{formData.dates.sort().map(dateStr => { const dayBlocks = blocks.filter(b => b.date === dateStr); if (dayBlocks.length === 0) return null; return ( <div key={dateStr} className="border border-slate-200 rounded-xl overflow-hidden"><div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center"><span className="text-sm font-bold text-slate-700 flex items-center gap-2"><Calendar size={14} className="text-slate-400"/>{formatDateDisplay(dateStr)}</span></div><div className="divide-y divide-slate-100">{dayBlocks.map(block => ( <div key={block.id} className="p-4 bg-white hover:bg-slate-50 transition-colors"><div className="flex justify-between items-start mb-3"><div><h5 className="font-bold text-indigo-700 text-sm">{block.title}</h5><p className="text-xs text-slate-500">Aluno pode escolher até <strong className="text-slate-700">{block.maxSelections}</strong> workshop(s).</p></div><div className="flex gap-2"><button onClick={() => { setWorkshopForm({ ...INITIAL_WORKSHOP, eventId: formData.id, blockId: block.id, date: block.date }); setIsEditingWorkshop(false); }} className="text-xs bg-white border border-slate-200 hover:border-indigo-300 text-indigo-600 px-2 py-1 rounded flex items-center gap-1 shadow-sm"><Plus size={12}/> Add Workshop</button><button onClick={() => handleDeleteBlock(block.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14} /></button></div></div><div className="pl-4 border-l-2 border-slate-100 space-y-2">{workshopForm.blockId === block.id && ( <div className="bg-slate-100 p-3 rounded-lg border border-slate-200 mb-2 animate-in fade-in zoom-in-95"><div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2"><div className="md:col-span-2"><input type="text" placeholder="Título" className="w-full px-2 py-1.5 border rounded text-xs mb-2" value={workshopForm.title} onChange={e => setWorkshopForm({...workshopForm, title: e.target.value})} /><textarea placeholder="Resumo do Workshop" className="w-full px-2 py-1.5 border rounded text-xs resize-none h-16" value={workshopForm.description || ''} onChange={e => setWorkshopForm({...workshopForm, description: e.target.value})} /></div><div className="md:col-span-2"><div className="grid grid-cols-3 gap-2"><input type="text" placeholder="Palestrante" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.speaker} onChange={e => setWorkshopForm({...workshopForm, speaker: e.target.value})} /><input type="time" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.time} onChange={e => setWorkshopForm({...workshopForm, time: e.target.value})} /><input type="number" placeholder="Vagas" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.spots} onChange={e => setWorkshopForm({...workshopForm, spots: parseInt(e.target.value) || 0})} /></div></div></div><div className="flex justify-end gap-2"><button onClick={() => setWorkshopForm(INITIAL_WORKSHOP)} className="text-xs text-slate-500">Cancelar</button><button onClick={handleSaveWorkshop} className="text-xs bg-green-600 text-white px-3 py-1 rounded font-bold">Salvar</button></div></div> )}{workshops.filter(w => w.blockId === block.id).map(w => ( <div key={w.id} className="flex justify-between items-center bg-white border border-slate-100 p-2 rounded hover:border-slate-300 transition-colors"><div className="flex-1"><p className="text-xs font-bold text-slate-700">{w.title}</p><p className="text-[10px] text-slate-500 mb-1">{w.time} • {w.speaker} • {w.spots} vagas</p>{w.description && <p className="text-[10px] text-slate-400 italic line-clamp-1">{w.description}</p>}</div><div className="flex gap-1"><button onClick={() => handleEditWorkshop(w)} className="p-1 text-slate-400 hover:text-slate-600"><Edit2 size={12}/></button><button onClick={() => handleDeleteWorkshop(w.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12}/></button></div></div> ))}{workshops.filter(w => w.blockId === block.id).length === 0 && !isEditingWorkshop && (<p className="text-[10px] text-slate-400 italic">Nenhum workshop neste bloco.</p>)}</div></div> ))}</div></div> ); })}</div>
+                                    <div className="space-y-6">{formData.dates.sort().map(dateStr => { const dayBlocks = blocks.filter(b => b.date === dateStr); if (dayBlocks.length === 0) return null; return ( <div key={dateStr} className="border border-slate-200 rounded-xl overflow-hidden"><div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center"><span className="text-sm font-bold text-slate-700 flex items-center gap-2"><Calendar size={14} className="text-slate-400"/>{formatDateDisplay(dateStr)}</span></div><div className="divide-y divide-slate-100">{dayBlocks.map(block => ( <div key={block.id} className="p-4 bg-white hover:bg-slate-50 transition-colors"><div className="flex justify-between items-start mb-3"><div><h5 className="font-bold text-indigo-700 text-sm">{block.title}</h5><p className="text-xs text-slate-500">Aluno pode escolher até <strong className="text-slate-700">{block.maxSelections}</strong> workshop(s).</p></div><div className="flex gap-2"><button onClick={() => { setWorkshopForm({ ...INITIAL_WORKSHOP, eventId: formData.id, blockId: block.id, date: block.date }); setIsEditingWorkshop(false); }} className="text-xs bg-white border border-slate-200 hover:border-indigo-300 text-indigo-600 px-2 py-1 rounded flex items-center gap-1 shadow-sm"><Plus size={12}/> Add Workshop</button><button onClick={() => handleDeleteBlock(block.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14} /></button></div></div><div className="pl-4 border-l-2 border-slate-100 space-y-2">{workshopForm.blockId === block.id && ( <div className="bg-slate-100 p-3 rounded-lg border border-slate-200 mb-2 animate-in fade-in zoom-in-95"><div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2"><div className="md:col-span-2"><input type="text" placeholder="Título" className="w-full px-2 py-1.5 border rounded text-xs mb-2" value={workshopForm.title} onChange={e => setWorkshopForm({...workshopForm, title: e.target.value})} /><textarea placeholder="Resumo do Workshop" className="w-full px-2 py-1.5 border rounded text-xs resize-none h-16" value={workshopForm.description || ''} onChange={e => setWorkshopForm({...workshopForm, description: e.target.value})} /></div><div className="md:col-span-2"><div className="grid grid-cols-3 gap-2"><input type="text" placeholder="Palestrante" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.speaker} onChange={e => setWorkshopForm({...workshopForm, speaker: e.target.value})} /><input type="time" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.time} onChange={e => setWorkshopForm({...workshopForm, time: e.target.value})} /><input type="number" placeholder="Vagas" className="w-full px-2 py-1.5 border rounded text-xs" value={workshopForm.spots} onChange={e => setWorkshopForm({...workshopForm, spots: parseInt(e.target.value) || 0})} /></div></div></div><div className="flex justify-end gap-2"><button onClick={() => setWorkshopForm(INITIAL_WORKSHOP)} className="text-xs text-slate-500">Cancelar</button><button onClick={handleSaveWorkshop} className="text-xs bg-green-600 text-white px-3 py-1 rounded font-bold">Salvar</button></div></div> )}{workshops.filter(w => w.blockId === block.id).map(w => ( <div key={w.id} className="flex justify-between items-center bg-white border border-slate-100 p-2 rounded hover:border-slate-300 transition-colors"><div className="flex-1"><p className="text-xs font-bold text-slate-700">{w.title}</p><p className="text-[10px] text-slate-500 mb-1">{w.time} • {w.speaker} • {w.spots} vagas</p>{w.description && <p className="text-[10px] text-slate-400 italic line-clamp-1">{w.description}</p>}</div><div className="flex gap-1"><button onClick={() => handleEditWorkshop(w)} className="p-1 text-slate-400 hover:text-slate-600"><Edit2 size={12}/></button><button onClick={() => handleDeleteWorkshop(w.id)} className="p-1 text-slate-300 hover:text-red-500"><Trash2 size={12}/></button></div></div> ))}{workshops.filter(w => w.blockId === block.id).length === 0 && !isEditingWorkshop && (<p className="text-[10px] text-slate-400 italic">Nenhum workshop neste bloco.</p>)}</div></div> ))}</div></div> ); })}</div>
                                 )}
                             </div>
                         )}

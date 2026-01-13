@@ -419,10 +419,7 @@ function App() {
 
   const handleDeepNavigation = (tab: string, recordId: string) => {
       setDashboardTab(tab as DashboardTab);
-      // Aqui simulamos uma busca pelo registro na aba destino
-      // Em uma aplicação real, poderíamos disparar um evento ou passar props para o componente filho
-      // Por enquanto, apenas avisamos que o sistema mudou de contexto
-      alert(`Navegando para ${tab}. Registro ID: ${recordId}`);
+      setPendingNavigation({ tab: tab as DashboardTab, id: recordId });
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -644,7 +641,14 @@ function App() {
                         {dashboardTab === 'inventory' && <InventoryManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'billing' && <BillingManager />}
                         {dashboardTab === 'suporte_interno' && <SupportManager />}
-                        {dashboardTab === 'crm' && <div className="h-full"><CrmBoard /></div>}
+                        {dashboardTab === 'crm' && (
+                          <div className="h-full">
+                            <CrmBoard 
+                              initialDealId={pendingNavigation?.tab === 'crm' ? pendingNavigation.id : undefined} 
+                              onClearNavigation={() => setPendingNavigation(null)} 
+                            />
+                          </div>
+                        )}
                         {dashboardTab === 'classes' && <ClassesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'teachers' && <TeachersManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'franchises' && <FranchisesManager onBack={() => setDashboardTab('overview')} />}
@@ -654,7 +658,12 @@ function App() {
                         {dashboardTab === 'contracts' && <ContractsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'certificates' && <CertificatesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'products' && <ProductsManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'students' && <StudentsManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'students' && (
+                          <StudentsManager 
+                            onBack={() => setDashboardTab('overview')} 
+                            onOpenDeal={(id) => handleDeepNavigation('crm', id)}
+                          />
+                        )}
                         {dashboardTab === 'events' && <EventsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} jobs={jobs} onStartWizard={handleStartWizard} onDeleteJob={handleDeleteJob} />}
                         {dashboardTab === 'analysis' && <SalesAnalysis />}

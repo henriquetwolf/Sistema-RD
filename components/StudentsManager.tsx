@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
@@ -11,6 +10,7 @@ import clsx from 'clsx';
 
 interface StudentsManagerProps {
   onBack: () => void;
+  onOpenDeal: (dealId: string) => void;
 }
 
 interface StudentDeal {
@@ -52,7 +52,7 @@ interface CertStatus {
     issuedAt: string;
 }
 
-export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
+export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack, onOpenDeal }) => {
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'cpf_search'>('list');
   const [deals, setDeals] = useState<StudentDeal[]>([]);
   const [onlineCourses, setOnlineCourses] = useState<OnlineCourse[]>([]);
@@ -80,7 +80,13 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-        const { data, error } = await appBackend.client.from('crm_deals').select('*').order('contact_name', { ascending: true });
+        // Buscamos todas as negociações que tenham student_access_enabled como true
+        const { data, error } = await appBackend.client
+            .from('crm_deals')
+            .select('*')
+            .eq('student_access_enabled', true)
+            .order('contact_name', { ascending: true });
+        
         if (error) throw error;
         
         const mappedDeals = data.map((s: any) => ({ ...s, student_access_enabled: s.student_access_enabled !== false }));
@@ -152,10 +158,9 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
               groups[key].digital.push(itemRef);
           }
 
-          // Cursos liberados manualmente vinculados à transação (para exibição)
+          // Incluir cursos liberados manualmente na coluna de Produtos Digitais
           const manualCourses = courseAccessMap[deal.id] || [];
           manualCourses.forEach(cName => {
-              // Verifica se já não existe na lista para não duplicar visualmente
               if (!groups[key].digital.some(d => d.name === cName)) {
                   groups[key].digital.push({ id: `manual_${deal.id}`, name: cName });
               }
@@ -186,28 +191,35 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           alert("Este item foi liberado manualmente através do modal 'Liberar Cursos'. Para removê-lo, acesse o botão 'Liberar Cursos' deste aluno.");
           return;
       }
-      if (!window.confirm(`Tem certeza que deseja excluir "${itemName}" deste aluno?`)) return;
+      if (!window.confirm(`Remover o acesso de "${itemName}" deste aluno? A negociação continuará existindo no CRM comercial.`)) return;
       
       try {
-          const { error } = await appBackend.client.from('crm_deals').delete().eq('id', dealId);
+          // Em vez de delete, fazemos update para false para manter a negociação no CRM
+          const { error } = await appBackend.client.from('crm_deals').update({ student_access_enabled: false }).eq('id', dealId);
           if (error) throw error;
           fetchData();
       } catch (e: any) {
-          alert("Erro ao excluir item: " + e.message);
+          alert("Erro ao remover acesso: " + e.message);
       }
   };
 
   const handleDeleteStudent = async (student: GroupedStudent) => {
-      if (!window.confirm(`ATENÇÃO: Deseja excluir permanentemente o aluno ${student.name} e TODOS os seus registros vinculados? Esta ação não pode ser desfeita.`)) return;
+      if (!window.confirm(`Remover o aluno ${student.name} desta lista? Todos os seus acessos ao portal serão desativados, mas as negociações permanecerão no CRM.`)) return;
       
       try {
           const dealIds = student.deals.map(d => d.id);
-          const { error } = await appBackend.client.from('crm_deals').delete().in('id', dealIds);
+          // Em vez de delete, fazemos update para false para manter as negociações no CRM
+          const { error } = await appBackend.client.from('crm_deals').update({ student_access_enabled: false }).in('id', dealIds);
           if (error) throw error;
           fetchData();
       } catch (e: any) {
-          alert("Erro ao excluir aluno: " + e.message);
+          alert("Erro ao remover aluno: " + e.message);
       }
+  };
+
+  const handleProductClick = (id: string) => {
+    const realId = id.startsWith('manual_') ? id.replace('manual_', '') : id;
+    onOpenDeal(realId);
   };
 
   const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -381,8 +393,8 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                             <div className="flex flex-wrap gap-1">
                                                 {s.presential.map(p => (
                                                     <span key={p.id} className="inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-purple-100">
-                                                        {p.name}
-                                                        <button onClick={() => handleDeleteItem(p.id, p.name)} className="hover:text-red-600 transition-colors"><X size={10} /></button>
+                                                        <span className="cursor-pointer hover:underline" onClick={() => handleProductClick(p.id)}>{p.name}</span>
+                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 transition-colors"><X size={10} /></button>
                                                     </span>
                                                 ))}
                                                 {s.presential.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
@@ -392,8 +404,8 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                             <div className="flex flex-wrap gap-1">
                                                 {s.digital.map(p => (
                                                     <span key={p.id} className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-indigo-100">
-                                                        {p.name}
-                                                        {!p.id.startsWith('manual_') && <button onClick={() => handleDeleteItem(p.id, p.name)} className="hover:text-red-600 transition-colors"><X size={10} /></button>}
+                                                        <span className="cursor-pointer hover:underline" onClick={() => handleProductClick(p.id)}>{p.name}</span>
+                                                        {!p.id.startsWith('manual_') && <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 transition-colors"><X size={10} /></button>}
                                                     </span>
                                                 ))}
                                                 {s.digital.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
@@ -403,8 +415,8 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                             <div className="flex flex-wrap gap-1">
                                                 {s.events.map(p => (
                                                     <span key={p.id} className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-amber-100">
-                                                        {p.name}
-                                                        <button onClick={() => handleDeleteItem(p.id, p.name)} className="hover:text-red-600 transition-colors"><X size={10} /></button>
+                                                        <span className="cursor-pointer hover:underline" onClick={() => handleProductClick(p.id)}>{p.name}</span>
+                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 transition-colors"><X size={10} /></button>
                                                     </span>
                                                 ))}
                                                 {s.events.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
@@ -448,7 +460,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button onClick={() => openUnlockModal(s)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-md hover:bg-indigo-700 active:scale-95 transition-all"><MonitorPlay size={12}/> Liberar</button>
-                                                <button onClick={() => handleDeleteStudent(s)} className="p-1.5 bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all" title="Excluir Aluno"><Trash2 size={16} /></button>
+                                                <button onClick={() => handleDeleteStudent(s)} className="p-1.5 bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all" title="Remover Aluno da Lista"><Trash2 size={16} /></button>
                                             </div>
                                         </td>
                                     </tr>
@@ -502,7 +514,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         </div>
                                         <div className="flex flex-col items-end gap-1">
                                             <span className={clsx(
-                                                "text-[8px] font-black px-2 py-0.5 rounded-full uppercase border",
+                                                "text-[8px] font-black px-2 py-1 rounded-full uppercase border",
                                                 deal.product_type === 'Evento' ? "bg-amber-50 text-amber-700 border-amber-200" : 
                                                 deal.product_type === 'Digital' ? "bg-indigo-50 text-indigo-700 border-indigo-200" :
                                                 "bg-teal-50 text-teal-700 border-teal-200"
@@ -510,14 +522,14 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                 {deal.product_type || 'Produto'}
                                             </span>
                                             <span className={clsx(
-                                                "text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter border",
+                                                "text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter border",
                                                 deal.stage === 'closed' ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-50 text-blue-700 border-blue-200"
                                             )}>
                                                 {deal.stage === 'closed' ? 'Matriculado' : 'Lead'}
                                             </span>
                                         </div>
                                     </div>
-                                    <h4 className="font-black text-slate-800 text-lg leading-tight mb-2">{deal.product_name || 'Produto Não Identificado'}</h4>
+                                    <h4 className="font-black text-slate-800 text-lg leading-tight mb-2 cursor-pointer hover:text-teal-600 transition-colors" onClick={() => handleProductClick(deal.id)}>{deal.product_name || 'Produto Não Identificado'}</h4>
                                     <div className="space-y-1.5 mb-6 flex-1">
                                         <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
                                             <Calendar size={14} className="text-slate-300"/> Adquirido em: {new Date(deal.created_at).toLocaleDateString()}
@@ -544,7 +556,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         >
                                             Gerenciar Acesso
                                         </button>
-                                        <button onClick={() => handleDeleteItem(deal.id, deal.product_name)} className="p-2.5 bg-red-50 hover:bg-red-100 text-red-400 rounded-xl transition-all" title="Excluir Compra"><Trash2 size={16}/></button>
+                                        <button onClick={() => handleDeleteItem(deal.id, deal.product_name)} className="p-2.5 bg-red-50 hover:bg-red-100 text-red-400 rounded-xl transition-all" title="Remover Acesso"><Trash2 size={16}/></button>
                                     </div>
                                 </div>
                             ))}

@@ -165,28 +165,38 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 return;
             }
 
-            // Verificar vagas (simples, idealmente via RPC no banco)
-            // Aqui fazemos um check local para agilizar a UI
+            // Verificar vagas no banco
             setIsRegistering(workshop.id);
             try {
-                const { data: currentRegs } = await appBackend.client.from('crm_event_registrations').select('id').eq('workshopId', workshop.id);
+                const { data: currentRegs } = await appBackend.client.from('crm_event_registrations').select('id').eq('workshop_id', workshop.id);
                 if (currentRegs && currentRegs.length >= workshop.spots) {
                     alert("Desculpe, este workshop já está lotado.");
                     return;
                 }
 
-                const newReg = {
+                // Payload com nomes de colunas corretos (snake_case)
+                const dbPayload = {
                     id: crypto.randomUUID(),
-                    eventId: viewingEvent!.id,
-                    workshopId: workshop.id,
-                    studentId: mainDealId,
-                    studentName: student.name,
-                    studentEmail: student.email,
-                    registeredAt: new Date().toISOString()
+                    event_id: viewingEvent!.id,
+                    workshop_id: workshop.id,
+                    student_id: mainDealId,
+                    student_name: student.name,
+                    student_email: student.email,
+                    registered_at: new Date().toISOString()
                 };
                 
-                await appBackend.client.from('crm_event_registrations').insert([newReg]);
-                setMyRegistrations(prev => [...prev, newReg as EventRegistration]);
+                await appBackend.client.from('crm_event_registrations').insert([dbPayload]);
+                
+                // Atualiza estado local com camelCase para manter compatibilidade com o resto do componente
+                setMyRegistrations(prev => [...prev, {
+                    id: dbPayload.id,
+                    eventId: dbPayload.event_id,
+                    workshopId: dbPayload.workshop_id,
+                    studentId: dbPayload.student_id,
+                    studentName: dbPayload.student_name,
+                    studentEmail: dbPayload.student_email,
+                    registeredAt: dbPayload.registered_at
+                }]);
             } catch (e) { alert("Erro ao realizar inscrição."); }
             finally { setIsRegistering(null); }
         }

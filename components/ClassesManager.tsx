@@ -187,7 +187,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     if (!formData.course || !formData.city) { alert("Preencha ao menos o Curso e a Cidade."); return; }
     setIsSaving(true);
     const payload = {
-        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studioMod1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffeeMod1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotel_mod_2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.is_ready, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
+        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studioMod1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffeeMod1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotel_mod_2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
     };
     try {
         if (formData.id) await appBackend.client.from('crm_classes').update(payload).eq('id', formData.id);
@@ -391,13 +391,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                       <tbody className="divide-y divide-slate-100">
                           {capacitySortedData.map(item => {
                               return (
-                                  <tr key={item.id} className={clsx(
-                                      "transition-colors",
-                                      item.percent <= 27 ? "bg-white hover:bg-slate-50" :
-                                      item.percent <= 37 ? "bg-green-50 hover:bg-green-100/50" :
-                                      item.percent <= 49 ? "bg-yellow-50 hover:bg-yellow-100/50" :
-                                      "bg-red-50 hover:bg-red-100/50"
-                                  )}>
+                                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                                       <td className="px-6 py-4 font-bold text-slate-700">{item.state}</td>
                                       <td className="px-6 py-4 text-slate-600">{item.city}</td>
                                       <td className="px-6 py-4 font-mono font-bold text-slate-500">#{item.classCode}</td>
@@ -413,21 +407,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                           <div className="flex flex-col items-center gap-1">
                                               <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                                   <div 
-                                                      className={clsx("h-full transition-all", 
-                                                          item.percent <= 27 ? "bg-slate-300" :
-                                                          item.percent <= 37 ? "bg-green-500" :
-                                                          item.percent <= 49 ? "bg-yellow-500" :
-                                                          "bg-red-500"
-                                                      )}
+                                                      className={clsx("h-full transition-all", item.percent > 100 ? "bg-red-500" : item.percent > 80 ? "bg-orange-500" : "bg-teal-500")}
                                                       style={{ width: `${Math.min(item.percent, 100)}%` }}
                                                   ></div>
                                               </div>
-                                              <span className={clsx("text-[10px] font-black", 
-                                                  item.percent <= 27 ? "text-slate-500" :
-                                                  item.percent <= 37 ? "text-green-700" :
-                                                  item.percent <= 49 ? "text-yellow-700" :
-                                                  "text-red-700"
-                                              )}>{item.percent}%</span>
+                                              <span className={clsx("text-[10px] font-black", item.percent > 100 ? "text-red-600" : "text-slate-500")}>{item.percent}%</span>
                                           </div>
                                       </td>
                                   </tr>

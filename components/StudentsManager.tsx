@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
-  // Added missing icons: List, DollarSign, XCircle
   Award, Eye, Download, ExternalLink, CheckCircle, Trash2, Wand2, Calendar, BookOpen, X, MonitorPlay, Zap, ChevronRight, Check, Save, FileText, ShoppingBag, CreditCard,
   List, DollarSign, XCircle
 } from 'lucide-react';
@@ -21,6 +20,7 @@ interface StudentDeal {
     email: string;
     phone: string;
     product_name: string;
+    product_type?: string;
     status: string;
     stage: string;
     value: number;
@@ -89,6 +89,22 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       setOnlineCourses(data || []);
   };
 
+  const formatCPF = (val: string) => {
+      const numbers = val.replace(/\D/g, '');
+      return numbers
+          .replace(/(\d{3})(\d)/, '$1.$2')
+          .replace(/(\d{3})(\d)/, '$1.$2')
+          .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+          .replace(/(-\d{2})\d+?$/, '$1');
+  };
+
+  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const formatted = formatCPF(e.target.value);
+      if (formatted.length <= 14) {
+          setCpfSearchQuery(formatted);
+      }
+  };
+
   const handleCpfSearch = async (e: React.FormEvent) => {
       e.preventDefault();
       const cleanCpf = cpfSearchQuery.replace(/\D/g, '');
@@ -96,10 +112,13 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
       setIsSearchingCpf(true);
       try {
+          const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+          
+          // Busca por CPF limpo OU formatado para garantir compatibilidade com registros manuais e importados
           const { data, error } = await appBackend.client
               .from('crm_deals')
               .select('*')
-              .ilike('cpf', `%${cleanCpf}%`)
+              .or(`cpf.ilike.%${cleanCpf}%,cpf.ilike.%${formattedCpf}%`)
               .order('created_at', { ascending: false });
           
           if (error) throw error;
@@ -125,7 +144,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       } catch (e) {
           console.error("Erro ao carregar acessos:", e);
       } finally {
-          setIsSearchingCpf(false);
           setIsSavingAccess(false);
       }
   };
@@ -292,7 +310,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             <ShoppingBag size={32}/>
                         </div>
                         <h3 className="text-xl font-black text-slate-800">Histórico de Compras</h3>
-                        <p className="text-sm text-slate-500 mt-2">Insira o CPF do aluno abaixo para listar todos os produtos e cursos já adquiridos no sistema.</p>
+                        <p className="text-sm text-slate-500 mt-2">Insira o CPF do aluno abaixo para listar todos os produtos, eventos e cursos adquiridos.</p>
                     </div>
 
                     <form onSubmit={handleCpfSearch} className="max-w-md mx-auto flex gap-2">
@@ -303,7 +321,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                 placeholder="000.000.000-00" 
                                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white outline-none focus:ring-2 focus:ring-teal-500 transition-all font-bold"
                                 value={cpfSearchQuery}
-                                onChange={e => setCpfSearchQuery(e.target.value)}
+                                onChange={handleCpfChange}
                             />
                         </div>
                         <button 
@@ -326,12 +344,22 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         <div className="p-2 bg-teal-50 rounded-xl text-teal-600">
                                             <ShoppingBag size={20}/>
                                         </div>
-                                        <span className={clsx(
-                                            "text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-tighter border",
-                                            deal.stage === 'closed' ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-50 text-blue-700 border-blue-200"
-                                        )}>
-                                            {deal.stage === 'closed' ? 'Matriculado' : 'Lead'}
-                                        </span>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className={clsx(
+                                                "text-[8px] font-black px-2 py-0.5 rounded-full uppercase border",
+                                                deal.product_type === 'Evento' ? "bg-amber-50 text-amber-700 border-amber-200" : 
+                                                deal.product_type === 'Digital' ? "bg-indigo-50 text-indigo-700 border-indigo-200" :
+                                                "bg-teal-50 text-teal-700 border-teal-200"
+                                            )}>
+                                                {deal.product_type || 'Produto'}
+                                            </span>
+                                            <span className={clsx(
+                                                "text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter border",
+                                                deal.stage === 'closed' ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-50 text-blue-700 border-blue-200"
+                                            )}>
+                                                {deal.stage === 'closed' ? 'Matriculado' : 'Lead'}
+                                            </span>
+                                        </div>
                                     </div>
                                     <h4 className="font-black text-slate-800 text-lg leading-tight mb-2">{deal.product_name || 'Produto Não Identificado'}</h4>
                                     <div className="space-y-1.5 mb-6 flex-1">

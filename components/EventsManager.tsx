@@ -9,6 +9,9 @@ import { appBackend } from '../services/appBackend';
 import { EventModel, Workshop, EventRegistration, EventBlock } from '../types';
 import clsx from 'clsx';
 
+// Declaração do XLSX carregado via CDN no index.html
+declare const XLSX: any;
+
 interface EventsManagerProps {
   onBack: () => void;
 }
@@ -345,6 +348,26 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
     return Object.values(map).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
   }, [registrations, workshops, viewMode]);
 
+  const exportToExcel = () => {
+    if (studentsList.length === 0) return;
+    
+    const currentEvent = events.find(e => e.id === selectedEventId);
+    const eventName = currentEvent?.name || 'Evento';
+
+    const dataToExport = studentsList.map((s: any) => ({
+        'Data Inscrição': new Date(s.registrationDate).toLocaleDateString('pt-BR'),
+        'Nome do Aluno': s.name,
+        'E-mail': s.email,
+        'Telefone': s.phone,
+        'Workshops': s.workshops.join(', ')
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Inscritos");
+    XLSX.writeFile(workbook, `Lista_Alunos_${eventName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+  };
+
   if (viewMode === 'report' && selectedEventId) {
       const currentEvent = events.find(e => e.id === selectedEventId);
       const totalCapacity = workshops.reduce((acc, w) => acc + (w.spots || 0), 0);
@@ -369,6 +392,11 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                         <button onClick={() => setReportTab('workshops')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", reportTab === 'workshops' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Workshops</button>
                         <button onClick={() => setReportTab('students')} className={clsx("px-4 py-1.5 text-xs font-bold rounded-md transition-all", reportTab === 'students' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Lista de Alunos</button>
                     </div>
+                    {reportTab === 'students' && studentsList.length > 0 && (
+                        <button onClick={exportToExcel} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg font-bold text-xs flex items-center gap-2 transition-all shadow-sm mr-2">
+                            <FileSpreadsheet size={16} /> Exportar Excel
+                        </button>
+                    )}
                     <button onClick={() => fetchReportData(selectedEventId)} className="p-2 text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 rounded-lg hover:bg-indigo-50">
                         <RefreshCw size={18} className={clsx(reportLoading && "animate-spin")} />
                     </button>

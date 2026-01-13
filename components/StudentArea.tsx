@@ -157,7 +157,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         }
     };
 
+    const isEventLocked = useMemo(() => {
+        return myRegistrations.some(r => r.locked);
+    }, [myRegistrations]);
+
     const handleToggleRegistration = async (workshop: Workshop) => {
+        if (isEventLocked) {
+            alert("Suas escolhas estão bloqueadas pela administração e não podem ser alteradas.");
+            return;
+        }
         if (!viewingEvent) return;
         const studentIdToUse = mainDealId;
         if (!studentIdToUse) {
@@ -706,7 +714,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 <div className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95">
                         <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50 shrink-0">
-                            <div><h3 className="text-xl font-black text-slate-800">{viewingEvent.name}</h3><p className="text-sm text-slate-500 font-medium">Escolha os workshops que deseja participar.</p></div>
+                            <div>
+                                <h3 className="text-xl font-black text-slate-800">{viewingEvent.name}</h3>
+                                <p className="text-sm text-slate-500 font-medium">Escolha os workshops que deseja participar.</p>
+                                {isEventLocked && (
+                                    <div className="mt-2 inline-flex items-center gap-2 bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-black uppercase animate-pulse">
+                                        <Lock size={12}/> Suas escolhas estão bloqueadas pela administração.
+                                    </div>
+                                )}
+                            </div>
                             <button onClick={() => setViewingEvent(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                         </div>
                         <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
@@ -730,7 +746,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                                                         const isSelected = myRegistrations.some(r => String(r.workshopId) === String(ws.id));
                                                         const occupied = workshopOccupation[String(ws.id)] || 0;
                                                         const remaining = Math.max(0, ws.spots - occupied);
-                                                        const isDisabled = isRegistering !== null || (!isSelected && (myBlockRegs.length >= block.maxSelections || remaining <= 0));
+                                                        const isDisabled = isEventLocked || isRegistering !== null || (!isSelected && (myBlockRegs.length >= block.maxSelections || remaining <= 0));
                                                         return (
                                                             <div key={ws.id} className={clsx("p-5 rounded-3xl border-2 transition-all flex flex-col group", isSelected ? "border-teal-500 bg-teal-50/30" : "border-slate-100 hover:border-indigo-200 bg-white")}>
                                                                 <div className="flex justify-between items-start mb-4">

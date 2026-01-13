@@ -244,6 +244,7 @@ export interface EventRegistration {
   studentName: string;
   studentEmail: string;
   registeredAt: string;
+  locked?: boolean;
 }
 
 export interface Banner {

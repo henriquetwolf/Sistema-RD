@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, MapPin, Users, Mic, Clock, Plus, Search, 
   MoreVertical, Edit2, Trash2, ArrowLeft, Save, X, 
   Loader2, ChevronRight, Hash, BarChart3, User, RefreshCw, Lock, Unlock, Layers, FileText,
-  FileSpreadsheet, UserMinus
+  FileSpreadsheet, UserMinus, ShieldAlert, CheckSquare, Square
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { EventModel, Workshop, EventRegistration, EventBlock } from '../types';
@@ -67,6 +68,12 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   
   const [showBlockForm, setShowBlockForm] = useState(false);
   const [blockForm, setBlockForm] = useState<EventBlock>({ id: '', eventId: '', date: '', title: '', maxSelections: 1 });
+
+  // States para Edição de Aluno
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [editingStudentName, setEditingStudentName] = useState('');
+  const [tempWorkshops, setTempWorkshops] = useState<string[]>([]);
+  const [isSavingStudent, setIsSavingStudent] = useState(false);
 
   useEffect(() => {
     fetchEvents();
@@ -132,6 +139,115 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
       }
   };
 
+  const handleToggleLockStudent = async (studentId: string, studentName: string, currentlyLocked: boolean) => {
+    if (!selectedEventId) return;
+    const actionLabel = currentlyLocked ? 'Desbloquear' : 'Bloquear';
+    if (!window.confirm(`Deseja ${actionLabel} as escolhas de ${studentName}? ${currentlyLocked ? 'O aluno poderá voltar a escolher.' : 'O aluno não poderá mais alterar seus workshops.'}`)) return;
+
+    setReportLoading(true);
+    try {
+        const studentRegs = registrations.filter(r => (r.student_id || r.studentId) === studentId);
+        
+        if (studentRegs.length > 0) {
+            // Se já tem inscrições, atualiza o flag locked em todas elas
+            const { error } = await appBackend.client
+                .from('crm_event_registrations')
+                .update({ locked: !currentlyLocked })
+                .eq('event_id', selectedEventId)
+                .eq('student_id', studentId);
+            if (error) throw error;
+        } else if (!currentlyLocked) {
+            // Se está bloqueando e não tem inscrição, cria um registro "placeholder" bloqueado
+            const { error } = await appBackend.client
+                .from('crm_event_registrations')
+                .insert([{
+                    id: crypto.randomUUID(),
+                    event_id: selectedEventId,
+                    workshop_id: 'LOCK_PLACEHOLDER',
+                    student_id: studentId,
+                    student_name: studentName,
+                    locked: true,
+                    created_at: new Date().toISOString()
+                }]);
+            if (error) throw error;
+        } else {
+            // Se está desbloqueando e só tinha o placeholder, remove o placeholder
+            const { error } = await appBackend.client
+                .from('crm_event_registrations')
+                .delete()
+                .eq('event_id', selectedEventId)
+                .eq('student_id', studentId)
+                .eq('workshop_id', 'LOCK_PLACEHOLDER');
+            if (error) throw error;
+        }
+
+        await appBackend.logActivity({ 
+            action: 'update', 
+            module: 'eventos', 
+            details: `${actionLabel}u escolhas de ${studentName} no evento ID: ${selectedEventId}`,
+            recordId: studentId
+        });
+        await fetchReportData(selectedEventId);
+    } catch (e: any) {
+        alert("Erro: " + e.message);
+    } finally {
+        setReportLoading(false);
+    }
+  };
+
+  const handleOpenEditStudent = (sId: string, sName: string) => {
+    const studentRegs = registrations.filter(r => (r.student_id || r.studentId) === sId);
+    const selectedIds = studentRegs.map(r => r.workshop_id || r.workshopId).filter(id => id !== 'LOCK_PLACEHOLDER');
+    setTempWorkshops(selectedIds);
+    setEditingStudentId(sId);
+    setEditingStudentName(sName);
+  };
+
+  const handleSaveStudentWorkshops = async () => {
+    if (!selectedEventId || !editingStudentId) return;
+    setIsSavingStudent(true);
+    try {
+        // 1. Remove inscrições atuais (incluindo placeholders)
+        const { error: delErr } = await appBackend.client
+            .from('crm_event_registrations')
+            .delete()
+            .eq('event_id', selectedEventId)
+            .eq('student_id', editingStudentId);
+        
+        if (delErr) throw delErr;
+
+        // 2. Se tiver workshops selecionados, insere
+        if (tempWorkshops.length > 0) {
+            const inserts = tempWorkshops.map(wsId => ({
+                id: crypto.randomUUID(),
+                event_id: selectedEventId,
+                workshop_id: wsId,
+                student_id: editingStudentId,
+                student_name: editingStudentName,
+                created_at: new Date().toISOString()
+            }));
+            const { error: insErr } = await appBackend.client
+                .from('crm_event_registrations')
+                .insert(inserts);
+            if (insErr) throw insErr;
+        }
+
+        await appBackend.logActivity({ 
+            action: 'update', 
+            module: 'eventos', 
+            details: `Admin editou workshops de ${editingStudentName} no evento ${selectedEventId}`,
+            recordId: editingStudentId
+        });
+
+        setEditingStudentId(null);
+        await fetchReportData(selectedEventId);
+    } catch (e: any) {
+        alert("Erro ao salvar: " + e.message);
+    } finally {
+        setIsSavingStudent(false);
+    }
+  };
+
   const handleRemoveStudentFromEvent = async (studentId: string, studentName: string) => {
     if (!selectedEventId) return;
     if (!window.confirm(`Deseja remover ${studentName} deste evento? Todas as inscrições em workshops serão canceladas e as vagas liberadas.`)) return;
@@ -146,7 +262,6 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
 
         if (error) throw error;
         
-        // Atualiza o estado local para refletir a remoção sem precisar de um novo fetch pesado
         setRegistrations(prev => prev.filter(r => (r.student_id || r.studentId) !== studentId));
         await appBackend.logActivity({ 
             action: 'delete', 
@@ -329,20 +444,24 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                 email: reg.student_email || reg.studentEmail || '--',
                 phone: reg.contact_phone || reg.phone || '--',
                 registrationDate: reg.created_at || reg.registeredAt,
+                locked: !!reg.locked,
                 workshops: []
             };
         }
         
         const workshopId = reg.workshop_id || reg.workshopId;
-        const ws = workshops.find(w => String(w.id) === String(workshopId));
-        if (ws) {
-            map[sId].workshops.push(ws.title);
+        if (workshopId !== 'LOCK_PLACEHOLDER') {
+            const ws = workshops.find(w => String(w.id) === String(workshopId));
+            if (ws) {
+                map[sId].workshops.push(ws.title);
+            }
         }
         
         const regDate = reg.created_at || reg.registeredAt;
         if (regDate && new Date(regDate) < new Date(map[sId].registrationDate)) {
             map[sId].registrationDate = regDate;
         }
+        if (reg.locked) map[sId].locked = true;
     });
 
     return Object.values(map).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
@@ -359,7 +478,8 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
         'Nome do Aluno': s.name,
         'E-mail': s.email,
         'Telefone': s.phone,
-        'Workshops': s.workshops.join(', ')
+        'Workshops': s.workshops.join(', '),
+        'Status Escolha': s.locked ? 'BLOQUEADO' : 'LIBERADO'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -371,7 +491,7 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
   if (viewMode === 'report' && selectedEventId) {
       const currentEvent = events.find(e => e.id === selectedEventId);
       const totalCapacity = workshops.reduce((acc, w) => acc + (w.spots || 0), 0);
-      const totalRegistrations = registrations.length;
+      const totalRegistrations = registrations.filter(r => r.workshop_id !== 'LOCK_PLACEHOLDER').length;
       const uniqueStudentsCount = studentsList.length;
       const occupancyRate = totalCapacity > 0 ? (totalRegistrations / totalCapacity) * 100 : 0;
 
@@ -492,8 +612,8 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                       <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Inscrição</th>
                                       <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Nome do Aluno</th>
                                       <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Email</th>
-                                      <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Telefone</th>
                                       <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Workshops Selecionados</th>
+                                      <th className="px-6 py-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Escolha</th>
                                       <th className="px-6 py-4 text-right">Ações</th>
                                   </tr>
                               </thead>
@@ -507,27 +627,128 @@ export const EventsManager: React.FC<EventsManagerProps> = ({ onBack }) => {
                                           </td>
                                           <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-800">{s.name}</td>
                                           <td className="px-6 py-4 whitespace-nowrap text-slate-600">{s.email}</td>
-                                          <td className="px-6 py-4 whitespace-nowrap font-mono text-xs text-slate-500">{s.phone}</td>
                                           <td className="px-6 py-4">
                                               <div className="flex flex-wrap gap-1">
-                                                  {s.workshops.map((w: string, i: number) => (
-                                                      <span key={i} className="bg-indigo-50 text-indigo-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-indigo-100">{w}</span>
-                                                  ))}
+                                                  {s.workshops.length === 0 ? (
+                                                      <span className="text-slate-300 text-[10px] italic">Sem workshops</span>
+                                                  ) : (
+                                                      s.workshops.map((w: string, i: number) => (
+                                                          <span key={i} className="bg-indigo-50 text-indigo-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-indigo-100">{w}</span>
+                                                      ))
+                                                  )}
                                               </div>
                                           </td>
-                                          <td className="px-6 py-4 text-right">
+                                          <td className="px-6 py-4 text-center">
                                               <button 
-                                                onClick={() => handleRemoveStudentFromEvent(s.id, s.name)}
-                                                className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                title="Remover aluno do evento"
+                                                onClick={() => handleToggleLockStudent(s.id, s.name, s.locked)}
+                                                className={clsx(
+                                                    "p-1.5 rounded-lg transition-all border",
+                                                    s.locked ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100" : "bg-green-50 text-green-600 border-green-100 hover:bg-green-100"
+                                                )}
+                                                title={s.locked ? "Desbloquear Escolhas" : "Bloquear Escolhas"}
                                               >
-                                                  <UserMinus size={16} />
+                                                  {s.locked ? <Lock size={16} /> : <Unlock size={16} />}
                                               </button>
+                                          </td>
+                                          <td className="px-6 py-4 text-right">
+                                              <div className="flex items-center justify-end gap-2">
+                                                  <button 
+                                                    onClick={() => handleOpenEditStudent(s.id, s.name)}
+                                                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                                    title="Editar Workshops do Aluno"
+                                                  >
+                                                      <Edit2 size={16} />
+                                                  </button>
+                                                  <button 
+                                                    onClick={() => handleRemoveStudentFromEvent(s.id, s.name)}
+                                                    className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                    title="Remover aluno do evento"
+                                                  >
+                                                      <UserMinus size={16} />
+                                                  </button>
+                                              </div>
                                           </td>
                                       </tr>
                                   ))}
                               </tbody>
                           </table>
+                      </div>
+                  </div>
+              )}
+
+              {/* MODAL DE EDIÇÃO DE WORKSHOPS DO ALUNO */}
+              {editingStudentId && (
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+                      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                          <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                              <div>
+                                  <h3 className="text-xl font-bold text-slate-800">Editar Workshops</h3>
+                                  <p className="text-sm text-slate-500">Aluno: <strong className="text-indigo-600">{editingStudentName}</strong></p>
+                              </div>
+                              <button onClick={() => setEditingStudentId(null)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
+                          </div>
+                          <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-8">
+                              {blocks.map(block => {
+                                  const blockWS = workshops.filter(w => w.blockId === block.id);
+                                  const selectedInBlock = tempWorkshops.filter(id => blockWS.some(w => w.id === id));
+                                  return (
+                                      <div key={block.id} className="space-y-4">
+                                          <div className="flex items-center justify-between border-b pb-2">
+                                              <h4 className="font-bold text-slate-700 flex items-center gap-2">
+                                                  <Clock size={16} className="text-indigo-600"/> {block.title} 
+                                                  <span className="text-[10px] text-slate-400">({formatDateDisplay(block.date)})</span>
+                                              </h4>
+                                              <span className={clsx("text-[10px] font-black px-2 py-0.5 rounded", selectedInBlock.length > block.maxSelections ? "bg-red-100 text-red-700" : "bg-indigo-50 text-indigo-700")}>
+                                                  {selectedInBlock.length} / {block.maxSelections} Seleções
+                                              </span>
+                                          </div>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                              {blockWS.map(ws => {
+                                                  const isChecked = tempWorkshops.includes(ws.id);
+                                                  return (
+                                                      <div 
+                                                        key={ws.id} 
+                                                        onClick={() => {
+                                                            if (isChecked) setTempWorkshops(prev => prev.filter(id => id !== ws.id));
+                                                            else setTempWorkshops(prev => [...prev, ws.id]);
+                                                        }}
+                                                        className={clsx(
+                                                            "p-4 border-2 rounded-xl cursor-pointer transition-all flex items-center justify-between group",
+                                                            isChecked ? "border-indigo-500 bg-indigo-50/50" : "border-slate-100 hover:border-slate-200"
+                                                        )}
+                                                      >
+                                                          <div className="flex items-center gap-3">
+                                                              {isChecked ? <CheckSquare className="text-indigo-600" size={20}/> : <Square className="text-slate-300 group-hover:text-slate-400" size={20}/>}
+                                                              <div className="min-w-0">
+                                                                  <p className="font-bold text-sm text-slate-800 truncate">{ws.title}</p>
+                                                                  <p className="text-[10px] text-slate-500">{ws.time} • {ws.speaker}</p>
+                                                              </div>
+                                                          </div>
+                                                      </div>
+                                                  );
+                                              })}
+                                          </div>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                          <div className="px-8 py-5 bg-slate-50 border-t flex justify-between items-center shrink-0">
+                              <div className="flex items-center gap-2 text-xs text-slate-400 italic">
+                                  <ShieldAlert size={14}/> 
+                                  <span>Alterações manuais pelo admin ignoram limites de vagas, mas respeitam a grade.</span>
+                              </div>
+                              <div className="flex gap-3">
+                                  <button onClick={() => setEditingStudentId(null)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm transition-all">Cancelar</button>
+                                  <button 
+                                    onClick={handleSaveStudentWorkshops} 
+                                    disabled={isSavingStudent}
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-lg font-black text-sm shadow-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                                  >
+                                      {isSavingStudent ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                                      Salvar Workshops
+                                  </button>
+                              </div>
+                          </div>
                       </div>
                   </div>
               )}

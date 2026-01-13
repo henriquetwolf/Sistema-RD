@@ -85,6 +85,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [states, setStates] = useState<IBGEUF[]>([]);
   const [cities, setCities] = useState<IBGECity[]>([]);
   const [isLoadingCities, setIsLoadingCities] = useState(false);
+  // Added to resolve error: Cannot find name 'filterCities'
   const [filterCities, setFilterCities] = useState<IBGECity[]>([]);
 
   // External Data States
@@ -158,6 +159,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       } else { setCities([]); }
   }, [formData.state]);
 
+  // Updated to use filterCities and clear city selection when state changes
   useEffect(() => {
       if (stateFilter) {
           ibgeService.getCities(stateFilter).then(setFilterCities);
@@ -187,7 +189,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     if (!formData.course || !formData.city) { alert("Preencha ao menos o Curso e a Cidade."); return; }
     setIsSaving(true);
     const payload = {
-        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studioMod1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffeeMod1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotel_mod_2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
+        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.date_mod_1 || null, mod_1_code: formData.mod_1_code, material: formData.material, studio_mod_1: formData.studio_mod_1, instructor_mod_1: formData.instructor_mod_1, ticket_mod_1: formData.ticket_mod_1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffee_mod_1, hotel_mod_1: formData.hotel_mod_1, hotel_loc_mod_1: formData.hotel_loc_mod_1, cost_help_1: formData.cost_help_1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod_2_code, instructor_mod_2: formData.instructor_mod_2, ticket_mod_2: formData.ticket_mod_2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotel_mod_2, hotel_loc_mod_2: formData.hotel_loc_mod_2, cost_help_2: formData.cost_help_2, studio_rent: formData.studio_rent, conta_azul_rd: formData.conta_azul_rd, is_ready: formData.is_ready, on_site: formData.on_site, on_crm: formData.on_crm, observations: formData.observations
     };
     try {
         if (formData.id) await appBackend.client.from('crm_classes').update(payload).eq('id', formData.id);
@@ -346,29 +348,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                             className="w-20 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs" 
                         />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Mod 1</label>
-                        <input 
-                            type="date" 
-                            value={mod1DateFilter} 
-                            onChange={e => setMod1DateFilter(e.target.value)} 
-                            className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] outline-none" 
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Mod 2</label>
-                        <input 
-                            type="date" 
-                            value={mod2DateFilter} 
-                            onChange={e => setMod2DateFilter(e.target.value)} 
-                            className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] outline-none" 
-                        />
-                      </div>
                       <div className="relative max-w-xs w-full">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                           <input type="text" placeholder="Buscar estúdio ou curso..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-1.5 bg-white border border-slate-200 rounded-lg text-sm" />
                       </div>
-                      <button onClick={() => { setStatusFilter('Todos'); setStateFilter(''); setCityFilter(''); setSearchTerm(''); setClassCodeFilter(''); setMod1DateFilter(''); setMod2DateFilter(''); }} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="Limpar Filtros"><Eraser size={18}/></button>
+                      <button onClick={() => { setStatusFilter('Todos'); setStateFilter(''); setCityFilter(''); setSearchTerm(''); setClassCodeFilter(''); }} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="Limpar Filtros"><Eraser size={18}/></button>
                   </div>
               </div>
               <div className="flex-1 overflow-auto custom-scrollbar">

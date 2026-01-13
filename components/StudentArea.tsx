@@ -210,7 +210,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     student_id: studentIdToUse,
                     student_name: student.name,
                     student_email: student.email,
-                    registered_at: new Date().toISOString()
+                    created_at: new Date().toISOString()
                 };
                 
                 const { error: insertErr } = await appBackend.client.from('crm_event_registrations').insert([dbPayload]);
@@ -223,7 +223,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     studentId: String(dbPayload.student_id),
                     studentName: dbPayload.student_name,
                     studentEmail: dbPayload.student_email,
-                    registeredAt: dbPayload.registered_at
+                    registeredAt: dbPayload.created_at
                 }]);
                 await fetchOccupationMap(viewingEvent.id);
             } catch (e: any) { 

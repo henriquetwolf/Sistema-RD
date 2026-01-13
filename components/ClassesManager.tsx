@@ -5,7 +5,7 @@ import {
   Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
   Edit2, Trash2, Hash, Loader2, Users, Filter, ChevronRight,
   LayoutList, ChevronLeft, ChevronRight as ChevronRightIcon,
-  CheckCircle2, Globe, Eraser, Building
+  CheckCircle2, Globe, Eraser, Building, ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
@@ -79,15 +79,21 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [cityFilter, setCityFilter] = useState<string>('');
   const [mod1DateFilter, setMod1DateFilter] = useState<string>('');
   const [mod2DateFilter, setMod2DateFilter] = useState<string>('');
+  const [classCodeFilter, setClassCodeFilter] = useState<string>('');
   
   // IBGE State
   const [states, setStates] = useState<IBGEUF[]>([]);
   const [cities, setCities] = useState<IBGECity[]>([]);
   const [isLoadingCities, setIsLoadingCities] = useState(false);
+  // Added to resolve error: Cannot find name 'filterCities'
+  const [filterCities, setFilterCities] = useState<IBGECity[]>([]);
 
   // External Data States
   const [instructorsList, setInstructorsList] = useState<string[]>([]);
   const [partnerStudios, setPartnerStudios] = useState<PartnerStudio[]>([]);
+
+  // Sorting State for Capacity View
+  const [capSortConfig, setCapSortConfig] = useState<{ key: 'enrolled' | 'percent'; direction: 'asc' | 'desc' } | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -126,7 +132,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           const { data, error } = await appBackend.client.from('crm_classes').select('*').order('created_at', { ascending: false });
           if (error) throw error;
           const mapped = (data || []).map((d: any) => ({
-            id: d.id, status: d.status || 'Confirmado', state: d.state || '', city: d.city || '', classCode: d.class_code || '', extraClass: d.extra_class || '', course: d.course || '', createdAt: d.created_at || '', dateMod1: d.date_mod_1 || '', mod1Code: d.mod_1_code || '', material: d.material || '', studioMod1: d.studio_mod_1 || '', instructorMod1: d.instructor_mod_1 || '', ticketMod1: d.ticket_mod_1 || '', infrastructure: d.infrastructure || '', coffeeMod1: d.coffee_mod_1 || '', hotelMod1: d.hotel_mod_1 || '', hotelLocMod1: d.hotel_loc_mod_1 || '', costHelp1: d.cost_help_1 || '', dateMod2: d.date_mod_2 || '', mod2Code: d.mod_2_code || '', instructorMod2: d.instructor_mod_2 || '', ticketMod2: d.ticket_mod_2 || '', coffeeMod2: d.coffee_mod_2 || '', hotelMod2: d.hotel_mod_2 || '', hotelLoc2: d.hotel_loc_mod_2 || '', costHelp2: d.cost_help_2 || '', studioRent: Number(d.studio_rent || 0), contaAzulRD: d.conta_azul_rd || '', isReady: !!d.is_ready, onSite: !!d.on_site, onCRM: !!d.on_crm, observations: d.observations || '', attachments: [] 
+            id: d.id, status: d.status || 'Confirmado', state: d.state || '', city: d.city || '', classCode: d.class_code || '', extraClass: d.extra_class || '', course: d.course || '', createdAt: d.created_at || '', dateMod1: d.date_mod_1 || '', mod1Code: d.mod_1_code || '', material: d.material || '', studio_mod_1: d.studio_mod_1 || '', instructor_mod_1: d.instructor_mod_1 || '', ticket_mod_1: d.ticket_mod_1 || '', infrastructure: d.infrastructure || '', coffee_mod_1: d.coffee_mod_1 || '', hotel_mod_1: d.hotel_mod_1 || '', hotel_loc_mod_1: d.hotel_loc_mod_1 || '', cost_help_1: d.cost_help_1 || '', date_mod_2: d.date_mod_2 || '', mod_2_code: d.mod_2_code || '', instructor_mod_2: d.instructor_mod_2 || '', ticket_mod_2: d.ticket_mod_2 || '', coffee_mod_2: d.coffee_mod_2 || '', hotel_mod_2: d.hotel_mod_2 || '', hotel_loc_2: d.hotel_loc_mod_2 || '', cost_help_2: d.cost_help_2 || '', studio_rent: Number(d.studio_rent || 0), conta_azul_rd: d.conta_azul_rd || '', is_ready: !!d.is_ready, on_site: !!d.on_site, on_crm: !!d.on_crm, observations: d.observations || '', attachments: [] 
           }));
           setClasses(mapped);
           if (mapped.length > 0 && viewMode === 'list' && selectedClassIds.length === 0) {
@@ -153,9 +159,14 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       } else { setCities([]); }
   }, [formData.state]);
 
+  // Updated to use filterCities and clear city selection when state changes
   useEffect(() => {
       if (stateFilter) {
-          ibgeService.getCities(stateFilter).then(setCities);
+          ibgeService.getCities(stateFilter).then(setFilterCities);
+          setCityFilter('');
+      } else {
+          setFilterCities([]);
+          setCityFilter('');
       }
   }, [stateFilter]);
 
@@ -178,7 +189,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     if (!formData.course || !formData.city) { alert("Preencha ao menos o Curso e a Cidade."); return; }
     setIsSaving(true);
     const payload = {
-        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studioMod1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffeeMod1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotel_mod_2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
+        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.date_mod_1 || null, mod_1_code: formData.mod_1_code, material: formData.material, studio_mod_1: formData.studio_mod_1, instructor_mod_1: formData.instructor_mod_1, ticket_mod_1: formData.ticket_mod_1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffee_mod_1, hotel_mod_1: formData.hotel_mod_1, hotel_loc_mod_1: formData.hotel_loc_mod_1, cost_help_1: formData.cost_help_1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod_2_code, instructor_mod_2: formData.instructor_mod_2, ticket_mod_2: formData.ticket_mod_2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotel_mod_2, hotel_loc_mod_2: formData.hotel_loc_mod_2, cost_help_2: formData.cost_help_2, studio_rent: formData.studio_rent, conta_azul_rd: formData.conta_azul_rd, is_ready: formData.is_ready, on_site: formData.on_site, on_crm: formData.on_crm, observations: formData.observations
     };
     try {
         if (formData.id) await appBackend.client.from('crm_classes').update(payload).eq('id', formData.id);
@@ -196,15 +207,39 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
   const filteredClasses = useMemo(() => {
     return classes.filter(c => {
-      const matchesSearch = c.course.toLowerCase().includes(searchTerm.toLowerCase()) || c.city.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = c.course.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            c.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            c.classCode.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'Todos' || c.status === statusFilter;
       const matchesState = !stateFilter || c.state === stateFilter;
       const matchesCity = !cityFilter || c.city === cityFilter;
       const matchesMod1 = !mod1DateFilter || c.dateMod1 === mod1DateFilter;
       const matchesMod2 = !mod2DateFilter || c.dateMod2 === mod2DateFilter;
-      return matchesSearch && matchesStatus && matchesState && matchesCity && matchesMod1 && matchesMod2;
+      const matchesClassCode = !classCodeFilter || c.classCode.includes(classCodeFilter);
+      return matchesSearch && matchesStatus && matchesState && matchesCity && matchesMod1 && matchesMod2 && matchesClassCode;
     });
-  }, [classes, searchTerm, statusFilter, stateFilter, cityFilter, mod1DateFilter, mod2DateFilter]);
+  }, [classes, searchTerm, statusFilter, stateFilter, cityFilter, mod1DateFilter, mod2DateFilter, classCodeFilter]);
+
+  const capacitySortedData = useMemo(() => {
+    const data = filteredClasses.map(cls => {
+      const enrolledCount = deals.filter(d => (d.class_mod_1 === cls.mod1Code || d.class_mod_2 === cls.mod2Code) && d.stage === 'closed').length;
+      const studioInfo = partnerStudios.find(s => s.fantasyName === cls.studioMod1);
+      const capacityNum = parseInt(studioInfo?.studentCapacity || '0');
+      const percent = capacityNum > 0 ? Math.round((enrolledCount / capacityNum) * 100) : 0;
+      return { ...cls, enrolledCount, capacityNum, percent, studioInfo };
+    });
+
+    if (capSortConfig) {
+      data.sort((a, b) => {
+        const valA = capSortConfig.key === 'enrolled' ? a.enrolledCount : a.percent;
+        const valB = capSortConfig.key === 'enrolled' ? b.enrolledCount : b.percent;
+        if (capSortConfig.direction === 'asc') return valA - valB;
+        return valB - valA;
+      });
+    }
+
+    return data;
+  }, [filteredClasses, deals, partnerStudios, capSortConfig]);
 
   const selectedClasses = useMemo(() => {
       return classes.filter(c => selectedClassIds.includes(c.id));
@@ -212,6 +247,20 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
   const toggleClassSelection = (id: string) => {
       setSelectedClassIds(prev => prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]);
+  };
+
+  const handleCapSort = (key: 'enrolled' | 'percent') => {
+    setCapSortConfig(prev => {
+      if (prev?.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'desc' };
+    });
+  };
+
+  const renderSortIcon = (key: 'enrolled' | 'percent') => {
+    if (capSortConfig?.key !== key) return <ArrowUpDown size={14} className="ml-1 opacity-30" />;
+    return capSortConfig.direction === 'asc' ? <ArrowUp size={14} className="ml-1" /> : <ArrowDown size={14} className="ml-1" />;
   };
 
   return (
@@ -272,11 +321,38 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           </div>
       ) : viewMode === 'capacity' ? (
           <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Building className="text-teal-600" /> Capacidade dos Estúdios</h3>
-                  <div className="relative max-w-sm w-full">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                      <input type="text" placeholder="Buscar turma ou cidade..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm" />
+              <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row gap-4 items-center justify-between">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 shrink-0"><Building className="text-teal-600" /> Capacidade dos Estúdios</h3>
+                  <div className="flex flex-wrap items-center gap-3 w-full justify-end">
+                      <div className="flex items-center gap-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Estado</label>
+                        <select value={stateFilter} onChange={e => setStateFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-1.5 outline-none">
+                            <option value="">Todos</option>
+                            {states.map(s => <option key={s.id} value={s.sigla}>{s.sigla}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Cidade</label>
+                        <select value={cityFilter} onChange={e => setCityFilter(e.target.value)} disabled={!stateFilter} className="bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-1.5 outline-none disabled:bg-slate-50">
+                            <option value="">Todas Cidades</option>
+                            {filterCities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Turma</label>
+                        <input 
+                            type="text" 
+                            placeholder="Nº..." 
+                            value={classCodeFilter} 
+                            onChange={e => setClassCodeFilter(e.target.value)} 
+                            className="w-20 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs" 
+                        />
+                      </div>
+                      <div className="relative max-w-xs w-full">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                          <input type="text" placeholder="Buscar estúdio ou curso..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-1.5 bg-white border border-slate-200 rounded-lg text-sm" />
+                      </div>
+                      <button onClick={() => { setStatusFilter('Todos'); setStateFilter(''); setCityFilter(''); setSearchTerm(''); setClassCodeFilter(''); }} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="Limpar Filtros"><Eraser size={18}/></button>
                   </div>
               </div>
               <div className="flex-1 overflow-auto custom-scrollbar">
@@ -288,45 +364,44 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                               <th className="px-6 py-4 border-b">Nº Turma</th>
                               <th className="px-6 py-4 border-b">Estúdio Parceiro</th>
                               <th className="px-6 py-4 border-b text-center">Capacidade</th>
-                              <th className="px-6 py-4 border-b text-center">Inscritos</th>
-                              <th className="px-6 py-4 border-b text-center">Ocupação</th>
+                              <th className="px-6 py-4 border-b text-center cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleCapSort('enrolled')}>
+                                <div className="flex items-center justify-center">Inscritos {renderSortIcon('enrolled')}</div>
+                              </th>
+                              <th className="px-6 py-4 border-b text-center cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => handleCapSort('percent')}>
+                                <div className="flex items-center justify-center">Ocupação {renderSortIcon('percent')}</div>
+                              </th>
                           </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                          {filteredClasses.map(cls => {
-                              const enrolledCount = deals.filter(d => (d.class_mod_1 === cls.mod1Code || d.class_mod_2 === cls.mod2Code) && d.stage === 'closed').length;
-                              const studioInfo = partnerStudios.find(s => s.fantasyName === cls.studioMod1);
-                              const capacityNum = parseInt(studioInfo?.studentCapacity || '0');
-                              const percent = capacityNum > 0 ? Math.round((enrolledCount / capacityNum) * 100) : 0;
-                              
+                          {capacitySortedData.map(item => {
                               return (
-                                  <tr key={cls.id} className="hover:bg-slate-50 transition-colors">
-                                      <td className="px-6 py-4 font-bold text-slate-700">{cls.state}</td>
-                                      <td className="px-6 py-4 text-slate-600">{cls.city}</td>
-                                      <td className="px-6 py-4 font-mono font-bold text-slate-500">#{cls.classCode}</td>
+                                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                      <td className="px-6 py-4 font-bold text-slate-700">{item.state}</td>
+                                      <td className="px-6 py-4 text-slate-600">{item.city}</td>
+                                      <td className="px-6 py-4 font-mono font-bold text-slate-500">#{item.classCode}</td>
                                       <td className="px-6 py-4">
                                           <div className="flex flex-col">
-                                              <span className="font-bold text-slate-800">{cls.studioMod1}</span>
-                                              <span className="text-[10px] text-slate-400 uppercase font-black">{studioInfo?.studioType || 'Parceiro'}</span>
+                                              <span className="font-bold text-slate-800">{item.studioMod1}</span>
+                                              <span className="text-[10px] text-slate-400 uppercase font-black">{item.studioInfo?.studioType || 'Parceiro'}</span>
                                           </div>
                                       </td>
-                                      <td className="px-6 py-4 text-center font-black text-slate-700">{studioInfo?.studentCapacity || '--'}</td>
-                                      <td className="px-6 py-4 text-center font-black text-purple-600">{enrolledCount}</td>
+                                      <td className="px-6 py-4 text-center font-black text-slate-700">{item.studioInfo?.studentCapacity || '--'}</td>
+                                      <td className="px-6 py-4 text-center font-black text-purple-600">{item.enrolledCount}</td>
                                       <td className="px-6 py-4">
                                           <div className="flex flex-col items-center gap-1">
                                               <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                                   <div 
-                                                      className={clsx("h-full transition-all", percent > 100 ? "bg-red-500" : percent > 80 ? "bg-orange-500" : "bg-teal-500")}
-                                                      style={{ width: `${Math.min(percent, 100)}%` }}
+                                                      className={clsx("h-full transition-all", item.percent > 100 ? "bg-red-500" : item.percent > 80 ? "bg-orange-500" : "bg-teal-500")}
+                                                      style={{ width: `${Math.min(item.percent, 100)}%` }}
                                                   ></div>
                                               </div>
-                                              <span className={clsx("text-[10px] font-black", percent > 100 ? "text-red-600" : "text-slate-500")}>{percent}%</span>
+                                              <span className={clsx("text-[10px] font-black", item.percent > 100 ? "text-red-600" : "text-slate-500")}>{item.percent}%</span>
                                           </div>
                                       </td>
                                   </tr>
                               );
                           })}
-                          {filteredClasses.length === 0 && (
+                          {capacitySortedData.length === 0 && (
                               <tr><td colSpan={7} className="py-20 text-center text-slate-400 italic">Nenhuma turma encontrada.</td></tr>
                           )}
                       </tbody>
@@ -339,7 +414,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
               <div className="p-4 border-b border-slate-200 bg-white z-10 space-y-3">
                   <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                      <input type="text" placeholder="Buscar por curso ou cidade..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                      <input type="text" placeholder="Buscar por curso ou cidade..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2">
@@ -361,7 +436,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                           <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Cidade</label>
                           <select value={cityFilter} onChange={e => setCityFilter(e.target.value)} disabled={!stateFilter} className="w-full bg-white border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-2 outline-none disabled:bg-slate-50">
                               <option value="">Cidade</option>
-                              {cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                              {filterCities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
                           </select>
                       </div>
                       <div className="space-y-1">
@@ -373,7 +448,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                           <input type="date" value={mod2DateFilter} onChange={e => setMod2DateFilter(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-600 text-[10px] rounded-lg px-1 py-1.5 outline-none" />
                       </div>
                       <div className="flex items-end">
-                          <button onClick={() => { setStatusFilter('Todos'); setStateFilter(''); setCityFilter(''); setMod1DateFilter(''); setMod2DateFilter(''); setSearchTerm(''); }} className="w-full h-9 flex items-center justify-center gap-1.5 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded-lg border border-red-100 transition-all"><Eraser size={14}/> Limpar</button>
+                          <button onClick={() => { setStatusFilter('Todos'); setStateFilter(''); setCityFilter(''); setMod1DateFilter(''); setMod2DateFilter(''); setSearchTerm(''); setClassCodeFilter(''); }} className="w-full h-9 flex items-center justify-center gap-1.5 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded-lg border border-red-100 transition-all"><Eraser size={14}/> Limpar</button>
                       </div>
                   </div>
               </div>
@@ -456,7 +531,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                     </div>
                 </div>
                 <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100">
-                    <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                    <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm transition-colors">Cancelar</button>
                     <button onClick={handleSave} disabled={isSaving} className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50">{isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} {formData.id ? 'Salvar Alterações' : 'Criar Turma'}</button>
                 </div>
             </div>

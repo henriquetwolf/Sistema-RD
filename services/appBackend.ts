@@ -1,3 +1,4 @@
+
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -7,7 +8,7 @@ import {
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
-  WAAutomationRule, WAAutomationLog
+  WAAutomationRule, WAAutomationLog, CommunityParticipant
 } from '../types';
 
 export type { CompanySetting, Pipeline, WebhookTrigger };
@@ -136,16 +137,16 @@ export const appBackend = {
       description: item.description, 
       campaign: item.campaign, 
       isLeadCapture: item.is_lead_capture, 
-      distributionMode: item.distribution_mode, 
-      fixedOwnerId: item.fixed_owner_id, 
-      teamId: item.team_id, 
-      targetPipeline: item.target_pipeline, 
-      targetStage: item.target_stage, 
-      questions: item.questions, 
-      style: item.style, 
-      createdAt: item.created_at, 
-      submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
-      folderId: item.folder_id
+      distributionMode: data.distribution_mode, 
+      fixedOwnerId: data.fixed_owner_id, 
+      teamId: data.team_id, 
+      targetPipeline: data.target_pipeline, 
+      targetStage: data.target_stage, 
+      questions: data.questions, 
+      style: data.style, 
+      createdAt: data.created_at, 
+      submissionsCount: data.crm_form_submissions?.[0]?.count || 0, 
+      folderId: data.folder_id
     }));
   },
 
@@ -158,11 +159,11 @@ export const appBackend = {
       description: item.description, 
       campaign: item.campaign, 
       isLeadCapture: item.is_lead_capture, 
-      distributionMode: item.distribution_mode, 
-      fixedOwnerId: item.fixed_owner_id, 
-      teamId: item.team_id, 
-      targetPipeline: item.target_pipeline, 
-      targetStage: item.target_stage, 
+      distributionMode: data.distribution_mode, 
+      fixedOwnerId: data.fixed_owner_id, 
+      teamId: data.team_id, 
+      targetPipeline: data.target_pipeline, 
+      targetStage: data.target_stage, 
       questions: item.questions, 
       style: item.style, 
       createdAt: item.created_at, 
@@ -635,7 +636,7 @@ export const appBackend = {
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, description: item.description, price: item.price, paymentLink: item.payment_link, imageUrl: item.image_url, certificateTemplateId: item.certificate_template_id, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title, description: item.description, price: item.price, payment_link: item.payment_link, imageUrl: item.image_url, certificate_template_id: item.certificate_template_id, createdAt: item.created_at }));
   },
 
   saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
@@ -758,7 +759,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, triggerType: d.trigger_type, pipelineName: d.pipeline_name, stageId: d.stage_id, productType: d.product_type, productId: d.product_id, messageTemplate: d.message_template, isActive: d.is_active, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, name: d.name, triggerType: d.trigger_type, pipelineName: d.pipeline_name, stageId: d.stage_id, productType: d.product_type, productId: d.product_id, message_template: d.message_template, isActive: d.is_active, createdAt: d.created_at }));
   },
 
   saveWAAutomationRule: async (rule: Partial<WAAutomationRule>): Promise<void> => {
@@ -813,5 +814,43 @@ export const appBackend = {
   deleteBillingNegotiation: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_billing_negotiations').delete().eq('id', id);
+  },
+
+  getCommunityParticipants: async (): Promise<CommunityParticipant[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('crm_community_participants').select('*').order('full_name', { ascending: true });
+    if (error) throw error;
+    return (data || []).map((d: any) => ({
+      id: d.id,
+      fullName: d.full_name,
+      state: d.state,
+      city: d.city,
+      address: d.address,
+      phone: d.phone,
+      email: d.email,
+      createdAt: d.created_at
+    }));
+  },
+
+  saveCommunityParticipant: async (participant: Partial<CommunityParticipant>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+      id: participant.id || crypto.randomUUID(),
+      full_name: participant.fullName,
+      state: participant.state,
+      city: participant.city,
+      address: participant.address,
+      phone: participant.phone,
+      email: participant.email,
+      created_at: participant.createdAt || new Date().toISOString()
+    };
+    const { error } = await supabase.from('crm_community_participants').upsert(payload);
+    if (error) throw error;
+  },
+
+  deleteCommunityParticipant: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_community_participants').delete().eq('id', id);
+    if (error) throw error;
   }
 };

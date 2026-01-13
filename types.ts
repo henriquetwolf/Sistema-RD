@@ -594,3 +594,14 @@ export interface WAAutomationLog {
   message: string;
   createdAt: string;
 }
+
+export interface CommunityParticipant {
+  id: string;
+  fullName: string;
+  state: string;
+  city: string;
+  address: string;
+  phone: string;
+  email: string;
+  createdAt: string;
+}

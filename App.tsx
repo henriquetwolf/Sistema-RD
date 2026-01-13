@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -32,6 +33,7 @@ import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
 import { SupportManager } from './components/SupportManager';
+import { CommunityManager } from './components/CommunityManager';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -43,11 +45,11 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap
+  LifeBuoy, Zap, Share2
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'area_comunidade';
 
 function App() {
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
@@ -527,6 +529,7 @@ function App() {
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
                             <nav className="space-y-1">
                                 {canAccess('overview') && <button onClick={() => setDashboardTab('overview')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'overview' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LayoutDashboard size={18} /> Visão Geral</button>}
+                                {canAccess('area_comunidade') && <button onClick={() => setDashboardTab('area_comunidade')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'area_comunidade' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Share2 size={18} /> Área de Comunidade</button>}
                                 {canAccess('hr') && <button onClick={() => setDashboardTab('hr')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'hr' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Heart size={18} /> Recursos Humanos</button>}
                                 {canAccess('crm') && <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Kanban size={18} /> CRM Comercial</button>}
                                 {canAccess('billing') && <button onClick={() => setDashboardTab('billing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'billing' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> Cobrança</button>}
@@ -639,6 +642,7 @@ function App() {
                                 )}
                             </div>
                         )}
+                        {dashboardTab === 'area_comunidade' && <CommunityManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'hr' && <HrDashboard collaborators={allCollaborators} onEditCollaborator={(c) => { setDashboardTab('hr'); }} />}
                         {dashboardTab === 'inventory' && <InventoryManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'billing' && <BillingManager />}

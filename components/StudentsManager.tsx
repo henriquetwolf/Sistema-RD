@@ -32,14 +32,19 @@ interface StudentDeal {
     class_mod_2?: string;
 }
 
+interface ItemRef {
+    id: string;
+    name: string;
+}
+
 interface GroupedStudent {
     cpf: string;
     email: string;
     name: string;
     deals: StudentDeal[];
-    presential: string[];
-    digital: string[];
-    events: string[];
+    presential: ItemRef[];
+    digital: ItemRef[];
+    events: ItemRef[];
 }
 
 interface CertStatus {
@@ -135,21 +140,24 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           groups[key].deals.push(deal);
           
           const prodName = deal.product_name || 'Produto Indefinido';
+          const itemRef = { id: deal.id, name: prodName };
+
           if (deal.product_type === 'Presencial') {
-              if (!groups[key].presential.includes(prodName)) groups[key].presential.push(prodName);
+              groups[key].presential.push(itemRef);
           } else if (deal.product_type === 'Digital') {
-              if (!groups[key].digital.includes(prodName)) groups[key].digital.push(prodName);
+              groups[key].digital.push(itemRef);
           } else if (deal.product_type === 'Evento') {
-              if (!groups[key].events.includes(prodName)) groups[key].events.push(prodName);
+              groups[key].events.push(itemRef);
           } else {
-              if (!groups[key].digital.includes(prodName)) groups[key].digital.push(prodName);
+              groups[key].digital.push(itemRef);
           }
 
-          // Incluir cursos liberados manualmente na coluna de Produtos Digitais
+          // Cursos liberados manualmente vinculados à transação (para exibição)
           const manualCourses = courseAccessMap[deal.id] || [];
           manualCourses.forEach(cName => {
-              if (!groups[key].digital.includes(cName)) {
-                  groups[key].digital.push(cName);
+              // Verifica se já não existe na lista para não duplicar visualmente
+              if (!groups[key].digital.some(d => d.name === cName)) {
+                  groups[key].digital.push({ id: `manual_${deal.id}`, name: cName });
               }
           });
       });
@@ -171,6 +179,35 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           .replace(/(\d{3})(\d)/, '$1.$2')
           .replace(/(\d{3})(\d{1,2})/, '$1-$2')
           .replace(/(-\d{2})\d+?$/, '$1');
+  };
+
+  const handleDeleteItem = async (dealId: string, itemName: string) => {
+      if (dealId.startsWith('manual_')) {
+          alert("Este item foi liberado manualmente através do modal 'Liberar Cursos'. Para removê-lo, acesse o botão 'Liberar Cursos' deste aluno.");
+          return;
+      }
+      if (!window.confirm(`Tem certeza que deseja excluir "${itemName}" deste aluno?`)) return;
+      
+      try {
+          const { error } = await appBackend.client.from('crm_deals').delete().eq('id', dealId);
+          if (error) throw error;
+          fetchData();
+      } catch (e: any) {
+          alert("Erro ao excluir item: " + e.message);
+      }
+  };
+
+  const handleDeleteStudent = async (student: GroupedStudent) => {
+      if (!window.confirm(`ATENÇÃO: Deseja excluir permanentemente o aluno ${student.name} e TODOS os seus registros vinculados? Esta ação não pode ser desfeita.`)) return;
+      
+      try {
+          const dealIds = student.deals.map(d => d.id);
+          const { error } = await appBackend.client.from('crm_deals').delete().in('id', dealIds);
+          if (error) throw error;
+          fetchData();
+      } catch (e: any) {
+          alert("Erro ao excluir aluno: " + e.message);
+      }
   };
 
   const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -257,7 +294,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           }
           alert("Acessos atualizados com sucesso!");
           setUnlockModalStudent(null);
-          fetchData(); // Atualiza a listagem principal para refletir os novos cursos na coluna digital
+          fetchData(); 
       } catch (e: any) { 
           alert("Erro ao salvar acessos: " + e.message); 
       } finally { 
@@ -325,12 +362,12 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                     <th className="px-6 py-4">Produtos Digitais</th>
                                     <th className="px-6 py-4">Eventos</th>
                                     <th className="px-6 py-4 text-center">Certificados</th>
-                                    <th className="px-6 py-4 text-center">Ações</th>
+                                    <th className="px-6 py-4 text-right">Ações</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filtered.map(s => (
-                                    <tr key={s.cpf || s.email || s.name} className="hover:bg-slate-50 transition-colors">
+                                    <tr key={s.cpf || s.email || s.name} className="hover:bg-slate-50 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
                                                 <span className="font-bold text-slate-800">{s.name}</span>
@@ -342,19 +379,34 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1">
-                                                {s.presential.map(p => <span key={p} className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-purple-100">{p}</span>)}
+                                                {s.presential.map(p => (
+                                                    <span key={p.id} className="inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-purple-100">
+                                                        {p.name}
+                                                        <button onClick={() => handleDeleteItem(p.id, p.name)} className="hover:text-red-600 transition-colors"><X size={10} /></button>
+                                                    </span>
+                                                ))}
                                                 {s.presential.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1">
-                                                {s.digital.map(p => <span key={p} className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-indigo-100">{p}</span>)}
+                                                {s.digital.map(p => (
+                                                    <span key={p.id} className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-indigo-100">
+                                                        {p.name}
+                                                        {!p.id.startsWith('manual_') && <button onClick={() => handleDeleteItem(p.id, p.name)} className="hover:text-red-600 transition-colors"><X size={10} /></button>}
+                                                    </span>
+                                                ))}
                                                 {s.digital.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1">
-                                                {s.events.map(p => <span key={p} className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-amber-100">{p}</span>)}
+                                                {s.events.map(p => (
+                                                    <span key={p.id} className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-amber-100">
+                                                        {p.name}
+                                                        <button onClick={() => handleDeleteItem(p.id, p.name)} className="hover:text-red-600 transition-colors"><X size={10} /></button>
+                                                    </span>
+                                                ))}
                                                 {s.events.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
                                             </div>
                                         </td>
@@ -393,8 +445,11 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                 {s.deals.every(d => !productTemplates[d.product_name]) && <span className="text-slate-300 italic text-[10px]">--</span>}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <button onClick={() => openUnlockModal(s)} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:bg-indigo-700 active:scale-95 transition-all"><MonitorPlay size={14}/> Liberar Cursos</button>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button onClick={() => openUnlockModal(s)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-md hover:bg-indigo-700 active:scale-95 transition-all"><MonitorPlay size={12}/> Liberar</button>
+                                                <button onClick={() => handleDeleteStudent(s)} className="p-1.5 bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all" title="Excluir Aluno"><Trash2 size={16} /></button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -489,13 +544,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         >
                                             Gerenciar Acesso
                                         </button>
-                                        <a 
-                                            href={`mailto:${deal.email}`}
-                                            className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-xl transition-all"
-                                            title="Enviar E-mail"
-                                        >
-                                            <Mail size={16}/>
-                                        </a>
+                                        <button onClick={() => handleDeleteItem(deal.id, deal.product_name)} className="p-2.5 bg-red-50 hover:bg-red-100 text-red-400 rounded-xl transition-all" title="Excluir Compra"><Trash2 size={16}/></button>
                                     </div>
                                 </div>
                             ))}

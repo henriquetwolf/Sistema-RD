@@ -131,10 +131,15 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             setEventWorkshops(ws);
             setEventBlocks(blks);
             
-            // Filtro Definitivo: Usamos o e-mail do aluno para identificar suas inscrições
-            // Isso ignora inconsistências de IDs entre sessões e banco de dados.
-            const userEmail = student.email.toLowerCase();
-            setMyRegistrations(regs.filter(r => r.studentEmail?.toLowerCase() === userEmail));
+            // Filtro Híbrido: Compara por ID de Negócio (todos do aluno) OU por e-mail
+            // Usamos String() para garantir que comparações entre IDs numéricos e UUIDs funcionem
+            const userEmail = (student.email || '').toLowerCase().trim();
+            setMyRegistrations(regs.filter(r => {
+                const regEmail = (r.studentEmail || '').toLowerCase().trim();
+                const isEmailMatch = regEmail !== '' && regEmail === userEmail;
+                const isIdMatch = studentDealIds.includes(String(r.studentId));
+                return isEmailMatch || isIdMatch;
+            }));
         } catch (e) {
             console.error(e);
         } finally {
@@ -144,25 +149,27 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
     const handleToggleRegistration = async (workshop: Workshop) => {
         if (!mainDealId) return;
-        const isRegistered = myRegistrations.some(r => r.workshopId === workshop.id);
+        
+        // Comparação robusta de ID para verificar se já está inscrito
+        const currentReg = myRegistrations.find(r => String(r.workshopId) === String(workshop.id));
+        const isRegistered = !!currentReg;
         
         if (isRegistered) {
             if (!window.confirm("Deseja cancelar sua inscrição neste workshop?")) return;
             setIsRegistering(workshop.id);
             try {
-                const reg = myRegistrations.find(r => r.workshopId === workshop.id);
-                if (reg) {
-                    await appBackend.client.from('crm_event_registrations').delete().eq('id', reg.id);
-                    setMyRegistrations(prev => prev.filter(r => r.id !== reg.id));
+                if (currentReg) {
+                    await appBackend.client.from('crm_event_registrations').delete().eq('id', currentReg.id);
+                    setMyRegistrations(prev => prev.filter(r => r.id !== currentReg.id));
                 }
             } catch (e) { alert("Erro ao cancelar."); }
             finally { setIsRegistering(null); }
         } else {
             // Verificar limite do bloco
-            const block = eventBlocks.find(b => b.id === workshop.blockId);
+            const block = eventBlocks.find(b => String(b.id) === String(workshop.blockId));
             const blockRegs = myRegistrations.filter(r => {
-                const ws = eventWorkshops.find(w => w.id === r.workshopId);
-                return ws?.blockId === workshop.blockId;
+                const ws = eventWorkshops.find(w => String(w.id) === String(r.workshopId));
+                return ws && String(ws.blockId) === String(workshop.blockId);
             });
 
             if (block && blockRegs.length >= block.maxSelections) {
@@ -179,7 +186,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                     return;
                 }
 
-                // Payload com nomes de colunas corretos (snake_case)
                 const dbPayload = {
                     id: crypto.randomUUID(),
                     event_id: viewingEvent!.id,
@@ -192,11 +198,11 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 
                 await appBackend.client.from('crm_event_registrations').insert([dbPayload]);
                 
-                // Atualiza estado local
+                // Atualiza estado local garantindo a estrutura correta para o filter do handleOpenEventProgram
                 setMyRegistrations(prev => [...prev, {
                     id: dbPayload.id,
                     eventId: dbPayload.event_id,
-                    workshopId: dbPayload.workshop_id,
+                    workshopId: String(dbPayload.workshop_id),
                     studentId: String(dbPayload.student_id),
                     studentName: dbPayload.student_name,
                     studentEmail: dbPayload.student_email,
@@ -502,7 +508,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
                         { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length }
                     ].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("flex-1 min-w-[140px] py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
                             {tab.label}
                             {tab.badge ? (
@@ -695,8 +701,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                             ) : (
                                 <div className="space-y-10">
                                     {eventBlocks.sort((a, b) => a.date.localeCompare(b.date)).map(block => {
-                                        const blockWS = eventWorkshops.filter(w => w.blockId === block.id);
-                                        const myBlockRegs = myRegistrations.filter(r => blockWS.some(w => w.id === r.workshopId));
+                                        const blockWS = eventWorkshops.filter(w => String(w.blockId) === String(block.id));
+                                        const myBlockRegs = myRegistrations.filter(r => blockWS.some(w => String(w.id) === String(r.workshopId)));
                                         
                                         return (
                                             <div key={block.id} className="space-y-4">
@@ -715,7 +721,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     {blockWS.map(ws => {
-                                                        const isSelected = myRegistrations.some(r => r.workshopId === ws.id);
+                                                        const isSelected = myRegistrations.some(r => String(r.workshopId) === String(ws.id));
                                                         const isDisabled = isRegistering !== null || (!isSelected && myBlockRegs.length >= block.maxSelections);
                                                         
                                                         return (

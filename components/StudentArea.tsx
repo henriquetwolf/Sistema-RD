@@ -48,6 +48,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const [showSupportModal, setShowSupportModal] = useState(false);
     const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
 
+    const studentDealIds = useMemo(() => student.deals.map(d => String(d.id)), [student.deals]);
     const mainDealId = student.deals[0]?.id;
 
     useEffect(() => {
@@ -83,7 +84,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
     const fetchSupportNotifications = async () => {
         if (!mainDealId) return;
         try {
-            const tickets = await appBackend.getSupportTicketsBySender(mainDealId);
+            const tickets = await appBackend.getSupportTicketsBySender(String(mainDealId));
             setPendingTicketsCount(tickets.filter(t => t.status === 'pending').length);
         } catch (e) {}
     };
@@ -129,7 +130,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
             ]);
             setEventWorkshops(ws);
             setEventBlocks(blks);
-            setMyRegistrations(regs.filter(r => r.studentId === mainDealId));
+            // Filtra as inscrições comparando Strings para evitar erros de tipo e verifica em todos os deals do aluno
+            setMyRegistrations(regs.filter(r => studentDealIds.includes(String(r.studentId))));
         } catch (e) {
             console.error(e);
         } finally {
@@ -187,12 +189,12 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 
                 await appBackend.client.from('crm_event_registrations').insert([dbPayload]);
                 
-                // Atualiza estado local com camelCase para manter compatibilidade com o resto do componente
+                // Atualiza estado local garantindo que studentId seja string para consistência na filtragem futura
                 setMyRegistrations(prev => [...prev, {
                     id: dbPayload.id,
                     eventId: dbPayload.event_id,
                     workshopId: dbPayload.workshop_id,
-                    studentId: dbPayload.student_id,
+                    studentId: String(dbPayload.student_id),
                     studentName: dbPayload.student_name,
                     studentEmail: dbPayload.student_email,
                     registeredAt: dbPayload.registered_at
@@ -228,8 +230,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         try {
             const [coursesData, accessIds, progressIds] = await Promise.all([
                 appBackend.getOnlineCourses(),
-                appBackend.getStudentCourseAccess(mainDealId),
-                appBackend.getStudentLessonProgress(mainDealId)
+                appBackend.getStudentCourseAccess(String(mainDealId)),
+                appBackend.getStudentLessonProgress(String(mainDealId))
             ]);
             setAllCourses(coursesData || []);
             setUnlockedCourseIds(accessIds || []);
@@ -263,7 +265,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
         const newStatus = !isCurrentlyCompleted;
         
         try {
-            await appBackend.toggleLessonProgress(mainDealId, lessonId, newStatus);
+            await appBackend.toggleLessonProgress(String(mainDealId), lessonId, newStatus);
             const updatedProgress = newStatus 
                 ? [...completedLessonIds, lessonId] 
                 : completedLessonIds.filter(id => id !== lessonId);
@@ -276,7 +278,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout }) =
                 if (isFinished) {
                     const alreadyHasCert = certificates.some(c => c.certificate_template_id === playingCourse.certificateTemplateId);
                     if (!alreadyHasCert) {
-                        await appBackend.issueCertificate(mainDealId, playingCourse.certificateTemplateId);
+                        await appBackend.issueCertificate(String(mainDealId), playingCourse.certificateTemplateId);
                         await loadCertificates(); 
                         alert("🎉 Parabéns! Você concluuiu 100% das aulas e seu certificado já está disponível na aba 'Meus Diplomas'!");
                     }

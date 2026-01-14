@@ -1,16 +1,16 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LogOut, Calendar, MapPin, Loader2, BookOpen, User, 
   ChevronRight, Users, ExternalLink, GraduationCap,
   Newspaper, Bell, Sparkles, X, Clock, Image as ImageIcon,
   ArrowRight, Info, Plane, Coffee, Bed, Map, DollarSign, Package, Monitor,
-  FileCheck, LayoutDashboard, FileText, CheckCircle, LifeBuoy, FileSignature, ChevronLeft
+  FileCheck, LayoutDashboard, FileText, CheckCircle, LifeBuoy, FileSignature, ChevronLeft,
+  MonitorPlay, Play, CheckCircle2, Circle, Video, Download, Paperclip
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
 import { Teacher } from './TeachersManager';
-import { Banner, TeacherNews, Contract, SupportTicket } from '../types';
+import { Banner, TeacherNews, Contract, SupportTicket, OnlineCourse, CourseModule, CourseLesson } from '../types';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
 import clsx from 'clsx';
@@ -21,7 +21,7 @@ interface InstructorAreaProps {
 }
 
 export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLogout }) => {
-  const [activeViewTab, setActiveViewTab] = useState<'dashboard' | 'contracts' | 'pending_contracts'>('dashboard');
+  const [activeViewTab, setActiveViewTab] = useState<'dashboard' | 'contracts' | 'pending_contracts' | 'trainings'>('dashboard');
   const [classes, setClasses] = useState<any[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [news, setNews] = useState<TeacherNews[]>([]);
@@ -37,6 +37,13 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [pendingTicketsCount, setPendingTicketsCount] = useState(0);
 
+  // Estados para Treinamentos (Produtos Digitais)
+  const [trainings, setTrainings] = useState<any[]>([]);
+  const [playingCourse, setPlayingCourse] = useState<OnlineCourse | null>(null);
+  const [activeLesson, setActiveLesson] = useState<CourseLesson | null>(null);
+  const [courseStructure, setCourseStructure] = useState<{ modules: CourseModule[], lessons: Record<string, CourseLesson[]> } | null>(null);
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
+
   useEffect(() => {
     fetchMyClasses();
     fetchBanners();
@@ -44,6 +51,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
     fetchMyContracts();
     fetchPendingContracts();
     fetchSupportNotifications();
+    fetchTrainings();
     
     const saved = localStorage.getItem(`seen_news_${instructor.id}`);
     if (saved) {
@@ -122,6 +130,42 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
     }
   };
 
+  const fetchTrainings = async () => {
+      try {
+          const { data } = await appBackend.client
+              .from('crm_products')
+              .select('*')
+              .contains('target_areas', ['instructor'])
+              .eq('status', 'active');
+          if (data) setTrainings(data);
+      } catch (e) {}
+  };
+
+  const handleOpenCoursePlayer = async (product: any) => {
+      setIsLoading(true);
+      try {
+          const onlineCourses = await appBackend.getOnlineCourses();
+          const course = onlineCourses.find(c => c.title.toLowerCase() === product.name.toLowerCase());
+          
+          if (!course) {
+              alert("Conteúdo técnico deste treinamento ainda não configurado.");
+              return;
+          }
+
+          const mods = await appBackend.getCourseModules(course.id);
+          const lessonsMap: Record<string, CourseLesson[]> = {};
+          let firstLesson: CourseLesson | null = null;
+          for (const mod of mods) {
+              const lessons = await appBackend.getModuleLessons(mod.id);
+              lessonsMap[mod.id] = lessons;
+              if (!firstLesson && lessons.length > 0) firstLesson = lessons[0];
+          }
+          setCourseStructure({ modules: mods, lessons: lessonsMap });
+          setPlayingCourse(course);
+          setActiveLesson(firstLesson);
+      } catch (e) {} finally { setIsLoading(false); }
+  };
+
   const markNewsAsSeen = (item: TeacherNews) => {
       if (!seenNewsIds.includes(item.id)) {
           const updated = [...seenNewsIds, item.id];
@@ -134,6 +178,92 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
   const unreadCount = useMemo(() => {
       return news.filter(n => !seenNewsIds.includes(n.id)).length;
   }, [news, seenNewsIds]);
+
+  if (playingCourse && courseStructure) {
+      return (
+          <div className="min-h-screen bg-slate-900 text-white flex flex-col font-sans animate-in fade-in">
+              <header className="bg-slate-800/50 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between shrink-0">
+                  <button onClick={() => setPlayingCourse(null)} className="flex items-center gap-2 text-slate-400 hover:text-white transition-all font-bold text-sm">
+                      <ChevronLeft size={20}/> Voltar
+                  </button>
+                  <h2 className="text-sm font-black uppercase tracking-widest text-orange-400">{playingCourse.title}</h2>
+                  <div className="w-24"></div>
+              </header>
+              <div className="flex-1 flex overflow-hidden">
+                  <main className="flex-1 overflow-y-auto custom-scrollbar-dark p-8">
+                      {activeLesson ? (
+                          <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                              <div className="aspect-video bg-black rounded-[2rem] shadow-2xl overflow-hidden border border-white/5 relative">
+                                  {activeLesson.videoUrl ? (
+                                      <div 
+                                          className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:absolute [&>iframe]:top-0 [&>iframe]:left-0"
+                                          dangerouslySetInnerHTML={{ __html: activeLesson.videoUrl }}
+                                      />
+                                  ) : (
+                                      <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
+                                          <Video size={64} className="opacity-20 mb-4" />
+                                          <p className="font-bold">Esta aula não possui vídeo.</p>
+                                      </div>
+                                  )}
+                              </div>
+                              <div className="space-y-4">
+                                  <h1 className="text-3xl font-black">{activeLesson.title}</h1>
+                                  <p className="text-slate-400 leading-relaxed whitespace-pre-wrap">{activeLesson.description || 'Nenhuma descrição.'}</p>
+                                  {(activeLesson.materials || []).length > 0 && (
+                                      <div className="pt-6">
+                                          <h4 className="text-[10px] font-black uppercase tracking-widest text-orange-400 mb-4">Materiais de Apoio</h4>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                              {activeLesson.materials.map((mat, i) => (
+                                                  <a key={i} href={mat.url} target="_blank" className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all group">
+                                                      <div className="p-2 bg-orange-500/20 text-orange-400 rounded-lg group-hover:scale-110 transition-transform"><FileText size={18}/></div>
+                                                      <span className="text-xs font-bold text-slate-200 truncate">{mat.name}</span>
+                                                      <Download size={14} className="ml-auto text-slate-500" />
+                                                  </a>
+                                              ))}
+                                          </div>
+                                      </div>
+                                  )}
+                              </div>
+                          </div>
+                      ) : (
+                          <div className="h-full flex items-center justify-center text-slate-500 italic">Selecione uma aula para começar.</div>
+                      )}
+                  </main>
+                  <aside className="w-80 bg-slate-800/30 border-l border-white/5 flex flex-col shrink-0">
+                      <div className="p-6 border-b border-white/5">
+                          <h3 className="font-black text-xs uppercase tracking-widest text-slate-400">Conteúdo do Treinamento</h3>
+                      </div>
+                      <div className="flex-1 overflow-y-auto custom-scrollbar-dark p-4 space-y-4">
+                          {courseStructure.modules.map(mod => (
+                              <div key={mod.id} className="space-y-2">
+                                  <h4 className="text-[10px] font-black text-orange-400 uppercase tracking-widest px-2 mb-3">{mod.title}</h4>
+                                  <div className="space-y-1">
+                                      {(courseStructure.lessons[mod.id] || []).map(lesson => (
+                                          <button 
+                                              key={lesson.id} 
+                                              onClick={() => setActiveLesson(lesson)}
+                                              className={clsx(
+                                                  "w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all group",
+                                                  activeLesson?.id === lesson.id ? "bg-white/10 ring-1 ring-white/20" : "hover:bg-white/5"
+                                              )}
+                                          >
+                                              <div className={clsx("mt-0.5 shrink-0", activeLesson?.id === lesson.id ? "text-white" : "text-slate-600")}>
+                                                  <Play size={16}/>
+                                              </div>
+                                              <div className="min-w-0">
+                                                  <p className={clsx("text-xs font-bold truncate", activeLesson?.id === lesson.id ? "text-white" : "text-slate-400 group-hover:text-slate-200")}>{lesson.title}</p>
+                                              </div>
+                                          </button>
+                                      ))}
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </aside>
+              </div>
+          </div>
+      );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -215,6 +345,15 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                 )}
             >
                 <LayoutDashboard size={18} /> Dashboard
+            </button>
+            <button 
+                onClick={() => setActiveViewTab('trainings')}
+                className={clsx(
+                    "px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap",
+                    activeViewTab === 'trainings' ? "bg-white text-orange-600 shadow-md ring-1 ring-slate-100" : "text-slate-400 hover:text-slate-600"
+                )}
+            >
+                <MonitorPlay size={18} /> Treinamentos e Materiais
             </button>
             <button 
                 onClick={() => setActiveViewTab('pending_contracts')}
@@ -401,6 +540,55 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                     )}
                 </div>
             </div>
+        ) : activeViewTab === 'trainings' ? (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="flex items-center justify-between px-2">
+                    <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                        <MonitorPlay size={24} className="text-orange-600" /> Treinamentos e Materiais
+                    </h2>
+                </div>
+
+                {trainings.length === 0 ? (
+                    <div className="bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 p-16 text-center shadow-inner">
+                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+                            <BookOpen size={40} />
+                        </div>
+                        <h3 className="text-lg font-black text-slate-700">Nenhum treinamento liberado</h3>
+                        <p className="text-slate-400 text-sm max-w-xs mx-auto mt-2 font-medium">
+                            Seu material didático e treinamentos técnicos aparecerão aqui.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {trainings.map(product => (
+                            <div key={product.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all overflow-hidden flex flex-col group cursor-pointer" onClick={() => handleOpenCoursePlayer(product)}>
+                                <div className="h-48 relative overflow-hidden">
+                                    {product.image_url ? (
+                                        <img src={product.image_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={product.name} />
+                                    ) : (
+                                        <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300">
+                                            <MonitorPlay size={48} />
+                                        </div>
+                                    )}
+                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <div className="bg-white/90 backdrop-blur-sm p-3 rounded-full shadow-xl">
+                                            <Play size={24} className="text-orange-600 fill-orange-600 ml-1" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="p-6 flex-1 flex flex-col">
+                                    <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1">{product.category}</span>
+                                    <h3 className="font-black text-slate-800 mb-2 leading-tight">{product.name}</h3>
+                                    <p className="text-xs text-slate-400 line-clamp-2 mb-4 font-medium">{product.description}</p>
+                                    <div className="mt-auto flex items-center text-xs font-black text-orange-600 uppercase tracking-widest">
+                                        Acessar Conteúdo <ArrowRight size={14} className="ml-1" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
         ) : activeViewTab === 'pending_contracts' ? (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                 <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 px-2">
@@ -515,7 +703,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
       {viewingDetails && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                  <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                  <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 rounded-t-[2.5rem]">
                       <div>
                           <h3 className="text-2xl font-black text-slate-800 leading-tight">{viewingDetails.course}</h3>
                           <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">Detalhes Logísticos #{viewingDetails.class_code}</p>
@@ -625,7 +813,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
                   </div>
 
                   <div className="px-10 py-6 bg-slate-50 border-t border-slate-100 rounded-b-[2.5rem] flex justify-end">
-                      <button onClick={() => setViewingDetails(null)} className="bg-slate-800 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-900 transition-all active:scale-95 shadow-lg">
+                      <button onClick={() => setViewingDetails(null)} className="bg-slate-800 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-orange-600 transition-all active:scale-95 shadow-lg">
                           Fechar Detalhes
                       </button>
                   </div>

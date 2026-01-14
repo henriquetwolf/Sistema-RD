@@ -204,7 +204,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V67 (INCLUDES EXTERNAL CERTIFICATES)
+-- SCRIPT DE FUNDAÇÃO CRM V70 (FIXES SURVEY SAVE ERRORS)
 CREATE TABLE IF NOT EXISTS public.crm_teacher_levels (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text NOT NULL,
@@ -247,6 +247,15 @@ CREATE TABLE IF NOT EXISTS public.crm_wa_automation_logs (
     message text,
     created_at timestamp with time zone DEFAULT now()
 );
+
+-- Correção da tabela crm_forms para suportar Pesquisas
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_audience text DEFAULT 'all';
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_type text DEFAULT 'all';
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_product_type text;
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_product_name text;
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS only_if_finished boolean DEFAULT false;
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS type text DEFAULT 'form';
 
 -- Adiciona suporte para áreas de exibição de produtos
 ALTER TABLE IF EXISTS public.crm_products ADD COLUMN IF NOT EXISTS target_areas text[] DEFAULT '{}';
@@ -542,8 +551,8 @@ NOTIFY pgrst, 'reload schema';
 
         {activeTab === 'sql_script' && (
             <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 animate-in zoom-in-95 duration-200">
-                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V67</h3></div>
-                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados para os níveis de instrutores, certificados externos, tabelas de automação, bloqueio de eventos e suporte para áreas de produtos digitais. Copie e execute no **SQL Editor** do Supabase.</p>
+                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V70</h3></div>
+                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados para os níveis de instrutores, certificados externos, tabelas de automação, bloqueio de eventos e as novas funcionalidades das Pesquisas. Copie e execute no **SQL Editor** do Supabase.</p>
                 <div className="relative">
                     <pre className="bg-black text-emerald-400 p-6 rounded-2xl text-[10px] font-mono overflow-auto max-h-[400px] shadow-inner custom-scrollbar-dark border border-slate-800">
                         {generateRepairSQL()}

@@ -180,7 +180,7 @@ export const appBackend = {
   saveForm: async (form: FormModel): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_forms').upsert({
-      id: (form.id && String(form.id).length > 5) ? form.id : crypto.randomUUID(),
+      id: (form.id && form.id.trim() !== '') ? form.id : crypto.randomUUID(),
       title: form.title, 
       description: form.description || null, 
       campaign: form.campaign || null, 
@@ -188,8 +188,8 @@ export const appBackend = {
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
       team_id: form.teamId || null, 
-      target_pipeline: form.target_pipeline || null, 
-      target_stage: form.target_stage || null, 
+      target_pipeline: form.targetPipeline || null, 
+      target_stage: form.targetStage || null, 
       questions: form.questions || [], 
       style: form.style || {}, 
       folder_id: form.folderId || null, 
@@ -202,16 +202,16 @@ export const appBackend = {
   saveSurvey: async (survey: SurveyModel): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_forms').upsert({
-      id: (survey.id && String(survey.id).length > 5) ? survey.id : crypto.randomUUID(),
+      id: (survey.id && survey.id.trim() !== '') ? survey.id : crypto.randomUUID(),
       title: survey.title, 
       description: survey.description || null, 
       campaign: survey.campaign || null, 
       is_lead_capture: !!survey.isLeadCapture, 
       distribution_mode: survey.distributionMode || 'fixed', 
-      fixed_owner_id: survey.fixedOwnerId || null,
-      team_id: survey.teamId || null,
-      target_pipeline: survey.targetPipeline || null,
-      target_stage: survey.targetStage || null,
+      fixed_owner_id: survey.fixedOwnerId || null, 
+      team_id: survey.teamId || null, 
+      target_pipeline: survey.targetPipeline || null, 
+      target_stage: survey.targetStage || null, 
       questions: survey.questions || [], 
       style: survey.style || {}, 
       folder_id: survey.folderId || null, 
@@ -341,7 +341,6 @@ export const appBackend = {
   getCompanies: async (): Promise<CompanySetting[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_companies').select('*').order('legal_name');
-    // Fix: Corrected property names to match CompanySetting interface
     return (data || []).map((item: any) => ({ 
       id: item.id, 
       legalName: item.legal_name, 
@@ -368,6 +367,7 @@ export const appBackend = {
     return (data || []).map((item: any) => ({ id: item.id, pipelineName: item.pipeline_name, stageId: item.stage_id, payloadJson: item.payload_json, createdAt: item.created_at }));
   },
 
+  // Fix: Property 'payload_json' does not exist on type 'Partial<WebhookTrigger>'. Did you mean 'payloadJson'?
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || crypto.randomUUID(), pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson, created_at: trigger.createdAt || new Date().toISOString() });
@@ -486,7 +486,6 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    // Fix: intervalMinutes: j.interval_minutes to match interface
     return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
@@ -513,7 +512,6 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    /* Fix: Error in file services/appBackend.ts on line 516: Property 'primary_key' does not exist on type 'Partial<SavedPreset>'. Did you mean 'primaryKey'? */
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
@@ -596,7 +594,7 @@ export const appBackend = {
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-    return (data || []).map((item: any) => ({ id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role, content: item.content, attachment_url: item.attachment_url, attachment_name: item.attachment_name, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role, content: item.content, attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at }));
   },
 
   saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
@@ -617,7 +615,6 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    /* Corrected: Mapping database snake_case fields to camelCase interface properties */
     return (data || []).map((item: any) => ({ 
       id: item.id, 
       status: item.status, 
@@ -631,40 +628,39 @@ export const appBackend = {
       fantasyName: item.fantasy_name, 
       legalName: item.legal_name, 
       cnpj: item.cnpj, 
-      studioPhone: item.studio_phone, 
+      studio_phone: item.studio_phone, 
       address: item.address, 
       city: item.city, 
       state: item.state, 
       country: item.country, 
-      sizeM2: item.size_m2, 
-      studentCapacity: item.student_capacity, 
-      rentValue: item.rent_value, 
+      size_m2: item.size_m2, 
+      student_capacity: item.student_capacity, 
+      rent_value: item.rent_value, 
       methodology: item.methodology, 
-      studioType: item.studio_type, 
-      nameOnSite: item.name_on_site, 
+      studio_type: item.studio_type, 
+      name_on_site: item.name_on_site, 
       bank: item.bank, 
       agency: item.agency, 
       account: item.account, 
       beneficiary: item.beneficiary, 
-      pixKey: item.pix_key, 
-      hasReformer: !!item.has_reformer, 
-      qtyReformer: item.qty_reformer, 
-      hasLadderBarrel: !!item.has_ladder_barrel, 
-      qtyLadderBarrel: item.qty_ladder_barrel, 
-      hasChair: !!item.has_chair, 
-      qtyChair: item.qty_chair, 
-      hasCadillac: !!item.has_cadillac, 
-      qtyCadillac: item.qty_cadillac, 
-      hasChairsForCourse: !!item.has_chairs_for_course, 
-      hasTv: !!item.has_tv, 
-      maxKitsCapacity: item.max_kits_capacity, 
+      pix_key: item.pix_key, 
+      has_reformer: !!item.has_reformer, 
+      qty_reformer: item.qty_reformer, 
+      has_ladder_barrel: !!item.has_ladder_barrel, 
+      qty_ladder_barrel: item.qty_ladder_barrel, 
+      has_chair: !!item.has_chair, 
+      qty_chair: item.qty_chair, 
+      has_cadillac: !!item.has_cadillac, 
+      qty_cadillac: item.qty_cadillac, 
+      has_chairs_for_course: !!item.has_chairs_for_course, 
+      has_tv: !!item.has_tv, 
+      max_kits_capacity: item.max_kits_capacity, 
       attachments: item.attachments 
     }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
-    /* Corrected: Fixed studio.qty_ladder_barrel typo to studio.qtyLadderBarrel and cpf mapping */
     await supabase.from('crm_partner_studios').upsert({ 
       id: studio.id || crypto.randomUUID(), 
       status: studio.status, 
@@ -709,7 +705,6 @@ export const appBackend = {
     });
   },
 
-  // Added: missing deletePartnerStudio method
   deletePartnerStudio: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_partner_studios').delete().eq('id', id);
@@ -739,7 +734,6 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    // Updated property names to fix lines 614 errors
     await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, backBackgroundData: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
   },
 
@@ -792,13 +786,11 @@ export const appBackend = {
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
-    // Fix: paymentLink: item.payment_link to match interface
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, description: item.description, price: item.price, paymentLink: item.payment_link, imageUrl: item.image_url, certificateTemplateId: item.certificate_template_id, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title, description: item.description, price: item.price, payment_link: item.payment_link, image_url: item.image_url, certificate_template_id: item.certificate_template_id, createdAt: item.created_at }));
   },
 
   saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: Use certificateTemplateId instead of certificate_template_id on Partial<OnlineCourse>
     await supabase.from('crm_online_courses').upsert({ 
       id: course.id || crypto.randomUUID(), 
       title: course.title, 
@@ -906,9 +898,8 @@ export const appBackend = {
 
   saveWorkshop: async (ws: Workshop): Promise<Workshop> => {
     if (!isConfigured) throw new Error("Not configured");
-    const { data, error } = await appBackend.client.from('crm_workshops').upsert({ id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
+    const { data, error } = await supabase.from('crm_workshops').upsert({ id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
     if (error) throw error;
-    /* Fix: Error in file services/appBackend.ts on line 910: Object literal may only specify known properties, but 'block_id' does not exist in type 'Workshop'. Did you mean to write 'blockId'? */
     return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
   },
 
@@ -927,16 +918,15 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    // Fix: Map snake_case to camelCase properties for WAAutomationRule
     return (data || []).map((d: any) => ({ 
         id: d.id, 
         name: d.name, 
         triggerType: d.trigger_type, 
-        pipelineName: d.pipeline_name, 
-        stageId: d.stage_id, 
-        productType: d.product_type, 
-        productId: d.product_id, 
-        messageTemplate: d.message_template, 
+        pipeline_name: d.pipeline_name, 
+        stage_id: d.stage_id, 
+        product_type: d.product_type, 
+        product_id: d.product_id, 
+        message_template: d.message_template, 
         isActive: d.is_active, 
         createdAt: d.created_at 
     }));
@@ -956,7 +946,6 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    // Fix: studentName: d.student_name to match interface
     return (data || []).map((d: any) => ({ id: d.id, ruleName: d.rule_name, studentName: d.student_name, phone: d.phone, message: d.message, createdAt: d.created_at }));
   },
 
@@ -968,7 +957,6 @@ export const appBackend = {
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    // Fix: trackingCode: item.tracking_code to match interface
     return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
   },
 

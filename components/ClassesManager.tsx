@@ -5,7 +5,8 @@ import {
   Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
   Edit2, Trash2, Hash, Loader2, Users, Filter, ChevronRight,
   LayoutList, ChevronLeft, ChevronRight as ChevronRightIcon,
-  CheckCircle2, Globe, Eraser, Building
+  CheckCircle2, Globe, Eraser, Building, Info, User, Monitor, 
+  Truck, CheckCircle, Circle, ArrowUpCircle, Layout
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
@@ -126,7 +127,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           const { data, error } = await appBackend.client.from('crm_classes').select('*').order('created_at', { ascending: false });
           if (error) throw error;
           const mapped = (data || []).map((d: any) => ({
-            id: d.id, status: d.status || 'Confirmado', state: d.state || '', city: d.city || '', classCode: d.class_code || '', extraClass: d.extra_class || '', course: d.course || '', createdAt: d.created_at || '', dateMod1: d.date_mod_1 || '', mod1Code: d.mod_1_code || '', material: d.material || '', studioMod1: d.studio_mod_1 || '', instructorMod1: d.instructor_mod_1 || '', ticketMod1: d.ticket_mod_1 || '', infrastructure: d.infrastructure || '', coffeeMod1: d.coffee_mod_1 || '', hotelMod1: d.hotel_mod_1 || '', hotelLocMod1: d.hotel_loc_mod_1 || '', costHelp1: d.cost_help_1 || '', dateMod2: d.date_mod_2 || '', mod2Code: d.mod_2_code || '', instructorMod2: d.instructor_mod_2 || '', ticketMod2: d.ticket_mod_2 || '', coffeeMod2: d.coffee_mod_2 || '', hotelMod2: d.hotel_mod_2 || '', hotelLoc2: d.hotel_loc_mod_2 || '', costHelp2: d.cost_help_2 || '', studioRent: Number(d.studio_rent || 0), contaAzulRD: d.conta_azul_rd || '', isReady: !!d.is_ready, onSite: !!d.on_site, onCRM: !!d.on_crm, observations: d.observations || '', attachments: [] 
+            id: d.id, status: d.status || 'Confirmado', state: d.state || '', city: d.city || '', classCode: d.class_code || '', extraClass: d.extra_class || '', course: d.course || '', createdAt: d.created_at || '', dateMod1: d.date_mod_1 || '', mod1Code: d.mod_1_code || '', material: d.material || '', studioMod1: d.studio_mod_1 || '', instructorMod1: d.instructor_mod_1 || '', ticketMod1: d.ticket_mod_1 || '', infrastructure: d.infrastructure || '', coffeeMod1: d.coffee_mod_1 || '', hotelMod1: d.hotel_mod_1 || '', hotelLocMod1: d.hotel_loc_mod_1 || '', costHelp1: d.cost_help_1 || '', dateMod2: d.date_mod_2 || '', mod2Code: d.mod_2_code || '', instructorMod2: d.instructor_mod_2 || '', ticketMod2: d.ticket_mod_2 || '', coffeeMod2: d.coffee_mod_2 || '', hotelMod2: d.hotel_mod_2 || '', hotelLocMod2: d.hotel_loc_mod_2 || '', costHelp2: d.cost_help_2 || '', studioRent: Number(d.studio_rent || 0), contaAzulRD: d.conta_azul_rd || '', isReady: !!d.is_ready, onSite: !!d.on_site, onCRM: !!d.on_crm, observations: d.observations || '', attachments: [] 
           }));
           setClasses(mapped);
           if (mapped.length > 0 && viewMode === 'list' && selectedClassIds.length === 0) {
@@ -215,7 +216,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   };
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 h-full flex flex-col pb-20">
+    <div className="animate-in fade-in h-full flex flex-col pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
@@ -228,7 +229,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             <div className="bg-slate-100 p-1 rounded-lg flex items-center mr-2">
                 <button onClick={() => setViewMode('list')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutList size={16} /> Lista</button>
                 <button onClick={() => setViewMode('calendar')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'calendar' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><CalendarIcon size={16} /> Calendário</button>
-                <button onClick={() => setViewMode('capacity')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'capacity' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Users size={16} /> Capacidade dos Estúdios</button>
+                <button onClick={() => setViewMode('capacity')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'capacity' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Users size={16} /> Capacidade</button>
             </div>
             <button onClick={handleOpenNew} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all"><Plus size={18} /> Nova Turma</button>
         </div>
@@ -249,7 +250,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
               </div>
               <div className="flex-1 overflow-auto custom-scrollbar p-4">
                   <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-lg overflow-hidden">
-                      {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map(day => ( <div key={day} className="bg-slate-50 p-2 text-center text-xs font-bold text-slate-500 uppercase">{day}</div> ))}
+                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => ( <div key={day} className="bg-slate-50 p-2 text-center text-xs font-bold text-slate-500 uppercase">{day}</div> ))}
                       {Array.from({ length: getFirstDayOfMonth(calendarDate) }).map((_, i) => ( <div key={`empty-${i}`} className="bg-white min-h-[120px]"></div> ))}
                       {Array.from({ length: getDaysInMonth(calendarDate) }).map((_, i) => {
                           const day = i + 1;
@@ -326,9 +327,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                   </tr>
                               );
                           })}
-                          {filteredClasses.length === 0 && (
-                              <tr><td colSpan={7} className="py-20 text-center text-slate-400 italic">Nenhuma turma encontrada.</td></tr>
-                          )}
                       </tbody>
                   </table>
               </div>
@@ -364,14 +362,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                               {cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
                           </select>
                       </div>
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Data Mod 1</label>
-                          <input type="date" value={mod1DateFilter} onChange={e => setMod1DateFilter(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-600 text-[10px] rounded-lg px-1 py-1.5 outline-none" />
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Data Mod 2</label>
-                          <input type="date" value={mod2DateFilter} onChange={e => setMod2DateFilter(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-600 text-[10px] rounded-lg px-1 py-1.5 outline-none" />
-                      </div>
                       <div className="flex items-end">
                           <button onClick={() => { setStatusFilter('Todos'); setStateFilter(''); setCityFilter(''); setMod1DateFilter(''); setMod2DateFilter(''); setSearchTerm(''); }} className="w-full h-9 flex items-center justify-center gap-1.5 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded-lg border border-red-100 transition-all"><Eraser size={14}/> Limpar</button>
                       </div>
@@ -381,8 +371,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
               <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50">
                   {isLoadingData ? (
                       <div className="flex justify-center py-10"><Loader2 size={32} className="animate-spin text-purple-600" /></div>
-                  ) : filteredClasses.length === 0 ? (
-                      <div className="p-8 text-center text-slate-400 text-sm">Nenhuma turma encontrada.</div>
                   ) : (
                       <div className="divide-y divide-slate-100">
                           {filteredClasses.map(cls => (
@@ -425,7 +413,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                   <div className="flex flex-col items-center justify-center h-full text-slate-400 p-8 text-center">
                       <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4"><Users size={32} className="text-slate-300" /></div>
                       <h3 className="text-lg font-medium text-slate-600">Nenhuma turma selecionada</h3>
-                      <p className="text-sm max-w-xs mx-auto mt-2">Selecione uma ou mais turmas na lista à esquerda para visualizar todos os alunos inscritos, financeiro e lista de presença consolidada.</p>
+                      <p className="text-sm max-w-xs mx-auto mt-2">Selecione uma ou mais turmas na lista à esquerda.</p>
                   </div>
               )}
           </div>
@@ -436,24 +424,104 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[95vh]">
                 <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 rounded-t-xl">
-                    <div><h3 className="text-xl font-bold text-slate-800">{formData.id ? 'Editar Turma' : 'Cadastro de Turma'}</h3><p className="text-sm text-slate-500">Preencha todos os detalhes logísticos e financeiros.</p></div>
+                    <div><h3 className="text-xl font-bold text-slate-800">{formData.id ? 'Editar Turma' : 'Cadastro de Turma'}</h3><p className="text-sm text-slate-500">Gestão logística e técnica.</p></div>
                     <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={24}/></button>
                 </div>
                 <div className="p-8 overflow-y-auto custom-scrollbar space-y-8">
-                    <div>
+                    {/* INFORMAÇÕES BÁSICAS */}
+                    <section>
                         <h4 className="text-sm font-bold text-purple-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><BookOpen size={16} /> Informações Básicas</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div><label className="block text-xs font-semibold text-slate-600 mb-1">STATUS</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.status} onChange={e => handleInputChange('status', e.target.value)}>{STATUS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select></div>
-                            <div><label className="block text-xs font-semibold text-slate-600 mb-1">Estado (UF)</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.state} onChange={e => { handleInputChange('state', e.target.value); handleInputChange('city', ''); handleInputChange('studioMod1', ''); }}>{states.map(uf => <option key={uf.id} value={uf.sigla}>{uf.sigla} - {uf.nome}</option>)}</select></div>
-                            <div><label className="block text-xs font-semibold text-slate-600 mb-1">Cidade</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" value={formData.city} onChange={e => { handleInputChange('city', e.target.value); handleInputChange('studioMod1', ''); }} disabled={!formData.state || isLoadingCities}><option value="">{isLoadingCities ? 'Carregando...' : 'Selecione...'}</option>{cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}</select></div>
-                            <div><label className="block text-xs font-semibold text-slate-600 mb-1">Número da Turma</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.classCode} onChange={e => handleInputChange('classCode', e.target.value)} /></div>
+                            <div><label className="block text-xs font-semibold text-slate-600 mb-1">Estado (UF)</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.state} onChange={e => { handleInputChange('state', e.target.value); handleInputChange('city', ''); }}>{states.map(uf => <option key={uf.id} value={uf.sigla}>{uf.sigla} - {uf.nome}</option>)}</select></div>
+                            <div><label className="block text-xs font-semibold text-slate-600 mb-1">Cidade</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100" value={formData.city} onChange={e => handleInputChange('city', e.target.value)} disabled={!formData.state || isLoadingCities}><option value="">{isLoadingCities ? '...' : 'Selecione'}</option>{cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}</select></div>
+                            <div><label className="block text-xs font-semibold text-slate-600 mb-1">Nº Turma</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.classCode} onChange={e => handleInputChange('classCode', e.target.value)} /></div>
                             <div><label className="block text-xs font-semibold text-slate-600 mb-1">Turma EXTRA</label><input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" value={formData.extraClass} onChange={e => handleInputChange('extraClass', e.target.value)} /></div>
                             <div className="lg:col-span-2"><label className="block text-xs font-semibold text-slate-600 mb-1">Curso</label><select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" value={formData.course} onChange={e => handleInputChange('course', e.target.value)}><option value="">Selecione o curso...</option>{COURSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                            <div><label className="block text-xs font-semibold text-slate-600 mb-1">Data de criação</label><input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500" value={formData.createdAt} readOnly /></div>
+                            <div><label className="block text-xs font-semibold text-slate-600 mb-1 text-slate-400">Criado em</label><input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-400" value={formData.createdAt} readOnly /></div>
                         </div>
-                    </div>
+                    </section>
+
+                    {/* LOGÍSTICA MÓDULO 1 */}
+                    <section className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                        <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-4 border-b border-indigo-100 pb-2 flex items-center gap-2"><CalendarIcon size={16} /> Logística Módulo 1</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data Início</label><input type="date" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" value={formData.dateMod1} onChange={e => handleInputChange('dateMod1', e.target.value)} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cód. Módulo 1</label><input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white font-mono" value={formData.mod1Code} onChange={e => handleInputChange('mod1Code', e.target.value)} /></div>
+                            <div className="md:col-span-1"><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Studio / Local</label><select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" value={formData.studioMod1} onChange={e => handleInputChange('studioMod1', e.target.value)}><option value="">Selecione...</option>{partnerStudios.filter(s => s.state === formData.state && s.city === formData.city).map(s => <option key={s.id} value={s.fantasyName}>{s.fantasyName}</option>)}</select></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Instrutor Mod 1</label><select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" value={formData.instructorMod1} onChange={e => handleInputChange('instructorMod1', e.target.value)}><option value="">Selecione...</option>{instructorsList.map(name => <option key={name} value={name}>{name}</option>)}</select></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cód. Voo/Passagem</label><div className="relative"><Plane className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.ticketMod1} onChange={e => handleInputChange('ticketMod1', e.target.value)} /></div></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Coffee Break</label><div className="relative"><Coffee className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.coffeeMod1} onChange={e => handleInputChange('coffeeMod1', e.target.value)} /></div></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hotel</label><div className="relative"><Bed className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.hotelMod1} onChange={e => handleInputChange('hotelMod1', e.target.value)} /></div></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Localização Hotel</label><div className="relative"><Map className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.hotelLocMod1} onChange={e => handleInputChange('hotelLocMod1', e.target.value)} /></div></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Ajuda de Custo (R$)</label><div className="relative"><DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.costHelp1} onChange={e => handleInputChange('costHelp1', e.target.value)} /></div></div>
+                        </div>
+                    </section>
+
+                    {/* LOGÍSTICA MÓDULO 2 */}
+                    <section className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                        <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-4 border-b border-orange-100 pb-2 flex items-center gap-2"><CalendarIcon size={16} /> Logística Módulo 2</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data Início</label><input type="date" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" value={formData.dateMod2} onChange={e => handleInputChange('dateMod2', e.target.value)} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cód. Módulo 2</label><input type="text" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white font-mono" value={formData.mod2Code} onChange={e => handleInputChange('mod2Code', e.target.value)} /></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Instrutor Mod 2</label><select className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" value={formData.instructorMod2} onChange={e => handleInputChange('instructorMod2', e.target.value)}><option value="">Selecione...</option>{instructorsList.map(name => <option key={name} value={name}>{name}</option>)}</select></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cód. Voo/Passagem</label><div className="relative"><Plane className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.ticketMod2} onChange={e => handleInputChange('ticketMod2', e.target.value)} /></div></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Coffee Break</label><div className="relative"><Coffee className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.coffeeMod2} onChange={e => handleInputChange('coffeeMod2', e.target.value)} /></div></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hotel</label><div className="relative"><Bed className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.hotelMod2} onChange={e => handleInputChange('hotelMod2', e.target.value)} /></div></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Localização Hotel</label><div className="relative"><Map className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.hotelLocMod2} onChange={e => handleInputChange('hotelLocMod2', e.target.value)} /></div></div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Ajuda de Custo (R$)</label><div className="relative"><DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" size={14}/><input type="text" className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white" value={formData.costHelp2} onChange={e => handleInputChange('costHelp2', e.target.value)} /></div></div>
+                        </div>
+                    </section>
+
+                    {/* LOGÍSTICA E FINANCEIRO GERAL */}
+                    <section>
+                        <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><Truck size={16} /> Outros Dados Logísticos e Financeiro</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Material Didático</label>
+                                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-16 resize-none" value={formData.material} onChange={e => handleInputChange('material', e.target.value)} placeholder="Livros, Apostilas, Brindes..." />
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Infraestrutura Necessária</label>
+                                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm h-16 resize-none" value={formData.infrastructure} onChange={e => handleInputChange('infrastructure', e.target.value)} placeholder="Projetor, Som, Flipchart..." />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Aluguel do Studio (R$)</label>
+                                <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold" value={formData.studioRent} onChange={e => handleInputChange('studioRent', parseFloat(e.target.value) || 0)} />
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">ContaAzul / RD Station / Transações</label>
+                                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" value={formData.contaAzulRD} onChange={e => handleInputChange('contaAzulRD', e.target.value)} />
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* STATUS DE VISIBILIDADE E OBSERVAÇÕES */}
+                    <section>
+                        <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide mb-4 border-b border-slate-100 pb-2 flex items-center gap-2"><ArrowUpCircle size={16} /> Visibilidade e Alertas</h4>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                            <div className="space-y-4">
+                                <label className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all">
+                                    <input type="checkbox" className="w-5 h-5 rounded text-purple-600" checked={formData.isReady} onChange={e => handleInputChange('isReady', e.target.checked)} />
+                                    <div><span className="font-bold text-sm block">Logística Pronta</span><p className="text-[10px] text-slate-400 font-medium">Turma validada e completa.</p></div>
+                                </label>
+                                <label className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all">
+                                    <input type="checkbox" className="w-5 h-5 rounded text-purple-600" checked={formData.onSite} onChange={e => handleInputChange('onSite', e.target.checked)} />
+                                    <div><span className="font-bold text-sm block">Publicado no Site</span><p className="text-[10px] text-slate-400 font-medium">Visível para vendas online.</p></div>
+                                </label>
+                                <label className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all">
+                                    <input type="checkbox" className="w-5 h-5 rounded text-purple-600" checked={formData.onCRM} onChange={e => handleInputChange('onCRM', e.target.checked)} />
+                                    <div><span className="font-bold text-sm block">Visível no CRM</span><p className="text-[10px] text-slate-400 font-medium">Liberado para negociações.</p></div>
+                                </label>
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Observações Internas</label>
+                                <textarea className="w-full px-4 py-3 border border-slate-300 rounded-2xl text-sm h-[180px] resize-none focus:ring-2 focus:ring-purple-100 outline-none" value={formData.observations} onChange={e => handleInputChange('observations', e.target.value)} placeholder="Digite aqui observações relevantes sobre esta turma..." />
+                            </div>
+                        </div>
+                    </section>
                 </div>
                 <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100">
                     <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>

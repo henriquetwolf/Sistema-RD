@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { SurveyModel, FormQuestion, QuestionType, FormStyle, FormAnswer, Product, FormFolder } from '../types';
 import { FormViewer } from './FormViewer';
@@ -401,7 +402,7 @@ export const SurveyManager: React.FC<SurveyManagerProps> = ({ onBack }) => {
                                                   <input type="checkbox" checked={currentSurvey.onlyIfFinished} onChange={e => setCurrentSurvey({...currentSurvey, onlyIfFinished: e.target.checked})} className="w-5 h-5 rounded text-indigo-600" />
                                                   <div className="flex-1">
                                                       <span className="font-bold text-indigo-900 block text-sm">Gatilho de Conclusão</span>
-                                                      <p className="text-[10px] text-indigo-500 font-medium leading-tight">Exibir automaticamente ao encerrar o curso presencial (após o último dia do último módulo).</p>
+                                                      <p className="text-[10px] text-indigo-500 font-medium leading-tight">Exibir automaticamente 1 dia após o término do dia 2 do Módulo 2.</p>
                                                   </div>
                                               </label>
                                           </div>

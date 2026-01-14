@@ -188,7 +188,9 @@ export const appBackend = {
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
       team_id: form.teamId || null, 
+      /* Fix: target_pipeline should use the targetPipeline camelCase property from FormModel */
       target_pipeline: form.targetPipeline || null, 
+      /* Fix: target_stage should use the targetStage camelCase property from FormModel */
       target_stage: form.targetStage || null, 
       questions: form.questions || [], 
       style: form.style || {}, 
@@ -615,6 +617,7 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
+    // Added comment: mapping snake_case from DB to camelCase in interface PartnerStudio
     return (data || []).map((item: any) => ({ 
       id: item.id, 
       status: item.status, 
@@ -628,33 +631,34 @@ export const appBackend = {
       fantasyName: item.fantasy_name, 
       legalName: item.legal_name, 
       cnpj: item.cnpj, 
-      studio_phone: item.studio_phone, 
+      studioPhone: item.studio_phone, 
       address: item.address, 
       city: item.city, 
       state: item.state, 
       country: item.country, 
-      size_m2: item.size_m2, 
-      student_capacity: item.student_capacity, 
-      rent_value: item.rent_value, 
+      sizeM2: item.size_m2, 
+      studentCapacity: item.student_capacity, 
+      rentValue: item.rent_value, 
       methodology: item.methodology, 
-      studio_type: item.studio_type, 
-      name_on_site: item.name_on_site, 
+      studioType: item.studio_type, 
+      nameOnSite: item.name_on_site, 
       bank: item.bank, 
       agency: item.agency, 
       account: item.account, 
       beneficiary: item.beneficiary, 
-      pix_key: item.pix_key, 
-      has_reformer: !!item.has_reformer, 
-      qty_reformer: item.qty_reformer, 
-      has_ladder_barrel: !!item.has_ladder_barrel, 
-      qty_ladder_barrel: item.qty_ladder_barrel, 
-      has_chair: !!item.has_chair, 
-      qty_chair: item.qty_chair, 
-      has_cadillac: !!item.has_cadillac, 
-      qty_cadillac: item.qty_cadillac, 
-      has_chairs_for_course: !!item.has_chairs_for_course, 
-      has_tv: !!item.has_tv, 
-      max_kits_capacity: item.max_kits_capacity, 
+      pixKey: item.pix_key, 
+      hasReformer: !!item.has_reformer, 
+      qtyReformer: item.qty_reformer, 
+      hasLadderBarrel: !!item.has_ladder_barrel, 
+      /* Fix: Changed mapping from qty_ladder_barrel to qtyLadderBarrel to match required property in PartnerStudio interface */
+      qtyLadderBarrel: item.qty_ladder_barrel, 
+      hasChair: !!item.has_chair, 
+      qtyChair: item.qty_chair, 
+      hasCadillac: !!item.has_cadillac, 
+      qtyCadillac: item.qty_cadillac, 
+      hasChairsForCourse: !!item.has_chairs_for_course, 
+      hasTv: !!item.has_tv, 
+      maxKitsCapacity: item.max_kits_capacity, 
       attachments: item.attachments 
     }));
   },
@@ -786,7 +790,17 @@ export const appBackend = {
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, description: item.description, price: item.price, payment_link: item.payment_link, image_url: item.image_url, certificate_template_id: item.certificate_template_id, createdAt: item.created_at }));
+    // Added comment: Fix mapping from snake_case DB fields to camelCase interface fields
+    return (data || []).map((item: any) => ({ 
+      id: item.id, 
+      title: item.title, 
+      description: item.description, 
+      price: item.price, 
+      paymentLink: item.payment_link,
+      imageUrl: item.image_url,
+      certificateTemplateId: item.certificate_template_id,
+      createdAt: item.created_at 
+    }));
   },
 
   saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
@@ -918,15 +932,16 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
     if (error) throw error;
+    // Added comment: Correctly map snake_case DB fields to camelCase interface properties for WAAutomationRule
     return (data || []).map((d: any) => ({ 
         id: d.id, 
         name: d.name, 
         triggerType: d.trigger_type, 
-        pipeline_name: d.pipeline_name, 
-        stage_id: d.stage_id, 
-        product_type: d.product_type, 
-        product_id: d.product_id, 
-        message_template: d.message_template, 
+        pipelineName: d.pipeline_name,
+        stageId: d.stage_id,
+        productType: d.product_type,
+        productId: d.product_id,
+        messageTemplate: d.message_template,
         isActive: d.is_active, 
         createdAt: d.created_at 
     }));
@@ -978,7 +993,31 @@ export const appBackend = {
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_billing_negotiations').upsert({ id: neg.id || crypto.randomUUID(), open_installments: neg.openInstallments, total_negotiated_value: neg.totalNegotiatedValue, total_installments: neg.totalInstallments, due_date: neg.dueDate, responsible_agent: neg.responsibleAgent, identifier_code: neg.identifierCode, full_name: neg.fullName, product_name: neg.productName, original_value: neg.originalValue, payment_method: neg.paymentMethod, observations: neg.observations, status: neg.status, team: neg.team, voucher_link_1: neg.voucherLink1, test_date: neg.testDate, voucher_link_2: neg.voucherLink2, voucher_link_3: neg.voucherLink3, boletos_link: neg.boletos_link, negotiation_reference: neg.negotiationReference, attachments: neg.attachments, created_at: neg.createdAt || new Date().toISOString() });
+    /* Fix: Corrected property mappings in saveBillingNegotiation to use camelCase from Partial<BillingNegotiation> */
+    await supabase.from('crm_billing_negotiations').upsert({ 
+        id: neg.id || crypto.randomUUID(), 
+        open_installments: neg.openInstallments, 
+        total_negotiated_value: neg.totalNegotiatedValue, 
+        total_installments: neg.totalInstallments, 
+        due_date: neg.dueDate, 
+        responsible_agent: neg.responsibleAgent, 
+        identifier_code: neg.identifierCode, 
+        full_name: neg.fullName, 
+        product_name: neg.productName, 
+        original_value: neg.originalValue, 
+        payment_method: neg.paymentMethod, 
+        observations: neg.observations, 
+        status: neg.status, 
+        team: neg.team, 
+        voucher_link_1: neg.voucherLink1, 
+        test_date: neg.testDate, 
+        voucher_link_2: neg.voucherLink2, 
+        voucher_link_3: neg.voucherLink3, 
+        boletos_link: neg.boletosLink, 
+        negotiation_reference: neg.negotiationReference, 
+        attachments: neg.attachments, 
+        created_at: neg.createdAt || new Date().toISOString() 
+    });
   },
 
   deleteBillingNegotiation: async (id: string): Promise<void> => {

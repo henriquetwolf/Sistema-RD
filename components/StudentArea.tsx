@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate, SurveyModel } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, Award, ExternalLink, Calendar, MapPin, 
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
+import { FormViewer } from './FormViewer';
 import clsx from 'clsx';
 
 interface StudentAreaProps {
@@ -31,6 +32,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [pendingContracts, setPendingContracts] = useState<Contract[]>([]);
     const [signingContract, setSigningContract] = useState<Contract | null>(null);
     
+    // Pesquisas (Surveys)
+    const [availableSurveys, setAvailableSurveys] = useState<SurveyModel[]>([]);
+    const [viewingSurvey, setViewingSurvey] = useState<SurveyModel | null>(null);
+
     // Upload Externo
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [extCourseName, setExtCourseName] = useState('');
@@ -78,6 +83,77 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         if (activeTab === 'contracts') fetchPendingContracts();
         if (activeTab === 'events') loadEvents();
     }, [activeTab]);
+
+    // Lógica de Sincronização de Pesquisas com gatilho de conclusão
+    useEffect(() => {
+        if (classes.length > 0) {
+            loadAvailableSurveys();
+        }
+    }, [classes, student.deals]);
+
+    const loadAvailableSurveys = async () => {
+        try {
+            const allSurveys = await appBackend.getSurveys();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // 1. Busca quais o aluno já respondeu para não repetir
+            const { data: answered } = await appBackend.client
+                .from('crm_form_submissions')
+                .select('form_id')
+                .eq('student_id', mainDealId);
+            
+            const answeredIds = new Set((answered || []).map(a => a.form_id));
+
+            const filtered = allSurveys.filter(survey => {
+                if (!survey.isActive || answeredIds.has(survey.id)) return false;
+                if (survey.targetAudience !== 'all' && survey.targetAudience !== 'student') return false;
+
+                // Se o gatilho de conclusão estiver ativado para produtos presenciais
+                if (survey.onlyIfFinished && ((survey.targetType === 'product_type' && survey.targetProductType === 'Presencial') || survey.targetType === 'specific_product')) {
+                    
+                    // Verifica se o aluno tem uma turma presencial que já "terminou" (Day 2 do Mod 2 + 1 dia)
+                    return classes.some(cls => {
+                        // Se for filtro por produto específico, a turma deve ser deste produto
+                        if (survey.targetType === 'specific_product' && cls.course !== survey.targetProductName) return false;
+
+                        if (!cls.date_mod_2) return false;
+                        
+                        // Data de início do Mod 2
+                        const [y, m, d] = cls.date_mod_2.split('-').map(Number);
+                        const mod2StartDate = new Date(y, m - 1, d);
+                        mod2StartDate.setHours(0, 0, 0, 0);
+
+                        // Regra: Aparecer 1 dia após o término do dia 2.
+                        // Dia 1 = data_mod_2
+                        // Dia 2 = data_mod_2 + 1 dia
+                        // 1 dia após término do Dia 2 = data_mod_2 + 2 dias.
+                        const triggerDate = new Date(mod2StartDate.getTime() + (2 * 24 * 60 * 60 * 1000));
+                        triggerDate.setHours(0, 0, 0, 0);
+
+                        return today >= triggerDate;
+                    });
+                }
+
+                // Se não for gatilho de conclusão, segue filtros normais
+                if (!survey.onlyIfFinished) {
+                    if (survey.targetType === 'all') return true;
+                    if (survey.targetType === 'product_type') {
+                        return student.deals.some(d => d.product_type === survey.targetProductType);
+                    }
+                    if (survey.targetType === 'specific_product') {
+                        return student.deals.some(d => d.product_name === survey.targetProductName);
+                    }
+                }
+
+                return false;
+            });
+
+            setAvailableSurveys(filtered);
+        } catch (e) {
+            console.error("Erro ao carregar pesquisas:", e);
+        }
+    };
 
     const fetchPendingContracts = async () => {
         try {
@@ -401,6 +477,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         return allCourseInfos.find(i => (i.courseName || '').trim().toLowerCase() === courseNameClean);
     }, [viewingClassDetails, allCourseInfos]);
 
+    if (viewingSurvey) {
+        return <FormViewer form={viewingSurvey} studentId={mainDealId} onBack={() => setViewingSurvey(null)} onSuccess={() => { setViewingSurvey(null); loadAvailableSurveys(); }} />;
+    }
+
     if (playingCourse && courseStructure) {
         return (
             <div className="min-h-screen bg-slate-900 text-white flex flex-col font-sans animate-in fade-in">
@@ -540,6 +620,31 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
             </header>
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-6 space-y-8">
+                {/* Notificação de Pesquisas Automáticas (Gatilho de Conclusão) */}
+                {availableSurveys.length > 0 && (
+                    <div className="space-y-4">
+                        {availableSurveys.map(survey => (
+                            <div key={survey.id} className="bg-indigo-600 text-white p-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-indigo-600/20 animate-in slide-in-from-top-4 border-4 border-indigo-400/30">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
+                                        <PieChart size={32} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black tracking-tight">Queremos te ouvir!</h3>
+                                        <p className="text-sm text-indigo-100 font-medium">{survey.title}</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => setViewingSurvey(survey)}
+                                    className="bg-white text-indigo-700 px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg transition-all active:scale-95"
+                                >
+                                    Responder Pesquisa
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 {pendingContracts.length > 0 && (
                     <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 animate-bounce-subtle shadow-lg shadow-amber-500/10">
                         <div className="flex items-center gap-4">
@@ -591,7 +696,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
                         { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length }
                     ].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === 'id' ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
                             {tab.label}
                             {tab.badge ? (
@@ -725,20 +830,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                             </div>
                         </div>
                     )}
-                    {activeTab === 'events' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {eventsList.length === 0 ? (
-                                <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300"><Mic size={48} className="mb-4 opacity-20"/><p className="font-bold">Nenhum evento disponivel.</p></div>
-                            ) : eventsList.map(evt => (
-                                <div key={evt.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all flex flex-col border-b-8 border-b-amber-500">
-                                    <div className="flex justify-between items-start mb-4"><div className="p-3 bg-amber-50 rounded-2xl text-amber-600"><Mic size={24} /></div>{evt.registrationOpen && <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-[10px] font-black uppercase">Inscricoes Abertas</span>}</div>
-                                    <h3 className="text-xl font-black text-slate-800 mb-2 leading-tight">{evt.name}</h3>
-                                    <div className="space-y-2 mb-8"><div className="flex items-center gap-2 text-xs text-slate-600 font-bold"><MapPin size={14} className="text-amber-500" /> {evt.location}</div></div>
-                                    <button onClick={() => handleOpenEventProgram(evt)} className="mt-auto w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all active:scale-95 shadow-lg">Ver Programacao / Inscricao</button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                     {activeTab === 'contracts' && (
                         <div className="space-y-6">
                             {pendingContracts.length === 0 ? (
@@ -782,7 +873,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                 />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Data de Conclusão</label>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Data de Conclusão</label>
                                 <input 
                                     type="date" 
                                     className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-emerald-500 rounded-2xl text-sm font-bold transition-all outline-none" 
@@ -791,7 +882,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                 />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Arquivo do Certificado (PDF ou Imagem)</label>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Arquivo do Certificado (PDF ou Imagem)</label>
                                 <div 
                                     onClick={() => fileInputRef.current?.click()}
                                     className={clsx(

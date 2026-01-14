@@ -270,12 +270,17 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const loadOnlineCourses = async () => {
         if (!mainDealId) return;
         try {
-            const [coursesData, accessIds, progressIds] = await Promise.all([
+            const [coursesData, accessIds, progressIds, targetedProductsRes] = await Promise.all([
                 appBackend.getOnlineCourses(),
                 appBackend.getStudentCourseAccess(String(mainDealId)),
-                appBackend.getStudentLessonProgress(String(mainDealId))
+                appBackend.getStudentLessonProgress(String(mainDealId)),
+                appBackend.client.from('crm_products').select('name').contains('target_areas', ['student'])
             ]);
-            setAllCourses(coursesData || []);
+            
+            const allowedNames = new Set((targetedProductsRes.data || []).map((p: any) => p.name.toLowerCase()));
+            const filtered = (coursesData || []).filter(c => allowedNames.has(c.title.toLowerCase()));
+
+            setAllCourses(filtered);
             setUnlockedCourseIds(accessIds || []);
             setCompletedLessonIds(progressIds || []);
         } catch (e) {}

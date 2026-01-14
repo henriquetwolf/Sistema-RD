@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock } from '../types';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
-    LogOut, GraduationCap, Award, ExternalLink, Calendar, MapPin, 
-    Video, Download, Loader2, CheckCircle, Clock, X, Info, Layers, 
-    PieChart, Send, ArrowRight, Sparkles, Bell, Trophy, ChevronRight, Book, ListTodo, LifeBuoy,
-    MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
-    Mic, RefreshCw, FileSignature, CheckSquare, Users, Building, User
+    LogOut, Calendar, MapPin, Loader2, BookOpen, User, 
+    ChevronRight, Users, ExternalLink, GraduationCap,
+    Newspaper, Bell, Sparkles, X, Clock, Image as ImageIcon,
+    ArrowRight, Info, Plane, Coffee, Bed, Map, DollarSign, Package, Monitor,
+    FileCheck, LayoutDashboard, FileText, CheckCircle, LifeBuoy, FileSignature, ChevronLeft
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
@@ -21,6 +21,7 @@ interface StudentAreaProps {
 export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, logoUrl }) => {
     const [activeTab, setActiveTab] = useState<'classes' | 'online_courses' | 'certificates' | 'events' | 'contracts'>('classes');
     const [classes, setClasses] = useState<any[]>([]);
+    const [allCourseInfos, setAllCourseInfos] = useState<CourseInfo[]>([]);
     const [eventsList, setEventsList] = useState<EventModel[]>([]);
     const [certificates, setCertificates] = useState<any[]>([]);
     const [banners, setBanners] = useState<Banner[]>([]);
@@ -252,6 +253,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                 const { data } = await appBackend.client.from('crm_classes').select('*').or(`mod_1_code.in.(${allCodes.map(c => `"${c}"`).join(',')}),mod_2_code.in.(${allCodes.map(c => `"${c}"`).join(',')})`);
                 if (data) setClasses(data);
             }
+            const infos = await appBackend.getCourseInfos();
+            setAllCourseInfos(infos || []);
             await loadCertificates();
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     };
@@ -334,6 +337,11 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
         if (!namePart || namePart.toLowerCase() === 'aluno') return 'Aluno';
         return namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase();
     }, [student.name]);
+
+    const technicalInfo = useMemo(() => {
+        if (!viewingClassDetails) return null;
+        return allCourseInfos.find(i => (i.courseName || '').trim().toLowerCase() === (viewingClassDetails.course || '').trim().toLowerCase());
+    }, [viewingClassDetails, allCourseInfos]);
 
     if (playingCourse && courseStructure) {
         return (
@@ -529,7 +537,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
                             {tab.label}
                             {tab.badge ? (
-                                <span className="absolute top-2 right-2 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">{tab.badge}</span>
+                                <span className="absolute top-2 right-2 bg-red-50 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">{tab.badge}</span>
                             ) : null}
                         </button>
                     ))}
@@ -539,10 +547,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                     {activeTab === 'classes' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {classes.length === 0 ? (
-                                <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300">
-                                    <GraduationCap size={48} className="mb-4 opacity-20"/> 
-                                    <p className="font-bold">Nenhuma formacao presencial ativa.</p>
-                                </div>
+                                <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300"><GraduationCap size={48} className="mb-4 opacity-20"/><p className="font-bold">Nenhuma formacao presencial ativa.</p></div>
                             ) : classes.map(cls => (
                                 <div key={cls.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all overflow-hidden border-b-8 border-b-purple-500 flex flex-col">
                                     <div className="flex-1">
@@ -645,15 +650,46 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 rounded-t-[2.5rem]">
                             <div>
                                 <h3 className="text-2xl font-black text-slate-800 leading-tight">{viewingClassDetails.course}</h3>
-                                <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">Informações Logísticas da Turma</p>
+                                <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">Informações Logísticas e Técnicas</p>
                             </div>
                             <button onClick={() => setViewingClassDetails(null)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><X size={24} /></button>
                         </div>
                         <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-10">
+                            {/* INFORMAÇÕES TÉCNICAS DO CURSO (VINDAS DAS CONFIGURAÇÕES) */}
+                            {technicalInfo && (
+                                <div className="space-y-8 animate-in fade-in slide-in-from-top-2">
+                                    <div>
+                                        <h4 className="text-xs font-black text-indigo-600 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-indigo-100 mb-4">
+                                            {/* Fix: Added explicit BookOpen component usage */}
+                                            <BookOpen size={16}/> Detalhes Técnicos e Ementa do Curso
+                                        </h4>
+                                        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm leading-relaxed">
+                                            <p className="text-sm text-slate-600 whitespace-pre-wrap">{technicalInfo.details || 'Ementa técnica em processamento...'}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100">
+                                            <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <FileText size={16}/> Materiais de Apoio Recomendados
+                                            </h4>
+                                            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap italic">{technicalInfo.materials || 'Links para download serão disponibilizados pelo instrutor.'}</p>
+                                        </div>
+                                        <div className="bg-teal-50/50 p-6 rounded-[2rem] border border-teal-100">
+                                            <h4 className="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <CheckSquare size={16}/> Pré-requisitos e Preparação
+                                            </h4>
+                                            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{technicalInfo.requirements || 'Traje esportivo confortável para as práticas.'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* LOGÍSTICA DE TURMA (VINDAS DA TURMA ESPECÍFICA) */}
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                                 <div className="space-y-6">
                                     <h4 className="text-xs font-black text-purple-600 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-purple-100">
-                                        <Calendar size={16}/> Módulo 1
+                                        <Calendar size={16}/> Logística Módulo 1
                                     </h4>
                                     <div className="grid grid-cols-1 gap-4">
                                         <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
@@ -752,6 +788,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                                 <div className="flex justify-between items-start mb-4">
                                                                     <div className="flex items-center gap-2"><div className={clsx("w-8 h-8 rounded-full flex items-center justify-center transition-all", isSelected ? "bg-teal-500 text-white" : "bg-slate-100 text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600")}><CheckSquare size={16}/></div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{ws.time}</span></div>
                                                                     <div className={clsx("flex items-center gap-1 text-[10px] font-black uppercase", remaining <= 5 && remaining > 0 ? "text-orange-500" : remaining === 0 ? "text-red-500" : "text-slate-400")}>
+                                                                        {/* Fix: Added explicit Users component usage */}
                                                                         <Users size={12}/> {remaining} / {ws.spots} livres
                                                                     </div>
                                                                 </div>

@@ -445,7 +445,8 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
+    // Fix: intervalMinutes: j.interval_minutes to match interface
+    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
@@ -574,14 +575,99 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    return (data || []).map((item: any) => ({ id: item.id, status: item.status, responsibleName: item.responsible_name, cpf: item.cpf, phone: item.phone, email: item.email, password: item.password, secondContactName: item.second_contact_name, secondContactPhone: item.second_contact_phone, fantasyName: item.fantasy_name, legalName: item.legal_name, cnpj: item.cnpj, studioPhone: item.studio_phone, address: item.address, city: item.city, state: item.state, country: item.country, sizeM2: item.size_m2, studentCapacity: item.student_capacity, rent_value: item.rent_value, methodology: item.methodology, studio_type: item.studio_type, name_on_site: item.name_on_site, bank: item.bank, agency: item.agency, account: item.account, beneficiary: item.beneficiary, pix_key: item.pix_key, has_reformer: !!item.has_reformer, qty_reformer: item.qty_reformer, has_ladder_barrel: !!item.has_ladder_barrel, qty_ladder_barrel: item.qty_ladder_barrel, has_chair: !!item.has_chair, qty_chair: item.qty_chair, has_cadillac: !!item.has_cadillac, qty_cadillac: item.qty_cadillac, has_chairs_for_course: !!item.has_chairs_for_course, has_tv: !!item.has_tv, max_kits_capacity: item.max_kits_capacity, attachments: item.attachments }));
+    /* Corrected: Mapping database snake_case fields to camelCase interface properties */
+    return (data || []).map((item: any) => ({ 
+      id: item.id, 
+      status: item.status, 
+      responsibleName: item.responsible_name, 
+      cpf: item.cpf, 
+      phone: item.phone, 
+      email: item.email, 
+      password: item.password, 
+      secondContactName: item.second_contact_name, 
+      secondContactPhone: item.second_contact_phone, 
+      fantasyName: item.fantasy_name, 
+      legalName: item.legal_name, 
+      cnpj: item.cnpj, 
+      studioPhone: item.studio_phone, 
+      address: item.address, 
+      city: item.city, 
+      state: item.state, 
+      country: item.country, 
+      sizeM2: item.size_m2, 
+      studentCapacity: item.student_capacity, 
+      rentValue: item.rent_value, 
+      methodology: item.methodology, 
+      studioType: item.studio_type, 
+      nameOnSite: item.name_on_site, 
+      bank: item.bank, 
+      agency: item.agency, 
+      account: item.account, 
+      beneficiary: item.beneficiary, 
+      pixKey: item.pix_key, 
+      hasReformer: !!item.has_reformer, 
+      qtyReformer: item.qty_reformer, 
+      hasLadderBarrel: !!item.has_ladder_barrel, 
+      qtyLadderBarrel: item.qty_ladder_barrel, 
+      hasChair: !!item.has_chair, 
+      qtyChair: item.qty_chair, 
+      hasCadillac: !!item.has_cadillac, 
+      qtyCadillac: item.qty_cadillac, 
+      hasChairsForCourse: !!item.has_chairs_for_course, 
+      hasTv: !!item.has_tv, 
+      maxKitsCapacity: item.max_kits_capacity, 
+      attachments: item.attachments 
+    }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_partner_studios').upsert({ id: studio.id || crypto.randomUUID(), status: studio.status, responsible_name: studio.responsibleName, cpf: studio.responsibleName, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qty_ladder_barrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments });
+    /* Corrected: Fixed studio.qty_ladder_barrel typo to studio.qtyLadderBarrel and cpf mapping */
+    await supabase.from('crm_partner_studios').upsert({ 
+      id: studio.id || crypto.randomUUID(), 
+      status: studio.status, 
+      responsible_name: studio.responsibleName, 
+      cpf: studio.cpf, 
+      phone: studio.phone, 
+      email: studio.email, 
+      password: studio.password, 
+      second_contact_name: studio.secondContactName, 
+      second_contact_phone: studio.secondContactPhone, 
+      fantasy_name: studio.fantasyName, 
+      legal_name: studio.legalName, 
+      cnpj: studio.cnpj, 
+      studio_phone: studio.studioPhone, 
+      address: studio.address, 
+      city: studio.city, 
+      state: studio.state, 
+      country: studio.country, 
+      size_m2: studio.sizeM2, 
+      student_capacity: studio.studentCapacity, 
+      rent_value: studio.rentValue, 
+      methodology: studio.methodology, 
+      studio_type: studio.studioType, 
+      name_on_site: studio.nameOnSite, 
+      bank: studio.bank, 
+      agency: studio.agency, 
+      account: studio.account, 
+      beneficiary: studio.beneficiary, 
+      pix_key: studio.pixKey, 
+      has_reformer: studio.hasReformer, 
+      qty_reformer: studio.qtyReformer, 
+      has_ladder_barrel: studio.hasLadderBarrel, 
+      qty_ladder_barrel: studio.qtyLadderBarrel, 
+      has_chair: studio.hasChair, 
+      qty_chair: studio.qtyChair, 
+      has_cadillac: studio.hasCadillac, 
+      qty_cadillac: studio.qtyCadillac, 
+      has_chairs_for_course: studio.hasChairsForCourse, 
+      has_tv: studio.hasTv, 
+      max_kits_capacity: studio.maxKitsCapacity, 
+      attachments: studio.attachments 
+    });
   },
 
+  // Added: missing deletePartnerStudio method
   deletePartnerStudio: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_partner_studios').delete().eq('id', id);
@@ -664,7 +750,8 @@ export const appBackend = {
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, description: item.description, price: item.price, payment_link: item.payment_link, imageUrl: item.image_url, certificateTemplateId: item.certificate_template_id, createdAt: item.created_at }));
+    // Fix: paymentLink: item.payment_link to match interface
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title, description: item.description, price: item.price, paymentLink: item.payment_link, imageUrl: item.image_url, certificateTemplateId: item.certificate_template_id, createdAt: item.created_at }));
   },
 
   saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
@@ -787,7 +874,19 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, triggerType: d.trigger_type, pipeline_name: d.pipeline_name, stageId: d.stage_id, product_type: d.product_type, product_id: d.product_id, message_template: d.message_template, is_active: d.is_active, created_at: d.created_at }));
+    // Fix: Map snake_case to camelCase properties for WAAutomationRule
+    return (data || []).map((d: any) => ({ 
+        id: d.id, 
+        name: d.name, 
+        triggerType: d.trigger_type, 
+        pipelineName: d.pipeline_name, 
+        stageId: d.stage_id, 
+        productType: d.product_type, 
+        productId: d.product_id, 
+        messageTemplate: d.message_template, 
+        isActive: d.is_active, 
+        createdAt: d.created_at 
+    }));
   },
 
   saveWAAutomationRule: async (rule: Partial<WAAutomationRule>): Promise<void> => {
@@ -804,6 +903,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
+    // Fix: studentName: d.student_name to match interface
     return (data || []).map((d: any) => ({ id: d.id, ruleName: d.rule_name, studentName: d.student_name, phone: d.phone, message: d.message, createdAt: d.created_at }));
   },
 
@@ -815,7 +915,8 @@ export const appBackend = {
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studioId: item.studio_id, tracking_code: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
+    // Fix: trackingCode: item.tracking_code to match interface
+    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
   },
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {

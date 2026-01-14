@@ -21,7 +21,6 @@ const INITIAL_SURVEY: SurveyModel = {
   id: '',
   title: 'Pesquisa de Satisfação',
   description: 'Gostaríamos de ouvir sua opinião.',
-  // Add missing campaign property
   campaign: '',
   isLeadCapture: false,
   questions: [],
@@ -32,7 +31,6 @@ const INITIAL_SURVEY: SurveyModel = {
   onlyIfFinished: true,
   isActive: true,
   folderId: null,
-  // Add missing distributionMode property
   distributionMode: 'fixed',
   style: {
       backgroundType: 'color', backgroundColor: '#fff7ed', cardTransparent: false, primaryColor: '#f59e0b', textColor: '#451a03', fontFamily: 'sans', titleAlignment: 'left', borderRadius: 'medium', buttonText: 'Enviar Pesquisa', shadowIntensity: 'soft', successTitle: 'Obrigado!', successMessage: 'Sua opinião é fundamental.', successButtonText: 'Fechar'
@@ -47,6 +45,11 @@ const SYSTEM_FIELDS = [
     { value: 'class_code', label: 'Cód. Turma (Automático)' },
     { value: 'city', label: 'Cidade do Curso (Automático)' },
     { value: 'state', label: 'UF do Curso (Automático)' },
+    { value: 'instructor_name', label: 'Nome do Instrutor (Automático)' },
+    { value: 'studio_name', label: 'Local / Studio (Automático)' },
+    { value: 'material', label: 'Material Didático (Automático)' },
+    { value: 'infrastructure', label: 'Infraestrutura (Automático)' },
+    { value: 'coffee', label: 'Coffee Break (Automático)' },
 ];
 
 const QUESTION_TYPES: { id: QuestionType; label: string; icon: any }[] = [

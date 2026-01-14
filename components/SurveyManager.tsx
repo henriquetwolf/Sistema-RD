@@ -46,6 +46,8 @@ const SYSTEM_FIELDS = [
     { value: 'city', label: 'Cidade do Curso (Automático)' },
     { value: 'state', label: 'UF do Curso (Automático)' },
     { value: 'instructor_name', label: 'Nome do Instrutor (Automático)' },
+    { value: 'instructor_mod1', label: 'Instrutor Mod 1 (Automático)' },
+    { value: 'instructor_mod2', label: 'Instrutor Mod 2 (Automático)' },
     { value: 'studio_name', label: 'Local / Studio (Automático)' },
     { value: 'material', label: 'Material Didático (Automático)' },
     { value: 'infrastructure', label: 'Infraestrutura (Automático)' },

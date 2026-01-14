@@ -524,6 +524,7 @@ export interface Product {
   certificateTemplateId: string;
   createdAt: string;
   imageUrl?: string;
+  targetAreas?: string[];
 }
 
 export interface AttendanceTag {

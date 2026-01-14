@@ -5,7 +5,9 @@ import {
   DollarSign, Globe, Loader2, CheckCircle2, AlertCircle, Award,
   Layers, BookOpen, Video, FileText, List, ChevronRight, GripVertical, Paperclip, 
   Download, ListPlus, LayoutTemplate, Upload, Image as ImageIcon, RefreshCw, AlertTriangle,
-  Settings, Layout, PlayCircle, Code
+  Settings, Layout, PlayCircle, Code,
+  /* Added missing icon imports to fix errors on lines 539-542 */
+  GraduationCap, School, Building2, Store
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -45,7 +47,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const [editingLesson, setEditingLesson] = useState<Partial<CourseLesson> | null>(null);
 
   const initialFormState: Product = {
-      id: '', name: '', category: 'Curso Online', platform: 'Plataforma Própria', price: 0, url: '', status: 'active', description: '', certificateTemplateId: '', createdAt: ''
+      id: '', name: '', category: 'Curso Online', platform: 'Plataforma Própria', price: 0, url: '', status: 'active', description: '', certificateTemplateId: '', createdAt: '', targetAreas: []
   };
   const [formData, setFormData] = useState<Product>(initialFormState);
   const [productImageUrl, setProductImageUrl] = useState<string>('');
@@ -86,7 +88,8 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
               category: p.category || 'Curso Online',
               certificateTemplateId: p.certificate_template_id, 
               createdAt: p.created_at,
-              imageUrl: p.image_url 
+              imageUrl: p.image_url,
+              targetAreas: p.target_areas || []
           }));
           setProducts(mapped);
           return mapped;
@@ -235,7 +238,8 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
           name: formData.name, category: formData.category, platform: formData.platform, 
           price: formData.price, url: formData.url, status: formData.status, 
           description: formData.description, certificate_template_id: formData.certificateTemplateId || null,
-          image_url: productImageUrl 
+          image_url: productImageUrl,
+          target_areas: formData.targetAreas || []
       };
       try {
           if (formData.id) await appBackend.client.from('crm_products').update(payload).eq('id', formData.id);
@@ -397,7 +401,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                                         <h4 className="font-bold text-slate-800 text-sm">{lesson.title}</h4>
                                                         <div className="flex items-center gap-3 mt-1">
                                                             {lesson.videoUrl && <span className="text-[9px] text-red-500 font-black uppercase flex items-center gap-1"><PlayCircle size={10}/> Vídeo Vinculado</span>}
-                                                            {(lesson.materials || []).length > 0 && <span className="text-[9px] text-teal-600 font-black uppercase flex items-center gap-1"><Paperclip size={10}/> {lesson.materials?.length} Anexo(s)</span>}
+                                                            {(lesson.materials || []).length > 0 && <span className="text-[9px] text-teal-600 font-black uppercase flex items-center gap-1"><Paperclip size={16}/> {lesson.materials?.length} Anexo(s)</span>}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -522,11 +526,43 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Preço (R$)</label>
-                                <input type="number" className="w-full px-5 py-3.5 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-2xl text-sm font-black text-emerald-700 outline-none" value={formData.price} onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} />
+                                <input type="number" className="w-full px-5 py-3.5 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-black text-emerald-700 outline-none" value={formData.price} onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} />
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Link de Venda / Checkout</label>
                                 <input type="text" className="w-full px-5 py-3.5 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-2xl text-xs font-mono" value={formData.url} onChange={e => setFormData({ ...formData, url: e.target.value })} />
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Direcionamento (Áreas de Exibição)</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {[
+                                        { id: 'student', label: 'Área do Aluno', icon: GraduationCap },
+                                        { id: 'instructor', label: 'Área do Instrutor', icon: School },
+                                        { id: 'studio', label: 'Studio Parceiro', icon: Building2 },
+                                        { id: 'franchise', label: 'Franqueado', icon: Store }
+                                    ].map(area => (
+                                        <label key={area.id} className={clsx(
+                                            "flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all",
+                                            (formData.targetAreas || []).includes(area.id) ? "bg-indigo-50 border-indigo-500 text-indigo-700" : "bg-white border-slate-100 text-slate-500 hover:bg-slate-50"
+                                        )}>
+                                            <input 
+                                                type="checkbox" 
+                                                className="w-4 h-4 rounded text-indigo-600 focus:ring-0" 
+                                                checked={(formData.targetAreas || []).includes(area.id)}
+                                                onChange={e => {
+                                                    const current = formData.targetAreas || [];
+                                                    const updated = e.target.checked ? [...current, area.id] : current.filter(a => a !== area.id);
+                                                    setFormData({...formData, targetAreas: updated});
+                                                }}
+                                            />
+                                            <div className="flex items-center gap-2">
+                                                <area.icon size={14} className={clsx((formData.targetAreas || []).includes(area.id) ? "text-indigo-600" : "text-slate-400")} />
+                                                <span className="text-[10px] font-bold uppercase tracking-tight">{area.label}</span>
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
                             </div>
 
                             {formData.category === 'Curso Online' && (

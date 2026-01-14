@@ -180,18 +180,18 @@ export const appBackend = {
   saveForm: async (form: FormModel): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_forms').upsert({
-      id: (form.id && form.id.length > 10) ? form.id : crypto.randomUUID(),
+      id: (form.id && String(form.id).length > 5) ? form.id : crypto.randomUUID(),
       title: form.title, 
-      description: form.description, 
-      campaign: form.campaign, 
-      is_lead_capture: form.isLeadCapture, 
-      distribution_mode: form.distributionMode, 
+      description: form.description || null, 
+      campaign: form.campaign || null, 
+      is_lead_capture: !!form.isLeadCapture, 
+      distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
       team_id: form.teamId || null, 
-      target_pipeline: form.targetPipeline, 
-      target_stage: form.targetStage, 
-      questions: form.questions, 
-      style: form.style, 
+      target_pipeline: form.target_pipeline || null, 
+      target_stage: form.target_stage || null, 
+      questions: form.questions || [], 
+      style: form.style || {}, 
       folder_id: form.folderId || null, 
       created_at: form.createdAt || new Date().toISOString(), 
       type: 'form'
@@ -202,25 +202,25 @@ export const appBackend = {
   saveSurvey: async (survey: SurveyModel): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_forms').upsert({
-      id: (survey.id && survey.id.length > 10) ? survey.id : crypto.randomUUID(),
+      id: (survey.id && String(survey.id).length > 5) ? survey.id : crypto.randomUUID(),
       title: survey.title, 
-      description: survey.description, 
-      campaign: survey.campaign, 
-      is_lead_capture: survey.isLeadCapture, 
-      distribution_mode: survey.distributionMode, 
+      description: survey.description || null, 
+      campaign: survey.campaign || null, 
+      is_lead_capture: !!survey.isLeadCapture, 
+      distribution_mode: survey.distributionMode || 'fixed', 
       fixed_owner_id: survey.fixedOwnerId || null,
       team_id: survey.teamId || null,
       target_pipeline: survey.targetPipeline || null,
       target_stage: survey.targetStage || null,
-      questions: survey.questions, 
-      style: survey.style, 
+      questions: survey.questions || [], 
+      style: survey.style || {}, 
       folder_id: survey.folderId || null, 
-      target_audience: survey.targetAudience, 
-      target_type: survey.targetType, 
-      target_product_type: survey.targetProductType, 
-      target_product_name: survey.targetProductName, 
-      only_if_finished: survey.onlyIfFinished, 
-      is_active: survey.isActive, 
+      target_audience: survey.targetAudience || 'all', 
+      target_type: survey.targetType || 'all', 
+      target_product_type: survey.targetProductType || null, 
+      target_product_name: survey.targetProductName || null, 
+      only_if_finished: !!survey.onlyIfFinished, 
+      is_active: survey.isActive !== false, 
       type: 'survey', 
       created_at: survey.createdAt || new Date().toISOString()
     });
@@ -513,7 +513,8 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primary_key, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
+    /* Fix: Error in file services/appBackend.ts on line 516: Property 'primary_key' does not exist on type 'Partial<SavedPreset>'. Did you mean 'primaryKey'? */
+    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
@@ -595,7 +596,7 @@ export const appBackend = {
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-    return (data || []).map((item: any) => ({ id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role, content: item.content, attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role, content: item.content, attachment_url: item.attachment_url, attachment_name: item.attachment_name, createdAt: item.created_at }));
   },
 
   saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
@@ -905,9 +906,10 @@ export const appBackend = {
 
   saveWorkshop: async (ws: Workshop): Promise<Workshop> => {
     if (!isConfigured) throw new Error("Not configured");
-    const { data, error } = await supabase.from('crm_workshops').upsert({ id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
+    const { data, error } = await appBackend.client.from('crm_workshops').upsert({ id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
     if (error) throw error;
-    return { id: data.id, eventId: data.event_id, block_id: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
+    /* Fix: Error in file services/appBackend.ts on line 910: Object literal may only specify known properties, but 'block_id' does not exist in type 'Workshop'. Did you mean to write 'blockId'? */
+    return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
   },
 
   deleteWorkshop: async (id: string): Promise<void> => {

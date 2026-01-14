@@ -2,11 +2,12 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
-    LogOut, Calendar, MapPin, Loader2, BookOpen, User, 
-    ChevronRight, Users, ExternalLink, GraduationCap,
-    Newspaper, Bell, Sparkles, X, Clock, Image as ImageIcon,
-    ArrowRight, Info, Plane, Coffee, Bed, Map, DollarSign, Package, Monitor,
-    FileCheck, LayoutDashboard, FileText, CheckCircle, LifeBuoy, FileSignature, ChevronLeft
+    LogOut, GraduationCap, Award, ExternalLink, Calendar, MapPin, 
+    Video, Download, Loader2, CheckCircle, Clock, X, Info, Layers, 
+    PieChart, Send, ArrowRight, Sparkles, Bell, Trophy, ChevronRight, Book, ListTodo, LifeBuoy,
+    MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
+    Mic, RefreshCw, FileSignature, CheckSquare, Building, User, LayoutDashboard, FileCheck, BookOpen, Users,
+    Package, DollarSign, Plane, Coffee, Bed, Map
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
@@ -340,7 +341,8 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
 
     const technicalInfo = useMemo(() => {
         if (!viewingClassDetails) return null;
-        return allCourseInfos.find(i => (i.courseName || '').trim().toLowerCase() === (viewingClassDetails.course || '').trim().toLowerCase());
+        const courseNameClean = (viewingClassDetails.course || '').trim().toLowerCase();
+        return allCourseInfos.find(i => (i.courseName || '').trim().toLowerCase() === courseNameClean);
     }, [viewingClassDetails, allCourseInfos]);
 
     if (playingCourse && courseStructure) {
@@ -547,7 +549,10 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                     {activeTab === 'classes' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {classes.length === 0 ? (
-                                <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300"><GraduationCap size={48} className="mb-4 opacity-20"/><p className="font-bold">Nenhuma formacao presencial ativa.</p></div>
+                                <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300">
+                                    <GraduationCap size={48} className="mb-4 opacity-20"/> 
+                                    <p className="font-bold">Nenhuma formacao presencial ativa.</p>
+                                </div>
                             ) : classes.map(cls => (
                                 <div key={cls.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all overflow-hidden border-b-8 border-b-purple-500 flex flex-col">
                                     <div className="flex-1">
@@ -660,7 +665,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                 <div className="space-y-8 animate-in fade-in slide-in-from-top-2">
                                     <div>
                                         <h4 className="text-xs font-black text-indigo-600 uppercase tracking-[0.2em] flex items-center gap-2 pb-2 border-b border-indigo-100 mb-4">
-                                            {/* Fix: Added explicit BookOpen component usage */}
                                             <BookOpen size={16}/> Detalhes Técnicos e Ementa do Curso
                                         </h4>
                                         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm leading-relaxed">
@@ -788,7 +792,6 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                                                                 <div className="flex justify-between items-start mb-4">
                                                                     <div className="flex items-center gap-2"><div className={clsx("w-8 h-8 rounded-full flex items-center justify-center transition-all", isSelected ? "bg-teal-500 text-white" : "bg-slate-100 text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600")}><CheckSquare size={16}/></div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{ws.time}</span></div>
                                                                     <div className={clsx("flex items-center gap-1 text-[10px] font-black uppercase", remaining <= 5 && remaining > 0 ? "text-orange-500" : remaining === 0 ? "text-red-500" : "text-slate-400")}>
-                                                                        {/* Fix: Added explicit Users component usage */}
                                                                         <Users size={12}/> {remaining} / {ws.spots} livres
                                                                     </div>
                                                                 </div>

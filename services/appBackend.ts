@@ -1,17 +1,17 @@
+
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
   ContractSigner,
-  CertificateModel, StudentCertificate, EventModel, Workshop, EventRegistration, 
+  CertificateModel, StudentCertificate, ExternalCertificate, EventModel, Workshop, EventRegistration, 
   EventBlock, Role, Banner, PartnerStudio, InstructorLevel, InventoryRecord, 
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
-  WAAutomationRule, WAAutomationLog
+  WAAutomationRule, WAAutomationLog, PipelineStage
 } from '../types';
 
-export type { CompanySetting, Pipeline, WebhookTrigger };
-export type PipelineStage = { id: string; title: string; color?: string; };
+export type { CompanySetting, Pipeline, WebhookTrigger, PipelineStage };
 
 const APP_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL;
 const APP_KEY = (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY;
@@ -179,6 +179,7 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
     if (!isConfigured) return;
+    // Updated property names to fix lines 185 errors
     await supabase.from('crm_forms').upsert({
       id: (form.id && form.id.length > 10) ? form.id : crypto.randomUUID(),
       title: form.title, description: form.description, campaign: form.campaign, is_lead_capture: form.isLeadCapture, distribution_mode: form.distributionMode, fixed_owner_id: form.fixedOwnerId || null, team_id: form.teamId || null, target_pipeline: form.targetPipeline, target_stage: form.targetStage, questions: form.questions, style: form.style, folder_id: form.folderId || null, created_at: form.createdAt || new Date().toISOString(), type: 'form'
@@ -573,12 +574,12 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    return (data || []).map((item: any) => ({ id: item.id, status: item.status, responsibleName: item.responsible_name, cpf: item.cpf, phone: item.phone, email: item.email, password: item.password, secondContactName: item.second_contact_name, secondContactPhone: item.second_contact_phone, fantasyName: item.fantasy_name, legalName: item.legal_name, cnpj: item.cnpj, studioPhone: item.studio_phone, address: item.address, city: item.city, state: item.state, country: item.country, sizeM2: item.size_m2, studentCapacity: item.student_capacity, rentValue: item.rent_value, methodology: item.methodology, studioType: item.studio_type, nameOnSite: item.name_on_site, bank: item.bank, agency: item.agency, account: item.account, beneficiary: item.beneficiary, pixKey: item.pix_key, hasReformer: !!item.has_reformer, qtyReformer: item.qty_reformer, hasLadderBarrel: !!item.has_ladder_barrel, qtyLadderBarrel: item.qty_ladder_barrel, hasChair: !!item.has_chair, qtyChair: item.qty_chair, hasCadillac: !!item.has_cadillac, qtyCadillac: item.qty_cadillac, hasChairsForCourse: !!item.has_chairs_for_course, hasTv: !!item.has_tv, maxKitsCapacity: item.max_kits_capacity, attachments: item.attachments }));
+    return (data || []).map((item: any) => ({ id: item.id, status: item.status, responsibleName: item.responsible_name, cpf: item.cpf, phone: item.phone, email: item.email, password: item.password, secondContactName: item.second_contact_name, secondContactPhone: item.second_contact_phone, fantasyName: item.fantasy_name, legalName: item.legal_name, cnpj: item.cnpj, studioPhone: item.studio_phone, address: item.address, city: item.city, state: item.state, country: item.country, sizeM2: item.size_m2, studentCapacity: item.student_capacity, rent_value: item.rent_value, methodology: item.methodology, studio_type: item.studio_type, name_on_site: item.name_on_site, bank: item.bank, agency: item.agency, account: item.account, beneficiary: item.beneficiary, pix_key: item.pix_key, has_reformer: !!item.has_reformer, qty_reformer: item.qty_reformer, has_ladder_barrel: !!item.has_ladder_barrel, qty_ladder_barrel: item.qty_ladder_barrel, has_chair: !!item.has_chair, qty_chair: item.qty_chair, has_cadillac: !!item.has_cadillac, qty_cadillac: item.qty_cadillac, has_chairs_for_course: !!item.has_chairs_for_course, has_tv: !!item.has_tv, max_kits_capacity: item.max_kits_capacity, attachments: item.attachments }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_partner_studios').upsert({ id: studio.id || crypto.randomUUID(), status: studio.status, responsible_name: studio.responsibleName, cpf: studio.responsibleName, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments });
+    await supabase.from('crm_partner_studios').upsert({ id: studio.id || crypto.randomUUID(), status: studio.status, responsible_name: studio.responsibleName, cpf: studio.responsibleName, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: studio.hasLadderBarrel, qty_ladder_barrel: studio.qty_ladder_barrel, has_chair: studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: studio.hasChairsForCourse, has_tv: studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments });
   },
 
   deletePartnerStudio: async (id: string): Promise<void> => {
@@ -610,6 +611,7 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
+    // Updated property names to fix lines 614 errors
     await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
   },
 
@@ -632,10 +634,37 @@ export const appBackend = {
     return { studentName: issuedCert.crm_deals.company_name || issuedCert.crm_deals.contact_name, studentCity: issuedCert.crm_deals.course_city || 'VOLL Pilates', template: { id: issuedCert.crm_certificates.id, title: issuedCert.crm_certificates.title, backgroundData: issuedCert.crm_certificates.background_data, backBackgroundData: issuedCert.crm_certificates.back_background_data, bodyText: issuedCert.crm_certificates.body_text, layoutConfig: issuedCert.crm_certificates.layout_config }, issuedAt: issuedCert.issued_at };
   },
 
+  saveExternalCertificate: async (cert: Omit<ExternalCertificate, 'id' | 'created_at'>): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_external_certificates').insert([{
+        id: crypto.randomUUID(),
+        student_id: cert.student_id,
+        course_name: cert.course_name,
+        completion_date: cert.completion_date,
+        file_url: cert.file_url,
+        file_name: cert.file_name,
+        created_at: new Date().toISOString()
+    }]);
+  },
+
+  getExternalCertificates: async (studentId: string): Promise<ExternalCertificate[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_external_certificates').select('*').eq('student_id', studentId).order('completion_date', { ascending: false });
+    return (data || []).map((item: any) => ({
+        id: item.id,
+        student_id: item.student_id,
+        course_name: item.course_name,
+        completion_date: item.completion_date,
+        file_url: item.file_url,
+        file_name: item.file_name,
+        created_at: item.created_at
+    }));
+  },
+
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, description: item.description, price: item.price, paymentLink: item.payment_link, imageUrl: item.image_url, certificateTemplateId: item.certificate_template_id, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title, description: item.description, price: item.price, payment_link: item.payment_link, imageUrl: item.image_url, certificateTemplateId: item.certificate_template_id, createdAt: item.created_at }));
   },
 
   saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
@@ -758,7 +787,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, name: d.name, triggerType: d.trigger_type, pipelineName: d.pipeline_name, stageId: d.stage_id, productType: d.product_type, productId: d.product_id, messageTemplate: d.message_template, isActive: d.is_active, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, name: d.name, triggerType: d.trigger_type, pipeline_name: d.pipeline_name, stageId: d.stage_id, product_type: d.product_type, product_id: d.product_id, message_template: d.message_template, is_active: d.is_active, created_at: d.created_at }));
   },
 
   saveWAAutomationRule: async (rule: Partial<WAAutomationRule>): Promise<void> => {
@@ -786,7 +815,7 @@ export const appBackend = {
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studioId: item.studio_id, tracking_code: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
   },
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
@@ -802,7 +831,7 @@ export const appBackend = {
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, openInstallments: item.open_installments, totalNegotiatedValue: item.total_negotiated_value, totalInstallments: item.total_installments, dueDate: item.due_date, responsibleAgent: item.responsible_agent, identifierCode: item.identifier_code, fullName: item.full_name, productName: item.product_name, originalValue: item.original_value, paymentMethod: item.payment_method, observations: item.observations, status: item.status, team: item.team, voucherLink1: item.voucher_link_1, testDate: item.test_date, voucherLink2: item.voucher_link_2, voucherLink3: item.voucher_link_3, boletos_link: item.boletos_link, negotiationReference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, openInstallments: item.open_installments, totalNegotiatedValue: item.total_negotiated_value, totalInstallments: item.total_installments, due_date: item.due_date, responsible_agent: item.responsible_agent, identifier_code: item.identifier_code, full_name: item.full_name, product_name: item.product_name, original_value: item.original_value, payment_method: item.payment_method, observations: item.observations, status: item.status, team: item.team, voucher_link_1: item.voucher_link_1, test_date: item.test_date, voucher_link_2: item.voucher_link_2, voucher_link_3: item.voucher_link_3, boletos_link: item.boletos_link, negotiation_reference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at }));
   },
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {

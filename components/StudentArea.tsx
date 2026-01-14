@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo } from '../types';
+
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { StudentSession, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress, Banner, Contract, EventModel, Workshop, EventRegistration, EventBlock, CourseInfo, ExternalCertificate } from '../types';
 import { appBackend } from '../services/appBackend';
 import { 
     LogOut, GraduationCap, Award, ExternalLink, Calendar, MapPin, 
@@ -7,7 +8,7 @@ import {
     PieChart, Send, ArrowRight, Sparkles, Bell, Trophy, ChevronRight, Book, ListTodo, LifeBuoy,
     MonitorPlay, Lock, Play, Circle, CheckCircle2, ChevronLeft, FileText, Smartphone, Paperclip, Youtube,
     Mic, RefreshCw, FileSignature, CheckSquare, Building, User, LayoutDashboard, FileCheck, BookOpen, Users,
-    Package, DollarSign, Plane, Coffee, Bed, Map
+    Package, DollarSign, Plane, Coffee, Bed, Map, Plus, Save, ImageIcon, Trash2, Upload
 } from 'lucide-react';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
@@ -25,10 +26,19 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const [allCourseInfos, setAllCourseInfos] = useState<CourseInfo[]>([]);
     const [eventsList, setEventsList] = useState<EventModel[]>([]);
     const [certificates, setCertificates] = useState<any[]>([]);
+    const [externalCertificates, setExternalCertificates] = useState<ExternalCertificate[]>([]);
     const [banners, setBanners] = useState<Banner[]>([]);
     const [pendingContracts, setPendingContracts] = useState<Contract[]>([]);
     const [signingContract, setSigningContract] = useState<Contract | null>(null);
     
+    // Upload Externo
+    const [showUploadModal, setShowUploadModal] = useState(false);
+    const [extCourseName, setExtCourseName] = useState('');
+    const [extDate, setExtDate] = useState('');
+    const [extFileData, setExtFileData] = useState<{ url: string, name: string } | null>(null);
+    const [isUploadingExt, setIsUploadingExt] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     // Logística de Turmas
     const [viewingClassDetails, setViewingClassDetails] = useState<any | null>(null);
 
@@ -89,16 +99,57 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
     const loadCertificates = async () => {
         const dealIds = student.deals.map(d => d.id);
         if (dealIds.length === 0) return;
+        setIsLoading(true);
         try {
-            const { data: issuedCerts, error } = await appBackend.client
-                .from('crm_student_certificates')
-                .select('*, crm_certificates(title)')
-                .in('student_deal_id', dealIds)
-                .order('issued_at', { ascending: false });
-            if (error) throw error;
-            setCertificates(issuedCerts || []);
+            const [issuedRes, externalRes] = await Promise.all([
+                appBackend.client.from('crm_student_certificates').select('*, crm_certificates(title)').in('student_deal_id', dealIds).order('issued_at', { ascending: false }),
+                appBackend.getExternalCertificates(String(mainDealId))
+            ]);
+            
+            if (issuedRes.error) throw issuedRes.error;
+            setCertificates(issuedRes.data || []);
+            setExternalCertificates(externalRes || []);
         } catch (err) {
             console.error("Erro ao carregar diplomas:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleExternalFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setExtFileData({ url: reader.result as string, name: file.name });
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleSaveExternalCert = async () => {
+        if (!mainDealId || !extCourseName || !extDate || !extFileData) {
+            alert("Preencha todos os campos e selecione o arquivo.");
+            return;
+        }
+        setIsUploadingExt(true);
+        try {
+            await appBackend.saveExternalCertificate({
+                student_id: String(mainDealId),
+                course_name: extCourseName,
+                completion_date: extDate,
+                file_url: extFileData.url,
+                file_name: extFileData.name
+            });
+            setShowUploadModal(false);
+            setExtCourseName('');
+            setExtDate('');
+            setExtFileData(null);
+            await loadCertificates();
+        } catch (e: any) {
+            alert("Erro ao salvar certificado: " + e.message);
+        } finally {
+            setIsUploadingExt(false);
         }
     };
 
@@ -540,7 +591,7 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         { id: 'certificates', label: 'Meus Diplomas', icon: Award, color: 'text-emerald-600' },
                         { id: 'contracts', label: 'Assinaturas', icon: FileSignature, color: 'text-amber-600', badge: pendingContracts.length }
                     ].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === tab.id ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={clsx("px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all relative", activeTab === 'id' ? "bg-white text-slate-800 shadow-md ring-1 ring-slate-100" : "text-slate-500 hover:text-slate-800")}>
                             <tab.icon size={20} className={activeTab === tab.id ? tab.color : "text-slate-400"} />
                             {tab.label}
                             {tab.badge ? (
@@ -620,15 +671,70 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                         </div>
                     )}
                     {activeTab === 'certificates' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="col-span-full flex justify-end mb-4"><button onClick={loadCertificates} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase hover:text-teal-600 transition-colors"><RefreshCw size={14}/> Atualizar Lista</button></div>
-                            {certificates.length === 0 ? (
-                                <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300"><Award size={48} className="mb-4 opacity-20"/><p className="font-bold">Nenhum certificado emitido.</p></div>
-                            ) : certificates.map(cert => (
-                                <div key={cert.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-6 shadow-sm hover:shadow-xl transition-all group">
-                                    <div className="bg-emerald-50 p-5 rounded-[2rem] text-emerald-600 group-hover:rotate-12 transition-transform shadow-inner"><Trophy size={32}/></div>
-                                    <div className="flex-1"><h4 className="font-black text-slate-800 text-lg leading-tight mb-1">{cert.crm_certificates?.title}</h4><p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Emitido em {new Date(cert.issued_at).toLocaleDateString()}</p></div>
-                                    <a href={`/?certificateHash=${cert.hash}`} target="_blank" className="p-4 bg-emerald-500 text-white rounded-2xl shadow-lg hover:bg-emerald-600 transition-all active:scale-95"><Download size={24}/></a>
+                        <div className="space-y-6">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+                                <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                                    <Award size={24} className="text-emerald-600" /> Diplomas e Certificados
+                                </h2>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => setShowUploadModal(true)}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-md"
+                                    >
+                                        <Plus size={16}/> Subir Certificado Externo
+                                    </button>
+                                    <button onClick={loadCertificates} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase hover:text-teal-600 transition-colors"><RefreshCw size={14}/> Atualizar Lista</button>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {certificates.length === 0 && externalCertificates.length === 0 ? (
+                                    <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300">
+                                        <Award size={48} className="mb-4 opacity-20"/>
+                                        <p className="font-bold">Nenhum certificado disponível.</p>
+                                        <p className="text-sm">Os diplomas das suas formações aparecerão aqui automaticamente.</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Certificados Emitidos pelo Sistema */}
+                                        {certificates.map(cert => (
+                                            <div key={cert.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-6 shadow-sm hover:shadow-xl transition-all group border-l-8 border-l-emerald-500">
+                                                <div className="bg-emerald-50 p-5 rounded-[2rem] text-emerald-600 group-hover:rotate-12 transition-transform shadow-inner"><Trophy size={32}/></div>
+                                                <div className="flex-1">
+                                                    <h4 className="font-black text-slate-800 text-lg leading-tight mb-1">{cert.crm_certificates?.title}</h4>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Emitido pela VOLL em {new Date(cert.issued_at).toLocaleDateString()}</p>
+                                                </div>
+                                                <a href={`/?certificateHash=${cert.hash}`} target="_blank" className="p-4 bg-emerald-500 text-white rounded-2xl shadow-lg hover:bg-emerald-600 transition-all active:scale-95"><Download size={24}/></a>
+                                            </div>
+                                        ))}
+
+                                        {/* Certificados Carregados pelo Aluno */}
+                                        {externalCertificates.map(cert => (
+                                            <div key={cert.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-6 shadow-sm hover:shadow-xl transition-all group border-l-8 border-l-indigo-500">
+                                                <div className="bg-indigo-50 p-5 rounded-[2rem] text-indigo-600 group-hover:rotate-12 transition-transform shadow-inner"><ImageIcon size={32}/></div>
+                                                <div className="flex-1">
+                                                    <h4 className="font-black text-slate-800 text-lg leading-tight mb-1">{cert.course_name}</h4>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Concluído em {new Date(cert.completion_date).toLocaleDateString()}</p>
+                                                    <p className="text-[9px] text-slate-300 uppercase mt-1">Carregado por você</p>
+                                                </div>
+                                                <a href={cert.file_url} download={cert.file_name} className="p-4 bg-indigo-500 text-white rounded-2xl shadow-lg hover:bg-indigo-600 transition-all active:scale-95"><Download size={24}/></a>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    {activeTab === 'events' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {eventsList.length === 0 ? (
+                                <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed flex flex-col items-center text-slate-300"><Mic size={48} className="mb-4 opacity-20"/><p className="font-bold">Nenhum evento disponivel.</p></div>
+                            ) : eventsList.map(evt => (
+                                <div key={evt.id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-xl transition-all flex flex-col border-b-8 border-b-amber-500">
+                                    <div className="flex justify-between items-start mb-4"><div className="p-3 bg-amber-50 rounded-2xl text-amber-600"><Mic size={24} /></div>{evt.registrationOpen && <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-[10px] font-black uppercase">Inscricoes Abertas</span>}</div>
+                                    <h3 className="text-xl font-black text-slate-800 mb-2 leading-tight">{evt.name}</h3>
+                                    <div className="space-y-2 mb-8"><div className="flex items-center gap-2 text-xs text-slate-600 font-bold"><MapPin size={14} className="text-amber-500" /> {evt.location}</div></div>
+                                    <button onClick={() => handleOpenEventProgram(evt)} className="mt-auto w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all active:scale-95 shadow-lg">Ver Programacao / Inscricao</button>
                                 </div>
                             ))}
                         </div>
@@ -652,6 +758,73 @@ export const StudentArea: React.FC<StudentAreaProps> = ({ student, onLogout, log
                     )}
                 </div>
             </main>
+
+            {/* Modal de Upload de Certificado Externo */}
+            {showUploadModal && (
+                <div className="fixed inset-0 z-[400] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
+                        <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-emerald-100 text-emerald-600 rounded-xl"><Plus size={20}/></div>
+                                <h3 className="text-lg font-black text-slate-800">Novo Certificado Externo</h3>
+                            </div>
+                            <button onClick={() => setShowUploadModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome do Curso / Instituição</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-emerald-500 rounded-2xl text-sm font-bold transition-all outline-none" 
+                                    value={extCourseName} 
+                                    onChange={e => setExtCourseName(e.target.value)} 
+                                    placeholder="Ex: Workshop de Anatomia" 
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Data de Conclusão</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full px-5 py-3 border border-slate-200 bg-slate-50 focus:bg-white focus:border-emerald-500 rounded-2xl text-sm font-bold transition-all outline-none" 
+                                    value={extDate} 
+                                    onChange={e => setExtDate(e.target.value)} 
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Arquivo do Certificado (PDF ou Imagem)</label>
+                                <div 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className={clsx(
+                                        "w-full py-8 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-all",
+                                        extFileData ? "bg-emerald-50 border-emerald-300 text-emerald-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-white hover:border-emerald-300"
+                                    )}
+                                >
+                                    {extFileData ? (
+                                        <><CheckCircle2 size={32}/> <span className="text-xs font-bold truncate max-w-[80%]">{extFileData.name}</span></>
+                                    ) : (
+                                        <><Upload size={32}/> <span className="text-xs font-bold uppercase tracking-widest">Selecionar Arquivo</span></>
+                                    )}
+                                    <input 
+                                        type="file" 
+                                        ref={fileInputRef}
+                                        className="hidden" 
+                                        accept="image/*,application/pdf" 
+                                        onChange={handleExternalFileUpload} 
+                                    />
+                                </div>
+                            </div>
+                            <button 
+                                onClick={handleSaveExternalCert}
+                                disabled={isUploadingExt || !extCourseName || !extDate || !extFileData}
+                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-emerald-600/20 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isUploadingExt ? <Loader2 size={18} className="animate-spin" /> : <Save size={18}/>} 
+                                {isUploadingExt ? 'Salvando...' : 'Salvar Certificado'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Detalhes da Turma Presencial */}
             {viewingClassDetails && (

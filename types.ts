@@ -1,4 +1,5 @@
 
+
 export type QuestionType = 'text' | 'paragraph' | 'select' | 'checkbox' | 'email' | 'phone' | 'number' | 'date';
 
 export interface FormQuestion {
@@ -204,6 +205,16 @@ export interface StudentCertificate {
   certificate_template_id: string;
   hash: string;
   issued_at: string;
+}
+
+export interface ExternalCertificate {
+  id: string;
+  student_id: string;
+  course_name: string;
+  completion_date: string;
+  file_url: string;
+  file_name: string;
+  created_at: string;
 }
 
 // Added to resolve error in components/ClassStudentsViewer.tsx
@@ -443,11 +454,8 @@ export interface CompanySetting {
   productIds: string[];
 }
 
-export interface PipelineStage {
-  id: string;
-  title: string;
-  color?: string;
-}
+// Added to resolve error on line 459
+export type PipelineStage = { id: string; title: string; color?: string; };
 
 export interface Pipeline {
   id: string;

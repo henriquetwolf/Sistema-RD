@@ -32,6 +32,67 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
       }
   }, [initialAnswers]);
 
+  // Lógica para preencher campos automáticos do sistema (systemMapping)
+  useEffect(() => {
+    const resolveSystemMappings = async () => {
+      if (!studentId || !form.questions.some(q => q.systemMapping)) return;
+
+      try {
+        // 1. Busca os dados do registro do aluno (Deal no CRM)
+        const { data: deal, error: dealErr } = await appBackend.client
+          .from('crm_deals')
+          .select('*')
+          .eq('id', studentId)
+          .maybeSingle();
+        
+        if (dealErr || !deal) return;
+
+        let classData: any = null;
+        // 2. Se o registro tiver vínculo com turma, busca os dados da turma para instrutores/local
+        if (deal.class_mod_1 || deal.class_mod_2) {
+          const { data: cls } = await appBackend.client
+            .from('crm_classes')
+            .select('*')
+            .or(`mod_1_code.eq."${deal.class_mod_1}",mod_2_code.eq."${deal.class_mod_2}"`)
+            .maybeSingle();
+          if (cls) classData = cls;
+        }
+
+        // 3. Resolve os mapeamentos definidos na pesquisa
+        const resolvedAnswers: Record<string, any> = { ...answers };
+        form.questions.forEach(q => {
+          if (q.systemMapping) {
+            let val = '';
+            switch (q.systemMapping) {
+              case 'student_name': val = deal.company_name || deal.contact_name; break;
+              case 'student_email': val = deal.email; break;
+              case 'course_name': val = deal.product_name; break;
+              case 'class_code': val = deal.class_mod_1 || deal.class_mod_2 || classData?.class_code; break;
+              case 'city': val = deal.course_city || classData?.city; break;
+              case 'state': val = deal.course_state || classData?.state; break;
+              case 'instructor_name': val = classData?.instructor_mod_1 || classData?.instructor_mod_2; break;
+              case 'instructor_mod1': val = classData?.instructor_mod_1; break;
+              case 'instructor_mod2': val = classData?.instructor_mod_2; break;
+              case 'studio_name': val = classData?.studio_mod_1; break;
+              case 'material': val = classData?.material; break;
+              case 'infrastructure': val = classData?.infrastructure; break;
+              case 'coffee': val = classData?.coffee_mod_1; break;
+            }
+            if (val) {
+              resolvedAnswers[q.id] = val;
+            }
+          }
+        });
+
+        setAnswers(resolvedAnswers);
+      } catch (err) {
+        console.error("Erro ao resolver preenchimento automático da pesquisa:", err);
+      }
+    };
+
+    resolveSystemMappings();
+  }, [studentId, form.questions]);
+
   const handleInputChange = (questionId: string, value: any) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
     setErrorMessage(null); // Limpa erro ao digitar
@@ -197,15 +258,13 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
                     <div key={q.id} className="space-y-4">
                         <label className="block text-lg font-bold flex items-center gap-2" style={{ color: style.textColor }}>
                         {q.title} {q.required && <span className="text-red-500">*</span>}
-                        {/* Corrected: Wrapped icon in span to use title attribute safely */}
                         {isSystemAuto && <span title="Informação automática do sistema"><Lock size={14} className="text-slate-400" /></span>}
                         </label>
                         
                         {q.type === 'paragraph' ? (
-                            /* Corrected: Removed invalid style properties focusRingColor and focusBorderColor */
-                            <textarea readOnly={isSystemAuto} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 p-4 min-h-[140px] transition-all bg-slate-50/50 text-base", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70")} style={{ borderColor: style.primaryColor }} placeholder="Escreva sua resposta longa aqui..." value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)} />
+                            <textarea readOnly={isSystemAuto} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 p-4 min-h-[140px] transition-all bg-slate-50/50 text-base", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70 cursor-not-allowed")} style={{ borderColor: style.primaryColor }} placeholder="Escreva sua resposta longa aqui..." value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)} />
                         ) : q.type === 'select' ? (
-                            <select disabled={isSystemAuto} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 px-4 py-3.5 transition-all bg-slate-50/50 text-base font-medium", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70")} value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)}>
+                            <select disabled={isSystemAuto} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 px-4 py-3.5 transition-all bg-slate-50/50 text-base font-medium", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70 cursor-not-allowed")} value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)}>
                                 <option value="">Escolha uma opção...</option>
                                 {q.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                             </select>
@@ -219,7 +278,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
                                 ))}
                             </div>
                         ) : (
-                            <input readOnly={isSystemAuto} type={q.type === 'email' ? 'email' : q.type === 'phone' ? 'tel' : q.type === 'number' ? 'number' : q.type === 'date' ? 'date' : 'text'} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 px-4 py-3.5 transition-all bg-slate-50/50 text-base", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70 font-bold")} placeholder={q.placeholder || "Sua resposta..."} value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)} />
+                            <input readOnly={isSystemAuto} type={q.type === 'email' ? 'email' : q.type === 'phone' ? 'tel' : q.type === 'number' ? 'number' : q.type === 'date' ? 'date' : 'text'} required={q.required} className={clsx("w-full border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-opacity-5 px-4 py-3.5 transition-all bg-slate-50/50 text-base", inputRadiusClass, isSystemAuto && "bg-slate-100/50 opacity-70 font-bold cursor-not-allowed")} placeholder={q.placeholder || "Sua resposta..."} value={answers[q.id] || ''} onChange={e => handleInputChange(q.id, e.target.value)} />
                         )}
                     </div>
                 )})}

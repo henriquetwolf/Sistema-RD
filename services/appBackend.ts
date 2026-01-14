@@ -179,19 +179,52 @@ export const appBackend = {
 
   saveForm: async (form: FormModel): Promise<void> => {
     if (!isConfigured) return;
-    // Updated property names to fix lines 185 errors
-    await supabase.from('crm_forms').upsert({
+    const { error } = await supabase.from('crm_forms').upsert({
       id: (form.id && form.id.length > 10) ? form.id : crypto.randomUUID(),
-      title: form.title, description: form.description, campaign: form.campaign, is_lead_capture: form.isLeadCapture, distribution_mode: form.distributionMode, fixed_owner_id: form.fixedOwnerId || null, team_id: form.teamId || null, target_pipeline: form.targetPipeline, target_stage: form.targetStage, questions: form.questions, style: form.style, folder_id: form.folderId || null, created_at: form.createdAt || new Date().toISOString(), type: 'form'
+      title: form.title, 
+      description: form.description, 
+      campaign: form.campaign, 
+      is_lead_capture: form.isLeadCapture, 
+      distribution_mode: form.distributionMode, 
+      fixed_owner_id: form.fixedOwnerId || null, 
+      team_id: form.teamId || null, 
+      target_pipeline: form.targetPipeline, 
+      target_stage: form.targetStage, 
+      questions: form.questions, 
+      style: form.style, 
+      folder_id: form.folderId || null, 
+      created_at: form.createdAt || new Date().toISOString(), 
+      type: 'form'
     });
+    if (error) throw error;
   },
 
   saveSurvey: async (survey: SurveyModel): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_forms').upsert({
+    const { error } = await supabase.from('crm_forms').upsert({
       id: (survey.id && survey.id.length > 10) ? survey.id : crypto.randomUUID(),
-      title: survey.title, description: survey.description, campaign: survey.campaign, is_lead_capture: survey.isLeadCapture, distribution_mode: survey.distributionMode, questions: survey.questions, style: survey.style, folder_id: survey.folderId, target_audience: survey.targetAudience, target_type: survey.targetType, target_product_type: survey.targetProductType, target_product_name: survey.targetProductName, only_if_finished: survey.onlyIfFinished, is_active: survey.isActive, type: 'survey', created_at: survey.createdAt || new Date().toISOString()
+      title: survey.title, 
+      description: survey.description, 
+      campaign: survey.campaign, 
+      is_lead_capture: survey.isLeadCapture, 
+      distribution_mode: survey.distributionMode, 
+      fixed_owner_id: survey.fixedOwnerId || null,
+      team_id: survey.teamId || null,
+      target_pipeline: survey.targetPipeline || null,
+      target_stage: survey.targetStage || null,
+      questions: survey.questions, 
+      style: survey.style, 
+      folder_id: survey.folderId || null, 
+      target_audience: survey.targetAudience, 
+      target_type: survey.targetType, 
+      target_product_type: survey.targetProductType, 
+      target_product_name: survey.targetProductName, 
+      only_if_finished: survey.onlyIfFinished, 
+      is_active: survey.isActive, 
+      type: 'survey', 
+      created_at: survey.createdAt || new Date().toISOString()
     });
+    if (error) throw error;
   },
 
   deleteForm: async (id: string): Promise<void> => {
@@ -308,7 +341,15 @@ export const appBackend = {
   getCompanies: async (): Promise<CompanySetting[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_companies').select('*').order('legal_name');
-    return (data || []).map((item: any) => ({ id: item.id, legalName: item.legal_name, cnpj: item.cnpj, webhookUrl: item.webhook_url, productTypes: item.product_types || [], productIds: item.product_ids || [] }));
+    // Fix: Corrected property names to match CompanySetting interface
+    return (data || []).map((item: any) => ({ 
+      id: item.id, 
+      legalName: item.legal_name, 
+      cnpj: item.cnpj, 
+      webhookUrl: item.webhook_url, 
+      productTypes: item.product_types || [], 
+      productIds: item.product_ids || [] 
+    }));
   },
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
@@ -472,7 +513,7 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
+    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primary_key, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
@@ -698,7 +739,7 @@ export const appBackend = {
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
     // Updated property names to fix lines 614 errors
-    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
+    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, backBackgroundData: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -756,7 +797,17 @@ export const appBackend = {
 
   saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_online_courses').upsert({ id: course.id || crypto.randomUUID(), title: course.title, description: course.description, price: course.price, payment_link: course.paymentLink, image_url: course.imageUrl, certificate_template_id: course.certificateTemplateId || null, created_at: course.createdAt || new Date().toISOString() }, { onConflict: 'title' });
+    // Fix: Use certificateTemplateId instead of certificate_template_id on Partial<OnlineCourse>
+    await supabase.from('crm_online_courses').upsert({ 
+      id: course.id || crypto.randomUUID(), 
+      title: course.title, 
+      description: course.description, 
+      price: course.price, 
+      payment_link: course.paymentLink, 
+      image_url: course.imageUrl, 
+      certificate_template_id: course.certificateTemplateId || null, 
+      created_at: course.createdAt || new Date().toISOString() 
+    }, { onConflict: 'title' });
   },
 
   getCourseModules: async (courseId: string): Promise<CourseModule[]> => {
@@ -856,7 +907,7 @@ export const appBackend = {
     if (!isConfigured) throw new Error("Not configured");
     const { data, error } = await supabase.from('crm_workshops').upsert({ id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
     if (error) throw error;
-    return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
+    return { id: data.id, eventId: data.event_id, block_id: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
   },
 
   deleteWorkshop: async (id: string): Promise<void> => {

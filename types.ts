@@ -499,7 +499,7 @@ export interface CourseLesson {
   title: string;
   description: string;
   videoUrl: string;
-  materials: { name: string; url: string; }[];
+  materials: { name: string; url: string; }[] | null;
   orderIndex: number;
 }
 
@@ -611,6 +611,7 @@ export interface LandingPage {
   id: string;
   name: string;
   domain: string;
+  slug: string;
   status: 'draft' | 'published';
   createdAt: string;
   updatedAt: string;

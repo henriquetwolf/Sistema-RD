@@ -29,7 +29,8 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
   
   // Create New LP State
   const [lpName, setLpName] = useState('');
-  const [lpDomain, setLpDomain] = useState('');
+  const [lpSlug, setLpSlug] = useState('');
+  const [lpDomain, setLpDomain] = useState('lp.vollpilates.com.br');
   const [activeLp, setActiveLp] = useState<LandingPage | null>(null);
 
   useEffect(() => {
@@ -52,17 +53,36 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
     setView('templates');
   };
 
+  const slugify = (text: string) => {
+    return text
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^\w-]+/g, '')
+      .replace(/--+/g, '-');
+  };
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setLpName(val);
+    setLpSlug(slugify(val));
+  };
+
   const handleSelectTemplate = (templateId: string, category: string) => {
     setLpName('');
-    setLpDomain('');
+    setLpSlug('');
+    setLpDomain('lp.vollpilates.com.br');
     setShowWizard(true);
     // Store template info to use when wizard confirms
     (window as any)._pendingTemplate = { templateId, category };
   };
 
   const confirmWizard = async () => {
-    if (!lpName || !lpDomain) {
-      alert("Preencha o nome e o domínio.");
+    if (!lpName || !lpDomain || !lpSlug) {
+      alert("Preencha o nome, o domínio e o link de direcionamento.");
       return;
     }
     
@@ -72,6 +92,7 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
       id: crypto.randomUUID(),
       name: lpName,
       domain: lpDomain,
+      slug: lpSlug,
       status: 'draft',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -202,7 +223,6 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
                         value={lpDomain}
                         onChange={e => setLpDomain(e.target.value)}
                       >
-                        <option value="">Selecione um domínio...</option>
                         <option value="vollpilates.com.br">vollpilates.com.br</option>
                         <option value="lp.vollpilates.com.br">lp.vollpilates.com.br</option>
                         <option value="oferta.vollpilates.com.br">oferta.vollpilates.com.br</option>
@@ -214,19 +234,41 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
                       <input 
                         type="text"
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:bg-white transition-all"
-                        placeholder="Digite o nome da sua Landing Page"
+                        placeholder="Ex: Minha Promoção de Verão"
                         value={lpName}
-                        onChange={e => setLpName(e.target.value)}
+                        onChange={handleNameChange}
                       />
-                      <p className="text-[10px] text-slate-400 mt-2">O nome também será utilizado como sugestão de URL.</p>
                     </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Link de Direcionamento (Caminho)</label>
+                      <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden focus-within:bg-white focus-within:border-teal-500 transition-all">
+                        <span className="pl-4 py-3 text-xs text-slate-400 font-medium select-none">{lpDomain}/</span>
+                        <input 
+                          type="text"
+                          className="flex-1 pr-4 py-3 bg-transparent border-none text-sm font-bold outline-none text-teal-700"
+                          placeholder="caminho-da-pagina"
+                          value={lpSlug}
+                          onChange={e => setLpSlug(slugify(e.target.value))}
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-2 px-1">Este será o link final que você enviará para seus clientes.</p>
+                    </div>
+
+                    {lpSlug && (
+                      <div className="p-4 bg-teal-50 rounded-2xl border border-teal-100 animate-in fade-in slide-in-from-top-1">
+                        <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-1">Prévia do Link:</p>
+                        <p className="text-xs font-bold text-teal-800 break-all">{lpDomain}/{lpSlug}</p>
+                      </div>
+                    )}
                  </div>
 
                  <div className="flex gap-4 pt-4">
                     <button onClick={() => setShowWizard(false)} className="flex-1 py-3 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all">Cancelar</button>
                     <button 
                       onClick={confirmWizard}
-                      className="flex-1 py-3 bg-teal-600 text-white rounded-xl font-bold shadow-lg hover:bg-teal-700 active:scale-95 transition-all"
+                      disabled={!lpName || !lpSlug}
+                      className="flex-1 py-3 bg-teal-600 text-white rounded-xl font-bold shadow-lg hover:bg-teal-700 active:scale-95 transition-all disabled:opacity-50"
                     >
                       Criar Landing Page
                     </button>
@@ -310,7 +352,7 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
                </div>
                <div className="p-5">
                   <h3 className="font-bold text-slate-800 mb-1 group-hover:text-teal-700 transition-colors">{lp.name}</h3>
-                  <p className="text-xs text-slate-400 mb-4 truncate font-mono">{lp.domain}/{lp.name.toLowerCase().replace(/\s/g, '-')}</p>
+                  <p className="text-xs text-slate-400 mb-4 truncate font-mono">{lp.domain}/{lp.slug}</p>
                   
                   <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
                     <div>

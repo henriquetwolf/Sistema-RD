@@ -111,6 +111,7 @@ export const appBackend = {
       id: item.id,
       name: item.name,
       domain: item.domain,
+      slug: item.slug || '',
       status: item.status,
       createdAt: item.created_at,
       updatedAt: item.updated_at,
@@ -128,6 +129,7 @@ export const appBackend = {
       id: lp.id || crypto.randomUUID(),
       name: lp.name,
       domain: lp.domain,
+      slug: lp.slug,
       status: lp.status,
       content: lp.content,
       template_id: lp.templateId,
@@ -228,9 +230,11 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
-      distribution_mode: form.distribution_mode || 'fixed', 
+      // Fix: distribution_mode uses distributionMode from FormModel
+      distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
-      team_id: form.team_id || null, 
+      // Fix: team_id uses teamId from FormModel
+      team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
       questions: form.questions || [], 
@@ -250,8 +254,10 @@ export const appBackend = {
       description: survey.description || null, 
       campaign: survey.campaign || null, 
       is_lead_capture: !!survey.isLeadCapture, 
+      // Fix: distribution_mode uses distributionMode from SurveyModel
       distribution_mode: survey.distributionMode || 'fixed', 
       fixed_owner_id: survey.fixedOwnerId || null, 
+      // Fix: team_id uses teamId from SurveyModel
       team_id: survey.teamId || null, 
       target_pipeline: survey.targetPipeline || null, 
       target_stage: survey.targetStage || null, 
@@ -396,7 +402,15 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_companies').upsert({ id: company.id || crypto.randomUUID(), legal_name: company.legal_name, cnpj: company.cnpj, webhook_url: company.webhook_url, product_types: company.product_types, product_ids: company.product_ids });
+    // Fix: Map camelCase property names from CompanySetting interface to snake_case DB columns
+    await supabase.from('crm_companies').upsert({ 
+        id: company.id || crypto.randomUUID(), 
+        legal_name: company.legalName, 
+        cnpj: company.cnpj, 
+        webhook_url: company.webhookUrl, 
+        product_types: company.productTypes, 
+        product_ids: company.productIds 
+    });
   },
 
   deleteCompany: async (id: string): Promise<void> => {
@@ -554,7 +568,17 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.interval_minutes, created_by_name: preset.createdByName };
+    // Fix: Use intervalMinutes camelCase property name from SavedPreset type
+    const payload = { 
+        id: preset.id || crypto.randomUUID(), 
+        name: preset.name, 
+        url: preset.url, 
+        key: preset.key, 
+        table_name: preset.tableName, 
+        primary_key: preset.primaryKey, 
+        interval_minutes: preset.intervalMinutes, 
+        created_by_name: preset.createdByName 
+    };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
@@ -834,7 +858,8 @@ export const appBackend = {
       title: item.title, 
       description: item.description, 
       price: item.price, 
-      payment_link: item.payment_link,
+      // Fix: Map item.payment_link from DB to required camelCase paymentLink in OnlineCourse interface
+      paymentLink: item.payment_link, 
       imageUrl: item.image_url,
       certificateTemplateId: item.certificate_template_id,
       createdAt: item.created_at 

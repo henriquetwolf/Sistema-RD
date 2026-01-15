@@ -176,19 +176,10 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
           } else {
               groups[key].digital.push(itemRef);
           }
-
-          // Cursos liberados manualmente vinculados à transação (para exibição)
-          const manualCourses = courseAccessMap[deal.id] || [];
-          manualCourses.forEach(cName => {
-              // Verifica se já não existe na lista para não duplicar visualmente
-              if (!groups[key].digital.some(d => d.name === cName)) {
-                  groups[key].digital.push({ id: `manual_${deal.id}`, name: cName, isCrm: false });
-              }
-          });
       });
 
       return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
-  }, [deals, courseAccessMap]);
+  }, [deals]);
 
   const filtered = groupedStudents.filter(s => 
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -208,7 +199,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
 
   const handleDeleteItem = async (dealId: string, itemName: string) => {
       if (dealId.startsWith('manual_')) {
-          alert("Este item foi liberado manualmente através do modal 'Liberar Cursos'. Para removê-lo, acesse o botão 'Liberar Cursos' deste aluno.");
+          alert("Este item foi liberado manualmente. Verifique no painel de administração.");
           return;
       }
       if (!window.confirm(`Tem certeza que deseja excluir "${itemName}" deste aluno?`)) return;
@@ -447,7 +438,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                     >
                                                         {p.isCrm && <span className="bg-purple-600 text-white px-1 rounded-[2px] text-[7px] mr-0.5">CRM</span>}
                                                         {p.name}
-                                                        <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />
+                                                        {p.isCrm && <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />}
                                                     </button>
                                                 ))}
                                                 {s.presential.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
@@ -466,7 +457,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                     >
                                                         {p.isCrm && <span className="bg-indigo-600 text-white px-1 rounded-[2px] text-[7px] mr-0.5">CRM</span>}
                                                         {p.name}
-                                                        {!p.id.startsWith('manual_') && <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />}
+                                                        {p.isCrm && <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />}
                                                     </button>
                                                 ))}
                                                 {s.digital.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
@@ -485,7 +476,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                     >
                                                         {p.isCrm && <span className="bg-amber-600 text-white px-1 rounded-[2px] text-[7px] mr-0.5">CRM</span>}
                                                         {p.name}
-                                                        <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />
+                                                        {p.isCrm && <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />}
                                                     </button>
                                                 ))}
                                                 {s.events.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
@@ -623,32 +614,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             <p className="text-xs">O CPF informado não possui compras registradas no CRM.</p>
                         </div>
                     ) : null}
-                </div>
-            </div>
-        )}
-
-        {unlockModalStudent && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                    <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
-                        <div><h3 className="text-xl font-black text-slate-800">Liberar Cursos Online</h3><p className="text-sm text-slate-500">Aluno: <strong className="text-indigo-600">{unlockModalStudent.name}</strong></p></div>
-                        <button onClick={() => setUnlockModalStudent(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
-                    </div>
-                    <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-4">
-                        <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3 text-xs text-amber-800 mb-2"><Zap size={18} className="shrink-0 text-amber-500"/><p>Marque os cursos que este aluno deve ter acesso no Portal.</p></div>
-                        <div className="grid grid-cols-1 gap-3">
-                            {onlineCourses.map(course => (
-                                <div key={course.id} onClick={() => toggleAccess(course.id)} className={clsx("p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group", studentAccessedIds.includes(course.id) ? "bg-indigo-50 border-indigo-600 text-indigo-700 shadow-md" : "bg-white border-slate-100 hover:border-indigo-200")}>
-                                    <div className="flex items-center gap-4">
-                                        <div className={clsx("w-12 h-12 rounded-xl border-2 flex items-center justify-center", studentAccessedIds.includes(course.id) ? "bg-indigo-600 text-white border-white/20" : "bg-slate-50 text-slate-300 border-slate-100 group-hover:text-indigo-400")}><MonitorPlay size={24} /></div>
-                                        <p className="font-black text-slate-800 text-sm">{course.title}</p>
-                                    </div>
-                                    <div className={clsx("w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all", studentAccessedIds.includes(course.id) ? "bg-indigo-500 border-indigo-500 text-white" : "border-slate-200 text-transparent")}><Check size={18} /></div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-3xl"><button onClick={() => setUnlockModalStudent(null)} className="px-6 py-2.5 text-slate-500 font-bold text-sm">Cancelar</button><button onClick={saveAccessChanges} disabled={isSavingAccess} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl shadow-indigo-600/20 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50">{isSavingAccess ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Acessos</button></div>
                 </div>
             </div>
         )}

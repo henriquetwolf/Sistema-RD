@@ -34,6 +34,7 @@ import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
 import { SupportManager } from './components/SupportManager';
+import { AiAssistant } from './components/AiAssistant';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -45,7 +46,7 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap, Send
+  LifeBuoy, Zap, Send, Bot
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -77,6 +78,7 @@ function App() {
   const jobsRef = useRef<SyncJob[]>([]); 
   
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
+  const [isAiOpen, setIsAiOpen] = useState(false);
 
   const [overviewStats, setOverviewStats] = useState({
       leadsToday: 0,
@@ -567,7 +569,7 @@ function App() {
                                             <span className="text-teal-100 text-xs font-black uppercase tracking-[0.2em]">Painel de Controle</span>
                                         </div>
                                         <h2 className="text-4xl font-black tracking-tight mb-2">
-                                            <span className="text-green-400">Bem-Vindo</span>, <span className="text-white">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
+                                            <span className="text-white">Bem-Vindo</span>, <span className="text-white">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
                                         </h2>
                                         <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed">
                                             Seu centro de comando está pronto. Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.
@@ -630,11 +632,12 @@ function App() {
                                         <div className="grid grid-cols-1 gap-8">
                                             <section className="space-y-4">
                                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutDashboard size={14} /> Atalhos Rápidos</h3>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                                                     <div onClick={() => setDashboardTab('crm')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Kanban size={24} /></div><h4 className="font-bold text-slate-800 mb-1">CRM</h4><p className="text-xs text-slate-500">Gestão Comercial.</p></div>
                                                     <div onClick={() => setDashboardTab('billing')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><CreditCard size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Cobrança</h4><p className="text-xs text-slate-500">Financeiro.</p></div>
                                                     <div onClick={() => setDashboardTab('hr')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-rose-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-rose-600 group-hover:text-white transition-colors"><Heart size={24} /></div><h4 className="font-bold text-slate-800 mb-1">RH</h4><p className="text-xs text-slate-500">Painel Executivo.</p></div>
                                                     <div onClick={() => setDashboardTab('suporte_interno')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><LifeBuoy size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Suporte</h4><p className="text-xs text-slate-500">Chamados.</p></div>
+                                                    <div onClick={() => setIsAiOpen(true)} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-amber-600 group-hover:text-white transition-colors"><Bot size={24} /></div><h4 className="font-bold text-slate-800 mb-1">IA Guia</h4><p className="text-xs text-slate-500">Falar com IA.</p></div>
                                                 </div>
                                             </section>
                                         </div>
@@ -666,6 +669,7 @@ function App() {
                     </div>
                 </div>
             </main>
+            {(session || currentCollaborator) && <AiAssistant isOpen={isAiOpen} setIsOpen={setIsAiOpen} onNavigate={(tab) => { setDashboardTab(tab as DashboardTab); setIsAiOpen(false); }} />}
         </>
       )}
     </div>

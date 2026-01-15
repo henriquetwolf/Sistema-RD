@@ -63,10 +63,13 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const apiKey = process.env.API_KEY;
+      if (!apiKey) throw new Error("API_KEY_MISSING");
+
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: userText,
+        contents: [{ role: 'user', parts: [{ text: userText }] }],
         config: {
           systemInstruction: systemPrompt,
           temperature: 0.7,
@@ -75,15 +78,20 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
 
       const botText = response.text || "Desculpe, não consegui processar sua dúvida.";
       
-      // Extrair sugestão de navegação
       const tabMatch = botText.match(/\[TAB:(.*?)\]/);
       const tabSuggestion = tabMatch ? tabMatch[1] : undefined;
       const cleanText = botText.replace(/\[TAB:.*?\]/g, '').trim();
 
       setMessages(prev => [...prev, { role: 'bot', text: cleanText, tabSuggestion }]);
-    } catch (error) {
-      console.error("Erro na API do Gemini:", error);
-      setMessages(prev => [...prev, { role: 'bot', text: "Houve um erro ao consultar minha base de conhecimento. Verifique se a variável API_KEY está configurada no seu ambiente do Vercel." }]);
+    } catch (error: any) {
+      console.error("Falha na consulta ao Gemini:", error);
+      let errorMsg = "Houve um erro ao consultar minha base de conhecimento. Verifique sua conexão.";
+      
+      if (error.message === "API_KEY_MISSING") {
+          errorMsg = "A chave de API (API_KEY) não foi detectada no ambiente. Verifique as configurações do Vercel.";
+      }
+
+      setMessages(prev => [...prev, { role: 'bot', text: errorMsg }]);
     } finally {
       setIsLoading(false);
     }

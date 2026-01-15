@@ -218,8 +218,7 @@ CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     theme text DEFAULT 'modern'
 );
 
--- 2. Garantir que a coluna is_active exista (Usando IF NOT EXISTS direto no ALTER TABLE para Postgres moderno)
--- Se o seu supabase for antigo e der erro aqui, remova o "IF NOT EXISTS"
+-- 2. Garantir que a coluna is_active exista (Indispensável para as políticas abaixo)
 ALTER TABLE public.crm_landing_pages ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
 
 -- 3. Habilitar RLS e Criar Políticas
@@ -254,7 +253,7 @@ NOTIFY pgrst, 'reload schema';
   const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
 
   const handleBannerUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files[0] && editingBanner) {
+      if (e.target.files && e.target.files[0]) {
           const reader = new FileReader();
           reader.onloadend = () => {
               setEditingBanner({ ...editingBanner, imageUrl: reader.result as string });

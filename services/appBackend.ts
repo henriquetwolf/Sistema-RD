@@ -185,7 +185,7 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
-      distribution_mode: form.distributionMode || 'fixed', 
+      distribution_mode: form.distribution_mode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
@@ -485,7 +485,7 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
+    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, created_by: j.created_by, createdAt: j.created_at }));
   },
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
@@ -635,7 +635,7 @@ export const appBackend = {
       state: item.state, 
       country: item.country, 
       sizeM2: item.size_m2, 
-      studentCapacity: item.student_capacity, 
+      student_capacity: item.student_capacity, 
       rentValue: item.rent_value, 
       methodology: item.methodology, 
       studioType: item.studio_type, 
@@ -644,18 +644,18 @@ export const appBackend = {
       agency: item.agency, 
       account: item.account, 
       beneficiary: item.beneficiary, 
-      pixKey: item.pix_key, 
-      hasReformer: !!item.has_reformer, 
-      qtyReformer: item.qty_reformer, 
-      hasLadderBarrel: !!item.has_ladder_barrel, 
-      qtyLadderBarrel: item.qty_ladder_barrel, 
-      hasChair: !!item.has_chair, 
-      qtyChair: item.qty_chair, 
-      hasCadillac: !!item.has_cadillac, 
-      qtyCadillac: item.qty_cadillac, 
-      hasChairsForCourse: !!item.has_chairs_for_course, 
-      hasTv: !!item.has_tv, 
-      maxKitsCapacity: item.max_kits_capacity, 
+      pix_key: item.pix_key, 
+      has_reformer: !!item.has_reformer, 
+      qty_reformer: item.qty_reformer, 
+      has_ladder_barrel: !!item.has_ladder_barrel, 
+      qty_ladder_barrel: item.qty_ladder_barrel, 
+      has_chair: !!item.has_chair, 
+      qty_chair: item.qty_chair, 
+      has_cadillac: !!item.has_cadillac, 
+      qty_cadillac: item.qty_cadillac, 
+      has_chairs_for_course: !!item.has_chairs_for_course, 
+      has_tv: !!item.has_tv, 
+      max_kits_capacity: item.max_kits_capacity, 
       attachments: item.attachments 
     }));
   },
@@ -730,12 +730,12 @@ export const appBackend = {
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, backgroundData: item.background_data, backBackgroundData: item.back_background_data, linkedProductId: item.linked_product_id, bodyText: item.body_text, layoutConfig: item.layout_config, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title, background_data: item.background_data, back_background_data: item.back_background_data, linked_product_id: item.linked_product_id, body_text: item.body_text, layout_config: item.layout_config, createdAt: item.created_at }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, backBackgroundData: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
+    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -972,7 +972,7 @@ export const appBackend = {
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_inventory').upsert({ id: record.id || crypto.randomUUID(), type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments, created_at: record.createdAt || new Date().toISOString() });
+    await supabase.from('crm_inventory').upsert({ id: record.id || crypto.randomUUID(), type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.tracking_code, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments, created_at: record.createdAt || new Date().toISOString() });
   },
 
   deleteInventoryRecord: async (id: string): Promise<void> => {
@@ -990,9 +990,12 @@ export const appBackend = {
     if (!isConfigured) return;
     await supabase.from('crm_billing_negotiations').upsert({ 
         id: neg.id || crypto.randomUUID(), 
-        open_installments: neg.open_installments, 
-        total_negotiated_value: neg.total_negotiated_value, 
-        total_installments: neg.total_installments, 
+        // Fix: Property 'open_installments' does not exist on type 'Partial<BillingNegotiation>'. Did you mean 'openInstallments'?
+        open_installments: neg.openInstallments, 
+        // Fix: Property 'total_negotiated_value' does not exist on type 'Partial<BillingNegotiation>'. Did you mean 'totalNegotiatedValue'?
+        total_negotiated_value: neg.totalNegotiatedValue, 
+        // Fix: Property 'total_installments' does not exist on type 'Partial<BillingNegotiation>'. Did you mean 'totalInstallments'?
+        total_installments: neg.totalInstallments, 
         due_date: neg.due_date, 
         responsible_agent: neg.responsible_agent, 
         identifier_code: neg.identifier_code, 

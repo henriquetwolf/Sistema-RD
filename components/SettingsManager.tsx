@@ -205,7 +205,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V76 (PÁGINAS DE VENDA)
+-- SCRIPT DE FUNDAÇÃO CRM V76 (PÁGINAS DE VENDA CORRIGIDO)
+-- 1. Tabela de Páginas de Venda
 CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
@@ -217,20 +218,12 @@ CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     theme text DEFAULT 'modern'
 );
 
--- Garantir que a coluna is_active exista (caso a tabela já existisse sem ela)
-DO $$ 
-BEGIN 
-    BEGIN
-        ALTER TABLE public.crm_landing_pages ADD COLUMN is_active boolean DEFAULT true;
-    EXCEPTION 
-        WHEN duplicate_column THEN NULL; 
-    END;
-END $$;
+-- 2. Garantir que a coluna is_active exista (Indispensável para as políticas abaixo)
+ALTER TABLE public.crm_landing_pages ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
 
--- Habilitar RLS para Landing Pages
+-- 3. Habilitar RLS e Criar Políticas
 ALTER TABLE public.crm_landing_pages ENABLE ROW LEVEL SECURITY;
 
--- Políticas Landing Pages
 DROP POLICY IF EXISTS "Acesso público para visualização" ON public.crm_landing_pages;
 CREATE POLICY "Acesso público para visualização" ON public.crm_landing_pages
 FOR SELECT USING (is_active = true);
@@ -239,7 +232,7 @@ DROP POLICY IF EXISTS "Acesso total para administradores" ON public.crm_landing_
 CREATE POLICY "Acesso total para administradores" ON public.crm_landing_pages
 FOR ALL USING (true) WITH CHECK (true);
 
--- Tabela para Certificados Externos dos Alunos
+-- 4. Tabelas de suporte
 CREATE TABLE IF NOT EXISTS public.crm_external_certificates (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     student_id text NOT NULL,
@@ -250,15 +243,8 @@ CREATE TABLE IF NOT EXISTS public.crm_external_certificates (
     created_at timestamp with time zone DEFAULT now()
 );
 
--- Correção da tabela crm_forms para suportar is_active (Pesquisas)
-DO $$ 
-BEGIN 
-    BEGIN
-        ALTER TABLE public.crm_forms ADD COLUMN is_active boolean DEFAULT true;
-    EXCEPTION 
-        WHEN duplicate_column THEN NULL; 
-    END;
-END $$;
+-- 5. Correção de outras tabelas se necessário
+ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
 
 -- Atualizar Schema
 NOTIFY pgrst, 'reload schema';

@@ -810,7 +810,8 @@ export const appBackend = {
       price: course.price, 
       payment_link: course.paymentLink, 
       image_url: course.imageUrl, 
-      certificate_template_id: course.certificate_template_id || null, 
+      // Fix: Property 'certificate_template_id' does not exist on type 'Partial<OnlineCourse>'. Corrected to 'certificateTemplateId'.
+      certificate_template_id: course.certificateTemplateId || null, 
       created_at: course.createdAt || new Date().toISOString() 
     }, { onConflict: 'title' });
   },
@@ -823,7 +824,8 @@ export const appBackend = {
 
   saveCourseModule: async (mod: Partial<CourseModule>): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_course_modules').upsert({ id: mod.id || crypto.randomUUID(), course_id: mod.courseId, title: mod.title, order_index: mod.order_index });
+    // Fix: Property 'order_index' does not exist on type 'Partial<CourseModule>'. Corrected to 'orderIndex'.
+    await supabase.from('crm_course_modules').upsert({ id: mod.id || crypto.randomUUID(), course_id: mod.courseId, title: mod.title, order_index: mod.orderIndex });
   },
 
   deleteCourseModule: async (id: string): Promise<void> => {
@@ -911,7 +913,7 @@ export const appBackend = {
 
   saveWorkshop: async (ws: Workshop): Promise<Workshop> => {
     if (!isConfigured) throw new Error("Not configured");
-    const { data, error } = await supabase.from('crm_workshops').upsert({ id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
+    const { data, error = null } = await supabase.from('crm_workshops').upsert({ id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
     if (error) throw error;
     return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
   },

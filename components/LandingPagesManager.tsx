@@ -19,6 +19,78 @@ const CATEGORIES = [
   'Todos', 'Recomendados', 'Geração de Leads', 'Agradecimento', 'Página de Vendas', 'Educação', 'Eventos'
 ];
 
+const TEMPLATE_CONTENTS: Record<string, any> = {
+  'free-class': {
+    sections: [
+      {
+        id: 'fold-1',
+        bgColor: '#f8fafc',
+        padding: '80px',
+        elements: [
+          { id: 'e1', type: 'heading', content: 'Sua Primeira Aula de Pilates é Por Nossa Conta!', style: { fontSize: 42, color: '#1e293b', textAlign: 'center', fontWeight: 'bold' } },
+          { id: 'e2', type: 'text', content: 'Experimente a transformação no seu corpo e mente com o método VOLL.', style: { fontSize: 18, color: '#64748b', textAlign: 'center' } },
+          { id: 'e3', type: 'button', content: 'Quero Minha Aula Grátis', style: { bgColor: '#0d9488', color: '#ffffff', borderRadius: 8, align: 'center' } }
+        ]
+      }
+    ]
+  },
+  'course-presential': {
+    sections: [
+      {
+        id: 'fold-1',
+        bgColor: '#1e293b',
+        padding: '100px',
+        elements: [
+          { id: 'e1', type: 'heading', content: 'Formação Profissional em Pilates', style: { fontSize: 48, color: '#ffffff', textAlign: 'center', fontWeight: '900' } },
+          { id: 'e2', type: 'text', content: 'Torne-se um instrutor de elite com a maior escola de Pilates do mundo.', style: { fontSize: 20, color: '#94a3b8', textAlign: 'center' } },
+          { id: 'e3', type: 'button', content: 'Ver Próximas Turmas', style: { bgColor: '#0d9488', color: '#ffffff', borderRadius: 50, align: 'center' } }
+        ]
+      }
+    ]
+  },
+  'discount-cupom': {
+    sections: [
+      {
+        id: 'fold-1',
+        bgColor: '#fff',
+        padding: '60px',
+        elements: [
+          { id: 'e1', type: 'image', content: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&q=80&w=800', style: { width: '300px', align: 'center' } },
+          { id: 'e2', type: 'heading', content: 'Você Ganhou um Presente!', style: { fontSize: 32, color: '#b91c1c', textAlign: 'center', fontWeight: 'bold' } },
+          { id: 'e3', type: 'text', content: 'Use o cupom VOLL10 para garantir 10% de desconto em qualquer curso.', style: { fontSize: 16, color: '#444', textAlign: 'center' } }
+        ]
+      }
+    ]
+  },
+  'thank-you': {
+    sections: [
+      {
+        id: 'fold-1',
+        bgColor: '#f0fdf4',
+        padding: '80px',
+        elements: [
+          { id: 'e1', type: 'heading', content: 'Inscrição Confirmada!', style: { fontSize: 36, color: '#166534', textAlign: 'center', fontWeight: 'bold' } },
+          { id: 'e2', type: 'text', content: 'Verifique seu e-mail para mais detalhes. Estamos ansiosos para te ver!', style: { fontSize: 18, color: '#166534', textAlign: 'center' } }
+        ]
+      }
+    ]
+  },
+  'webinar-live': {
+    sections: [
+      {
+        id: 'fold-1',
+        bgColor: '#000000',
+        padding: '80px',
+        elements: [
+          { id: 'e1', type: 'heading', content: 'MASTERCLASS AO VIVO', style: { fontSize: 24, color: '#0d9488', textAlign: 'center', fontWeight: 'bold' } },
+          { id: 'e2', type: 'heading', content: 'Os 7 Segredos para um Studio de Sucesso', style: { fontSize: 42, color: '#ffffff', textAlign: 'center', fontWeight: 'bold' } },
+          { id: 'e3', type: 'button', content: 'Garantir meu Lugar', style: { bgColor: '#0d9488', color: '#ffffff', borderRadius: 8, align: 'center' } }
+        ]
+      }
+    ]
+  }
+};
+
 export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack }) => {
   const [view, setView] = useState<'list' | 'editor' | 'templates'>('list');
   const [landingPages, setLandingPages] = useState<LandingPage[]>([]);
@@ -27,7 +99,6 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [showWizard, setShowWizard] = useState(false);
   
-  // Create New LP State
   const [lpName, setLpName] = useState('');
   const [lpSlug, setLpSlug] = useState('');
   const [lpDomain, setLpDomain] = useState(window.location.origin);
@@ -76,17 +147,17 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
     setLpSlug('');
     setLpDomain(window.location.origin);
     setShowWizard(true);
-    // Store template info to use when wizard confirms
     (window as any)._pendingTemplate = { templateId, category };
   };
 
   const confirmWizard = async () => {
-    if (!lpName || !lpDomain || !lpSlug) {
-      alert("Preencha o nome e o link de direcionamento.");
+    if (!lpName || !lpSlug) {
+      alert("Preencha o nome e o caminho do link.");
       return;
     }
     
     const { templateId, category } = (window as any)._pendingTemplate || {};
+    const content = templateId ? TEMPLATE_CONTENTS[templateId] : { sections: [] };
     
     const newLp: LandingPage = {
       id: crypto.randomUUID(),
@@ -96,7 +167,7 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
       status: 'draft',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      content: { sections: [] }, // Basic empty content
+      content: content,
       templateId,
       category,
       visits: 0,
@@ -174,7 +245,7 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[
                   { id: 'free-class', title: 'Primeira aula grátis', category: 'Geração de Leads', img: 'https://images.unsplash.com/photo-1518611012118-2960520ee86c?auto=format&fit=crop&q=80&w=800' },
-                  { id: 'course-presential', title: 'Formação Presencial', category: 'Página de Vendas', img: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&q=80&w=800' },
+                  { id: 'course-presential', title: 'Formação Profissional', category: 'Página de Vendas', img: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&q=80&w=800' },
                   { id: 'discount-cupom', title: 'Cupom de Desconto', category: 'Geração de Leads', img: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&q=80&w=800' },
                   { id: 'thank-you', title: 'Agradecimento Padrão', category: 'Agradecimento', img: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800' },
                   { id: 'webinar-live', title: 'Inscrição para Live', category: 'Eventos', img: 'https://images.unsplash.com/photo-1540575861501-7ad05823c9f5?auto=format&fit=crop&q=80&w=800' },
@@ -202,7 +273,6 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
           </div>
         </div>
 
-        {/* Create Wizard Modal */}
         {showWizard && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
@@ -213,41 +283,33 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
                   </button>
                </div>
                <div className="p-8 space-y-6">
-                 <p className="text-sm text-slate-500">Use um nome fácil de ser lembrado, para conseguir identificar futuramente.</p>
+                 <p className="text-sm text-slate-500">Defina os detalhes da sua nova página.</p>
                  
                  <div className="space-y-4">
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Nome da Landing Page</label>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Nome Interno</label>
                       <input 
                         type="text"
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:bg-white transition-all"
-                        placeholder="Ex: Minha Promoção de Verão"
+                        placeholder="Ex: Campanha de Inverno"
                         value={lpName}
                         onChange={handleNameChange}
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Link de Direcionamento (Caminho)</label>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Link Final</label>
                       <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden focus-within:bg-white focus-within:border-teal-500 transition-all">
                         <span className="pl-4 py-3 text-xs text-slate-400 font-medium select-none">{lpDomain}/</span>
                         <input 
                           type="text"
                           className="flex-1 pr-4 py-3 bg-transparent border-none text-sm font-bold outline-none text-teal-700"
-                          placeholder="caminho-da-pagina"
+                          placeholder="minha-pagina"
                           value={lpSlug}
                           onChange={e => setLpSlug(slugify(e.target.value))}
                         />
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-2 px-1">Este será o link final que você enviará para seus clientes.</p>
                     </div>
-
-                    {lpSlug && (
-                      <div className="p-4 bg-teal-50 rounded-2xl border border-teal-100 animate-in fade-in slide-in-from-top-1">
-                        <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-1">Prévia do Link:</p>
-                        <p className="text-xs font-bold text-teal-800 break-all">{lpDomain}/{lpSlug}</p>
-                      </div>
-                    )}
                  </div>
 
                  <div className="flex gap-4 pt-4">
@@ -257,7 +319,7 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
                       disabled={!lpName || !lpSlug}
                       className="flex-1 py-3 bg-teal-600 text-white rounded-xl font-bold shadow-lg hover:bg-teal-700 active:scale-95 transition-all disabled:opacity-50"
                     >
-                      Criar Landing Page
+                      Criar Agora
                     </button>
                  </div>
                </div>
@@ -285,13 +347,12 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
         </button>
       </div>
 
-      {/* Tabs / Filters */}
       <div className="flex bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-col md:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" 
-            placeholder="Buscar Landing Pages..." 
+            placeholder="Buscar páginas..." 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
@@ -306,21 +367,18 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
         </select>
       </div>
 
-      {/* LP Grid */}
       {isLoading ? (
         <div className="flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={40} /></div>
       ) : filteredLPs.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
           <Layout size={64} className="mx-auto mb-4 opacity-10" />
-          <p className="font-bold text-lg">Nenhuma Landing Page criada ainda.</p>
-          <p className="text-sm">Clique no botão "Criar Landing Page" para começar.</p>
+          <p className="font-bold text-lg">Nenhuma página encontrada.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredLPs.map(lp => (
             <div key={lp.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all group overflow-hidden">
                <div className="h-40 bg-slate-100 relative">
-                  {/* Preview Placeholder */}
                   <div className="w-full h-full flex items-center justify-center text-slate-300">
                     <Monitor size={48} className="opacity-20" />
                   </div>
@@ -338,10 +396,10 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
                   </div>
                </div>
                <div className="p-5">
-                  <h3 className="font-bold text-slate-800 mb-1 group-hover:text-teal-700 transition-colors">{lp.name}</h3>
+                  <h3 className="font-bold text-slate-800 mb-1 truncate">{lp.name}</h3>
                   <p className="text-xs text-slate-400 mb-4 truncate font-mono">
                     <a href={`${lp.domain}/${lp.slug}`} target="_blank" rel="noopener noreferrer" className="hover:text-teal-600 hover:underline flex items-center gap-1">
-                       <ExternalLink size={10} /> {lp.domain}/{lp.slug}
+                       <ExternalLink size={10} /> {lp.domain}/${lp.slug}
                     </a>
                   </p>
                   

@@ -63,10 +63,11 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
     setIsLoading(true);
 
     try {
+      // Cria a instância da IA no momento do envio para garantir a leitura da chave de ambiente atualizada
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: userText,
+        contents: [{ role: 'user', parts: [{ text: userText }] }],
         config: {
           systemInstruction: systemPrompt,
           temperature: 0.7,
@@ -82,7 +83,8 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
 
       setMessages(prev => [...prev, { role: 'bot', text: cleanText, tabSuggestion }]);
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'bot', text: "Houve um erro ao consultar minha base de conhecimento. Verifique sua conexão ou API Key." }]);
+      console.error("Erro na API do Gemini:", error);
+      setMessages(prev => [...prev, { role: 'bot', text: "Houve um erro ao consultar minha base de conhecimento. Verifique se a variável API_KEY está configurada no seu ambiente do Vercel." }]);
     } finally {
       setIsLoading(false);
     }
@@ -157,7 +159,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
         onClick={() => setIsOpen(!isOpen)}
         className={clsx(
           "p-4 rounded-full shadow-2xl transition-all hover:scale-110 active:scale-95 flex items-center gap-3 group",
-          isOpen ? "bg-red-500 text-white" : "bg-indigo-600 text-white"
+          isOpen ? "bg-red-50 text-white" : "bg-indigo-600 text-white"
         )}
       >
         {!isOpen && <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 font-bold text-sm whitespace-nowrap">Dúvida de navegação?</span>}

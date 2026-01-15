@@ -7,13 +7,14 @@ import {
   Edit2, Trash2, Hash, Loader2, Users, Filter, ChevronRight,
   LayoutList, ChevronLeft, ChevronRight as ChevronRightIcon,
   CheckCircle2, Globe, Eraser, Building, Info, User, Monitor, 
-  Truck, CheckCircle, Circle, ArrowUpCircle, Layout, Table, MoreHorizontal
+  Truck, CheckCircle, Circle, ArrowUpCircle, Layout, Table, MoreHorizontal,
+  ClipboardList
 } from 'lucide-react';
-import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
 import { appBackend } from '../services/appBackend';
 import { ClassStudentsViewer } from './ClassStudentsViewer';
 import { PartnerStudio } from '../types';
+import clsx from 'clsx';
 
 interface ClassItem {
   id: string;
@@ -67,7 +68,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [showModal, setShowModal] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   
-  const [viewMode, setViewMode] = useState<'list' | 'full_list' | 'calendar' | 'capacity'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'full_list' | 'calendar' | 'capacity' | 'scale'>('list');
   const [calendarDate, setCalendarDate] = useState(new Date());
 
   // Multi-selection state
@@ -81,6 +82,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [cityFilter, setCityFilter] = useState<string>('');
   const [mod1DateFilter, setMod1DateFilter] = useState<string>('');
   const [mod2DateFilter, setMod2DateFilter] = useState<string>('');
+  const [instructorFilter, setInstructorFilter] = useState<string>('');
   
   // Column-specific filters for tabular view
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
@@ -183,7 +185,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     if (!formData.course || !formData.city) { alert("Preencha ao menos o Curso e a Cidade."); return; }
     setIsSaving(true);
     const payload = {
-        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studioMod1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffeeMod1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffeeMod2, hotel_mod_2: formData.hotelMod2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
+        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studio_mod_1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffee_mod_1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotelMod2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
     };
     try {
         if (formData.id) await appBackend.client.from('crm_classes').update(payload).eq('id', formData.id);
@@ -207,6 +209,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       const matchesCity = !cityFilter || c.city === cityFilter;
       const matchesMod1 = !mod1DateFilter || c.dateMod1 === mod1DateFilter;
       const matchesMod2 = !mod2DateFilter || c.dateMod2 === mod2DateFilter;
+      const matchesInstructor = !instructorFilter || (c.instructorMod1 === instructorFilter || c.instructorMod2 === instructorFilter);
 
       // Apply column-specific filters
       const matchesColumnFilters = Object.entries(columnFilters).every(([key, value]) => {
@@ -232,9 +235,9 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           return strValue.includes(filterValue);
       });
 
-      return matchesSearch && matchesStatus && matchesState && matchesCity && matchesMod1 && matchesMod2 && matchesColumnFilters;
+      return matchesSearch && matchesStatus && matchesState && matchesCity && matchesMod1 && matchesMod2 && matchesInstructor && matchesColumnFilters;
     });
-  }, [classes, searchTerm, statusFilter, stateFilter, cityFilter, mod1DateFilter, mod2DateFilter, columnFilters]);
+  }, [classes, searchTerm, statusFilter, stateFilter, cityFilter, mod1DateFilter, mod2DateFilter, instructorFilter, columnFilters]);
 
   const selectedClasses = useMemo(() => {
       return classes.filter(c => selectedClassIds.includes(c.id));
@@ -264,6 +267,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             <div className="bg-slate-100 p-1 rounded-lg flex items-center mr-2">
                 <button onClick={() => setViewMode('list')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutList size={16} /> Alunos</button>
                 <button onClick={() => setViewMode('full_list')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'full_list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Table size={16} /> Lista de Turmas</button>
+                <button onClick={() => setViewMode('scale')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'scale' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><ClipboardList size={16} /> Escala</button>
                 <button onClick={() => setViewMode('calendar')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'calendar' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><CalendarIcon size={16} /> Calendário</button>
                 <button onClick={() => setViewMode('capacity')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'capacity' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Users size={16} /> Capacidade</button>
             </div>
@@ -332,7 +336,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                       <tbody className="divide-y divide-slate-100">
                           {filteredClasses.map(cls => {
                               const enrolledCount = deals.filter(d => (d.class_mod_1 === cls.mod1Code || d.class_mod_2 === cls.mod2Code) && d.stage === 'closed').length;
-                              const studioInfo = partnerStudios.find(s => s.fantasyName === cls.studioMod1);
+                              const studioInfo = partnerStudios.find(s => s.id === cls.studioMod1);
                               const capacityNum = parseInt(studioInfo?.studentCapacity || '0');
                               const percent = capacityNum > 0 ? Math.round((enrolledCount / capacityNum) * 100) : 0;
                               
@@ -363,6 +367,84 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                   </tr>
                               );
                           })}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      ) : viewMode === 'scale' ? (
+          <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col animate-in fade-in">
+              <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 shrink-0"><ClipboardList className="text-purple-600" /> Escala de Professores</h3>
+                  <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase">Mod 1</label>
+                          <input type="date" value={mod1DateFilter} onChange={e => setMod1DateFilter(e.target.value)} className="text-xs p-1.5 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-500" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase">Mod 2</label>
+                          <input type="date" value={mod2DateFilter} onChange={e => setMod2DateFilter(e.target.value)} className="text-xs p-1.5 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-500" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase">Instrutor</label>
+                          <select value={instructorFilter} onChange={e => setInstructorFilter(e.target.value)} className="text-xs p-1.5 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-500 w-32">
+                              <option value="">Todos</option>
+                              {instructorsList.map(name => <option key={name} value={name}>{name}</option>)}
+                          </select>
+                      </div>
+                      <div className="h-8 w-px bg-slate-200 mx-1 hidden md:block"></div>
+                      <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                          <input type="text" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-purple-500 w-40" />
+                      </div>
+                      {(mod1DateFilter || mod2DateFilter || instructorFilter || searchTerm) && (
+                          <button onClick={() => { setMod1DateFilter(''); setMod2DateFilter(''); setInstructorFilter(''); setSearchTerm(''); }} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Limpar Filtros"><Eraser size={16}/></button>
+                      )}
+                  </div>
+              </div>
+              <div className="flex-1 overflow-auto custom-scrollbar">
+                  <table className="w-full text-left text-sm border-collapse">
+                      <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold sticky top-0 z-10 shadow-sm">
+                          <tr>
+                              <th className="px-6 py-4 border-b">Estado</th>
+                              <th className="px-6 py-4 border-b">Cidade</th>
+                              <th className="px-6 py-4 border-b">Turma</th>
+                              <th className="px-6 py-4 border-b">Data Módulo 1</th>
+                              <th className="px-6 py-4 border-b">Instrutor Módulo 1</th>
+                              <th className="px-6 py-4 border-b">Data Módulo 2</th>
+                              <th className="px-6 py-4 border-b">Instrutor Módulo 2</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                          {filteredClasses.map(cls => (
+                              <tr key={cls.id} className="hover:bg-slate-50 transition-colors">
+                                  <td className="px-6 py-4 font-bold text-slate-700">{cls.state}</td>
+                                  <td className="px-6 py-4 text-slate-600">{cls.city}</td>
+                                  <td className="px-6 py-4 font-mono font-bold text-slate-500">#{cls.classCode}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                      {cls.dateMod1 ? new Date(cls.dateMod1).toLocaleDateString('pt-BR') : '--'}
+                                  </td>
+                                  <td className="px-6 py-4 font-medium text-slate-800">
+                                      <div className="flex items-center gap-2">
+                                          <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                                          {cls.instructorMod1 || '--'}
+                                      </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                      {cls.dateMod2 ? new Date(cls.dateMod2).toLocaleDateString('pt-BR') : '--'}
+                                  </td>
+                                  <td className="px-6 py-4 font-medium text-slate-800">
+                                      <div className="flex items-center gap-2">
+                                          <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                                          {cls.instructorMod2 || '--'}
+                                      </div>
+                                  </td>
+                              </tr>
+                          ))}
+                          {filteredClasses.length === 0 && (
+                              <tr>
+                                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">Nenhuma turma localizada.</td>
+                              </tr>
+                          )}
                       </tbody>
                   </table>
               </div>
@@ -521,7 +603,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                           </select>
                       </div>
                       <div className="flex items-end">
-                          <button onClick={() => { setStatusFilter('Todos'); setStateFilter(''); setCityFilter(''); setMod1DateFilter(''); setMod2DateFilter(''); setSearchTerm(''); }} className="w-full h-9 flex items-center justify-center gap-1.5 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded-lg border border-red-100 transition-all"><Eraser size={14}/> Limpar</button>
+                          <button onClick={() => { setStatusFilter('Todos'); setStateFilter(''); setCityFilter(''); setMod1DateFilter(''); setMod2DateFilter(''); setInstructorFilter(''); setSearchTerm(''); }} className="w-full h-9 flex items-center justify-center gap-1.5 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded-lg border border-red-100 transition-all"><Eraser size={14}/> Limpar</button>
                       </div>
                   </div>
               </div>
@@ -547,10 +629,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                                           <div className="relative">
                                               <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === cls.id ? null : cls.id); }} className="p-1 hover:bg-slate-100 rounded text-slate-400 class-menu-btn"><MoreHorizontal size={16} /></button>
                                               {activeMenuId === cls.id && (
-                                                  <div className="absolute right-0 top-6 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
-                                                      <button onClick={(e) => { e.stopPropagation(); handleEdit(cls); }} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-b"><Edit2 size={12} /> Editar</button>
-                                                      <button onClick={(e) => { e.stopPropagation(); handleDelete(cls.id); }} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"><Trash2 size={12} /> Excluir</button>
-                                                  </div>
+                                                  <div className="absolute right-0 top-6 w-32 bg-white rounded-lg shadow-xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden"><button onClick={(e) => { e.stopPropagation(); handleEdit(cls); }} className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-b"><Edit2 size={12} /> Editar</button><button onClick={(e) => { e.stopPropagation(); handleDelete(cls.id); }} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"><Trash2 size={12} /> Excluir</button></div>
                                               )}
                                           </div>
                                       </div>

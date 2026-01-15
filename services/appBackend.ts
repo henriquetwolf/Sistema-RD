@@ -136,6 +136,7 @@ export const appBackend = {
       description: item.description, 
       campaign: item.campaign, 
       isLeadCapture: item.is_lead_capture, 
+      // Fix: Use 'item' instead of 'data' to access properties of the mapped element
       distributionMode: item.distribution_mode, 
       fixedOwnerId: item.fixed_owner_id, 
       teamId: item.team_id, 
@@ -624,6 +625,7 @@ export const appBackend = {
       phone: item.phone, 
       email: item.email, 
       password: item.password, 
+      // Fix: use correct camelCase property names from the PartnerStudio interface
       secondContactName: item.second_contact_name, 
       secondContactPhone: item.second_contact_phone, 
       fantasyName: item.fantasy_name, 
@@ -808,7 +810,7 @@ export const appBackend = {
       price: course.price, 
       payment_link: course.paymentLink, 
       image_url: course.imageUrl, 
-      certificate_template_id: course.certificateTemplateId || null, 
+      certificate_template_id: course.certificate_template_id || null, 
       created_at: course.createdAt || new Date().toISOString() 
     }, { onConflict: 'title' });
   },
@@ -821,7 +823,7 @@ export const appBackend = {
 
   saveCourseModule: async (mod: Partial<CourseModule>): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_course_modules').upsert({ id: mod.id || crypto.randomUUID(), course_id: mod.courseId, title: mod.title, order_index: mod.orderIndex });
+    await supabase.from('crm_course_modules').upsert({ id: mod.id || crypto.randomUUID(), course_id: mod.courseId, title: mod.title, order_index: mod.order_index });
   },
 
   deleteCourseModule: async (id: string): Promise<void> => {
@@ -933,6 +935,7 @@ export const appBackend = {
         id: d.id, 
         name: d.name, 
         triggerType: d.trigger_type, 
+        // Fix: Use correct camelCase property names from the WAAutomationRule interface
         pipelineName: d.pipeline_name,
         stageId: d.stage_id,
         productType: d.product_type,
@@ -968,7 +971,8 @@ export const appBackend = {
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registration_date: item.registration_date, studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
+    // Fix: changed registration_date to registrationDate to match InventoryRecord interface
+    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
   },
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {

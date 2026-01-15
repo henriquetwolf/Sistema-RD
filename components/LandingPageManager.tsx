@@ -158,7 +158,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       setShowModal(false);
       setEditingPage(null);
     } catch (e) {
-      alert("Erro ao salvar.");
+      alert("Erro ao salvar no banco. Verifique se rodou o script SQL no Supabase.");
     } finally {
       setIsLoading(false);
     }
@@ -284,7 +284,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-orange-600 text-white rounded-2xl shadow-xl shadow-orange-600/20">
-                  {/* Fixed: removed rogue <index.tsx /> tag */}
                   <Sparkles size={24} />
                 </div>
                 <div>

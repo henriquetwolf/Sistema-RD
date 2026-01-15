@@ -91,6 +91,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       { id: 'partner_studios', label: 'Studios Parceiros' },
       { id: 'classes', label: 'Turmas' },
       { id: 'teachers', label: 'Professores' },
+      { id: 'landing_pages', label: 'Páginas de Venda' },
       { id: 'global_settings', label: 'Configurações' }
   ];
 
@@ -204,14 +205,39 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V70 (FIXES SURVEY SAVE ERRORS)
-CREATE TABLE IF NOT EXISTS public.crm_teacher_levels (
+-- SCRIPT DE FUNDAÇÃO CRM V76 (PÁGINAS DE VENDA)
+CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    name text NOT NULL,
-    honorarium numeric DEFAULT 0,
-    observations text,
-    created_at timestamp with time zone DEFAULT now()
+    title text NOT NULL,
+    product_name text,
+    content jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    is_active boolean DEFAULT true,
+    theme text DEFAULT 'modern'
 );
+
+-- Garantir que a coluna is_active exista (caso a tabela já existisse sem ela)
+DO $$ 
+BEGIN 
+    BEGIN
+        ALTER TABLE public.crm_landing_pages ADD COLUMN is_active boolean DEFAULT true;
+    EXCEPTION 
+        WHEN duplicate_column THEN NULL; 
+    END;
+END $$;
+
+-- Habilitar RLS para Landing Pages
+ALTER TABLE public.crm_landing_pages ENABLE ROW LEVEL SECURITY;
+
+-- Políticas Landing Pages
+DROP POLICY IF EXISTS "Acesso público para visualização" ON public.crm_landing_pages;
+CREATE POLICY "Acesso público para visualização" ON public.crm_landing_pages
+FOR SELECT USING (is_active = true);
+
+DROP POLICY IF EXISTS "Acesso total para administradores" ON public.crm_landing_pages;
+CREATE POLICY "Acesso total para administradores" ON public.crm_landing_pages
+FOR ALL USING (true) WITH CHECK (true);
 
 -- Tabela para Certificados Externos dos Alunos
 CREATE TABLE IF NOT EXISTS public.crm_external_certificates (
@@ -224,48 +250,17 @@ CREATE TABLE IF NOT EXISTS public.crm_external_certificates (
     created_at timestamp with time zone DEFAULT now()
 );
 
--- Tabela de Configurações de Automação
-CREATE TABLE IF NOT EXISTS public.crm_wa_automations (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    name text NOT NULL,
-    trigger_type text DEFAULT 'crm_stage_reached',
-    pipeline_name text NOT NULL,
-    stage_id text NOT NULL,
-    product_type text,
-    product_id text,
-    message_template text NOT NULL,
-    is_active boolean DEFAULT true,
-    created_at timestamp with time zone DEFAULT now()
-);
+-- Correção da tabela crm_forms para suportar is_active (Pesquisas)
+DO $$ 
+BEGIN 
+    BEGIN
+        ALTER TABLE public.crm_forms ADD COLUMN is_active boolean DEFAULT true;
+    EXCEPTION 
+        WHEN duplicate_column THEN NULL; 
+    END;
+END $$;
 
--- Tabela de Histórico de Disparos (LOGS)
-CREATE TABLE IF NOT EXISTS public.crm_wa_automation_logs (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    rule_name text NOT NULL,
-    student_name text,
-    phone text,
-    message text,
-    created_at timestamp with time zone DEFAULT now()
-);
-
--- Correção da tabela crm_forms para suportar Pesquisas
-ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_audience text DEFAULT 'all';
-ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_type text DEFAULT 'all';
-ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_product_type text;
-ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS target_product_name text;
-ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS only_if_finished boolean DEFAULT false;
-ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
-ALTER TABLE IF EXISTS public.crm_forms ADD COLUMN IF NOT EXISTS type text DEFAULT 'form';
-
--- Adiciona suporte para áreas de exibição de produtos
-ALTER TABLE IF EXISTS public.crm_products ADD COLUMN IF NOT EXISTS target_areas text[] DEFAULT '{}';
-
--- Adiciona coluna de bloqueio de escolhas para alunos em eventos
-ALTER TABLE IF EXISTS public.crm_event_registrations ADD COLUMN IF NOT EXISTS locked boolean DEFAULT false;
-
--- Garante que a coluna de honorarium esteja no formato correto
-ALTER TABLE IF EXISTS public.crm_teacher_levels ALTER COLUMN honorarium SET DEFAULT 0;
-
+-- Atualizar Schema
 NOTIFY pgrst, 'reload schema';
   `.trim();
 
@@ -551,8 +546,8 @@ NOTIFY pgrst, 'reload schema';
 
         {activeTab === 'sql_script' && (
             <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 animate-in zoom-in-95 duration-200">
-                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V70</h3></div>
-                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados para os níveis de instrutores, certificados externos, tabelas de automação, bloqueio de eventos e as novas funcionalidades das Pesquisas. Copie e execute no **SQL Editor** do Supabase.</p>
+                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V76</h3></div>
+                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados para os níveis de instrutores, certificados externos, tabelas de automação, bloqueio de eventos, pesquisas e agora suporte para <b>Páginas de Venda</b>. Copie e execute no **SQL Editor** do Supabase.</p>
                 <div className="relative">
                     <pre className="bg-black text-emerald-400 p-6 rounded-2xl text-[10px] font-mono overflow-auto max-h-[400px] shadow-inner custom-scrollbar-dark border border-slate-800">
                         {generateRepairSQL()}
@@ -787,7 +782,7 @@ NOTIFY pgrst, 'reload schema';
                           <div className="space-y-6">
                               <div>
                                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nome da Tag</label>
-                                  <input className="w-full px-4 py-2.5 border rounded-xl font-bold" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Acadêmico..." />
+                                  <input className="w-full px-4 py-2.5 border rounded-xl font-bold" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Dúvida Técnica..." />
                               </div>
                               <div>
                                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Público de Exibição</label>

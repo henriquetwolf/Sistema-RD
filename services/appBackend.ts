@@ -185,10 +185,15 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
-      distribution_mode: form.distribution_mode || 'fixed', 
+      // Fix: Use distributionMode instead of distribution_mode for property access
+      distribution_mode: form.distributionMode || 'fixed', 
+      // Fix: Use fixedOwnerId instead of fixed_owner_id for property access
       fixed_owner_id: form.fixedOwnerId || null, 
+      // Fix: Use teamId instead of team_id for property access
       team_id: form.teamId || null, 
+      // Fix: Use targetPipeline instead of target_pipeline for property access
       target_pipeline: form.targetPipeline || null, 
+      // Fix: Use targetStage instead of target_stage for property access
       target_stage: form.targetStage || null, 
       questions: form.questions || [], 
       style: form.style || {}, 
@@ -207,10 +212,15 @@ export const appBackend = {
       description: survey.description || null, 
       campaign: survey.campaign || null, 
       is_lead_capture: !!survey.isLeadCapture, 
+      // Fix: Use distributionMode instead of distribution_mode for property access
       distribution_mode: survey.distributionMode || 'fixed', 
+      // Fix: Use fixedOwnerId instead of fixed_owner_id for property access
       fixed_owner_id: survey.fixedOwnerId || null, 
+      // Fix: Use teamId instead of team_id for property access
       team_id: survey.teamId || null, 
+      // Fix: Use targetPipeline instead of target_pipeline for property access
       target_pipeline: survey.targetPipeline || null, 
+      // Fix: Use targetStage instead of target_stage for property access
       target_stage: survey.targetStage || null, 
       questions: survey.questions || [], 
       style: survey.style || {}, 
@@ -237,7 +247,7 @@ export const appBackend = {
 
   getFormFolders: async (type: 'form' | 'survey' = 'form'): Promise<FormFolder[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_form_folders').select('*').eq('type', type).order('name');
+    const { data } = await supabase.from('crm_form_folders').select('*').order('name');
     return (data || []).map((item: any) => ({ id: item.id, name: item.name, createdAt: item.created_at }));
   },
 
@@ -485,7 +495,7 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, created_by: j.created_by, createdAt: j.created_at }));
+    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
@@ -511,11 +521,9 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    // Fix: Access primaryKey instead of primary_key on preset (Partial<SavedPreset>)
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
-    // Fix: Map data.interval_minutes to intervalMinutes and data.primary_key to primaryKey in the returned object to match SavedPreset interface
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
   },
 
@@ -629,13 +637,13 @@ export const appBackend = {
       fantasyName: item.fantasy_name, 
       legalName: item.legal_name, 
       cnpj: item.cnpj, 
-      studioPhone: item.studio_phone, 
+      studio_phone: item.studio_phone, 
       address: item.address, 
       city: item.city, 
       state: item.state, 
       country: item.country, 
       sizeM2: item.size_m2, 
-      student_capacity: item.student_capacity, 
+      studentCapacity: item.student_capacity, 
       rentValue: item.rent_value, 
       methodology: item.methodology, 
       studioType: item.studio_type, 
@@ -644,18 +652,18 @@ export const appBackend = {
       agency: item.agency, 
       account: item.account, 
       beneficiary: item.beneficiary, 
-      pix_key: item.pix_key, 
+      pixKey: item.pix_key, 
       has_reformer: !!item.has_reformer, 
-      qty_reformer: item.qty_reformer, 
+      qtyReformer: item.qty_reformer, 
       has_ladder_barrel: !!item.has_ladder_barrel, 
-      qty_ladder_barrel: item.qty_ladder_barrel, 
+      qtyLadderBarrel: item.qty_ladder_barrel, 
       has_chair: !!item.has_chair, 
-      qty_chair: item.qty_chair, 
+      qtyChair: item.qty_chair, 
       has_cadillac: !!item.has_cadillac, 
-      qty_cadillac: item.qty_cadillac, 
+      qtyCadillac: item.qty_cadillac, 
       has_chairs_for_course: !!item.has_chairs_for_course, 
       has_tv: !!item.has_tv, 
-      max_kits_capacity: item.max_kits_capacity, 
+      maxKitsCapacity: item.max_kits_capacity, 
       attachments: item.attachments 
     }));
   },
@@ -730,12 +738,12 @@ export const appBackend = {
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, background_data: item.background_data, back_background_data: item.back_background_data, linked_product_id: item.linked_product_id, body_text: item.body_text, layout_config: item.layout_config, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title, backgroundData: item.background_data, backBackgroundData: item.back_background_data, linkedProductId: item.linked_product_id, bodyText: item.body_text, layoutConfig: item.layout_config, createdAt: item.created_at }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
+    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, backBackgroundData: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -853,7 +861,7 @@ export const appBackend = {
 
   getStudentLessonProgress: async (studentDealId: string): Promise<string[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_student_lesson_progress').select('lesson_id').eq('student_deal_id', studentDealId);
+    const { data = null } = await supabase.from('crm_student_lesson_progress').select('lesson_id').eq('student_deal_id', studentDealId);
     return (data || []).map(item => item.lesson_id);
   },
 
@@ -972,7 +980,7 @@ export const appBackend = {
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_inventory').upsert({ id: record.id || crypto.randomUUID(), type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.tracking_code, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments, created_at: record.createdAt || new Date().toISOString() });
+    await supabase.from('crm_inventory').upsert({ id: record.id || crypto.randomUUID(), type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments, created_at: record.createdAt || new Date().toISOString() });
   },
 
   deleteInventoryRecord: async (id: string): Promise<void> => {
@@ -990,28 +998,25 @@ export const appBackend = {
     if (!isConfigured) return;
     await supabase.from('crm_billing_negotiations').upsert({ 
         id: neg.id || crypto.randomUUID(), 
-        // Fix: Property 'open_installments' does not exist on type 'Partial<BillingNegotiation>'. Did you mean 'openInstallments'?
         open_installments: neg.openInstallments, 
-        // Fix: Property 'total_negotiated_value' does not exist on type 'Partial<BillingNegotiation>'. Did you mean 'totalNegotiatedValue'?
         total_negotiated_value: neg.totalNegotiatedValue, 
-        // Fix: Property 'total_installments' does not exist on type 'Partial<BillingNegotiation>'. Did you mean 'totalInstallments'?
         total_installments: neg.totalInstallments, 
-        due_date: neg.due_date, 
-        responsible_agent: neg.responsible_agent, 
-        identifier_code: neg.identifier_code, 
-        full_name: neg.full_name, 
-        product_name: neg.product_name, 
-        original_value: neg.original_value, 
-        payment_method: neg.payment_method, 
+        due_date: neg.dueDate, 
+        responsible_agent: neg.responsibleAgent, 
+        identifier_code: neg.identifierCode, 
+        full_name: neg.fullName, 
+        product_name: neg.productName, 
+        original_value: neg.originalValue, 
+        payment_method: neg.paymentMethod, 
         observations: neg.observations, 
         status: neg.status, 
         team: neg.team, 
-        voucher_link_1: neg.voucher_link_1, 
-        test_date: neg.test_date, 
-        voucher_link_2: neg.voucher_link_2, 
-        voucher_link_3: neg.voucher_link_3, 
-        boletos_link: neg.boletos_link, 
-        negotiation_reference: neg.negotiation_reference, 
+        voucher_link_1: neg.voucherLink1, 
+        test_date: neg.testDate, 
+        voucher_link_2: neg.voucherLink2, 
+        voucher_link_3: neg.voucherLink3, 
+        boletos_link: neg.boletosLink, 
+        negotiation_reference: neg.negotiationReference, 
         attachments: neg.attachments, 
         created_at: neg.createdAt || new Date().toISOString() 
     });
@@ -1055,8 +1060,7 @@ export const appBackend = {
 
   saveLandingPage: async (lp: LandingPage): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-      id: lp.id || crypto.randomUUID(),
+    const payload: any = {
       title: lp.title,
       product_name: lp.productName,
       content: lp.content,
@@ -1065,6 +1069,11 @@ export const appBackend = {
       is_active: lp.isActive !== false,
       theme: lp.theme || 'modern'
     };
+    
+    if (lp.id && lp.id.trim() !== '') {
+        payload.id = lp.id;
+    }
+    
     const { error } = await supabase.from('crm_landing_pages').upsert(payload);
     if (error) throw error;
   },

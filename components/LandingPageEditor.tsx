@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
-  ArrowLeft, Monitor, Smartphone, Save, Send, Eye, X, 
-  Layers, List, Type, MousePointer2, Image as ImageIcon, Box, 
+  ArrowLeft, Type, MousePointer2, Image as ImageIcon, 
   ChevronRight, Settings, Plus, Layout, Grid, MoreVertical,
-  Undo, Redo, Smartphone as MobileIcon, Monitor as DesktopIcon,
-  Search, Palette, Check, AlertCircle, Loader2, Trash2, ArrowUp, ArrowDown,
-  Link as LinkIcon, AlignCenter, AlignLeft, AlignRight, Bold, Type as TypeIcon,
-  /* Added missing Info icon import */
-  PlayCircle, Info
+  Smartphone as MobileIcon, Monitor as DesktopIcon,
+  Palette, Check, AlertCircle, Loader2, Trash2, ArrowUp, ArrowDown,
+  AlignCenter, AlignLeft, Info, PlayCircle, Video, Save, X
 } from 'lucide-react';
 import { LandingPage } from '../types';
 import { appBackend } from '../services/appBackend';
@@ -20,7 +17,7 @@ interface LandingPageEditorProps {
 
 interface Section {
   id: string;
-  type: 'hero' | 'text' | 'image' | 'cta' | 'features' | 'video';
+  type: 'hero' | 'text' | 'image' | 'cta' | 'video';
   content: any;
 }
 
@@ -64,7 +61,6 @@ const COMPONENTS = [
 
 export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack }) => {
   const [activeView, setActiveView] = useState<'desktop' | 'mobile'>('desktop');
-  const [activeTab, setActiveTab] = useState<'components' | 'page'>('components');
   const [isSaving, setIsSaving] = useState(false);
   const [sections, setSections] = useState<Section[]>(lp.content?.sections || []);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
@@ -145,7 +141,6 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-100 flex flex-col animate-in fade-in duration-300">
-      {/* Top Header */}
       <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-sm z-20">
         <div className="flex items-center gap-6">
           <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-teal-600 font-bold text-sm transition-colors border border-slate-200 px-3 py-1.5 rounded-lg">
@@ -190,9 +185,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
         </div>
       </header>
 
-      {/* Editor Main Area */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar: Components */}
         <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0">
           <div className="p-6 border-b border-slate-100">
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Adicionar Elementos</h3>
@@ -239,7 +232,6 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
           </div>
         </aside>
 
-        {/* Editor Workspace */}
         <main className="flex-1 overflow-auto bg-slate-200 p-8 flex flex-col items-center custom-scrollbar relative">
           <div 
             className={clsx(
@@ -264,14 +256,12 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                     selectedSectionId === section.id ? "border-teal-500" : "border-transparent hover:border-teal-200"
                   )}
                 >
-                  {/* Actions Overlay */}
                   <div className="absolute -left-12 top-0 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity p-2">
                     <button onClick={(e) => moveSection(section.id, 'up', e)} className="p-1.5 bg-white shadow-md rounded-lg text-slate-500 hover:text-teal-600 disabled:opacity-30" disabled={idx === 0}><ArrowUp size={16}/></button>
                     <button onClick={(e) => moveSection(section.id, 'down', e)} className="p-1.5 bg-white shadow-md rounded-lg text-slate-500 hover:text-teal-600 disabled:opacity-30" disabled={idx === sections.length - 1}><ArrowDown size={16}/></button>
                     <button onClick={(e) => removeSection(section.id, e)} className="p-1.5 bg-white shadow-md rounded-lg text-red-500 hover:bg-red-50"><Trash2 size={16}/></button>
                   </div>
 
-                  {/* Renderers */}
                   {section.type === 'hero' && (
                     <div style={{ backgroundColor: section.content.bgColor, color: section.content.textColor }} className="py-20 px-10 text-center">
                       <h1 className="text-5xl font-black mb-6 leading-tight" style={{ color: section.content.textColor }}>{section.content.title}</h1>
@@ -318,7 +308,6 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
           </div>
         </main>
 
-        {/* Right Sidebar: Settings (Contextual) */}
         <aside className="w-80 bg-white border-l border-slate-200 p-6 overflow-y-auto custom-scrollbar shrink-0">
           {selectedSection ? (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-200">
@@ -391,7 +380,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                        <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Código Embed do YouTube</label>
                         <textarea className="w-full border rounded-xl p-3 text-xs font-mono h-32" value={selectedSection.content.embedCode} onChange={e => updateSectionContent(selectedSection.id, 'embedCode', e.target.value)} />
-                        <p className="text-[9px] text-slate-400 mt-2 font-medium leading-relaxed">Vá no YouTube, clique em Compartilhar > Incorporar e cole o código iframe aqui.</p>
+                        <p className="text-[9px] text-slate-400 mt-2 font-medium leading-relaxed">Vá no YouTube, clique em Compartilhar &gt; Incorporar e cole o código iframe aqui.</p>
                       </div>
                     </>
                   )}

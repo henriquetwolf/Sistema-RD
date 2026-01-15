@@ -136,7 +136,6 @@ export const appBackend = {
       description: item.description, 
       campaign: item.campaign, 
       isLeadCapture: item.is_lead_capture, 
-      // Fix: Use 'item' instead of 'data' to access properties of the mapped element
       distributionMode: item.distribution_mode, 
       fixedOwnerId: item.fixed_owner_id, 
       teamId: item.team_id, 
@@ -486,7 +485,6 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    // Fix: corrected mapping of interval_minutes to intervalMinutes to match interface
     return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
@@ -513,9 +511,11 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
+    // Fix: Access primaryKey instead of primary_key on preset (Partial<SavedPreset>)
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
+    // Fix: Map data.interval_minutes to intervalMinutes and data.primary_key to primaryKey in the returned object to match SavedPreset interface
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
   },
 
@@ -616,7 +616,6 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    // Fix: corrected property mapping for PartnerStudio to use camelCase and match interface
     return (data || []).map((item: any) => ({ 
       id: item.id, 
       status: item.status, 
@@ -625,7 +624,6 @@ export const appBackend = {
       phone: item.phone, 
       email: item.email, 
       password: item.password, 
-      // Fix: use correct camelCase property names from the PartnerStudio interface
       secondContactName: item.second_contact_name, 
       secondContactPhone: item.second_contact_phone, 
       fantasyName: item.fantasy_name, 
@@ -810,7 +808,6 @@ export const appBackend = {
       price: course.price, 
       payment_link: course.paymentLink, 
       image_url: course.imageUrl, 
-      // Fix: Property 'certificate_template_id' does not exist on type 'Partial<OnlineCourse>'. Corrected to 'certificateTemplateId'.
       certificate_template_id: course.certificateTemplateId || null, 
       created_at: course.createdAt || new Date().toISOString() 
     }, { onConflict: 'title' });
@@ -824,7 +821,6 @@ export const appBackend = {
 
   saveCourseModule: async (mod: Partial<CourseModule>): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: Property 'order_index' does not exist on type 'Partial<CourseModule>'. Corrected to 'orderIndex'.
     await supabase.from('crm_course_modules').upsert({ id: mod.id || crypto.randomUUID(), course_id: mod.courseId, title: mod.title, order_index: mod.orderIndex });
   },
 
@@ -896,7 +892,6 @@ export const appBackend = {
     if (!isConfigured) throw new Error("Not configured");
     const { data, error } = await supabase.from('crm_event_blocks').upsert({ id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections }).select().single();
     if (error) throw error;
-    // Fix: changed block.max_selections to data.max_selections
     return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
   },
 
@@ -937,7 +932,6 @@ export const appBackend = {
         id: d.id, 
         name: d.name, 
         triggerType: d.trigger_type, 
-        // Fix: Use correct camelCase property names from the WAAutomationRule interface
         pipelineName: d.pipeline_name,
         stageId: d.stage_id,
         productType: d.product_type,
@@ -973,7 +967,6 @@ export const appBackend = {
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    // Fix: changed registration_date to registrationDate to match InventoryRecord interface
     return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
   },
 
@@ -997,25 +990,25 @@ export const appBackend = {
     if (!isConfigured) return;
     await supabase.from('crm_billing_negotiations').upsert({ 
         id: neg.id || crypto.randomUUID(), 
-        open_installments: neg.openInstallments, 
-        total_negotiated_value: neg.totalNegotiatedValue, 
-        total_installments: neg.totalInstallments, 
-        due_date: neg.dueDate, 
-        responsible_agent: neg.responsibleAgent, 
-        identifier_code: neg.identifierCode, 
-        full_name: neg.fullName, 
-        product_name: neg.productName, 
-        original_value: neg.originalValue, 
-        payment_method: neg.paymentMethod, 
+        open_installments: neg.open_installments, 
+        total_negotiated_value: neg.total_negotiated_value, 
+        total_installments: neg.total_installments, 
+        due_date: neg.due_date, 
+        responsible_agent: neg.responsible_agent, 
+        identifier_code: neg.identifier_code, 
+        full_name: neg.full_name, 
+        product_name: neg.product_name, 
+        original_value: neg.original_value, 
+        payment_method: neg.payment_method, 
         observations: neg.observations, 
         status: neg.status, 
         team: neg.team, 
-        voucher_link_1: neg.voucherLink1, 
-        test_date: neg.testDate, 
-        voucher_link_2: neg.voucherLink2, 
-        voucher_link_3: neg.voucherLink3, 
-        boletos_link: neg.boletosLink, 
-        negotiation_reference: neg.negotiationReference, 
+        voucher_link_1: neg.voucher_link_1, 
+        test_date: neg.test_date, 
+        voucher_link_2: neg.voucher_link_2, 
+        voucher_link_3: neg.voucher_link_3, 
+        boletos_link: neg.boletos_link, 
+        negotiation_reference: neg.negotiation_reference, 
         attachments: neg.attachments, 
         created_at: neg.createdAt || new Date().toISOString() 
     });
@@ -1059,16 +1052,17 @@ export const appBackend = {
 
   saveLandingPage: async (lp: LandingPage): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_landing_pages').upsert({
-      id: lp.id,
+    const payload = {
+      id: lp.id || crypto.randomUUID(),
       title: lp.title,
       product_name: lp.productName,
       content: lp.content,
-      created_at: lp.createdAt,
-      updated_at: lp.updatedAt,
-      is_active: lp.isActive,
-      theme: lp.theme
-    });
+      created_at: lp.createdAt || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      is_active: lp.isActive !== false,
+      theme: lp.theme || 'modern'
+    };
+    const { error } = await supabase.from('crm_landing_pages').upsert(payload);
     if (error) throw error;
   },
 

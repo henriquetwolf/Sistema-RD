@@ -205,7 +205,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V76 (PÁGINAS DE VENDA CORRIGIDO)
+-- SCRIPT DE FUNDAÇÃO CRM V77 (PÁGINAS DE VENDA REPARO FOCO)
 -- 1. Tabela de Páginas de Venda
 CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -218,7 +218,8 @@ CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     theme text DEFAULT 'modern'
 );
 
--- 2. Garantir que a coluna is_active exista (Indispensável para as políticas abaixo)
+-- 2. Garantir que a coluna is_active exista (Usando IF NOT EXISTS direto no ALTER TABLE para Postgres moderno)
+-- Se o seu supabase for antigo e der erro aqui, remova o "IF NOT EXISTS"
 ALTER TABLE public.crm_landing_pages ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
 
 -- 3. Habilitar RLS e Criar Políticas
@@ -532,7 +533,7 @@ NOTIFY pgrst, 'reload schema';
 
         {activeTab === 'sql_script' && (
             <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 animate-in zoom-in-95 duration-200">
-                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V76</h3></div>
+                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V77</h3></div>
                 <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados para os níveis de instrutores, certificados externos, tabelas de automação, bloqueio de eventos, pesquisas e agora suporte para <b>Páginas de Venda</b>. Copie e execute no **SQL Editor** do Supabase.</p>
                 <div className="relative">
                     <pre className="bg-black text-emerald-400 p-6 rounded-2xl text-[10px] font-mono overflow-auto max-h-[400px] shadow-inner custom-scrollbar-dark border border-slate-800">

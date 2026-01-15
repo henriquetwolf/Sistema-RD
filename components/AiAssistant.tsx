@@ -63,11 +63,10 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
     setIsLoading(true);
 
     try {
-      // Cria a instância da IA no momento do envio para garantir a leitura da chave de ambiente atualizada
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: [{ role: 'user', parts: [{ text: userText }] }],
+        contents: userText,
         config: {
           systemInstruction: systemPrompt,
           temperature: 0.7,

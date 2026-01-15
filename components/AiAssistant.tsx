@@ -63,10 +63,8 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
     setIsLoading(true);
 
     try {
-      const apiKey = process.env.API_KEY;
-      if (!apiKey) throw new Error("API_KEY_MISSING");
-
-      const ai = new GoogleGenAI({ apiKey });
+      // Inicializa o cliente usando o process.env.API_KEY injetado pelo ambiente
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: [{ role: 'user', parts: [{ text: userText }] }],
@@ -84,14 +82,8 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
 
       setMessages(prev => [...prev, { role: 'bot', text: cleanText, tabSuggestion }]);
     } catch (error: any) {
-      console.error("Falha na consulta ao Gemini:", error);
-      let errorMsg = "Houve um erro ao consultar minha base de conhecimento. Verifique sua conexão.";
-      
-      if (error.message === "API_KEY_MISSING") {
-          errorMsg = "A chave de API (API_KEY) não foi detectada no ambiente. Verifique as configurações do Vercel.";
-      }
-
-      setMessages(prev => [...prev, { role: 'bot', text: errorMsg }]);
+      console.error("Erro na comunicação com a IA:", error);
+      setMessages(prev => [...prev, { role: 'bot', text: "Houve um problema técnico ao consultar minha inteligência. Por favor, tente novamente em alguns instantes." }]);
     } finally {
       setIsLoading(false);
     }

@@ -4,7 +4,8 @@ import {
   ArrowLeft, Type, MousePointer2, Image as ImageIcon, 
   Settings, Plus, Layout, Loader2, Trash2, ArrowUp, ArrowDown,
   AlignCenter, AlignLeft, AlignRight, PlayCircle, Save, X, Info,
-  Smartphone as MobileIcon, Monitor as DesktopIcon, ChevronRight
+  Smartphone as MobileIcon, Monitor as DesktopIcon, ChevronRight,
+  Video, Link
 } from 'lucide-react';
 import { LandingPage } from '../types';
 import { appBackend } from '../services/appBackend';
@@ -24,6 +25,7 @@ interface ElementStyle {
   width?: string;
   align?: 'left' | 'center' | 'right';
   fontWeight?: string;
+  link?: string;
 }
 
 interface Element {
@@ -44,7 +46,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
   const [activeView, setActiveView] = useState<'desktop' | 'mobile'>('desktop');
   const [isSaving, setIsSaving] = useState(false);
   const [sections, setSections] = useState<SectionFold[]>(lp.content?.sections || []);
-  const [selectedFoldId, setSelectedFoldId] = useState<string | null>(null);
+  const [selectedFoldId, setSelectedFoldId] = useState<string | null>(sections.length > 0 ? sections[0].id : null);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
 
   const selectedFold = sections.find(s => s.id === selectedFoldId);
@@ -64,7 +66,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
 
   const removeFold = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm("Deseja excluir esta dobra inteira?")) {
+    if (window.confirm("Deseja excluir esta dobra inteira? Todos os elementos nela serão perdidos.")) {
         setSections(sections.filter(s => s.id !== id));
         if (selectedFoldId === id) {
             setSelectedFoldId(null);
@@ -74,9 +76,23 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
   };
 
   const addElement = (type: Element['type']) => {
-    if (!selectedFoldId) {
-        alert("Selecione ou crie uma dobra primeiro.");
-        return;
+    // Auto-create fold if none selected or exists
+    let foldId = selectedFoldId;
+    if (!foldId) {
+        if (sections.length > 0) {
+            foldId = sections[0].id;
+            setSelectedFoldId(foldId);
+        } else {
+            const newFold: SectionFold = {
+                id: crypto.randomUUID(),
+                bgColor: '#ffffff',
+                padding: '60px',
+                elements: []
+            };
+            setSections([newFold]);
+            foldId = newFold.id;
+            setSelectedFoldId(foldId);
+        }
     }
     
     const newElement: Element = {
@@ -85,13 +101,15 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
       content: type === 'heading' ? 'Novo Título' : 
                type === 'text' ? 'Seu texto editável aqui...' : 
                type === 'button' ? 'Clique Aqui' : 
-               type === 'image' ? 'https://via.placeholder.com/400x300' : '',
-      style: type === 'button' ? { bgColor: '#0d9488', color: '#ffffff', borderRadius: 8, align: 'center' } :
-             type === 'heading' ? { fontSize: 32, fontWeight: 'bold', textAlign: 'center' } :
+               type === 'image' ? 'https://images.unsplash.com/photo-1518611012118-2960520ee86c?auto=format&fit=crop&q=80&w=800' :
+               type === 'video' ? '<iframe width="560" height="315" src="https://www.youtube.com/embed/dQw4w9WgXcQ" frameborder="0" allowfullscreen></iframe>' : '',
+      style: type === 'button' ? { bgColor: '#0d9488', color: '#ffffff', borderRadius: 8, align: 'center', link: '#' } :
+             type === 'heading' ? { fontSize: 32, fontWeight: 'bold', textAlign: 'center', color: '#1e293b' } :
+             type === 'image' ? { width: '400px', align: 'center' } :
              { textAlign: 'center' }
     };
 
-    setSections(prev => prev.map(f => f.id === selectedFoldId ? { ...f, elements: [...f.elements, newElement] } : f));
+    setSections(prev => prev.map(f => f.id === foldId ? { ...f, elements: [...f.elements, newElement] } : f));
     setSelectedElementId(newElement.id);
   };
 
@@ -156,7 +174,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
         content: { sections },
         updatedAt: new Date().toISOString()
       });
-      alert("Página salva!");
+      alert("Landing Page salva com sucesso!");
     } catch (e) {
       alert("Erro ao salvar.");
     } finally {
@@ -165,7 +183,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
   };
 
   const publish = async () => {
-    if (!window.confirm("Publicar esta página agora?")) return;
+    if (!window.confirm("Deseja publicar esta página? Ela ficará visível no link externo.")) return;
     setIsSaving(true);
     try {
       await appBackend.saveLandingPage({
@@ -174,7 +192,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
         status: 'published',
         updatedAt: new Date().toISOString()
       });
-      alert("Página publicada!");
+      alert("Página publicada com sucesso!");
     } catch (e) {
       alert("Erro ao publicar.");
     } finally {
@@ -193,19 +211,20 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
           <div className="h-6 w-px bg-slate-200"></div>
           <div>
             <h1 className="text-sm font-black text-slate-800 leading-none">{lp.name}</h1>
+            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">/{lp.slug}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl shadow-inner">
-          <button onClick={() => setActiveView('desktop')} className={clsx("p-2 rounded-lg transition-all", activeView === 'desktop' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")}><DesktopIcon size={18}/></button>
-          <button onClick={() => setActiveView('mobile')} className={clsx("p-2 rounded-lg transition-all", activeView === 'mobile' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")}><MobileIcon size={18}/></button>
+          <button onClick={() => setActiveView('desktop')} className={clsx("p-2 rounded-lg transition-all", activeView === 'desktop' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Desktop View"><DesktopIcon size={18}/></button>
+          <button onClick={() => setActiveView('mobile')} className={clsx("p-2 rounded-lg transition-all", activeView === 'mobile' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Mobile View"><MobileIcon size={18}/></button>
         </div>
 
         <div className="flex items-center gap-3">
-          <button onClick={handleSave} disabled={isSaving} className="text-teal-600 hover:bg-teal-50 border border-teal-200 font-bold text-xs px-4 py-2 rounded-xl">
-            {isSaving ? <Loader2 size={16} className="animate-spin" /> : 'Salvar'}
+          <button onClick={handleSave} disabled={isSaving} className="text-teal-600 hover:bg-teal-50 border border-teal-200 font-bold text-xs px-4 py-2 rounded-xl transition-all">
+            {isSaving ? <Loader2 size={16} className="animate-spin" /> : 'Salvar Alterações'}
           </button>
-          <button onClick={publish} className="bg-teal-600 hover:bg-teal-700 text-white font-black text-xs px-6 py-2 rounded-xl shadow-lg">Publicar</button>
+          <button onClick={publish} className="bg-teal-600 hover:bg-teal-700 text-white font-black text-xs px-6 py-2 rounded-xl shadow-lg transition-all active:scale-95">Publicar Página</button>
         </div>
       </header>
 
@@ -215,7 +234,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
             {/* Add Elements */}
             <section>
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Adicionar Elementos</h3>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Adicionar ao Dobro Selecionado</h3>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { id: 'heading', label: 'Título', icon: Type },
@@ -240,8 +259,8 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
             {/* Structure */}
             <section>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estrutura da Página</h3>
-                <button onClick={addFold} className="p-1 text-teal-600 hover:bg-teal-50 rounded-lg"><Plus size={16}/></button>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estrutura (Dobras)</h3>
+                <button onClick={addFold} className="p-1 text-teal-600 hover:bg-teal-50 rounded-lg" title="Adicionar Dobra"><Plus size={16}/></button>
               </div>
               <div className="space-y-3">
                 {sections.map((fold, idx) => (
@@ -249,7 +268,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                     <div 
                       onClick={() => { setSelectedFoldId(fold.id); setSelectedElementId(null); }}
                       className={clsx(
-                        "flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all cursor-pointer",
+                        "flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all cursor-pointer group",
                         selectedFoldId === fold.id ? "bg-teal-50 border-teal-500 text-teal-700 shadow-sm" : "bg-slate-50 border-slate-100 text-slate-500"
                       )}
                     >
@@ -264,20 +283,27 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                                     onClick={() => setSelectedElementId(el.id)}
                                     className={clsx(
                                         "flex items-center justify-between p-2 rounded-lg text-[10px] font-bold transition-all cursor-pointer",
-                                        selectedElementId === el.id ? "bg-white border-teal-400 border text-teal-600" : "text-slate-400 hover:text-slate-600"
+                                        selectedElementId === el.id ? "bg-white border-teal-400 border text-teal-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
                                     )}
                                 >
-                                    <span className="truncate">{el.type.toUpperCase()}: {el.content.substring(0, 15)}...</span>
+                                    <span className="truncate flex-1 pr-2">{el.type.toUpperCase()}: {el.content.substring(0, 15)}...</span>
                                     <div className="flex gap-1">
-                                        <button onClick={(e) => moveElement(el.id, 'up', e)} disabled={elIdx === 0} className="disabled:opacity-20"><ArrowUp size={10}/></button>
-                                        <button onClick={(e) => moveElement(el.id, 'down', e)} disabled={elIdx === fold.elements.length - 1} className="disabled:opacity-20"><ArrowDown size={10}/></button>
+                                        <button onClick={(e) => moveElement(el.id, 'up', e)} disabled={elIdx === 0} className="disabled:opacity-10"><ArrowUp size={10}/></button>
+                                        <button onClick={(e) => moveElement(el.id, 'down', e)} disabled={elIdx === fold.elements.length - 1} className="disabled:opacity-10"><ArrowDown size={10}/></button>
+                                        <button onClick={(e) => removeElement(el.id, e)} className="hover:text-red-500"><X size={10}/></button>
                                     </div>
                                 </div>
                             ))}
+                            {fold.elements.length === 0 && <p className="text-[9px] text-slate-300 italic p-2">Sem elementos.</p>}
                         </div>
                     )}
                   </div>
                 ))}
+                {sections.length === 0 && (
+                    <div className="text-center py-4 text-slate-300">
+                        <p className="text-[10px] font-bold uppercase">Nenhuma dobra criada</p>
+                    </div>
+                )}
               </div>
             </section>
           </div>
@@ -292,9 +318,11 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
             )}
           >
             {sections.length === 0 ? (
-                <div className="h-96 flex flex-col items-center justify-center text-slate-300">
+                <div className="h-[400px] flex flex-col items-center justify-center text-slate-300 text-center p-8">
                     <Layout size={64} className="opacity-10 mb-4" />
-                    <p className="font-bold">Crie uma dobra para começar</p>
+                    <p className="font-bold">Sua página está em branco</p>
+                    <p className="text-sm">Clique em "+" na barra lateral para criar sua primeira dobra (módulo).</p>
+                    <button onClick={addFold} className="mt-6 bg-teal-600 text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg">Criar Minha Primeira Dobra</button>
                 </div>
             ) : (
                 sections.map((fold) => (
@@ -329,7 +357,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                                 {el.type === 'button' && (
                                     <div className={clsx("flex", el.style.align === 'center' ? 'justify-center' : el.style.align === 'right' ? 'justify-end' : 'justify-start')}>
                                         <button 
-                                            style={{ backgroundColor: el.style.bgColor, color: el.style.color, borderRadius: el.style.borderRadius, padding: '12px 32px', fontWeight: 'bold' }}
+                                            style={{ backgroundColor: el.style.bgColor, color: el.style.color, borderRadius: `${el.style.borderRadius}px`, padding: '12px 32px', fontWeight: 'bold' }}
                                         >
                                             {el.content}
                                         </button>
@@ -337,12 +365,18 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                                 )}
                                 {el.type === 'spacer' && <div style={{ height: el.style.fontSize || 40 }}></div>}
                                 {el.type === 'video' && (
-                                    <div className="aspect-video bg-black rounded-xl overflow-hidden flex items-center justify-center">
-                                        <PlayCircle size={48} className="text-white opacity-50" />
+                                    <div className="aspect-video bg-black rounded-3xl overflow-hidden flex items-center justify-center shadow-lg">
+                                        <div dangerouslySetInnerHTML={{ __html: el.content }} className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full" />
                                     </div>
                                 )}
                             </div>
                         ))}
+                        {fold.elements.length === 0 && (
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl py-12 flex flex-col items-center justify-center text-slate-300">
+                                <Plus size={24} className="opacity-20 mb-2"/>
+                                <span className="text-xs font-bold uppercase">Dobra Vazia</span>
+                            </div>
+                        )}
                     </div>
                 ))
             )}
@@ -364,12 +398,17 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                       {/* Content Edit */}
                       {selectedElement.type !== 'spacer' && (
                           <div>
-                            <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Conteúdo</label>
-                            {selectedElement.type === 'text' ? (
-                                <textarea className="w-full border rounded-lg p-2 text-xs h-32" value={selectedElement.content} onChange={e => updateElement('content', e.target.value)} />
+                            <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">{selectedElement.type === 'video' ? 'Código Embed (YouTube)' : 'Conteúdo'}</label>
+                            {selectedElement.type === 'text' || selectedElement.type === 'video' ? (
+                                <textarea 
+                                    className="w-full border rounded-lg p-2 text-xs h-32 focus:ring-2 focus:ring-teal-100 outline-none transition-all" 
+                                    value={selectedElement.content} 
+                                    onChange={e => updateElement('content', e.target.value)} 
+                                />
                             ) : (
-                                <input type="text" className="w-full border rounded-lg p-2 text-xs" value={selectedElement.content} onChange={e => updateElement('content', e.target.value)} />
+                                <input type="text" className="w-full border rounded-lg p-2 text-xs focus:ring-2 focus:ring-teal-100 outline-none" value={selectedElement.content} onChange={e => updateElement('content', e.target.value)} />
                             )}
+                            {selectedElement.type === 'video' && <p className="text-[8px] text-slate-400 mt-1 uppercase font-bold tracking-tighter">Copie o código em "Compartilhar > Incorporar" no YouTube.</p>}
                           </div>
                       )}
 
@@ -400,6 +439,10 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
 
                       {selectedElement.type === 'button' && (
                           <>
+                            <div>
+                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 flex items-center gap-1"><Link size={10}/> URL de Destino</label>
+                                <input type="text" className="w-full border rounded-lg p-2 text-[10px] font-mono" value={selectedElement.style.link || ''} onChange={e => updateElementStyle('link', e.target.value)} placeholder="https://..." />
+                            </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
                                     <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Cor Fundo</label>
@@ -411,7 +454,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Arredondamento</label>
+                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Arredondamento (px)</label>
                                 <input type="range" min="0" max="50" className="w-full accent-teal-600" value={selectedElement.style.borderRadius} onChange={e => updateElementStyle('borderRadius', parseInt(e.target.value))} />
                             </div>
                           </>
@@ -419,13 +462,20 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
 
                       {['button', 'image'].includes(selectedElement.type) && (
                           <div>
-                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Posicionamento</label>
+                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Posicionamento Horizontal</label>
                                 <div className="flex bg-slate-100 p-1 rounded-lg">
                                     <button onClick={() => updateElementStyle('align', 'left')} className={clsx("flex-1 p-1 rounded", selectedElement.style.align === 'left' ? "bg-white shadow text-teal-600" : "text-slate-400")}><AlignLeft size={14} className="mx-auto"/></button>
                                     <button onClick={() => updateElementStyle('align', 'center')} className={clsx("flex-1 p-1 rounded", selectedElement.style.align === 'center' ? "bg-white shadow text-teal-600" : "text-slate-400")}><AlignCenter size={14} className="mx-auto"/></button>
                                     <button onClick={() => updateElementStyle('align', 'right')} className={clsx("flex-1 p-1 rounded", selectedElement.style.align === 'right' ? "bg-white shadow text-teal-600" : "text-slate-400")}><AlignRight size={14} className="mx-auto"/></button>
                                 </div>
                             </div>
+                      )}
+
+                      {selectedElement.type === 'image' && (
+                          <div>
+                              <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Largura (px ou %)</label>
+                              <input type="text" className="w-full border rounded-lg p-2 text-xs" value={selectedElement.style.width || ''} onChange={e => updateElementStyle('width', e.target.value)} placeholder="Ex: 400px ou 100%" />
+                          </div>
                       )}
                   </div>
               </div>
@@ -446,6 +496,11 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                           <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Espaçamento Vertical (Padding)</label>
                           <input type="text" className="w-full border rounded-lg p-2 text-xs" value={selectedFold.padding} onChange={e => updateFold('padding', e.target.value)} placeholder="Ex: 80px" />
                       </div>
+                      <div className="pt-4 mt-4 border-t">
+                          <button onClick={(e) => removeFold(selectedFoldId, e)} className="w-full py-2 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest border border-red-100 hover:bg-red-100 transition-all flex items-center justify-center gap-2">
+                              <Trash2 size={12}/> Excluir este módulo
+                          </button>
+                      </div>
                   </div>
               </div>
           ) : (
@@ -455,7 +510,18 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
               </h3>
               <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 flex flex-col items-center text-center gap-3">
                  <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-indigo-600"><Info size={20}/></div>
-                 <p className="text-[10px] font-bold text-indigo-700 leading-relaxed uppercase tracking-tighter">Clique em uma dobra ou elemento no centro para editar.</p>
+                 <p className="text-[10px] font-bold text-indigo-700 leading-relaxed uppercase tracking-tighter">Clique em uma dobra ou elemento no centro para editar suas propriedades específicas.</p>
+              </div>
+              <div className="p-4 bg-white rounded-2xl border border-slate-100 space-y-4 shadow-sm">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SEO da Página</h4>
+                  <div>
+                      <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Meta Título</label>
+                      <input type="text" className="w-full border rounded-lg p-2 text-xs" defaultValue={lp.name} />
+                  </div>
+                  <div>
+                      <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Meta Descrição</label>
+                      <textarea className="w-full border rounded-lg p-2 text-xs h-20 resize-none" placeholder="Descrição para o Google..." />
+                  </div>
               </div>
             </div>
           )}

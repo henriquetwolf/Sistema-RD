@@ -20,6 +20,9 @@ const CATEGORIES = [
 ];
 
 const TEMPLATE_CONTENTS: Record<string, any> = {
+  'blank': {
+    sections: []
+  },
   'free-class': {
     sections: [
       {
@@ -29,7 +32,7 @@ const TEMPLATE_CONTENTS: Record<string, any> = {
         elements: [
           { id: 'e1', type: 'heading', content: 'Sua Primeira Aula de Pilates é Por Nossa Conta!', style: { fontSize: 42, color: '#1e293b', textAlign: 'center', fontWeight: 'bold' } },
           { id: 'e2', type: 'text', content: 'Experimente a transformação no seu corpo e mente com o método VOLL.', style: { fontSize: 18, color: '#64748b', textAlign: 'center' } },
-          { id: 'e3', type: 'button', content: 'Quero Minha Aula Grátis', style: { bgColor: '#0d9488', color: '#ffffff', borderRadius: 8, align: 'center' } }
+          { id: 'e3', type: 'button', content: 'Quero Minha Aula Grátis', style: { bgColor: '#0d9488', color: '#ffffff', borderRadius: 8, align: 'center', link: '#' } }
         ]
       }
     ]
@@ -43,7 +46,7 @@ const TEMPLATE_CONTENTS: Record<string, any> = {
         elements: [
           { id: 'e1', type: 'heading', content: 'Formação Profissional em Pilates', style: { fontSize: 48, color: '#ffffff', textAlign: 'center', fontWeight: '900' } },
           { id: 'e2', type: 'text', content: 'Torne-se um instrutor de elite com a maior escola de Pilates do mundo.', style: { fontSize: 20, color: '#94a3b8', textAlign: 'center' } },
-          { id: 'e3', type: 'button', content: 'Ver Próximas Turmas', style: { bgColor: '#0d9488', color: '#ffffff', borderRadius: 50, align: 'center' } }
+          { id: 'e3', type: 'button', content: 'Ver Próximas Turmas', style: { bgColor: '#0d9488', color: '#ffffff', borderRadius: 50, align: 'center', link: '#' } }
         ]
       }
     ]
@@ -84,7 +87,7 @@ const TEMPLATE_CONTENTS: Record<string, any> = {
         elements: [
           { id: 'e1', type: 'heading', content: 'MASTERCLASS AO VIVO', style: { fontSize: 24, color: '#0d9488', textAlign: 'center', fontWeight: 'bold' } },
           { id: 'e2', type: 'heading', content: 'Os 7 Segredos para um Studio de Sucesso', style: { fontSize: 42, color: '#ffffff', textAlign: 'center', fontWeight: 'bold' } },
-          { id: 'e3', type: 'button', content: 'Garantir meu Lugar', style: { bgColor: '#0d9488', color: '#ffffff', borderRadius: 8, align: 'center' } }
+          { id: 'e3', type: 'button', content: 'Garantir meu Lugar', style: { bgColor: '#0d9488', color: '#ffffff', borderRadius: 8, align: 'center', link: '#' } }
         ]
       }
     ]
@@ -244,6 +247,7 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
           <div className="flex-1">
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[
+                  { id: 'blank', title: 'Modelo em Branco', category: 'Todos', img: 'https://images.unsplash.com/photo-1518611012118-2960520ee86c?auto=format&fit=crop&q=80&w=800' },
                   { id: 'free-class', title: 'Primeira aula grátis', category: 'Geração de Leads', img: 'https://images.unsplash.com/photo-1518611012118-2960520ee86c?auto=format&fit=crop&q=80&w=800' },
                   { id: 'course-presential', title: 'Formação Profissional', category: 'Página de Vendas', img: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&q=80&w=800' },
                   { id: 'discount-cupom', title: 'Cupom de Desconto', category: 'Geração de Leads', img: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&q=80&w=800' },
@@ -300,7 +304,7 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
                     <div>
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Link Final</label>
                       <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden focus-within:bg-white focus-within:border-teal-500 transition-all">
-                        <span className="pl-4 py-3 text-xs text-slate-400 font-medium select-none">{lpDomain}/</span>
+                        <span className="pl-4 py-3 text-xs text-slate-400 font-medium select-none">{lpDomain}/?lp=</span>
                         <input 
                           type="text"
                           className="flex-1 pr-4 py-3 bg-transparent border-none text-sm font-bold outline-none text-teal-700"
@@ -398,8 +402,8 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
                <div className="p-5">
                   <h3 className="font-bold text-slate-800 mb-1 truncate">{lp.name}</h3>
                   <p className="text-xs text-slate-400 mb-4 truncate font-mono">
-                    <a href={`${lp.domain}/${lp.slug}`} target="_blank" rel="noopener noreferrer" className="hover:text-teal-600 hover:underline flex items-center gap-1">
-                       <ExternalLink size={10} /> {lp.domain}/${lp.slug}
+                    <a href={`${lp.domain}/?lp=${lp.slug}`} target="_blank" rel="noopener noreferrer" className="hover:text-teal-600 hover:underline flex items-center gap-1">
+                       <ExternalLink size={10} /> {lp.domain}/?lp={lp.slug}
                     </a>
                   </p>
                   

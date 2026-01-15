@@ -35,6 +35,7 @@ import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
 import { SupportManager } from './components/SupportManager';
 import { LandingPagesManager } from './components/LandingPagesManager';
+import { LandingPagePublic } from './components/LandingPagePublic';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -56,6 +57,7 @@ function App() {
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
   const [publicContract, setPublicContract] = useState<Contract | null>(null);
   const [publicCertificateHash, setPublicCertificateHash] = useState<string | null>(null);
+  const [publicLpSlug, setPublicLpSlug] = useState<string | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
 
@@ -116,8 +118,9 @@ function App() {
         const publicFormId = params.get('publicFormId');
         const contractId = params.get('contractId');
         const certificateHash = params.get('certificateHash');
+        const lpSlug = params.get('lp');
 
-        if (publicFormId || contractId || certificateHash) {
+        if (publicFormId || contractId || certificateHash || lpSlug) {
             setIsPublicLoading(true);
             setPublicError(null);
             try {
@@ -131,6 +134,8 @@ function App() {
                     else setPublicError("O contrato solicitado não foi localizado.");
                 } else if (certificateHash) {
                     setPublicCertificateHash(certificateHash);
+                } else if (lpSlug) {
+                    setPublicLpSlug(lpSlug);
                 }
             } catch (e) {
                 setPublicError("Ocorreu um erro ao tentar carregar o recurso. Verifique sua conexão.");
@@ -445,6 +450,7 @@ function App() {
       </div>
   );
 
+  if (publicLpSlug) return <LandingPagePublic slug={publicLpSlug} />;
   if (publicCertificateHash) return <CertificateViewer hash={publicCertificateHash} />;
   if (publicContract) return <ContractSigning contract={publicContract} />;
   if (publicForm) return <div className="min-h-screen bg-slate-50"><FormViewer form={publicForm} isPublic={true} /></div>;

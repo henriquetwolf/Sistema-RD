@@ -41,9 +41,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     setIsLoading(true);
     try {
       const data = await appBackend.getLandingPages();
-      setPages(data);
+      setPages(data || []);
     } catch (e) {
       console.error(e);
+      setPages([]);
     } finally {
       setIsLoading(false);
     }
@@ -66,7 +67,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       Detalhes adicionais: ${aiPrompt.offerDetails}
       
       Use gatilhos mentais de escassez, autoridade e prova social.
-      Traduza tudo para um tom profissional e inspirador.`;
+      Traduza tudo para um tom profissional e inspirador.
+      Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -123,11 +125,13 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         }
       });
 
-      const generatedContent = JSON.parse(response.text);
+      const text = response.text || "{}";
+      const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      const generatedContent = JSON.parse(cleanJson);
       
       const newPage: LandingPage = {
         id: crypto.randomUUID(),
-        title: generatedContent.title,
+        title: generatedContent.title || aiPrompt.productName,
         productName: aiPrompt.productName,
         content: generatedContent,
         createdAt: new Date().toISOString(),
@@ -138,6 +142,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       setEditingPage(newPage);
     } catch (e: any) {
+      console.error(e);
       alert("Erro ao gerar página com IA: " + e.message);
     } finally {
       setIsGenerating(false);
@@ -175,6 +180,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  const filteredPages = pages.filter(p => 
+    (p.title || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -226,15 +235,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
             <p className="text-sm">Use o botão acima para gerar sua primeira página com IA.</p>
           </div>
         ) : (
-          pages.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase())).map(page => (
+          filteredPages.map(page => (
             <div key={page.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
               <div className="h-32 bg-gradient-to-br from-orange-500 to-indigo-600 p-6 flex items-end relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10"><Globe size={80}/></div>
-                <h3 className="text-white font-black text-lg line-clamp-1">{page.title}</h3>
+                <h3 className="text-white font-black text-lg line-clamp-1">{page.title || 'Sem Título'}</h3>
               </div>
               <div className="p-6 flex-1 flex flex-col">
-                <p className="text-xs text-slate-500 font-medium mb-1">Produto: <span className="font-bold text-slate-700">{page.productName}</span></p>
-                <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-6">Criada em: {new Date(page.createdAt).toLocaleDateString()}</p>
+                <p className="text-xs text-slate-500 font-medium mb-1">Produto: <span className="font-bold text-slate-700">{page.productName || '--'}</span></p>
+                <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-6">Criada em: {page.createdAt ? new Date(page.createdAt).toLocaleDateString() : '--'}</p>
                 
                 <div className="flex gap-2 mt-auto">
                   <button 
@@ -275,6 +284,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-orange-600 text-white rounded-2xl shadow-xl shadow-orange-600/20">
+                  {/* Fixed: removed rogue <index.tsx /> tag */}
                   <Sparkles size={24} />
                 </div>
                 <div>
@@ -315,7 +325,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Preço / Oferta</label>
+                      <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço / Oferta</label>
                       <input 
                         className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" 
                         value={aiPrompt.price} 
@@ -324,7 +334,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Benefícios Principais (Gatilhos)</label>
+                      <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Benefícios Principais (Gatilhos)</label>
                       <textarea 
                         className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-32 resize-none outline-none transition-all" 
                         value={aiPrompt.mainBenefits} 
@@ -356,21 +366,21 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                     <div className="space-y-6">
                         <div>
                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Título da Página</label>
-                          <input className="w-full px-4 py-3 border border-slate-200 rounded-xl font-bold" value={editingPage.title} onChange={e => setEditingPage({...editingPage, title: e.target.value})} />
+                          <input className="w-full px-4 py-3 border border-slate-200 rounded-xl font-bold" value={editingPage.title || ''} onChange={e => setEditingPage({...editingPage, title: e.target.value})} />
                         </div>
                         
                         <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
                           <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><Layout size={16}/> Hero Section (Destaque)</h5>
-                          <input className="w-full px-4 py-2 border rounded-lg text-sm font-bold" value={editingPage.content?.hero.headline} onChange={e => setEditingPage({...editingPage, content: {...editingPage.content!, hero: {...editingPage.content!.hero, headline: e.target.value}}})} placeholder="Headline" />
-                          <textarea className="w-full px-4 py-2 border rounded-lg text-xs h-20 resize-none" value={editingPage.content?.hero.subheadline} onChange={e => setEditingPage({...editingPage, content: {...editingPage.content!, hero: {...editingPage.content!.hero, subheadline: e.target.value}}})} placeholder="Subheadline" />
-                          <input className="w-full px-4 py-2 border rounded-lg text-xs font-black uppercase" value={editingPage.content?.hero.ctaText} onChange={e => setEditingPage({...editingPage, content: {...editingPage.content!, hero: {...editingPage.content!.hero, ctaText: e.target.value}}})} placeholder="Texto do Botão" />
+                          <input className="w-full px-4 py-2 border rounded-lg text-sm font-bold" value={editingPage.content?.hero?.headline || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), hero: {...(editingPage.content?.hero as any), headline: e.target.value}}})} placeholder="Headline" />
+                          <textarea className="w-full px-4 py-2 border rounded-lg text-xs h-20 resize-none" value={editingPage.content?.hero?.subheadline || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), hero: {...(editingPage.content?.hero as any), subheadline: e.target.value}}})} placeholder="Subheadline" />
+                          <input className="w-full px-4 py-2 border rounded-lg text-xs font-black uppercase" value={editingPage.content?.hero?.ctaText || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), hero: {...(editingPage.content?.hero as any), ctaText: e.target.value}}})} placeholder="Texto do Botão" />
                         </div>
 
                         <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
                           <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><CreditCard size={16}/> Preço e Oferta</h5>
                           <div className="grid grid-cols-2 gap-4">
-                            <input className="w-full px-4 py-2 border rounded-lg text-sm font-bold" value={editingPage.content?.pricing.price} onChange={e => setEditingPage({...editingPage, content: {...editingPage.content!, pricing: {...editingPage.content!.pricing, price: e.target.value}}})} placeholder="Preço" />
-                            <input className="w-full px-4 py-2 border rounded-lg text-sm" value={editingPage.content?.pricing.installments} onChange={e => setEditingPage({...editingPage, content: {...editingPage.content!, pricing: {...editingPage.content!.pricing, installments: e.target.value}}})} placeholder="Parcelamento" />
+                            <input className="w-full px-4 py-2 border rounded-lg text-sm font-bold" value={editingPage.content?.pricing?.price || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), pricing: {...(editingPage.content?.pricing as any), price: e.target.value}}})} placeholder="Preço" />
+                            <input className="w-full px-4 py-2 border rounded-lg text-sm" value={editingPage.content?.pricing?.installments || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), pricing: {...(editingPage.content?.pricing as any), installments: e.target.value}}})} placeholder="Parcelamento" />
                           </div>
                         </div>
                     </div>
@@ -379,20 +389,20 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                         <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
                            <div className="flex justify-between items-center">
                               <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><ListChecks size={16}/> Benefícios</h5>
-                              <button onClick={() => setEditingPage({...editingPage, content: {...editingPage.content!, features: [...editingPage.content!.features, { title: 'Novo Benefício', description: 'Descrição aqui' }]}})} className="text-[10px] font-black uppercase text-indigo-600">+ Add</button>
+                              <button onClick={() => setEditingPage({...editingPage, content: {...(editingPage.content as any), features: [...(editingPage.content?.features || []), { title: 'Novo Benefício', description: 'Descrição aqui' }]}})} className="text-[10px] font-black uppercase text-indigo-600">+ Add</button>
                            </div>
-                           {editingPage.content?.features.map((f, i) => (
+                           {(editingPage.content?.features || []).map((f, i) => (
                              <div key={i} className="bg-white p-3 rounded-xl border border-slate-200 relative">
-                                <button onClick={() => setEditingPage({...editingPage, content: {...editingPage.content!, features: editingPage.content!.features.filter((_, idx) => idx !== i)}})} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={12}/></button>
-                                <input className="w-full mb-1 text-xs font-bold outline-none border-none p-0" value={f.title} onChange={e => {
-                                  const newFeat = [...editingPage.content!.features];
+                                <button onClick={() => setEditingPage({...editingPage, content: {...(editingPage.content as any), features: (editingPage.content?.features || []).filter((_, idx) => idx !== i)}})} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={12}/></button>
+                                <input className="w-full mb-1 text-xs font-bold outline-none border-none p-0" value={f.title || ''} onChange={e => {
+                                  const newFeat = [...(editingPage.content?.features || [])];
                                   newFeat[i].title = e.target.value;
-                                  setEditingPage({...editingPage, content: {...editingPage.content!, features: newFeat}});
+                                  setEditingPage({...editingPage, content: {...(editingPage.content as any), features: newFeat}});
                                 }} />
-                                <textarea className="w-full text-[10px] text-slate-500 outline-none border-none p-0 resize-none h-12" value={f.description} onChange={e => {
-                                  const newFeat = [...editingPage.content!.features];
+                                <textarea className="w-full text-[10px] text-slate-500 outline-none border-none p-0 resize-none h-12" value={f.description || ''} onChange={e => {
+                                  const newFeat = [...(editingPage.content?.features || [])];
                                   newFeat[i].description = e.target.value;
-                                  setEditingPage({...editingPage, content: {...editingPage.content!, features: newFeat}});
+                                  setEditingPage({...editingPage, content: {...(editingPage.content as any), features: newFeat}});
                                 }} />
                              </div>
                            ))}
@@ -401,20 +411,20 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                         <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
                            <div className="flex justify-between items-center">
                               <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><HelpCircle size={16}/> FAQ</h5>
-                              <button onClick={() => setEditingPage({...editingPage, content: {...editingPage.content!, faq: [...editingPage.content!.faq, { question: 'Pergunta?', answer: 'Resposta aqui' }]}})} className="text-[10px] font-black uppercase text-indigo-600">+ Add</button>
+                              <button onClick={() => setEditingPage({...editingPage, content: {...(editingPage.content as any), faq: [...(editingPage.content?.faq || []), { question: 'Pergunta?', answer: 'Resposta aqui' }]}})} className="text-[10px] font-black uppercase text-indigo-600">+ Add</button>
                            </div>
-                           {editingPage.content?.faq.map((item, i) => (
+                           {(editingPage.content?.faq || []).map((item, i) => (
                              <div key={i} className="bg-white p-3 rounded-xl border border-slate-200 relative">
-                                <button onClick={() => setEditingPage({...editingPage, content: {...editingPage.content!, faq: editingPage.content!.faq.filter((_, idx) => idx !== i)}})} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={12}/></button>
-                                <input className="w-full mb-1 text-xs font-bold outline-none border-none p-0" value={item.question} onChange={e => {
-                                  const newFaq = [...editingPage.content!.faq];
+                                <button onClick={() => setEditingPage({...editingPage, content: {...(editingPage.content as any), faq: (editingPage.content?.faq || []).filter((_, idx) => idx !== i)}})} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={12}/></button>
+                                <input className="w-full mb-1 text-xs font-bold outline-none border-none p-0" value={item.question || ''} onChange={e => {
+                                  const newFaq = [...(editingPage.content?.faq || [])];
                                   newFaq[i].question = e.target.value;
-                                  setEditingPage({...editingPage, content: {...editingPage.content!, faq: newFaq}});
+                                  setEditingPage({...editingPage, content: {...(editingPage.content as any), faq: newFaq}});
                                 }} />
-                                <textarea className="w-full text-[10px] text-slate-500 outline-none border-none p-0 resize-none h-12" value={item.answer} onChange={e => {
-                                  const newFaq = [...editingPage.content!.faq];
+                                <textarea className="w-full text-[10px] text-slate-500 outline-none border-none p-0 resize-none h-12" value={item.answer || ''} onChange={e => {
+                                  const newFaq = [...(editingPage.content?.faq || [])];
                                   newFaq[i].answer = e.target.value;
-                                  setEditingPage({...editingPage, content: {...editingPage.content!, faq: newFaq}});
+                                  setEditingPage({...editingPage, content: {...(editingPage.content as any), faq: newFaq}});
                                 }} />
                              </div>
                            ))}
@@ -437,9 +447,3 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     </div>
   );
 };
-
-const XCircleIcon = () => (
-    <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
-        <X size={24} />
-    </div>
-);

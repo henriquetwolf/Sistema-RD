@@ -485,7 +485,8 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
+    // Fix: corrected mapping of interval_minutes to intervalMinutes to match interface
+    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
@@ -614,6 +615,7 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
+    // Fix: corrected property mapping for PartnerStudio to use camelCase and match interface
     return (data || []).map((item: any) => ({ 
       id: item.id, 
       status: item.status, 
@@ -623,7 +625,7 @@ export const appBackend = {
       email: item.email, 
       password: item.password, 
       secondContactName: item.second_contact_name, 
-      second_contact_phone: item.second_contact_phone, 
+      secondContactPhone: item.second_contact_phone, 
       fantasyName: item.fantasy_name, 
       legalName: item.legal_name, 
       cnpj: item.cnpj, 
@@ -643,17 +645,17 @@ export const appBackend = {
       account: item.account, 
       beneficiary: item.beneficiary, 
       pixKey: item.pix_key, 
-      has_reformer: !!item.has_reformer, 
-      qty_reformer: item.qty_reformer, 
-      has_ladder_barrel: !!item.has_ladder_barrel, 
-      qty_ladder_barrel: item.qty_ladder_barrel, 
-      has_chair: !!item.has_chair, 
-      qty_chair: item.qty_chair, 
-      has_cadillac: !!item.has_cadillac, 
-      qty_cadillac: item.qty_cadillac, 
-      has_chairs_for_course: !!item.has_chairs_for_course, 
-      has_tv: !!item.has_tv, 
-      max_kits_capacity: item.max_kits_capacity, 
+      hasReformer: !!item.has_reformer, 
+      qtyReformer: item.qty_reformer, 
+      hasLadderBarrel: !!item.has_ladder_barrel, 
+      qtyLadderBarrel: item.qty_ladder_barrel, 
+      hasChair: !!item.has_chair, 
+      qtyChair: item.qty_chair, 
+      hasCadillac: !!item.has_cadillac, 
+      qtyCadillac: item.qty_cadillac, 
+      hasChairsForCourse: !!item.has_chairs_for_course, 
+      hasTv: !!item.has_tv, 
+      maxKitsCapacity: item.max_kits_capacity, 
       attachments: item.attachments 
     }));
   },
@@ -966,7 +968,7 @@ export const appBackend = {
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registration_date: item.registration_date, studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
   },
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {

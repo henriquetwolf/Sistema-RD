@@ -34,8 +34,6 @@ import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
 import { SupportManager } from './components/SupportManager';
-import { LandingPagesManager } from './components/LandingPagesManager';
-import { LandingPagePublic } from './components/LandingPagePublic';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -47,17 +45,16 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap, Send, Monitor
+  LifeBuoy, Zap, Send
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'landing_pages' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno';
 
 function App() {
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
   const [publicContract, setPublicContract] = useState<Contract | null>(null);
   const [publicCertificateHash, setPublicCertificateHash] = useState<string | null>(null);
-  const [publicLpSlug, setPublicLpSlug] = useState<string | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
 
@@ -118,9 +115,8 @@ function App() {
         const publicFormId = params.get('publicFormId');
         const contractId = params.get('contractId');
         const certificateHash = params.get('certificateHash');
-        const lpSlug = params.get('lp');
 
-        if (publicFormId || contractId || certificateHash || lpSlug) {
+        if (publicFormId || contractId || certificateHash) {
             setIsPublicLoading(true);
             setPublicError(null);
             try {
@@ -134,8 +130,6 @@ function App() {
                     else setPublicError("O contrato solicitado não foi localizado.");
                 } else if (certificateHash) {
                     setPublicCertificateHash(certificateHash);
-                } else if (lpSlug) {
-                    setPublicLpSlug(lpSlug);
                 }
             } catch (e) {
                 setPublicError("Ocorreu um erro ao tentar carregar o recurso. Verifique sua conexão.");
@@ -426,6 +420,9 @@ function App() {
 
   const handleDeepNavigation = (tab: string, recordId: string) => {
       setDashboardTab(tab as DashboardTab);
+      // Aqui simulamos uma busca pelo registro na aba destino
+      // Em uma aplicação real, poderíamos disparar um evento ou passar props para o componente filho
+      // Por enquanto, apenas avisamos que o sistema mudou de contexto
       alert(`Navegando para ${tab}. Registro ID: ${recordId}`);
   };
 
@@ -450,7 +447,6 @@ function App() {
       </div>
   );
 
-  if (publicLpSlug) return <LandingPagePublic slug={publicLpSlug} />;
   if (publicCertificateHash) return <CertificateViewer hash={publicCertificateHash} />;
   if (publicContract) return <ContractSigning contract={publicContract} />;
   if (publicForm) return <div className="min-h-screen bg-slate-50"><FormViewer form={publicForm} isPublic={true} /></div>;
@@ -533,7 +529,6 @@ function App() {
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
                             <nav className="space-y-1">
                                 {canAccess('overview') && <button onClick={() => setDashboardTab('overview')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'overview' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LayoutDashboard size={18} /> Visão Geral</button>}
-                                {canAccess('landing_pages') && <button onClick={() => setDashboardTab('landing_pages')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'landing_pages' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Monitor size={18} /> Landing Pages</button>}
                                 {canAccess('hr') && <button onClick={() => setDashboardTab('hr')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'hr' ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Heart size={18} /> Recursos Humanos</button>}
                                 {canAccess('crm') && <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Kanban size={18} /> CRM Comercial</button>}
                                 {canAccess('billing') && <button onClick={() => setDashboardTab('billing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'billing' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> Cobrança</button>}
@@ -647,7 +642,6 @@ function App() {
                                 )}
                             </div>
                         )}
-                        {dashboardTab === 'landing_pages' && <LandingPagesManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'hr' && <HrDashboard collaborators={allCollaborators} onEditCollaborator={(c) => { setDashboardTab('hr'); }} />}
                         {dashboardTab === 'inventory' && <InventoryManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'billing' && <BillingManager />}

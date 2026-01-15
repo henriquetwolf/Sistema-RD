@@ -8,7 +8,7 @@ import {
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
-  WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage
+  WAAutomationRule, WAAutomationLog, PipelineStage
 } from '../types';
 
 export type { CompanySetting, Pipeline, WebhookTrigger, PipelineStage };
@@ -104,50 +104,6 @@ export const appBackend = {
       }));
   },
 
-  getLandingPages: async (): Promise<LandingPage[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_landing_pages').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({
-      id: item.id,
-      name: item.name,
-      domain: item.domain,
-      slug: item.slug || '',
-      status: item.status,
-      createdAt: item.created_at,
-      updatedAt: item.updated_at,
-      content: item.content,
-      templateId: item.template_id,
-      category: item.category,
-      visits: item.visits || 0,
-      conversions: item.conversions || 0
-    }));
-  },
-
-  saveLandingPage: async (lp: LandingPage): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_landing_pages').upsert({
-      id: lp.id || crypto.randomUUID(),
-      name: lp.name,
-      domain: lp.domain,
-      slug: lp.slug,
-      status: lp.status,
-      content: lp.content,
-      template_id: lp.templateId,
-      category: lp.category,
-      visits: lp.visits || 0,
-      conversions: lp.conversions || 0,
-      created_at: lp.createdAt || new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    });
-    if (error) throw error;
-  },
-
-  deleteLandingPage: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { error } = await supabase.from('crm_landing_pages').delete().eq('id', id);
-    if (error) throw error;
-  },
-
   getFormById: async (id: string): Promise<FormModel | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('crm_forms').select('*, crm_form_submissions(count)').eq('id', id).maybeSingle();
@@ -185,7 +141,6 @@ export const appBackend = {
       teamId: item.team_id, 
       targetPipeline: item.target_pipeline, 
       targetStage: item.target_stage, 
-      // Fixed: mapping correctly from item.questions
       questions: item.questions, 
       style: item.style, 
       createdAt: item.created_at, 
@@ -230,12 +185,12 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
-      // Fix: distribution_mode uses distributionMode from FormModel
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
-      // Fix: team_id uses teamId from FormModel
       team_id: form.teamId || null, 
+      /* Fix: target_pipeline should use the targetPipeline camelCase property from FormModel */
       target_pipeline: form.targetPipeline || null, 
+      /* Fix: target_stage should use the targetStage camelCase property from FormModel */
       target_stage: form.targetStage || null, 
       questions: form.questions || [], 
       style: form.style || {}, 
@@ -254,10 +209,8 @@ export const appBackend = {
       description: survey.description || null, 
       campaign: survey.campaign || null, 
       is_lead_capture: !!survey.isLeadCapture, 
-      // Fix: distribution_mode uses distributionMode from SurveyModel
       distribution_mode: survey.distributionMode || 'fixed', 
       fixed_owner_id: survey.fixedOwnerId || null, 
-      // Fix: team_id uses teamId from SurveyModel
       team_id: survey.teamId || null, 
       target_pipeline: survey.targetPipeline || null, 
       target_stage: survey.targetStage || null, 
@@ -402,15 +355,7 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: Map camelCase property names from CompanySetting interface to snake_case DB columns
-    await supabase.from('crm_companies').upsert({ 
-        id: company.id || crypto.randomUUID(), 
-        legal_name: company.legalName, 
-        cnpj: company.cnpj, 
-        webhook_url: company.webhookUrl, 
-        product_types: company.productTypes, 
-        product_ids: company.productIds 
-    });
+    await supabase.from('crm_companies').upsert({ id: company.id || crypto.randomUUID(), legal_name: company.legalName, cnpj: company.cnpj, webhook_url: company.webhookUrl, product_types: company.productTypes, product_ids: company.productIds });
   },
 
   deleteCompany: async (id: string): Promise<void> => {
@@ -424,6 +369,7 @@ export const appBackend = {
     return (data || []).map((item: any) => ({ id: item.id, pipelineName: item.pipeline_name, stageId: item.stage_id, payloadJson: item.payload_json, createdAt: item.created_at }));
   },
 
+  // Fix: Property 'payload_json' does not exist on type 'Partial<WebhookTrigger>'. Did you mean 'payloadJson'?
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || crypto.randomUUID(), pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson, created_at: trigger.createdAt || new Date().toISOString() });
@@ -568,17 +514,7 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    // Fix: Use intervalMinutes camelCase property name from SavedPreset type
-    const payload = { 
-        id: preset.id || crypto.randomUUID(), 
-        name: preset.name, 
-        url: preset.url, 
-        key: preset.key, 
-        table_name: preset.tableName, 
-        primary_key: preset.primaryKey, 
-        interval_minutes: preset.intervalMinutes, 
-        created_by_name: preset.createdByName 
-    };
+    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
@@ -681,6 +617,7 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
+    // Added comment: mapping snake_case from DB to camelCase in interface PartnerStudio
     return (data || []).map((item: any) => ({ 
       id: item.id, 
       status: item.status, 
@@ -694,7 +631,6 @@ export const appBackend = {
       fantasyName: item.fantasy_name, 
       legalName: item.legal_name, 
       cnpj: item.cnpj, 
-      // Fixed: property mapping changed from studio_phone to studioPhone
       studioPhone: item.studio_phone, 
       address: item.address, 
       city: item.city, 
@@ -714,6 +650,7 @@ export const appBackend = {
       hasReformer: !!item.has_reformer, 
       qtyReformer: item.qty_reformer, 
       hasLadderBarrel: !!item.has_ladder_barrel, 
+      /* Fix: Changed mapping from qty_ladder_barrel to qtyLadderBarrel to match required property in PartnerStudio interface */
       qtyLadderBarrel: item.qty_ladder_barrel, 
       hasChair: !!item.has_chair, 
       qtyChair: item.qty_chair, 
@@ -801,7 +738,7 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, backBackground_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
+    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, backBackgroundData: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -853,13 +790,13 @@ export const appBackend = {
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
+    // Added comment: Fix mapping from snake_case DB fields to camelCase interface fields
     return (data || []).map((item: any) => ({ 
       id: item.id, 
       title: item.title, 
       description: item.description, 
       price: item.price, 
-      // Fix: Map item.payment_link from DB to required camelCase paymentLink in OnlineCourse interface
-      paymentLink: item.payment_link, 
+      paymentLink: item.payment_link,
       imageUrl: item.image_url,
       certificateTemplateId: item.certificate_template_id,
       createdAt: item.created_at 
@@ -995,6 +932,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
     if (error) throw error;
+    // Added comment: Correctly map snake_case DB fields to camelCase interface properties for WAAutomationRule
     return (data || []).map((d: any) => ({ 
         id: d.id, 
         name: d.name, 
@@ -1055,6 +993,7 @@ export const appBackend = {
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
     if (!isConfigured) return;
+    /* Fix: Corrected property mappings in saveBillingNegotiation to use camelCase from Partial<BillingNegotiation> */
     await supabase.from('crm_billing_negotiations').upsert({ 
         id: neg.id || crypto.randomUUID(), 
         open_installments: neg.openInstallments, 

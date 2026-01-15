@@ -73,7 +73,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
   const PERMISSION_MODULES = [
       { id: 'overview', label: 'Visão Geral' },
-      { id: 'landing_pages', label: 'Landing Pages' },
       { id: 'hr', label: 'Recursos Humanos' },
       { id: 'crm', label: 'CRM Comercial' },
       { id: 'billing', label: 'Cobrança' },
@@ -205,36 +204,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V75 (ADDS LANDING PAGES SUPPORT)
-
--- Tabela de Landing Pages
-CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    name text NOT NULL,
-    domain text NOT NULL,
-    slug text NOT NULL,
-    status text DEFAULT 'draft',
-    content jsonb DEFAULT '{"sections": []}'::jsonb,
-    template_id text,
-    category text,
-    visits integer DEFAULT 0,
-    conversions integer DEFAULT 0,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
-);
-
--- Permissões de RLS para Landing Pages
-ALTER TABLE IF EXISTS public.crm_landing_pages ENABLE ROW LEVEL SECURITY;
-DO $$ 
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies 
-        WHERE tablename = 'crm_landing_pages' AND policyname = 'Permitir acesso total'
-    ) THEN
-        CREATE POLICY "Permitir acesso total" ON public.crm_landing_pages FOR ALL USING (true) WITH CHECK (true);
-    END IF;
-END $$;
-
+-- SCRIPT DE FUNDAÇÃO CRM V70 (FIXES SURVEY SAVE ERRORS)
 CREATE TABLE IF NOT EXISTS public.crm_teacher_levels (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text NOT NULL,
@@ -581,8 +551,8 @@ NOTIFY pgrst, 'reload schema';
 
         {activeTab === 'sql_script' && (
             <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 animate-in zoom-in-95 duration-200">
-                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V75</h3></div>
-                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados para os níveis de instrutores, certificados externos, tabelas de automação, bloqueio de eventos, Landing Pages e as novas funcionalidades das Pesquisas. Copie e execute no **SQL Editor** do Supabase.</p>
+                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V70</h3></div>
+                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados para os níveis de instrutores, certificados externos, tabelas de automação, bloqueio de eventos e as novas funcionalidades das Pesquisas. Copie e execute no **SQL Editor** do Supabase.</p>
                 <div className="relative">
                     <pre className="bg-black text-emerald-400 p-6 rounded-2xl text-[10px] font-mono overflow-auto max-h-[400px] shadow-inner custom-scrollbar-dark border border-slate-800">
                         {generateRepairSQL()}

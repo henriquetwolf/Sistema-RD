@@ -1,5 +1,4 @@
 
-
 export type QuestionType = 'text' | 'paragraph' | 'select' | 'checkbox' | 'email' | 'phone' | 'number' | 'date';
 
 export interface FormQuestion {
@@ -217,7 +216,6 @@ export interface ExternalCertificate {
   created_at: string;
 }
 
-// Added to resolve error in components/ClassStudentsViewer.tsx
 export interface StudentCertificateStatus {
   hash: string;
   issuedAt: string;
@@ -454,7 +452,6 @@ export interface CompanySetting {
   productIds: string[];
 }
 
-// Added to resolve error on line 459
 export type PipelineStage = { id: string; title: string; color?: string; };
 
 export interface Pipeline {
@@ -595,7 +592,7 @@ export interface WAAutomationRule {
   pipelineName: string;
   stageId: string;
   productType?: 'Digital' | 'Presencial' | 'Evento' | '';
-  productId: string; // ID ou Nome do produto/curso
+  productId: string;
   messageTemplate: string;
   isActive: boolean;
   createdAt: string;
@@ -608,4 +605,18 @@ export interface WAAutomationLog {
   phone: string;
   message: string;
   createdAt: string;
+}
+
+export interface LandingPage {
+  id: string;
+  name: string;
+  domain: string;
+  status: 'draft' | 'published';
+  createdAt: string;
+  updatedAt: string;
+  content: any;
+  templateId?: string;
+  category?: string;
+  visits: number;
+  conversions: number;
 }

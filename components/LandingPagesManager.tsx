@@ -30,7 +30,7 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
   // Create New LP State
   const [lpName, setLpName] = useState('');
   const [lpSlug, setLpSlug] = useState('');
-  const [lpDomain, setLpDomain] = useState('lp.vollpilates.com.br');
+  const [lpDomain, setLpDomain] = useState(window.location.origin);
   const [activeLp, setActiveLp] = useState<LandingPage | null>(null);
 
   useEffect(() => {
@@ -74,7 +74,7 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
   const handleSelectTemplate = (templateId: string, category: string) => {
     setLpName('');
     setLpSlug('');
-    setLpDomain('lp.vollpilates.com.br');
+    setLpDomain(window.location.origin);
     setShowWizard(true);
     // Store template info to use when wizard confirms
     (window as any)._pendingTemplate = { templateId, category };
@@ -82,7 +82,7 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
 
   const confirmWizard = async () => {
     if (!lpName || !lpDomain || !lpSlug) {
-      alert("Preencha o nome, o domínio e o link de direcionamento.");
+      alert("Preencha o nome e o link de direcionamento.");
       return;
     }
     
@@ -217,19 +217,6 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
                  
                  <div className="space-y-4">
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Domínio da Landing Page</label>
-                      <select 
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none"
-                        value={lpDomain}
-                        onChange={e => setLpDomain(e.target.value)}
-                      >
-                        <option value="vollpilates.com.br">vollpilates.com.br</option>
-                        <option value="lp.vollpilates.com.br">lp.vollpilates.com.br</option>
-                        <option value="oferta.vollpilates.com.br">oferta.vollpilates.com.br</option>
-                      </select>
-                    </div>
-
-                    <div>
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Nome da Landing Page</label>
                       <input 
                         type="text"
@@ -352,7 +339,11 @@ export const LandingPagesManager: React.FC<LandingPagesManagerProps> = ({ onBack
                </div>
                <div className="p-5">
                   <h3 className="font-bold text-slate-800 mb-1 group-hover:text-teal-700 transition-colors">{lp.name}</h3>
-                  <p className="text-xs text-slate-400 mb-4 truncate font-mono">{lp.domain}/{lp.slug}</p>
+                  <p className="text-xs text-slate-400 mb-4 truncate font-mono">
+                    <a href={`${lp.domain}/${lp.slug}`} target="_blank" rel="noopener noreferrer" className="hover:text-teal-600 hover:underline flex items-center gap-1">
+                       <ExternalLink size={10} /> {lp.domain}/{lp.slug}
+                    </a>
+                  </p>
                   
                   <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
                     <div>

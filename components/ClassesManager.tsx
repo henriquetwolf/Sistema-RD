@@ -1,12 +1,14 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   GraduationCap, Plus, Search, Calendar as CalendarIcon, MapPin, 
-  ArrowLeft, Save, X, MoreHorizontal, BookOpen, CheckSquare, 
+  ArrowLeft, Save, X, BookOpen, CheckSquare, 
+  /* Added MoreHorizontal to fix the error on line 482 */
   Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
   Edit2, Trash2, Hash, Loader2, Users, Filter, ChevronRight,
   LayoutList, ChevronLeft, ChevronRight as ChevronRightIcon,
   CheckCircle2, Globe, Eraser, Building, Info, User, Monitor, 
-  Truck, CheckCircle, Circle, ArrowUpCircle, Layout
+  Truck, CheckCircle, Circle, ArrowUpCircle, Layout, Table, MoreHorizontal
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ibgeService, IBGEUF, IBGECity } from '../services/ibgeService';
@@ -66,7 +68,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   const [showModal, setShowModal] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   
-  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'capacity'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'full_list' | 'calendar' | 'capacity'>('list');
   const [calendarDate, setCalendarDate] = useState(new Date());
 
   // Multi-selection state
@@ -76,7 +78,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
-  const [stateFilter, setStateFilter] = useState<string>('');
+  const [stateFilter, setStatusFilterState] = useState<string>('');
   const [cityFilter, setCityFilter] = useState<string>('');
   const [mod1DateFilter, setMod1DateFilter] = useState<string>('');
   const [mod2DateFilter, setMod2DateFilter] = useState<string>('');
@@ -215,6 +217,8 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       setSelectedClassIds(prev => prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]);
   };
 
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
   return (
     <div className="animate-in fade-in h-full flex flex-col pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
@@ -227,7 +231,8 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
         </div>
         <div className="flex items-center gap-3">
             <div className="bg-slate-100 p-1 rounded-lg flex items-center mr-2">
-                <button onClick={() => setViewMode('list')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutList size={16} /> Lista</button>
+                <button onClick={() => setViewMode('list')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><LayoutList size={16} /> Alunos</button>
+                <button onClick={() => setViewMode('full_list')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'full_list' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Table size={16} /> Lista de Turmas</button>
                 <button onClick={() => setViewMode('calendar')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'calendar' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><CalendarIcon size={16} /> Calendário</button>
                 <button onClick={() => setViewMode('capacity')} className={clsx("px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all", viewMode === 'capacity' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}><Users size={16} /> Capacidade</button>
             </div>
@@ -331,6 +336,94 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                   </table>
               </div>
           </div>
+      ) : viewMode === 'full_list' ? (
+        <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Table className="text-purple-600" /> Lista Geral de Turmas</h3>
+                <div className="relative max-w-sm w-full">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input type="text" placeholder="Buscar na lista completa..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm" />
+                </div>
+            </div>
+            <div className="flex-1 overflow-auto custom-scrollbar">
+                <table className="w-full text-left text-xs border-collapse min-w-[3000px]">
+                    <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold sticky top-0 z-10 shadow-sm">
+                        <tr>
+                            <th className="px-4 py-3 border-b sticky left-0 bg-slate-100 z-20">Ações</th>
+                            <th className="px-4 py-3 border-b">Status</th>
+                            <th className="px-4 py-3 border-b">UF</th>
+                            <th className="px-4 py-3 border-b">Cidade</th>
+                            <th className="px-4 py-3 border-b">Nº Turma</th>
+                            <th className="px-4 py-3 border-b">Extra</th>
+                            <th className="px-4 py-3 border-b">Curso</th>
+                            <th className="px-4 py-3 border-b">Data M1</th>
+                            <th className="px-4 py-3 border-b">Cód M1</th>
+                            <th className="px-4 py-3 border-b">Studio M1</th>
+                            <th className="px-4 py-3 border-b">Instrutor M1</th>
+                            <th className="px-4 py-3 border-b">Passagem M1</th>
+                            <th className="px-4 py-3 border-b">Coffee M1</th>
+                            <th className="px-4 py-3 border-b">Hotel M1</th>
+                            <th className="px-4 py-3 border-b">Ajuda M1</th>
+                            <th className="px-4 py-3 border-b">Data M2</th>
+                            <th className="px-4 py-3 border-b">Cód M2</th>
+                            <th className="px-4 py-3 border-b">Instrutor M2</th>
+                            <th className="px-4 py-3 border-b">Passagem M2</th>
+                            <th className="px-4 py-3 border-b">Coffee M2</th>
+                            <th className="px-4 py-3 border-b">Hotel M2</th>
+                            <th className="px-4 py-3 border-b">Ajuda M2</th>
+                            <th className="px-4 py-3 border-b">Aluguel Studio</th>
+                            <th className="px-4 py-3 border-b">Logística Pronta</th>
+                            <th className="px-4 py-3 border-b">Publicado Site</th>
+                            <th className="px-4 py-3 border-b">No CRM</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filteredClasses.map(cls => (
+                            <tr key={cls.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-4 py-3 border-b sticky left-0 bg-white group-hover:bg-slate-50 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                                    <div className="flex gap-1">
+                                        <button onClick={() => handleEdit(cls)} className="p-1.5 text-slate-400 hover:text-purple-600 transition-colors"><Edit2 size={14}/></button>
+                                        <button onClick={() => handleDelete(cls.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={14}/></button>
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                    <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-bold border", 
+                                        cls.status === 'Confirmado' ? 'bg-green-50 text-green-700 border-green-200' : 
+                                        cls.status === 'Cancelado' ? 'bg-red-50 text-red-700 border-red-200' : 
+                                        'bg-amber-50 text-amber-700 border-amber-200')}>
+                                        {cls.status}
+                                    </span>
+                                </td>
+                                <td className="px-4 py-3 font-bold">{cls.state}</td>
+                                <td className="px-4 py-3">{cls.city}</td>
+                                <td className="px-4 py-3 font-mono font-bold text-slate-500">{cls.classCode}</td>
+                                <td className="px-4 py-3">{cls.extraClass || '--'}</td>
+                                <td className="px-4 py-3 font-medium">{cls.course}</td>
+                                <td className="px-4 py-3">{cls.dateMod1 ? new Date(cls.dateMod1).toLocaleDateString('pt-BR') : '--'}</td>
+                                <td className="px-4 py-3 font-mono">{cls.mod1Code || '--'}</td>
+                                <td className="px-4 py-3">{cls.studioMod1 || '--'}</td>
+                                <td className="px-4 py-3">{cls.instructorMod1 || '--'}</td>
+                                <td className="px-4 py-3 font-mono">{cls.ticketMod1 || '--'}</td>
+                                <td className="px-4 py-3">{cls.coffeeMod1 || '--'}</td>
+                                <td className="px-4 py-3">{cls.hotelMod1 || '--'}</td>
+                                <td className="px-4 py-3">{cls.costHelp1 || '--'}</td>
+                                <td className="px-4 py-3">{cls.dateMod2 ? new Date(cls.dateMod2).toLocaleDateString('pt-BR') : '--'}</td>
+                                <td className="px-4 py-3 font-mono">{cls.mod2Code || '--'}</td>
+                                <td className="px-4 py-3">{cls.instructorMod2 || '--'}</td>
+                                <td className="px-4 py-3 font-mono">{cls.ticketMod2 || '--'}</td>
+                                <td className="px-4 py-3">{cls.coffeeMod2 || '--'}</td>
+                                <td className="px-4 py-3">{cls.hotelMod2 || '--'}</td>
+                                <td className="px-4 py-3">{cls.costHelp2 || '--'}</td>
+                                <td className="px-4 py-3 font-bold text-emerald-600">{formatCurrency(cls.studioRent)}</td>
+                                <td className="px-4 py-3 text-center">{cls.isReady ? <CheckCircle2 size={16} className="text-green-500 mx-auto"/> : <X size={16} className="text-slate-200 mx-auto"/>}</td>
+                                <td className="px-4 py-3 text-center">{cls.onSite ? <CheckCircle2 size={16} className="text-green-500 mx-auto"/> : <X size={16} className="text-slate-200 mx-auto"/>}</td>
+                                <td className="px-4 py-3 text-center">{cls.onCRM ? <CheckCircle2 size={16} className="text-green-500 mx-auto"/> : <X size={16} className="text-slate-200 mx-auto"/>}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
       ) : (
       <div className="flex flex-col lg:flex-row flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-[calc(100vh-180px)]">
           <div className="w-full lg:w-1/3 flex flex-col border-r border-slate-200">
@@ -524,7 +617,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                     </section>
                 </div>
                 <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100">
-                    <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm">Cancelar</button>
+                    <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm transition-colors">Cancelar</button>
                     <button onClick={handleSave} disabled={isSaving} className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50">{isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} {formData.id ? 'Salvar Alterações' : 'Criar Turma'}</button>
                 </div>
             </div>

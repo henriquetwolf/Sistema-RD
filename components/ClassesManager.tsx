@@ -201,7 +201,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
   const filteredClasses = useMemo(() => {
     return classes.filter(c => {
-      // Fixed line below: ensure c.course and c.city are handled as strings to avoid type issues
+      // ensure c.course and c.city are handled as strings to avoid type issues
       const matchesSearch = String(c.course || '').toLowerCase().includes(searchTerm.toLowerCase()) || String(c.city || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'Todos' || c.status === statusFilter;
       const matchesState = !stateFilter || c.state === stateFilter;
@@ -214,6 +214,14 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           if (!value) return true;
           const classValue = (c as any)[key];
           
+          // Check for "empty" filter keyword (vazio ou (vazio))
+          const filterStr = (value as string).toLowerCase();
+          const isEmptyFilter = filterStr === '(vazio)' || filterStr === 'vazio';
+
+          if (isEmptyFilter) {
+              return classValue === null || classValue === undefined || String(classValue).trim() === '';
+          }
+
           if (typeof classValue === 'boolean') {
               if (value === 'sim') return classValue === true;
               if (value === 'não') return classValue === false;
@@ -221,7 +229,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           }
           
           const strValue = String(classValue || '').toLowerCase();
-          // Fixed line below: cast value to string to fix 'unknown' type error for toLowerCase()
           const filterValue = (value as string).toLowerCase();
           
           return strValue.includes(filterValue);

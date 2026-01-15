@@ -50,9 +50,8 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
   - "global_settings": Configurações, Logo, Permissões, Banco de Dados.
 
   REGRAS:
-  1. Se o usuário perguntar "onde vejo meus colaboradores", diga para ir em "Recursos Humanos".
-  2. Responda de forma curta e amigável.
-  3. SEMPRE que identificar o destino, termine sua resposta com a tag [TAB:nome_da_aba] para que eu possa navegar o usuário automaticamente. Exemplo: "Você pode gerenciar os alunos na aba Alunos. [TAB:students]"`;
+  1. Responda de forma curta e amigável.
+  2. SEMPRE que identificar o destino, termine sua resposta com a tag [TAB:nome_da_aba].`;
 
   const handleSelectKey = async () => {
     if (window.aistudio && window.aistudio.openSelectKey) {
@@ -65,29 +64,25 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
     if (e) e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    // Verificação de API Key antes de prosseguir
-    if (window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
-      setNeedsKey(true);
-      return;
-    }
-
     const userText = input.trim();
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setIsLoading(true);
 
     try {
+      // Cria a instância no momento da chamada para garantir o uso da chave mais recente
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: userText, // Usando formato de string direta para maior compatibilidade
+        contents: [{ role: 'user', parts: [{ text: userText }] }],
         config: {
           systemInstruction: systemPrompt,
           temperature: 0.7,
         }
       });
 
-      const botText = response.text || "Desculpe, não consegui processar sua dúvida.";
+      const botText = response.text || "Desculpe, não consegui processar sua dúvida no momento.";
       
       const tabMatch = botText.match(/\[TAB:(.*?)\]/);
       const tabSuggestion = tabMatch ? tabMatch[1] : undefined;
@@ -96,16 +91,23 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
       setMessages(prev => [...prev, { role: 'bot', text: cleanText, tabSuggestion }]);
       setNeedsKey(false);
     } catch (error: any) {
-      console.error("Erro na API do Gemini:", error);
+      console.error("Erro completo da API Gemini:", error);
       
-      if (error.message?.includes("Requested entity was not found")) {
+      const errorStr = String(error?.message || "");
+      
+      // Tratativa recomendada para chaves inválidas ou falta de acesso ao modelo
+      if (errorStr.includes("Requested entity was not found") || errorStr.includes("API_KEY_INVALID") || errorStr.includes("403") || errorStr.includes("401")) {
         setNeedsKey(true);
+        setMessages(prev => [...prev, { 
+          role: 'bot', 
+          text: "Sua chave de API parece não ter permissão para acessar este modelo ou é inválida. Por favor, reconfigure-a abaixo." 
+        }]);
+      } else {
+        setMessages(prev => [...prev, { 
+          role: 'bot', 
+          text: "Houve uma falha na comunicação com meu cérebro digital. Verifique sua conexão e tente novamente." 
+        }]);
       }
-
-      setMessages(prev => [...prev, { 
-        role: 'bot', 
-        text: "Houve um problema ao processar sua solicitação. Certifique-se de que uma chave de API válida está configurada." 
-      }]);
     } finally {
       setIsLoading(false);
     }
@@ -124,7 +126,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
                 <h4 className="text-sm font-black uppercase tracking-widest">Guia Inteligente</h4>
                 <div className="flex items-center gap-1.5">
                   <div className={clsx("w-1.5 h-1.5 rounded-full", needsKey ? "bg-amber-500" : "bg-green-500 animate-pulse")}></div>
-                  <span className="text-[10px] font-bold opacity-60">{needsKey ? "Chave Pendente" : "IA Ativa"}</span>
+                  <span className="text-[10px] font-bold opacity-60">{needsKey ? "Ajuste Necessário" : "IA Ativa"}</span>
                 </div>
               </div>
             </div>
@@ -147,7 +149,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
                     onClick={() => onNavigate(msg.tabSuggestion!)}
                     className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-black uppercase hover:bg-indigo-200 transition-all border border-indigo-200"
                   >
-                    Ir para esta aba <ArrowRight size={12}/>
+                    Navegar para aba <ArrowRight size={12}/>
                   </button>
                 )}
               </div>
@@ -155,14 +157,14 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
             
             {needsKey && (
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl animate-in fade-in zoom-in-95">
-                <p className="text-xs text-amber-800 font-medium mb-3">Sua chave de API não foi detectada ou expirou. Por favor, selecione uma chave válida para continuar.</p>
+                <p className="text-xs text-amber-800 font-medium mb-3">Detectamos um problema com a autenticação da IA. É necessário selecionar uma chave de API válida (GCP Billing ativado).</p>
                 <button 
                   onClick={handleSelectKey}
                   className="w-full py-2 bg-amber-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-amber-700 transition-all"
                 >
-                  <Key size={14}/> Configurar API Key
+                  <Key size={14}/> Selecionar API Key
                 </button>
-                <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="block text-center text-[10px] text-amber-600 mt-2 hover:underline">Saiba mais sobre faturamento</a>
+                <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="block text-center text-[10px] text-amber-600 mt-2 hover:underline">Sobre o faturamento do Google</a>
               </div>
             )}
 
@@ -178,7 +180,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
           <form onSubmit={handleSend} className="p-4 bg-white border-t border-slate-100 flex gap-2">
             <input 
               type="text" 
-              placeholder={needsKey ? "Configure a chave acima..." : "Onde encontro..."} 
+              placeholder={needsKey ? "Selecione a chave acima..." : "Onde encontro..."} 
               disabled={needsKey}
               className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
               value={input}
@@ -199,7 +201,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
         onClick={() => setIsOpen(!isOpen)}
         className={clsx(
           "p-4 rounded-full shadow-2xl transition-all hover:scale-110 active:scale-95 flex items-center gap-3 group",
-          isOpen ? "bg-red-50 text-slate-800" : "bg-indigo-600 text-white"
+          isOpen ? "bg-white text-slate-800" : "bg-indigo-600 text-white"
         )}
       >
         {!isOpen && <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 font-bold text-sm whitespace-nowrap">Dúvida de navegação?</span>}

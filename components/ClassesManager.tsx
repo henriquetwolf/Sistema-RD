@@ -185,7 +185,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     if (!formData.course || !formData.city) { alert("Preencha ao menos o Curso e a Cidade."); return; }
     setIsSaving(true);
     const payload = {
-        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studio_mod_1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffee_mod_1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotelMod2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
+        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studio_mod_1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffee_mod_1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotel_mod_2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
     };
     try {
         if (formData.id) await appBackend.client.from('crm_classes').update(payload).eq('id', formData.id);
@@ -207,8 +207,8 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       const matchesStatus = statusFilter === 'Todos' || c.status === statusFilter;
       const matchesState = !stateFilter || c.state === stateFilter;
       const matchesCity = !cityFilter || c.city === cityFilter;
-      const matchesMod1 = !mod1DateFilter || c.dateMod1 === mod1DateFilter;
-      const matchesMod2 = !mod2DateFilter || c.dateMod2 === mod2DateFilter;
+      const matchesMod1 = !mod1DateFilter || (c.dateMod1 && c.dateMod1.startsWith(mod1DateFilter));
+      const matchesMod2 = !mod2DateFilter || (c.dateMod2 && c.dateMod2.startsWith(mod2DateFilter));
       const matchesInstructor = !instructorFilter || (c.instructorMod1 === instructorFilter || c.instructorMod2 === instructorFilter);
 
       // Apply column-specific filters
@@ -760,7 +760,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                         </div>
                     </section>
                 </div>
-                <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 rounded-b-xl border-t border-slate-100">
+                <div className="px-8 py-5 bg-slate-50 flex justify-end gap-3 shrink-0 border-t border-slate-100">
                     <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm transition-colors">Cancelar</button>
                     <button onClick={handleSave} disabled={isSaving} className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50">{isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} {formData.id ? 'Salvar Alterações' : 'Criar Turma'}</button>
                 </div>

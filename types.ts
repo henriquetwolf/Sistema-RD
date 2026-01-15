@@ -1,5 +1,4 @@
 
-
 export type QuestionType = 'text' | 'paragraph' | 'select' | 'checkbox' | 'email' | 'phone' | 'number' | 'date';
 
 export interface FormQuestion {
@@ -608,4 +607,41 @@ export interface WAAutomationLog {
   phone: string;
   message: string;
   createdAt: string;
+}
+
+export interface LandingPage {
+  id: string;
+  title: string;
+  productName: string;
+  content: LandingPageContent;
+  createdAt: string;
+  updatedAt: string;
+  isActive: boolean;
+  theme: 'modern' | 'clean' | 'dark' | 'corporate';
+}
+
+export interface LandingPageContent {
+  hero: {
+    headline: string;
+    subheadline: string;
+    ctaText: string;
+  };
+  features: {
+    title: string;
+    description: string;
+    icon?: string;
+  }[];
+  pricing: {
+    price: string;
+    installments: string;
+    ctaText: string;
+  };
+  faq: {
+    question: string;
+    answer: string;
+  }[];
+  socialProof?: {
+    text: string;
+    author: string;
+  }[];
 }

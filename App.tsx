@@ -35,7 +35,9 @@ import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
 import { SupportManager } from './components/SupportManager';
 import { AiAssistant } from './components/AiAssistant';
-import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType } from './types';
+import { LandingPageManager } from './components/LandingPageManager';
+import { LandingPagePublicViewer } from './components/LandingPagePublicViewer';
+import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
 import { createSupabaseClient, batchUploadData, clearTableData } from './services/supabaseService';
@@ -46,16 +48,17 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap, Send, Bot
+  LifeBuoy, Zap, Send, Bot, MonitorPlay
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages';
 
 function App() {
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
   const [publicContract, setPublicContract] = useState<Contract | null>(null);
   const [publicCertificateHash, setPublicCertificateHash] = useState<string | null>(null);
+  const [publicLandingPage, setPublicLandingPage] = useState<LandingPage | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
 
@@ -117,8 +120,9 @@ function App() {
         const publicFormId = params.get('publicFormId');
         const contractId = params.get('contractId');
         const certificateHash = params.get('certificateHash');
+        const landingPageId = params.get('landingPageId');
 
-        if (publicFormId || contractId || certificateHash) {
+        if (publicFormId || contractId || certificateHash || landingPageId) {
             setIsPublicLoading(true);
             setPublicError(null);
             try {
@@ -132,6 +136,10 @@ function App() {
                     else setPublicError("O contrato solicitado não foi localizado.");
                 } else if (certificateHash) {
                     setPublicCertificateHash(certificateHash);
+                } else if (landingPageId) {
+                    const lp = await appBackend.getLandingPageById(landingPageId);
+                    if (lp) setPublicLandingPage(lp);
+                    else setPublicError("Página de vendas não encontrada.");
                 }
             } catch (e) {
                 setPublicError("Ocorreu um erro ao tentar carregar o recurso. Verifique sua conexão.");
@@ -422,9 +430,6 @@ function App() {
 
   const handleDeepNavigation = (tab: string, recordId: string) => {
       setDashboardTab(tab as DashboardTab);
-      // Aqui simulamos uma busca pelo registro na aba destino
-      // Em uma aplicação real, poderíamos disparar um evento ou passar props para o componente filho
-      // Por enquanto, apenas avisamos que o sistema mudou de contexto
       alert(`Navegando para ${tab}. Registro ID: ${recordId}`);
   };
 
@@ -452,6 +457,7 @@ function App() {
   if (publicCertificateHash) return <CertificateViewer hash={publicCertificateHash} />;
   if (publicContract) return <ContractSigning contract={publicContract} />;
   if (publicForm) return <div className="min-h-screen bg-slate-50"><FormViewer form={publicForm} isPublic={true} /></div>;
+  if (publicLandingPage) return <LandingPagePublicViewer landingPage={publicLandingPage} />;
   
   if (isLoadingSession) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-teal-600" size={40} /></div>;
 
@@ -533,6 +539,7 @@ function App() {
                                 {canAccess('overview') && <button onClick={() => setDashboardTab('overview')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'overview' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LayoutDashboard size={18} /> Visão Geral</button>}
                                 {canAccess('hr') && <button onClick={() => setDashboardTab('hr')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'hr' ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Heart size={18} /> Recursos Humanos</button>}
                                 {canAccess('crm') && <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Kanban size={18} /> CRM Comercial</button>}
+                                {canAccess('landing_pages') && <button onClick={() => setDashboardTab('landing_pages')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'landing_pages' ? "bg-orange-50 text-orange-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MonitorPlay size={18} /> Páginas de Venda</button>}
                                 {canAccess('billing') && <button onClick={() => setDashboardTab('billing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'billing' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> Cobrança</button>}
                                 {canAccess('inventory') && <button onClick={() => setDashboardTab('inventory')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'inventory' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Package size={18} /> Controle de Estoque</button>}
                                 {canAccess('suporte_interno') && <button onClick={() => setDashboardTab('suporte_interno')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'suporte_interno' ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LifeBuoy size={18} /> Suporte Interno</button>}
@@ -569,7 +576,7 @@ function App() {
                                             <span className="text-teal-100 text-xs font-black uppercase tracking-[0.2em]">Painel de Controle</span>
                                         </div>
                                         <h2 className="text-4xl font-black tracking-tight mb-2">
-                                            <span className="text-white">Bem-Vindo</span>, <span className="text-white">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
+                                            <span className="text-green-400">Bem-Vindo</span>, <span className="text-white">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
                                         </h2>
                                         <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed">
                                             Seu centro de comando está pronto. Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.
@@ -666,6 +673,7 @@ function App() {
                         {dashboardTab === 'whatsapp' && <WhatsAppInbox onNavigateToRecord={handleDeepNavigation} currentAgentName={currentUserName} />}
                         {dashboardTab === 'whatsapp_automation' && <WhatsAppAutomation />}
                         {dashboardTab === 'whatsapp_bulk' && <BulkWhatsAppSender />}
+                        {dashboardTab === 'landing_pages' && <LandingPageManager onBack={() => setDashboardTab('overview')} />}
                     </div>
                 </div>
             </main>

@@ -8,7 +8,7 @@ import {
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
-  WAAutomationRule, WAAutomationLog, PipelineStage
+  WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage
 } from '../types';
 
 export type { CompanySetting, Pipeline, WebhookTrigger, PipelineStage };
@@ -188,9 +188,7 @@ export const appBackend = {
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
       team_id: form.teamId || null, 
-      /* Fix: target_pipeline should use the targetPipeline camelCase property from FormModel */
       target_pipeline: form.targetPipeline || null, 
-      /* Fix: target_stage should use the targetStage camelCase property from FormModel */
       target_stage: form.targetStage || null, 
       questions: form.questions || [], 
       style: form.style || {}, 
@@ -369,7 +367,6 @@ export const appBackend = {
     return (data || []).map((item: any) => ({ id: item.id, pipelineName: item.pipeline_name, stageId: item.stage_id, payloadJson: item.payload_json, createdAt: item.created_at }));
   },
 
-  // Fix: Property 'payload_json' does not exist on type 'Partial<WebhookTrigger>'. Did you mean 'payloadJson'?
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || crypto.randomUUID(), pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson, created_at: trigger.createdAt || new Date().toISOString() });
@@ -488,7 +485,7 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
+    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
@@ -617,7 +614,6 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    // Added comment: mapping snake_case from DB to camelCase in interface PartnerStudio
     return (data || []).map((item: any) => ({ 
       id: item.id, 
       status: item.status, 
@@ -627,7 +623,7 @@ export const appBackend = {
       email: item.email, 
       password: item.password, 
       secondContactName: item.second_contact_name, 
-      secondContactPhone: item.second_contact_phone, 
+      second_contact_phone: item.second_contact_phone, 
       fantasyName: item.fantasy_name, 
       legalName: item.legal_name, 
       cnpj: item.cnpj, 
@@ -647,18 +643,17 @@ export const appBackend = {
       account: item.account, 
       beneficiary: item.beneficiary, 
       pixKey: item.pix_key, 
-      hasReformer: !!item.has_reformer, 
-      qtyReformer: item.qty_reformer, 
-      hasLadderBarrel: !!item.has_ladder_barrel, 
-      /* Fix: Changed mapping from qty_ladder_barrel to qtyLadderBarrel to match required property in PartnerStudio interface */
-      qtyLadderBarrel: item.qty_ladder_barrel, 
-      hasChair: !!item.has_chair, 
-      qtyChair: item.qty_chair, 
-      hasCadillac: !!item.has_cadillac, 
-      qtyCadillac: item.qty_cadillac, 
-      hasChairsForCourse: !!item.has_chairs_for_course, 
-      hasTv: !!item.has_tv, 
-      maxKitsCapacity: item.max_kits_capacity, 
+      has_reformer: !!item.has_reformer, 
+      qty_reformer: item.qty_reformer, 
+      has_ladder_barrel: !!item.has_ladder_barrel, 
+      qty_ladder_barrel: item.qty_ladder_barrel, 
+      has_chair: !!item.has_chair, 
+      qty_chair: item.qty_chair, 
+      has_cadillac: !!item.has_cadillac, 
+      qty_cadillac: item.qty_cadillac, 
+      has_chairs_for_course: !!item.has_chairs_for_course, 
+      has_tv: !!item.has_tv, 
+      max_kits_capacity: item.max_kits_capacity, 
       attachments: item.attachments 
     }));
   },
@@ -775,7 +770,7 @@ export const appBackend = {
 
   getExternalCertificates: async (studentId: string): Promise<ExternalCertificate[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_external_certificates').select('*').eq('student_id', studentId).order('completion_date', { ascending: false });
+    const { data = null } = await supabase.from('crm_external_certificates').select('*').eq('student_id', studentId).order('completion_date', { ascending: false });
     return (data || []).map((item: any) => ({
         id: item.id,
         student_id: item.student_id,
@@ -790,7 +785,6 @@ export const appBackend = {
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
-    // Added comment: Fix mapping from snake_case DB fields to camelCase interface fields
     return (data || []).map((item: any) => ({ 
       id: item.id, 
       title: item.title, 
@@ -896,6 +890,7 @@ export const appBackend = {
     if (!isConfigured) throw new Error("Not configured");
     const { data, error } = await supabase.from('crm_event_blocks').upsert({ id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections }).select().single();
     if (error) throw error;
+    // Fix: changed block.max_selections to data.max_selections
     return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
   },
 
@@ -930,9 +925,8 @@ export const appBackend = {
 
   getWAAutomationRules: async (): Promise<WAAutomationRule[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
+    const { data, error = null } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    // Added comment: Correctly map snake_case DB fields to camelCase interface properties for WAAutomationRule
     return (data || []).map((d: any) => ({ 
         id: d.id, 
         name: d.name, 
@@ -959,7 +953,7 @@ export const appBackend = {
 
   getWAAutomationLogs: async (): Promise<WAAutomationLog[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
+    const { data, error = null } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((d: any) => ({ id: d.id, ruleName: d.rule_name, studentName: d.student_name, phone: d.phone, message: d.message, createdAt: d.created_at }));
   },
@@ -993,7 +987,6 @@ export const appBackend = {
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
     if (!isConfigured) return;
-    /* Fix: Corrected property mappings in saveBillingNegotiation to use camelCase from Partial<BillingNegotiation> */
     await supabase.from('crm_billing_negotiations').upsert({ 
         id: neg.id || crypto.randomUUID(), 
         open_installments: neg.openInstallments, 
@@ -1023,5 +1016,57 @@ export const appBackend = {
   deleteBillingNegotiation: async (id: string): Promise<void> => {
     if (!isConfigured) return;
     await supabase.from('crm_billing_negotiations').delete().eq('id', id);
+  },
+
+  getLandingPages: async (): Promise<LandingPage[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_landing_pages').select('*').order('created_at', { ascending: false });
+    return (data || []).map((item: any) => ({
+      id: item.id,
+      title: item.title,
+      productName: item.product_name,
+      content: item.content,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+      isActive: item.is_active,
+      theme: item.theme
+    }));
+  },
+
+  getLandingPageById: async (id: string): Promise<LandingPage | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('crm_landing_pages').select('*').eq('id', id).maybeSingle();
+    if (!data) return null;
+    return {
+      id: data.id,
+      title: data.title,
+      productName: data.product_name,
+      content: data.content,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      isActive: data.is_active,
+      theme: data.theme
+    };
+  },
+
+  saveLandingPage: async (lp: LandingPage): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_landing_pages').upsert({
+      id: lp.id,
+      title: lp.title,
+      product_name: lp.productName,
+      content: lp.content,
+      created_at: lp.createdAt,
+      updated_at: lp.updatedAt,
+      is_active: lp.isActive,
+      theme: lp.theme
+    });
+    if (error) throw error;
+  },
+
+  deleteLandingPage: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('crm_landing_pages').delete().eq('id', id);
+    if (error) throw error;
   }
 };

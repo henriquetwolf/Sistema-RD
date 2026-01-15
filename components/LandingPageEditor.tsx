@@ -4,8 +4,8 @@ import {
   ArrowLeft, Type, MousePointer2, Image as ImageIcon, 
   Settings, Plus, Layout, Loader2, Trash2, ArrowUp, ArrowDown,
   AlignCenter, AlignLeft, AlignRight, PlayCircle, Save, X, Info,
-  Smartphone as MobileIcon, Monitor as DesktopIcon, ChevronRight,
-  Video, Link
+  Smartphone as MobileIcon, Monitor as DesktopIcon,
+  Link as LinkIcon
 } from 'lucide-react';
 import { LandingPage } from '../types';
 import { appBackend } from '../services/appBackend';
@@ -76,19 +76,13 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
   };
 
   const addElement = (type: Element['type']) => {
-    // Auto-create fold if none selected or exists
     let foldId = selectedFoldId;
     if (!foldId) {
         if (sections.length > 0) {
             foldId = sections[0].id;
             setSelectedFoldId(foldId);
         } else {
-            const newFold: SectionFold = {
-                id: crypto.randomUUID(),
-                bgColor: '#ffffff',
-                padding: '60px',
-                elements: []
-            };
+            const newFold: SectionFold = { id: crypto.randomUUID(), bgColor: '#ffffff', padding: '60px', elements: [] };
             setSections([newFold]);
             foldId = newFold.id;
             setSelectedFoldId(foldId);
@@ -174,7 +168,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
         content: { sections },
         updatedAt: new Date().toISOString()
       });
-      alert("Landing Page salva com sucesso!");
+      alert("Landing Page salva!");
     } catch (e) {
       alert("Erro ao salvar.");
     } finally {
@@ -183,7 +177,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
   };
 
   const publish = async () => {
-    if (!window.confirm("Deseja publicar esta página? Ela ficará visível no link externo.")) return;
+    if (!window.confirm("Deseja publicar esta página?")) return;
     setIsSaving(true);
     try {
       await appBackend.saveLandingPage({
@@ -192,7 +186,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
         status: 'published',
         updatedAt: new Date().toISOString()
       });
-      alert("Página publicada com sucesso!");
+      alert("Página publicada!");
     } catch (e) {
       alert("Erro ao publicar.");
     } finally {
@@ -201,7 +195,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-100 flex flex-col animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[100] bg-slate-100 flex flex-col animate-in fade-in duration-300 font-sans">
       {/* Header */}
       <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-sm z-20">
         <div className="flex items-center gap-6">
@@ -216,25 +210,24 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
         </div>
 
         <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl shadow-inner">
-          <button onClick={() => setActiveView('desktop')} className={clsx("p-2 rounded-lg transition-all", activeView === 'desktop' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Desktop View"><DesktopIcon size={18}/></button>
-          <button onClick={() => setActiveView('mobile')} className={clsx("p-2 rounded-lg transition-all", activeView === 'mobile' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Mobile View"><MobileIcon size={18}/></button>
+          <button onClick={() => setActiveView('desktop')} className={clsx("p-2 rounded-lg transition-all", activeView === 'desktop' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Desktop"><DesktopIcon size={18}/></button>
+          <button onClick={() => setActiveView('mobile')} className={clsx("p-2 rounded-lg transition-all", activeView === 'mobile' ? "bg-white text-teal-600 shadow-sm" : "text-slate-400")} title="Mobile"><MobileIcon size={18}/></button>
         </div>
 
         <div className="flex items-center gap-3">
           <button onClick={handleSave} disabled={isSaving} className="text-teal-600 hover:bg-teal-50 border border-teal-200 font-bold text-xs px-4 py-2 rounded-xl transition-all">
-            {isSaving ? <Loader2 size={16} className="animate-spin" /> : 'Salvar Alterações'}
+            {isSaving ? <Loader2 size={16} className="animate-spin" /> : 'Salvar'}
           </button>
-          <button onClick={publish} className="bg-teal-600 hover:bg-teal-700 text-white font-black text-xs px-6 py-2 rounded-xl shadow-lg transition-all active:scale-95">Publicar Página</button>
+          <button onClick={publish} className="bg-teal-600 hover:bg-teal-700 text-white font-black text-xs px-6 py-2 rounded-xl shadow-lg transition-all active:scale-95">Publicar</button>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar: Components & Structure */}
+        {/* Left Sidebar */}
         <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0">
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
-            {/* Add Elements */}
             <section>
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Adicionar ao Dobro Selecionado</h3>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Adicionar Elementos</h3>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { id: 'heading', label: 'Título', icon: Type },
@@ -256,11 +249,10 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
               </div>
             </section>
 
-            {/* Structure */}
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estrutura (Dobras)</h3>
-                <button onClick={addFold} className="p-1 text-teal-600 hover:bg-teal-50 rounded-lg" title="Adicionar Dobra"><Plus size={16}/></button>
+                <button onClick={addFold} className="p-1 text-teal-600 hover:bg-teal-50 rounded-lg"><Plus size={16}/></button>
               </div>
               <div className="space-y-3">
                 {sections.map((fold, idx) => (
@@ -294,16 +286,10 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                                     </div>
                                 </div>
                             ))}
-                            {fold.elements.length === 0 && <p className="text-[9px] text-slate-300 italic p-2">Sem elementos.</p>}
                         </div>
                     )}
                   </div>
                 ))}
-                {sections.length === 0 && (
-                    <div className="text-center py-4 text-slate-300">
-                        <p className="text-[10px] font-bold uppercase">Nenhuma dobra criada</p>
-                    </div>
-                )}
               </div>
             </section>
           </div>
@@ -321,7 +307,6 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                 <div className="h-[400px] flex flex-col items-center justify-center text-slate-300 text-center p-8">
                     <Layout size={64} className="opacity-10 mb-4" />
                     <p className="font-bold">Sua página está em branco</p>
-                    <p className="text-sm">Clique em "+" na barra lateral para criar sua primeira dobra (módulo).</p>
                     <button onClick={addFold} className="mt-6 bg-teal-600 text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg">Criar Minha Primeira Dobra</button>
                 </div>
             ) : (
@@ -343,9 +328,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                                     "relative transition-all p-2 mb-2 rounded border-2",
                                     selectedElementId === el.id ? "border-amber-400 bg-amber-50/10" : "border-transparent hover:border-slate-200"
                                 )}
-                                style={{
-                                    textAlign: el.style.textAlign as any || 'left'
-                                }}
+                                style={{ textAlign: el.style.textAlign || 'left' }}
                             >
                                 {el.type === 'heading' && <h2 style={{ fontSize: el.style.fontSize, color: el.style.color, fontWeight: el.style.fontWeight as any }}>{el.content}</h2>}
                                 {el.type === 'text' && <p style={{ fontSize: el.style.fontSize, color: el.style.color, whiteSpace: 'pre-wrap' }}>{el.content}</p>}
@@ -356,11 +339,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                                 )}
                                 {el.type === 'button' && (
                                     <div className={clsx("flex", el.style.align === 'center' ? 'justify-center' : el.style.align === 'right' ? 'justify-end' : 'justify-start')}>
-                                        <button 
-                                            style={{ backgroundColor: el.style.bgColor, color: el.style.color, borderRadius: `${el.style.borderRadius}px`, padding: '12px 32px', fontWeight: 'bold' }}
-                                        >
-                                            {el.content}
-                                        </button>
+                                        <button style={{ backgroundColor: el.style.bgColor, color: el.style.color, borderRadius: `${el.style.borderRadius}px`, padding: '12px 32px', fontWeight: 'bold' }}>{el.content}</button>
                                     </div>
                                 )}
                                 {el.type === 'spacer' && <div style={{ height: el.style.fontSize || 40 }}></div>}
@@ -371,12 +350,6 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                                 )}
                             </div>
                         ))}
-                        {fold.elements.length === 0 && (
-                            <div className="border-2 border-dashed border-slate-200 rounded-xl py-12 flex flex-col items-center justify-center text-slate-300">
-                                <Plus size={24} className="opacity-20 mb-2"/>
-                                <span className="text-xs font-bold uppercase">Dobra Vazia</span>
-                            </div>
-                        )}
                     </div>
                 ))
             )}
@@ -386,42 +359,30 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
         {/* Right Sidebar: Properties */}
         <aside className="w-80 bg-white border-l border-slate-200 p-6 overflow-y-auto custom-scrollbar shrink-0">
           {selectedElement ? (
-              <div className="space-y-6 animate-in slide-in-from-right-2">
-                  <div className="flex items-center justify-between border-b pb-4">
-                      <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                          <Settings size={14} className="text-teal-600" /> Propriedades: {selectedElement.type.toUpperCase()}
-                      </h3>
-                      <button onClick={() => setSelectedElementId(null)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
-                  </div>
-
-                  <div className="space-y-4">
-                      {/* Content Edit */}
-                      {selectedElement.type !== 'spacer' && (
-                          <div>
-                            <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">{selectedElement.type === 'video' ? 'Código Embed (YouTube)' : 'Conteúdo'}</label>
-                            {selectedElement.type === 'text' || selectedElement.type === 'video' ? (
-                                <textarea 
-                                    className="w-full border rounded-lg p-2 text-xs h-32 focus:ring-2 focus:ring-teal-100 outline-none transition-all" 
-                                    value={selectedElement.content} 
-                                    onChange={e => updateElement('content', e.target.value)} 
-                                />
+            <div className="space-y-6 animate-in slide-in-from-right-2">
+                <div className="flex items-center justify-between border-b pb-4">
+                    <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">PROPRIEDADES: {selectedElement.type.toUpperCase()}</h3>
+                    <button onClick={() => setSelectedElementId(null)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+                </div>
+                <div className="space-y-4">
+                    {selectedElement.type !== 'spacer' && (
+                        <div>
+                            <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Conteúdo</label>
+                            {(selectedElement.type === 'text' || selectedElement.type === 'video') ? (
+                                <textarea className="w-full border rounded-lg p-2 text-xs h-32 outline-none" value={selectedElement.content} onChange={e => updateElement('content', e.target.value)} />
                             ) : (
-                                <input type="text" className="w-full border rounded-lg p-2 text-xs focus:ring-2 focus:ring-teal-100 outline-none" value={selectedElement.content} onChange={e => updateElement('content', e.target.value)} />
+                                <input type="text" className="w-full border rounded-lg p-2 text-xs outline-none" value={selectedElement.content} onChange={e => updateElement('content', e.target.value)} />
                             )}
-                            {selectedElement.type === 'video' && <p className="text-[8px] text-slate-400 mt-1 uppercase font-bold tracking-tighter">Copie o código em "Compartilhar > Incorporar" no YouTube.</p>}
-                          </div>
-                      )}
-
-                      {/* Common Style Edits */}
-                      {['heading', 'text', 'spacer'].includes(selectedElement.type) && (
-                          <div>
-                            <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Tamanho / Altura (px)</label>
+                        </div>
+                    )}
+                    {['heading', 'text', 'spacer'].includes(selectedElement.type) && (
+                        <div>
+                            <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Tamanho (px)</label>
                             <input type="number" className="w-full border rounded-lg p-2 text-xs" value={selectedElement.style.fontSize} onChange={e => updateElementStyle('fontSize', parseInt(e.target.value))} />
-                          </div>
-                      )}
-
-                      {['heading', 'text'].includes(selectedElement.type) && (
-                          <>
+                        </div>
+                    )}
+                    {['heading', 'text'].includes(selectedElement.type) && (
+                        <>
                             <div>
                                 <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Cor do Texto</label>
                                 <input type="color" className="w-full h-8 border rounded cursor-pointer" value={selectedElement.style.color || '#000000'} onChange={e => updateElementStyle('color', e.target.value)} />
@@ -434,94 +395,37 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ lp, onBack
                                     <button onClick={() => updateElementStyle('textAlign', 'right')} className={clsx("flex-1 p-1 rounded", selectedElement.style.textAlign === 'right' ? "bg-white shadow text-teal-600" : "text-slate-400")}><AlignRight size={14} className="mx-auto"/></button>
                                 </div>
                             </div>
-                          </>
-                      )}
-
-                      {selectedElement.type === 'button' && (
-                          <>
-                            <div>
-                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 flex items-center gap-1"><Link size={10}/> URL de Destino</label>
-                                <input type="text" className="w-full border rounded-lg p-2 text-[10px] font-mono" value={selectedElement.style.link || ''} onChange={e => updateElementStyle('link', e.target.value)} placeholder="https://..." />
-                            </div>
+                        </>
+                    )}
+                    {selectedElement.type === 'button' && (
+                        <>
+                            <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Link</label><input type="text" className="w-full border rounded-lg p-2 text-[10px]" value={selectedElement.style.link || ''} onChange={e => updateElementStyle('link', e.target.value)} /></div>
                             <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Cor Fundo</label>
-                                    <input type="color" className="w-full h-8 border rounded cursor-pointer" value={selectedElement.style.bgColor} onChange={e => updateElementStyle('bgColor', e.target.value)} />
-                                </div>
-                                <div>
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Cor Texto</label>
-                                    <input type="color" className="w-full h-8 border rounded cursor-pointer" value={selectedElement.style.color} onChange={e => updateElementStyle('color', e.target.value)} />
-                                </div>
+                                <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Fundo</label><input type="color" className="w-full h-8 border rounded" value={selectedElement.style.bgColor} onChange={e => updateElementStyle('bgColor', e.target.value)} /></div>
+                                <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Texto</label><input type="color" className="w-full h-8 border rounded" value={selectedElement.style.color} onChange={e => updateElementStyle('color', e.target.value)} /></div>
                             </div>
-                            <div>
-                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Arredondamento (px)</label>
-                                <input type="range" min="0" max="50" className="w-full accent-teal-600" value={selectedElement.style.borderRadius} onChange={e => updateElementStyle('borderRadius', parseInt(e.target.value))} />
-                            </div>
-                          </>
-                      )}
-
-                      {['button', 'image'].includes(selectedElement.type) && (
-                          <div>
-                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Posicionamento Horizontal</label>
-                                <div className="flex bg-slate-100 p-1 rounded-lg">
-                                    <button onClick={() => updateElementStyle('align', 'left')} className={clsx("flex-1 p-1 rounded", selectedElement.style.align === 'left' ? "bg-white shadow text-teal-600" : "text-slate-400")}><AlignLeft size={14} className="mx-auto"/></button>
-                                    <button onClick={() => updateElementStyle('align', 'center')} className={clsx("flex-1 p-1 rounded", selectedElement.style.align === 'center' ? "bg-white shadow text-teal-600" : "text-slate-400")}><AlignCenter size={14} className="mx-auto"/></button>
-                                    <button onClick={() => updateElementStyle('align', 'right')} className={clsx("flex-1 p-1 rounded", selectedElement.style.align === 'right' ? "bg-white shadow text-teal-600" : "text-slate-400")}><AlignRight size={14} className="mx-auto"/></button>
-                                </div>
-                            </div>
-                      )}
-
-                      {selectedElement.type === 'image' && (
-                          <div>
-                              <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Largura (px ou %)</label>
-                              <input type="text" className="w-full border rounded-lg p-2 text-xs" value={selectedElement.style.width || ''} onChange={e => updateElementStyle('width', e.target.value)} placeholder="Ex: 400px ou 100%" />
-                          </div>
-                      )}
-                  </div>
-              </div>
+                        </>
+                    )}
+                </div>
+            </div>
           ) : selectedFold ? (
               <div className="space-y-6 animate-in slide-in-from-right-2">
                   <div className="flex items-center justify-between border-b pb-4">
-                      <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                          <Layout size={14} className="text-teal-600" /> Configuração da Dobra
-                      </h3>
+                      <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Layout size={14}/> CONFIGURAÇÃO DOBRA</h3>
                       <button onClick={() => setSelectedFoldId(null)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
                   </div>
                   <div className="space-y-4">
-                      <div>
-                          <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Cor de Fundo da Dobra</label>
-                          <input type="color" className="w-full h-10 border rounded cursor-pointer" value={selectedFold.bgColor} onChange={e => updateFold('bgColor', e.target.value)} />
-                      </div>
-                      <div>
-                          <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Espaçamento Vertical (Padding)</label>
-                          <input type="text" className="w-full border rounded-lg p-2 text-xs" value={selectedFold.padding} onChange={e => updateFold('padding', e.target.value)} placeholder="Ex: 80px" />
-                      </div>
-                      <div className="pt-4 mt-4 border-t">
-                          <button onClick={(e) => removeFold(selectedFoldId, e)} className="w-full py-2 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest border border-red-100 hover:bg-red-100 transition-all flex items-center justify-center gap-2">
-                              <Trash2 size={12}/> Excluir este módulo
-                          </button>
-                      </div>
+                      <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Cor de Fundo</label><input type="color" className="w-full h-10 border rounded cursor-pointer" value={selectedFold.bgColor} onChange={e => updateFold('bgColor', e.target.value)} /></div>
+                      <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Padding Vertical</label><input type="text" className="w-full border rounded-lg p-2 text-xs" value={selectedFold.padding} onChange={e => updateFold('padding', e.target.value)} placeholder="Ex: 80px" /></div>
+                      <div className="pt-4 mt-4 border-t"><button onClick={(e) => removeFold(selectedFoldId!, e)} className="w-full py-2 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest border border-red-100 hover:bg-red-100 transition-all flex items-center justify-center gap-2"><Trash2 size={12}/> Excluir módulo</button></div>
                   </div>
               </div>
           ) : (
             <div className="space-y-8 animate-in fade-in duration-300">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <Settings size={16} /> Configurações Gerais
-              </h3>
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Settings size={16} /> Configurações Gerais</h3>
               <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 flex flex-col items-center text-center gap-3">
                  <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-indigo-600"><Info size={20}/></div>
-                 <p className="text-[10px] font-bold text-indigo-700 leading-relaxed uppercase tracking-tighter">Clique em uma dobra ou elemento no centro para editar suas propriedades específicas.</p>
-              </div>
-              <div className="p-4 bg-white rounded-2xl border border-slate-100 space-y-4 shadow-sm">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SEO da Página</h4>
-                  <div>
-                      <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Meta Título</label>
-                      <input type="text" className="w-full border rounded-lg p-2 text-xs" defaultValue={lp.name} />
-                  </div>
-                  <div>
-                      <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Meta Descrição</label>
-                      <textarea className="w-full border rounded-lg p-2 text-xs h-20 resize-none" placeholder="Descrição para o Google..." />
-                  </div>
+                 <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-tighter leading-tight">Selecione uma dobra ou elemento para editar propriedades.</p>
               </div>
             </div>
           )}

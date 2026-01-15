@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   GraduationCap, Plus, Search, Calendar as CalendarIcon, MapPin, 
   ArrowLeft, Save, X, BookOpen, CheckSquare, 
-  /* Added MoreHorizontal to fix the error on line 482 */
   Coffee, DollarSign, FileText, Paperclip, Bed, Plane, Map,
   Edit2, Trash2, Hash, Loader2, Users, Filter, ChevronRight,
   LayoutList, ChevronLeft, ChevronRight as ChevronRightIcon,
@@ -78,10 +77,13 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
-  const [stateFilter, setStatusFilterState] = useState<string>('');
+  const [stateFilter, setStateFilter] = useState<string>('');
   const [cityFilter, setCityFilter] = useState<string>('');
   const [mod1DateFilter, setMod1DateFilter] = useState<string>('');
   const [mod2DateFilter, setMod2DateFilter] = useState<string>('');
+  
+  // Column-specific filters for tabular view
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   
   // IBGE State
   const [states, setStates] = useState<IBGEUF[]>([]);
@@ -199,15 +201,35 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
   const filteredClasses = useMemo(() => {
     return classes.filter(c => {
-      const matchesSearch = c.course.toLowerCase().includes(searchTerm.toLowerCase()) || c.city.toLowerCase().includes(searchTerm.toLowerCase());
+      // Fixed line below: ensure c.course and c.city are handled as strings to avoid type issues
+      const matchesSearch = String(c.course || '').toLowerCase().includes(searchTerm.toLowerCase()) || String(c.city || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'Todos' || c.status === statusFilter;
       const matchesState = !stateFilter || c.state === stateFilter;
       const matchesCity = !cityFilter || c.city === cityFilter;
       const matchesMod1 = !mod1DateFilter || c.dateMod1 === mod1DateFilter;
       const matchesMod2 = !mod2DateFilter || c.dateMod2 === mod2DateFilter;
-      return matchesSearch && matchesStatus && matchesState && matchesCity && matchesMod1 && matchesMod2;
+
+      // Apply column-specific filters
+      const matchesColumnFilters = Object.entries(columnFilters).every(([key, value]) => {
+          if (!value) return true;
+          const classValue = (c as any)[key];
+          
+          if (typeof classValue === 'boolean') {
+              if (value === 'sim') return classValue === true;
+              if (value === 'não') return classValue === false;
+              return true;
+          }
+          
+          const strValue = String(classValue || '').toLowerCase();
+          // Fixed line below: cast value to string to fix 'unknown' type error for toLowerCase()
+          const filterValue = (value as string).toLowerCase();
+          
+          return strValue.includes(filterValue);
+      });
+
+      return matchesSearch && matchesStatus && matchesState && matchesCity && matchesMod1 && matchesMod2 && matchesColumnFilters;
     });
-  }, [classes, searchTerm, statusFilter, stateFilter, cityFilter, mod1DateFilter, mod2DateFilter]);
+  }, [classes, searchTerm, statusFilter, stateFilter, cityFilter, mod1DateFilter, mod2DateFilter, columnFilters]);
 
   const selectedClasses = useMemo(() => {
       return classes.filter(c => selectedClassIds.includes(c.id));
@@ -218,6 +240,10 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+  const handleColumnFilterChange = (column: string, value: string) => {
+      setColumnFilters(prev => ({ ...prev, [column]: value }));
+  };
 
   return (
     <div className="animate-in fade-in h-full flex flex-col pb-20">
@@ -348,8 +374,8 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
             <div className="flex-1 overflow-auto custom-scrollbar">
                 <table className="w-full text-left text-xs border-collapse min-w-[3000px]">
                     <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold sticky top-0 z-10 shadow-sm">
-                        <tr>
-                            <th className="px-4 py-3 border-b sticky left-0 bg-slate-100 z-20">Ações</th>
+                        <tr className="bg-slate-100">
+                            <th className="px-4 py-3 border-b sticky left-0 bg-slate-100 z-30">Ações</th>
                             <th className="px-4 py-3 border-b">Status</th>
                             <th className="px-4 py-3 border-b">UF</th>
                             <th className="px-4 py-3 border-b">Cidade</th>
@@ -375,6 +401,37 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
                             <th className="px-4 py-3 border-b">Logística Pronta</th>
                             <th className="px-4 py-3 border-b">Publicado Site</th>
                             <th className="px-4 py-3 border-b">No CRM</th>
+                        </tr>
+                        {/* Filters Row */}
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="px-4 py-2 sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                                <button onClick={() => setColumnFilters({})} className="p-1.5 text-slate-400 hover:text-red-500 transition-all" title="Limpar filtros da tabela"><Eraser size={14}/></button>
+                            </th>
+                            <th className="px-2 py-1"><select className="w-full text-[10px] p-1 border rounded" value={columnFilters.status || ''} onChange={e => handleColumnFilterChange('status', e.target.value)}><option value="">Todos</option>{STATUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar UF..." value={columnFilters.state || ''} onChange={e => handleColumnFilterChange('state', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Cidade..." value={columnFilters.city || ''} onChange={e => handleColumnFilterChange('city', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Turma..." value={columnFilters.classCode || ''} onChange={e => handleColumnFilterChange('classCode', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Extra..." value={columnFilters.extraClass || ''} onChange={e => handleColumnFilterChange('extraClass', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Curso..." value={columnFilters.course || ''} onChange={e => handleColumnFilterChange('course', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Data..." value={columnFilters.dateMod1 || ''} onChange={e => handleColumnFilterChange('dateMod1', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Cód..." value={columnFilters.mod1Code || ''} onChange={e => handleColumnFilterChange('mod1Code', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Studio..." value={columnFilters.studioMod1 || ''} onChange={e => handleColumnFilterChange('studioMod1', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Instrutor..." value={columnFilters.instructorMod1 || ''} onChange={e => handleColumnFilterChange('instructorMod1', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Passagem..." value={columnFilters.ticketMod1 || ''} onChange={e => handleColumnFilterChange('ticketMod1', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Coffee..." value={columnFilters.coffeeMod1 || ''} onChange={e => handleColumnFilterChange('coffeeMod1', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Hotel..." value={columnFilters.hotelMod1 || ''} onChange={e => handleColumnFilterChange('hotelMod1', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Ajuda..." value={columnFilters.costHelp1 || ''} onChange={e => handleColumnFilterChange('costHelp1', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Data..." value={columnFilters.dateMod2 || ''} onChange={e => handleColumnFilterChange('dateMod2', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Cód..." value={columnFilters.mod2Code || ''} onChange={e => handleColumnFilterChange('mod2Code', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Instrutor..." value={columnFilters.instructorMod2 || ''} onChange={e => handleColumnFilterChange('instructorMod2', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Passagem..." value={columnFilters.ticketMod2 || ''} onChange={e => handleColumnFilterChange('ticketMod2', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Coffee..." value={columnFilters.coffeeMod2 || ''} onChange={e => handleColumnFilterChange('coffeeMod2', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Hotel..." value={columnFilters.hotelMod2 || ''} onChange={e => handleColumnFilterChange('hotelLocMod2', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Ajuda..." value={columnFilters.costHelp2 || ''} onChange={e => handleColumnFilterChange('costHelp2', e.target.value)} /></th>
+                            <th className="px-2 py-1"><input className="w-full text-[10px] p-1 border rounded" placeholder="Filtrar Aluguel..." value={columnFilters.studioRent || ''} onChange={e => handleColumnFilterChange('studioRent', e.target.value)} /></th>
+                            <th className="px-2 py-1"><select className="w-full text-[10px] p-1 border rounded" value={columnFilters.isReady || ''} onChange={e => handleColumnFilterChange('isReady', e.target.value)}><option value="">Todos</option><option value="sim">Sim</option><option value="não">Não</option></select></th>
+                            <th className="px-2 py-1"><select className="w-full text-[10px] p-1 border rounded" value={columnFilters.onSite || ''} onChange={e => handleColumnFilterChange('onSite', e.target.value)}><option value="">Todos</option><option value="sim">Sim</option><option value="não">Não</option></select></th>
+                            <th className="px-2 py-1"><select className="w-full text-[10px] p-1 border rounded" value={columnFilters.onCRM || ''} onChange={e => handleColumnFilterChange('onCRM', e.target.value)}><option value="">Todos</option><option value="sim">Sim</option><option value="não">Não</option></select></th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -517,7 +574,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[95vh]">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
                 <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 rounded-t-xl">
                     <div><h3 className="text-xl font-bold text-slate-800">{formData.id ? 'Editar Turma' : 'Cadastro de Turma'}</h3><p className="text-sm text-slate-500">Gestão logística e técnica.</p></div>
                     <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded p-1"><X size={24}/></button>

@@ -183,7 +183,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
     if (!formData.course || !formData.city) { alert("Preencha ao menos o Curso e a Cidade."); return; }
     setIsSaving(true);
     const payload = {
-        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studioMod1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffeeMod1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffee_mod_2, hotel_mod_2: formData.hotel_mod_2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
+        status: formData.status, state: formData.state, city: formData.city, class_code: formData.classCode, extra_class: formData.extraClass, course: formData.course, date_mod_1: formData.dateMod1 || null, mod_1_code: formData.mod1Code, material: formData.material, studio_mod_1: formData.studioMod1, instructor_mod_1: formData.instructorMod1, ticket_mod_1: formData.ticketMod1, infrastructure: formData.infrastructure, coffee_mod_1: formData.coffeeMod1, hotel_mod_1: formData.hotelMod1, hotel_loc_mod_1: formData.hotelLocMod1, cost_help_1: formData.costHelp1, date_mod_2: formData.date_mod_2 || null, mod_2_code: formData.mod2Code, instructor_mod_2: formData.instructorMod2, ticket_mod_2: formData.ticketMod2, coffee_mod_2: formData.coffeeMod2, hotel_mod_2: formData.hotelMod2, hotel_loc_mod_2: formData.hotelLocMod2, cost_help_2: formData.costHelp2, studio_rent: formData.studioRent, conta_azul_rd: formData.contaAzulRD, is_ready: formData.isReady, on_site: formData.onSite, on_crm: formData.onCRM, observations: formData.observations
     };
     try {
         if (formData.id) await appBackend.client.from('crm_classes').update(payload).eq('id', formData.id);
@@ -201,7 +201,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
 
   const filteredClasses = useMemo(() => {
     return classes.filter(c => {
-      // ensure c.course and c.city are handled as strings to avoid type issues
       const matchesSearch = String(c.course || '').toLowerCase().includes(searchTerm.toLowerCase()) || String(c.city || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'Todos' || c.status === statusFilter;
       const matchesState = !stateFilter || c.state === stateFilter;
@@ -214,7 +213,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
           if (!value) return true;
           const classValue = (c as any)[key];
           
-          // Check for "empty" filter keyword (vazio ou (vazio))
           const filterStr = (value as string).toLowerCase();
           const isEmptyFilter = filterStr === '(vazio)' || filterStr === 'vazio';
 
@@ -372,7 +370,10 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({ onBack }) => {
       ) : viewMode === 'full_list' ? (
         <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
             <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Table className="text-purple-600" /> Lista Geral de Turmas</h3>
+                <div className="flex flex-col gap-1">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Table className="text-purple-600" /> Lista Geral de Turmas</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1"><Info size={12} className="text-indigo-500" /> Para filtrar campo vazio digite "vazio" nos filtros das colunas.</p>
+                </div>
                 <div className="relative max-w-sm w-full">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                     <input type="text" placeholder="Buscar na lista completa..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm" />

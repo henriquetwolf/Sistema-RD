@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
   Award, Eye, Download, ExternalLink, CheckCircle, Trash2, Wand2, Calendar, BookOpen, X, MonitorPlay, Zap, ChevronRight, Check, Save, FileText, ShoppingBag, CreditCard,
-  List, DollarSign, XCircle, Tag, MapPin, Building, User, Briefcase, Hash, Info, Map, FileSpreadsheet
+  List, DollarSign, XCircle, Tag, MapPin, Building, User, Briefcase, Hash, Info, Map, FileSpreadsheet, RotateCcw
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { OnlineCourse } from '../types';
@@ -75,7 +75,7 @@ interface CertStatus {
 }
 
 export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'list' | 'cpf_search'>('list');
+  const [activeSubTab, setActiveSubTab] = useState<'list' | 'cpf_search' | 'exclusions'>('list');
   const [deals, setDeals] = useState<StudentDeal[]>([]);
   const [onlineCourses, setOnlineCourses] = useState<OnlineCourse[]>([]);
   const [courseAccessMap, setCourseAccessMap] = useState<Record<string, string[]>>({});
@@ -88,7 +88,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   // CPF Search State
   const [cpfSearchQuery, setCpfSearchQuery] = useState('');
   const [searchResultDeals, setSearchResultDeals] = useState<StudentDeal[]>([]);
-  const [isSearchingCpf, setIsSearchingCpf] = useState(false);
+  const [isSearchingCpf, setIsLoadingCpf] = useState(false);
 
   // Unlock Modal State
   const [unlockModalStudent, setUnlockModalStudent] = useState<GroupedStudent | null>(null);
@@ -143,10 +143,10 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
-  const groupedStudents = useMemo(() => {
+  const getGroupedStudents = (filteredDeals: StudentDeal[]) => {
       const groups: Record<string, GroupedStudent> = {};
 
-      deals.forEach(deal => {
+      filteredDeals.forEach(deal => {
           const cleanCpf = deal.cpf ? deal.cpf.replace(/\D/g, '') : null;
           const key = cleanCpf || deal.email?.toLowerCase().trim() || deal.id;
 
@@ -179,9 +179,21 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       });
 
       return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  const groupedStudents = useMemo(() => {
+    const activeDeals = deals.filter(d => d.status !== 'excluido');
+    return getGroupedStudents(activeDeals);
   }, [deals]);
 
-  const filtered = groupedStudents.filter(s => 
+  const excludedGroupedStudents = useMemo(() => {
+    const excludedDeals = deals.filter(d => d.status === 'excluido');
+    return getGroupedStudents(excludedDeals);
+  }, [deals]);
+
+  const currentGroupedList = activeSubTab === 'exclusions' ? excludedGroupedStudents : groupedStudents;
+
+  const filtered = currentGroupedList.filter(s => 
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     s.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.cpf.replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''))
@@ -198,14 +210,15 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   };
 
   const handleDeleteItem = async (dealId: string, itemName: string) => {
-      if (dealId.startsWith('manual_')) {
-          alert("Este item foi liberado manualmente. Verifique no painel de administração.");
-          return;
-      }
-      if (!window.confirm(`Tem certeza que deseja excluir "${itemName}" deste aluno?`)) return;
+      if (!window.confirm(`Deseja realmente excluir "${itemName}"? Ele será movido para a aba de Exclusões.`)) return;
       
       try {
-          const { error } = await appBackend.client.from('crm_deals').delete().eq('id', dealId);
+          // Soft delete: muda o status para 'excluido'
+          const { error } = await appBackend.client
+            .from('crm_deals')
+            .update({ status: 'excluido' })
+            .eq('id', dealId);
+
           if (error) throw error;
           fetchData();
       } catch (e: any) {
@@ -213,12 +226,44 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       }
   };
 
+  const handleRestoreItem = async (dealId: string, itemName: string) => {
+      if (!window.confirm(`Deseja restaurar "${itemName}"?`)) return;
+      
+      try {
+          const { error } = await appBackend.client
+            .from('crm_deals')
+            .update({ status: 'active' }) // Ou outro status padrão apropriado
+            .eq('id', dealId);
+
+          if (error) throw error;
+          fetchData();
+      } catch (e: any) {
+          alert("Erro ao restaurar item: " + e.message);
+      }
+  };
+
+  const handlePermanentDelete = async (dealId: string, itemName: string) => {
+      if (!window.confirm(`ATENÇÃO: Deseja excluir PERMANENTEMENTE "${itemName}"? Esta ação não pode ser desfeita.`)) return;
+      
+      try {
+          const { error } = await appBackend.client.from('crm_deals').delete().eq('id', dealId);
+          if (error) throw error;
+          fetchData();
+      } catch (e: any) {
+          alert("Erro ao excluir permanentemente: " + e.message);
+      }
+  };
+
   const handleDeleteStudent = async (student: GroupedStudent) => {
-      if (!window.confirm(`ATENÇÃO: Deseja excluir permanentemente o aluno ${student.name} e TODOS os seus registros vinculados? Esta ação não pode ser desfeita.`)) return;
+      if (!window.confirm(`Deseja excluir o aluno ${student.name} e todos os seus itens? Eles serão movidos para Exclusões.`)) return;
       
       try {
           const dealIds = student.deals.map(d => d.id);
-          const { error } = await appBackend.client.from('crm_deals').delete().in('id', dealIds);
+          const { error } = await appBackend.client
+            .from('crm_deals')
+            .update({ status: 'excluido' })
+            .in('id', dealIds);
+
           if (error) throw error;
           fetchData();
       } catch (e: any) {
@@ -238,7 +283,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       const cleanCpf = cpfSearchQuery.replace(/\D/g, '');
       if (cleanCpf.length < 3) return;
 
-      setIsSearchingCpf(true);
+      setIsLoadingCpf(true);
       try {
           const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
           const { data, error } = await appBackend.client
@@ -252,69 +297,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
       } catch (e) {
           console.error("Erro na busca por CPF:", e);
       } finally {
-          setIsSearchingCpf(false);
-      }
-  };
-
-  const openUnlockModal = async (student: GroupedStudent) => {
-      setUnlockModalStudent(student);
-      setIsSavingAccess(true);
-      const mainDealId = student.deals[0]?.id;
-      if (!mainDealId) return;
-
-      try {
-          const { data, error } = await appBackend.client
-              .from('crm_student_course_access')
-              .select('course_id')
-              .eq('student_deal_id', mainDealId);
-          
-          if (error) throw error;
-          setStudentAccessedIds((data || []).map(d => d.course_id));
-      } catch (e) {
-          console.error("Erro ao carregar acessos:", e);
-      } finally {
-          setIsSavingAccess(false);
-      }
-  };
-
-  const toggleAccess = (courseId: string) => {
-      setStudentAccessedIds(prev => prev.includes(courseId) ? prev.filter(id => id !== courseId) : [...prev, courseId]);
-  };
-
-  const saveAccessChanges = async () => {
-      if (!unlockModalStudent) return;
-      const mainDealId = unlockModalStudent.deals[0]?.id;
-      if (!mainDealId) return;
-
-      setIsSavingAccess(true);
-      try {
-          const { error: delErr } = await appBackend.client
-            .from('crm_student_course_access')
-            .delete()
-            .eq('student_deal_id', mainDealId);
-          
-          if (delErr) throw delErr;
-
-          if (studentAccessedIds.length > 0) {
-              const inserts = studentAccessedIds.map(cid => ({ 
-                  student_deal_id: mainDealId, 
-                  course_id: cid, 
-                  unlocked_at: new Date().toISOString() 
-              }));
-              
-              const { error: insertError } = await appBackend.client
-                  .from('crm_student_course_access')
-                  .insert(inserts);
-              
-              if (insertError) throw insertError;
-          }
-          alert("Acessos atualizados com sucesso!");
-          setUnlockModalStudent(null);
-          fetchData(); 
-      } catch (e: any) { 
-          alert("Erro ao salvar acessos: " + e.message); 
-      } finally { 
-          setIsSavingAccess(false); 
+          setIsLoadingCpf(false);
       }
   };
 
@@ -377,10 +360,16 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                 >
                     <Search size={14}/> Compras por CPF
                 </button>
+                <button 
+                    onClick={() => setActiveSubTab('exclusions')}
+                    className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", activeSubTab === 'exclusions' ? "bg-white text-red-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                >
+                    <Trash2 size={14}/> Exclusões
+                </button>
             </div>
         </div>
 
-        {activeSubTab === 'list' ? (
+        {(activeSubTab === 'list' || activeSubTab === 'exclusions') ? (
             <>
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-4">
                     <div className="relative flex-1">
@@ -432,13 +421,20 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                         key={p.id} 
                                                         onClick={() => p.isCrm && handleViewDealDetails(p.id)}
                                                         className={clsx(
-                                                            "inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-purple-100 transition-all",
-                                                            p.isCrm && "hover:bg-purple-100 hover:border-purple-300"
+                                                            "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-black uppercase border transition-all",
+                                                            activeSubTab === 'exclusions' ? "bg-red-50 text-red-700 border-red-100" : "bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100 hover:border-purple-300"
                                                         )}
                                                     >
-                                                        {p.isCrm && <span className="bg-purple-600 text-white px-1 rounded-[2px] text-[7px] mr-0.5">CRM</span>}
+                                                        {p.isCrm && <span className={clsx("px-1 rounded-[2px] text-[7px] mr-0.5", activeSubTab === 'exclusions' ? "bg-red-600 text-white" : "bg-purple-600 text-white")}>CRM</span>}
                                                         {p.name}
-                                                        {p.isCrm && <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />}
+                                                        {activeSubTab === 'exclusions' ? (
+                                                            <div className="flex gap-1 ml-1">
+                                                                <RotateCcw size={10} onClick={(e) => { e.stopPropagation(); handleRestoreItem(p.id, p.name); }} className="hover:text-green-600" />
+                                                                <X size={10} onClick={(e) => { e.stopPropagation(); handlePermanentDelete(p.id, p.name); }} className="hover:text-red-900" />
+                                                            </div>
+                                                        ) : (
+                                                            <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />
+                                                        )}
                                                     </button>
                                                 ))}
                                                 {s.presential.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
@@ -451,13 +447,20 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                         key={p.id} 
                                                         onClick={() => p.isCrm && handleViewDealDetails(p.id)}
                                                         className={clsx(
-                                                            "inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-indigo-100 transition-all",
-                                                            p.isCrm && "hover:bg-indigo-100 hover:border-indigo-300"
+                                                            "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-black uppercase border transition-all",
+                                                            activeSubTab === 'exclusions' ? "bg-red-50 text-red-700 border-red-100" : "bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100 hover:border-indigo-300"
                                                         )}
                                                     >
-                                                        {p.isCrm && <span className="bg-indigo-600 text-white px-1 rounded-[2px] text-[7px] mr-0.5">CRM</span>}
+                                                        {p.isCrm && <span className={clsx("px-1 rounded-[2px] text-[7px] mr-0.5", activeSubTab === 'exclusions' ? "bg-red-600 text-white" : "bg-indigo-600 text-white")}>CRM</span>}
                                                         {p.name}
-                                                        {p.isCrm && <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />}
+                                                        {activeSubTab === 'exclusions' ? (
+                                                            <div className="flex gap-1 ml-1">
+                                                                <RotateCcw size={10} onClick={(e) => { e.stopPropagation(); handleRestoreItem(p.id, p.name); }} className="hover:text-green-600" />
+                                                                <X size={10} onClick={(e) => { e.stopPropagation(); handlePermanentDelete(p.id, p.name); }} className="hover:text-red-900" />
+                                                            </div>
+                                                        ) : (
+                                                            <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />
+                                                        )}
                                                     </button>
                                                 ))}
                                                 {s.digital.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
@@ -470,13 +473,20 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                                         key={p.id} 
                                                         onClick={() => p.isCrm && handleViewDealDetails(p.id)}
                                                         className={clsx(
-                                                            "inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-amber-100 transition-all",
-                                                            p.isCrm && "hover:bg-amber-100 hover:border-amber-300"
+                                                            "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-black uppercase border transition-all",
+                                                            activeSubTab === 'exclusions' ? "bg-red-50 text-red-700 border-red-100" : "bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100 hover:border-amber-300"
                                                         )}
                                                     >
-                                                        {p.isCrm && <span className="bg-amber-600 text-white px-1 rounded-[2px] text-[7px] mr-0.5">CRM</span>}
+                                                        {p.isCrm && <span className={clsx("px-1 rounded-[2px] text-[7px] mr-0.5", activeSubTab === 'exclusions' ? "bg-red-600 text-white" : "bg-amber-600 text-white")}>CRM</span>}
                                                         {p.name}
-                                                        {p.isCrm && <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />}
+                                                        {activeSubTab === 'exclusions' ? (
+                                                            <div className="flex gap-1 ml-1">
+                                                                <RotateCcw size={10} onClick={(e) => { e.stopPropagation(); handleRestoreItem(p.id, p.name); }} className="hover:text-green-600" />
+                                                                <X size={10} onClick={(e) => { e.stopPropagation(); handlePermanentDelete(p.id, p.name); }} className="hover:text-red-900" />
+                                                            </div>
+                                                        ) : (
+                                                            <X size={10} onClick={(e) => { e.stopPropagation(); handleDeleteItem(p.id, p.name); }} className="hover:text-red-600 ml-1" />
+                                                        )}
                                                     </button>
                                                 ))}
                                                 {s.events.length === 0 && <span className="text-slate-300 italic text-[10px]">--</span>}
@@ -678,7 +688,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         <p className="text-sm font-black text-green-700">{formatCurrency(viewingDeal.value)}</p>
                                     </div>
                                     <div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Data Venda</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1.5 ml-1">Data Venda</p>
                                         <p className="text-sm font-bold text-slate-800">{new Date(viewingDeal.created_at).toLocaleDateString()}</p>
                                     </div>
                                     <div>

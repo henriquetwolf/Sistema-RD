@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
@@ -527,7 +528,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button onClick={() => openUnlockModal(s)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-md hover:bg-indigo-700 active:scale-95 transition-all"><MonitorPlay size={12}/> Liberar</button>
                                                 <button onClick={() => handleDeleteStudent(s)} className="p-1.5 bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all" title="Excluir Aluno"><Trash2 size={16} /></button>
                                             </div>
                                         </td>
@@ -611,20 +611,6 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                                         </div>
                                     </div>
                                     <div className="flex gap-2 border-t pt-4">
-                                        <button 
-                                            onClick={() => openUnlockModal({
-                                                cpf: deal.cpf || '',
-                                                email: deal.email || '',
-                                                name: deal.company_name || deal.contact_name,
-                                                deals: [deal],
-                                                presential: [],
-                                                digital: [],
-                                                events: []
-                                            })}
-                                            className="flex-1 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                                        >
-                                            Gerenciar Acesso
-                                        </button>
                                         <button onClick={() => handleDeleteItem(deal.id, deal.product_name)} className="p-2.5 bg-red-50 hover:bg-red-100 text-red-400 rounded-xl transition-all" title="Excluir Compra"><Trash2 size={16}/></button>
                                     </div>
                                 </div>
@@ -652,7 +638,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                         <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3 text-xs text-amber-800 mb-2"><Zap size={18} className="shrink-0 text-amber-500"/><p>Marque os cursos que este aluno deve ter acesso no Portal.</p></div>
                         <div className="grid grid-cols-1 gap-3">
                             {onlineCourses.map(course => (
-                                <div key={course.id} onClick={() => toggleAccess(course.id)} className={clsx("p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group", studentAccessedIds.includes(course.id) ? "bg-indigo-50 border-indigo-500 shadow-sm" : "bg-white border-slate-100 hover:border-indigo-200")}>
+                                <div key={course.id} onClick={() => toggleAccess(course.id)} className={clsx("p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group", studentAccessedIds.includes(course.id) ? "bg-indigo-50 border-indigo-600 text-indigo-700 shadow-md" : "bg-white border-slate-100 hover:border-indigo-200")}>
                                     <div className="flex items-center gap-4">
                                         <div className={clsx("w-12 h-12 rounded-xl border-2 flex items-center justify-center", studentAccessedIds.includes(course.id) ? "bg-indigo-600 text-white border-white/20" : "bg-slate-50 text-slate-300 border-slate-100 group-hover:text-indigo-400")}><MonitorPlay size={24} /></div>
                                         <p className="font-black text-slate-800 text-sm">{course.title}</p>

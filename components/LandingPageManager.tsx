@@ -111,10 +111,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const templateReference = aiPrompt.referenceTemplate 
-        ? `IMPORTANTE: Baseie a estrutura, ordem das seções, tom de voz e estilo no modelo de página de referência: ${aiPrompt.referenceTemplate}.` 
+        ? `IMPORTANTE: Baseie a estrutura, ordem das seções e o tom de voz no modelo de página de referência: ${aiPrompt.referenceTemplate}.` 
         : '';
 
-      const prompt = `Crie uma página de vendas persuasiva e completa para o produto "${aiPrompt.productName}".
+      const prompt = `Crie uma página de vendas persuasiva para o produto "${aiPrompt.productName}".
       Descrição do produto: ${aiPrompt.productDescription}
       Público-alvo: ${aiPrompt.targetAudience}
       Benefícios principais: ${aiPrompt.mainBenefits}
@@ -124,7 +124,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       REGRAS OBRIGATÓRIAS:
       1. Gere no MÍNIMO 3 benefícios na seção 'features'.
       2. Gere no MÍNIMO 3 perguntas e respostas na seção 'faq'.
-      3. Inclua obrigatoriamente as seções: 'hero', 'features', 'text', 'pricing' e 'faq'.
       
       Retorne um JSON estruturado seguindo o esquema solicitado. 
       Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
@@ -181,11 +180,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         }
       });
 
-      const text = response.text;
-      if (!text) {
-        throw new Error("A IA não retornou um conteúdo válido.");
-      }
-
+      const text = response.text || "{}";
       const generated = JSON.parse(text);
       
       const newPage: Partial<LandingPage> = {
@@ -202,7 +197,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       setCurrentDraft(newPage);
     } catch (e: any) {
       console.error("Erro na geração:", e);
-      alert("Houve uma falha na geração da página. Por favor, tente novamente clicando no botão Gerar.");
+      alert("Houve uma falha na geração da página. Por favor, tente novamente.");
     } finally {
       setIsGenerating(false);
     }
@@ -920,7 +915,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
               <h3 className="text-2xl font-black text-slate-800 tracking-tight">Criar com Inteligência Artificial</h3>
               <button onClick={() => { setShowModal(false); setCurrentDraft(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>

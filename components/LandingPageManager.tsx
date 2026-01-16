@@ -422,8 +422,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
           {/* Área de Visualização/Edição de ALTA FIDELIDADE */}
           <main className="flex-1 bg-slate-200 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
-            <div className="bg-white w-full max-w-6xl shadow-2xl rounded-[3rem] overflow-hidden min-h-screen relative font-sans">
-               <nav className="bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-40">
+            <div className="bg-white w-full max-w-6xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-40">
+               <nav className="bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-40 rounded-t-[3rem]">
                   <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-8 object-contain" />
                </nav>
 

@@ -4,15 +4,12 @@ import {
   Save, X, Loader2, Sparkles, MonitorPlay, Copy, CheckCircle, 
   RefreshCw, Layout, Globe, Smartphone, CreditCard, MessageSquare, 
   HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText,
-  /* Fixed Duplicate identifier 'Type' on line 7 by removing it from lucide-react import */
-  ArrowUp, ArrowDown, MousePointer2, Settings, PlusCircle, Check,
-  Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
-  Type as TypeIcon
+  ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check,
+  Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
-import { LandingPage, LandingPageContent, LandingPageSection, FormModel } from '../types';
-/* Fixed Duplicate identifier 'Type' on line 13 by ensuring it is imported only from @google/genai */
-import { GoogleGenAI, Type } from "@google/genai";
+import { LandingPage, LandingPageContent, LandingPageSection } from '../types';
+import { GoogleGenAI, Type as SchemaType } from "@google/genai";
 import clsx from 'clsx';
 
 interface LandingPageManagerProps {
@@ -21,7 +18,6 @@ interface LandingPageManagerProps {
 
 export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }) => {
   const [pages, setPages] = useState<LandingPage[]>([]);
-  const [availableForms, setAvailableForms] = useState<FormModel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -29,7 +25,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const [isRefiningField, setIsRefiningField] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'visual_editor'>('list');
-  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -47,7 +42,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
   useEffect(() => {
     fetchPages();
-    fetchForms();
   }, []);
 
   const fetchPages = async () => {
@@ -63,77 +57,61 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     }
   };
 
-  const fetchForms = async () => {
-    try {
-      const data = await appBackend.getForms();
-      setAvailableForms(data || []);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   const handleCreateWithAi = async () => {
     if (!aiPrompt.productName || !aiPrompt.targetAudience) {
       alert("Informe pelo menos o nome do produto e o público-alvo.");
       return;
     }
 
-    if (!process.env.API_KEY) {
-        alert("Chave de API não configurada.");
-        return;
-    }
-
     setIsGenerating(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      const prompt = `Crie uma estrutura de página de vendas persuasiva para o produto "${aiPrompt.productName}".
-      Contexto: ${aiPrompt.productDescription}
-      Público: ${aiPrompt.targetAudience}
-      Benefícios: ${aiPrompt.mainBenefits}
-      Preço: ${aiPrompt.price}
+      const prompt = `Crie uma página de vendas persuasiva para o produto "${aiPrompt.productName}".
+      Descrição do produto: ${aiPrompt.productDescription}
+      Público-alvo: ${aiPrompt.targetAudience}
+      Benefícios principais: ${aiPrompt.mainBenefits}
+      Preço/Oferta: ${aiPrompt.price}
       
-      Gere um JSON com título e um array de seções (hero, text, features, pricing, faq).
-      Cada seção deve ter id único, type e content (objetos com textos apropriados).
-      Retorne APENAS o JSON.`;
+      Retorne um JSON estruturado seguindo o esquema solicitado. 
+      Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        contents: prompt,
         config: {
-          thinkingConfig: { thinkingBudget: 0 },
           responseMimeType: "application/json",
           responseSchema: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: {
-              title: { type: Type.STRING },
+              title: { type: SchemaType.STRING, description: "Título interno da página" },
               sections: {
-                type: Type.ARRAY,
+                type: SchemaType.ARRAY,
                 items: {
-                  type: Type.OBJECT,
+                  type: SchemaType.OBJECT,
                   properties: {
-                    id: { type: Type.STRING },
-                    type: { type: Type.STRING, enum: ['hero', 'text', 'features', 'pricing', 'faq'] },
+                    id: { type: SchemaType.STRING },
+                    type: { type: SchemaType.STRING, enum: ['hero', 'text', 'features', 'pricing', 'faq'] },
                     content: { 
-                        type: Type.OBJECT,
+                        type: SchemaType.OBJECT,
                         properties: {
-                            headline: { type: Type.STRING },
-                            subheadline: { type: Type.STRING },
-                            ctaText: { type: Type.STRING },
-                            title: { type: Type.STRING },
-                            text: { type: Type.STRING },
-                            mainTitle: { type: Type.STRING },
-                            price: { type: Type.STRING },
-                            installments: { type: Type.STRING },
+                            headline: { type: SchemaType.STRING },
+                            subheadline: { type: SchemaType.STRING },
+                            ctaText: { type: SchemaType.STRING },
+                            title: { type: SchemaType.STRING },
+                            text: { type: SchemaType.STRING },
+                            mainTitle: { type: SchemaType.STRING },
+                            price: { type: SchemaType.STRING },
+                            installments: { type: SchemaType.STRING },
                             items: {
-                                type: Type.ARRAY,
+                                type: SchemaType.ARRAY,
                                 items: {
-                                    type: Type.OBJECT,
+                                    type: SchemaType.OBJECT,
                                     properties: {
-                                        title: { type: Type.STRING },
-                                        description: { type: Type.STRING },
-                                        question: { type: Type.STRING },
-                                        answer: { type: Type.STRING }
+                                        title: { type: SchemaType.STRING },
+                                        description: { type: SchemaType.STRING },
+                                        question: { type: SchemaType.STRING },
+                                        answer: { type: SchemaType.STRING }
                                     }
                                 }
                             }
@@ -149,9 +127,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         }
       });
 
-      const text = response.text;
-      if (!text) throw new Error("A IA não retornou conteúdo.");
-      
+      const text = response.text || "{}";
       const generated = JSON.parse(text);
       
       const newPage: Partial<LandingPage> = {
@@ -167,8 +143,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       setCurrentDraft(newPage);
     } catch (e: any) {
-      console.error("Erro na geração por IA:", e);
-      alert("Erro ao gerar com IA: " + (e.message || "Tente novamente em instantes."));
+      console.error(e);
+      alert("Erro ao gerar com IA: " + (e.message || JSON.stringify(e)));
     } finally {
       setIsGenerating(false);
     }
@@ -194,8 +170,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        config: { thinkingConfig: { thinkingBudget: 0 } }
+        contents: prompt
       });
 
       const refinedText = (response.text || currentVal).trim();
@@ -250,7 +225,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       await fetchPages();
       setView('list');
       setEditingPage(null);
-      setSelectedSectionId(null);
     } catch (e: any) {
       alert(`Erro ao salvar: ${e.message}`);
     } finally {
@@ -305,17 +279,16 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         sections: [...(editingPage.content?.sections || []), newSection]
       }
     });
-    setSelectedSectionId(newSection.id);
   };
 
   const getInitialContentForType = (type: string) => {
     switch(type) {
-      case 'hero': return { headline: 'Título Impactante', subheadline: 'Descrição curta persuasiva.', ctaText: 'Quero Garantir', ctaUrl: '', imageUrl: '', textAlign: 'left', fontSize: 'base', fontFamily: 'sans' };
-      case 'text': return { title: 'Sobre o Produto', text: 'Escreva detalhes aqui...', textAlign: 'left', fontSize: 'base', fontFamily: 'sans' };
-      case 'features': return { mainTitle: 'Por que escolher?', items: [{ title: 'Destaque 1', description: 'Explicação.' }], textAlign: 'center', fontSize: 'base', fontFamily: 'sans' };
-      case 'pricing': return { price: 'R$ 997,00', installments: '12x R$ 97,00', ctaText: 'Comprar Agora', ctaUrl: '', formId: '', textAlign: 'center', fontSize: 'base', fontFamily: 'sans' };
-      case 'faq': return { items: [{ question: 'Como funciona?', answer: 'Explicação detalhada.' }], textAlign: 'center', fontSize: 'base', fontFamily: 'sans' };
-      case 'image': return { url: '', textAlign: 'center' };
+      case 'hero': return { headline: 'Título Impactante', subheadline: 'Descrição curta persuasiva.', ctaText: 'Quero Garantir', imageUrl: '' };
+      case 'text': return { title: 'Sobre o Produto', text: 'Escreva detalhes aqui...' };
+      case 'features': return { mainTitle: 'Por que escolher?', items: [{ title: 'Destaque 1', description: 'Explicação.' }] };
+      case 'pricing': return { price: 'R$ 997,00', installments: '12x R$ 97,00', ctaText: 'Comprar Agora' };
+      case 'faq': return { items: [{ question: 'Como funciona?', answer: 'Explicação detalhada.' }] };
+      case 'image': return { url: '' };
       default: return {};
     }
   };
@@ -352,15 +325,12 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         sections: editingPage.content!.sections.filter(s => s.id !== id)
       }
     });
-    if (selectedSectionId === id) setSelectedSectionId(null);
   };
-
-  const activeSection = editingPage?.content?.sections.find(s => s.id === selectedSectionId);
 
   if (view === 'visual_editor' && editingPage) {
     return (
       <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col animate-in fade-in">
-        <header className="h-16 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm z-30">
+        <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-sm">
           <div className="flex items-center gap-4">
             <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
             <div className="h-6 w-px bg-slate-200"></div>
@@ -374,156 +344,43 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Toolbar Lateral Dinâmica */}
-          <aside className="w-80 bg-white border-r border-slate-200 p-6 space-y-8 overflow-y-auto custom-scrollbar shadow-lg z-20">
-            {selectedSectionId && activeSection ? (
-              <div className="animate-in slide-in-from-left-2 duration-300">
-                <div className="flex items-center justify-between border-b pb-4 mb-6">
-                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                    <Edit2 size={14} className="text-orange-600" /> Editando: {activeSection.type}
-                  </h3>
-                  <button onClick={() => setSelectedSectionId(null)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"><X size={16}/></button>
+          {/* Toolbar Lateral */}
+          <aside className="w-72 bg-white border-r border-slate-200 p-6 space-y-8 overflow-y-auto custom-scrollbar shadow-lg z-20">
+            <div>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Novo Componente</h3>
+                <div className="grid grid-cols-1 gap-2">
+                {[
+                    { type: 'hero', label: 'Hero (Topo)', icon: Layout },
+                    { type: 'text', label: 'Texto/Sobre', icon: Type },
+                    { type: 'features', label: 'Benefícios', icon: ListChecks },
+                    { type: 'pricing', label: 'Oferta/Preço', icon: CreditCard },
+                    { type: 'faq', label: 'FAQ', icon: HelpCircle },
+                    { type: 'image', label: 'Imagem', icon: ImageIcon }
+                ].map(comp => (
+                    <button 
+                    key={comp.type} 
+                    onClick={() => addComponent(comp.type as any)}
+                    className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-orange-200 hover:bg-orange-50 text-xs font-bold text-slate-600 transition-all text-left group"
+                    >
+                    <comp.icon size={16} className="text-orange-500 group-hover:scale-110 transition-transform" /> {comp.label}
+                    </button>
+                ))}
                 </div>
-
-                <div className="space-y-6">
-                  {/* Estilos Gerais do Bloco */}
-                  <div className="space-y-4">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Estilos do Bloco</h4>
-                    <div className="grid grid-cols-1 gap-4">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Fonte</label>
-                        <select 
-                          className="w-full text-xs p-2.5 border rounded-xl mt-1 bg-white outline-none focus:ring-2 focus:ring-orange-500"
-                          value={activeSection.content.fontFamily || 'sans'}
-                          onChange={e => updateSection(activeSection.id, {...activeSection.content, fontFamily: e.target.value})}
-                        >
-                          <option value="sans">Sans Serif (Inter)</option>
-                          <option value="serif">Serif (Times)</option>
-                          <option value="mono">Monospace</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Tamanho Texto</label>
-                        <select 
-                          className="w-full text-xs p-2.5 border rounded-xl mt-1 bg-white outline-none focus:ring-2 focus:ring-orange-500"
-                          value={activeSection.content.fontSize || 'base'}
-                          onChange={e => updateSection(activeSection.id, {...activeSection.content, fontSize: e.target.value})}
-                        >
-                          <option value="xs">Extra Pequeno</option>
-                          <option value="sm">Pequeno</option>
-                          <option value="base">Normal</option>
-                          <option value="lg">Grande</option>
-                          <option value="xl">Extra Grande</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Alinhamento</label>
-                        <div className="flex bg-slate-50 p-1 rounded-xl mt-1 border">
-                           <button onClick={() => updateSection(activeSection.id, {...activeSection.content, textAlign: 'left'})} className={clsx("flex-1 py-2 flex justify-center rounded-lg transition-all", activeSection.content.textAlign === 'left' ? "bg-white shadow-sm text-orange-600" : "text-slate-400")}><AlignLeft size={16}/></button>
-                           <button onClick={() => updateSection(activeSection.id, {...activeSection.content, textAlign: 'center'})} className={clsx("flex-1 py-2 flex justify-center rounded-lg transition-all", activeSection.content.textAlign === 'center' ? "bg-white shadow-sm text-orange-600" : "text-slate-400")}><AlignCenter size={16}/></button>
-                           <button onClick={() => updateSection(activeSection.id, {...activeSection.content, textAlign: 'right'})} className={clsx("flex-1 py-2 flex justify-center rounded-lg transition-all", activeSection.content.textAlign === 'right' ? "bg-white shadow-sm text-orange-600" : "text-slate-400")}><AlignRight size={16}/></button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Campos Específicos por Tipo */}
-                  <div className="space-y-4 pt-4">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Conteúdo do Bloco</h4>
-                    
-                    {/* Campos Comuns de Texto */}
-                    {(activeSection.type === 'hero' || activeSection.type === 'text') && (
-                      <div className="space-y-4">
-                        <div>
-                           <label className="text-[10px] font-bold text-slate-500 uppercase">Título / Headline</label>
-                           <textarea className="w-full text-xs p-2.5 border rounded-xl mt-1 h-20 outline-none focus:ring-2 focus:ring-orange-500" value={activeSection.content.headline || activeSection.content.title} onChange={e => updateSection(activeSection.id, {...activeSection.content, [activeSection.type === 'hero' ? 'headline' : 'title']: e.target.value})} />
-                        </div>
-                        {activeSection.type === 'text' && (
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase">Texto Longo</label>
-                            <textarea className="w-full text-xs p-2.5 border rounded-xl mt-1 h-40 outline-none focus:ring-2 focus:ring-orange-500" value={activeSection.content.text} onChange={e => updateSection(activeSection.id, {...activeSection.content, text: e.target.value})} />
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Botão de Venda e Redirect */}
-                    {(activeSection.type === 'hero' || activeSection.type === 'pricing') && (
-                      <div className="space-y-4 p-4 bg-orange-50 rounded-2xl border border-orange-100">
-                        <p className="text-[10px] font-black text-orange-700 uppercase flex items-center gap-2"><Target size={12}/> Chamada para Ação (CTA)</p>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Texto do Botão</label>
-                          <input type="text" className="w-full text-xs p-2.5 border rounded-xl mt-1 bg-white outline-none focus:ring-2 focus:ring-orange-500" value={activeSection.content.ctaText} onChange={e => updateSection(activeSection.id, {...activeSection.content, ctaText: e.target.value})} />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Link de Redirecionamento</label>
-                          <input type="text" className="w-full text-xs p-2.5 border rounded-xl mt-1 bg-white outline-none focus:ring-2 focus:ring-orange-500" value={activeSection.content.ctaUrl || ''} onChange={e => updateSection(activeSection.id, {...activeSection.content, ctaUrl: e.target.value})} placeholder="https://..." />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Vínculo com Formulário */}
-                    {(activeSection.type === 'pricing') && (
-                      <div className="space-y-4 p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
-                        <p className="text-[10px] font-black text-indigo-700 uppercase flex items-center gap-2"><FileText size={12}/> Vínculo com Formulário</p>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Selecionar Formulário</label>
-                          <select 
-                            className="w-full text-xs p-2.5 border rounded-xl mt-1 bg-white outline-none focus:ring-2 focus:ring-indigo-500"
-                            value={activeSection.content.formId || ''}
-                            onChange={e => updateSection(activeSection.id, {...activeSection.content, formId: e.target.value})}
-                          >
-                            <option value="">Nenhum formulário</option>
-                            {availableForms.map(f => (
-                              <option key={f.id} value={f.id}>{f.title}</option>
-                            ))}
-                          </select>
-                          <p className="text-[9px] text-indigo-400 mt-2">O formulário será exibido após o botão ou como parte da oferta.</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+            </div>
+            
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Propriedades da Página</h3>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Título da Página</label>
+                <input className="w-full text-xs p-2.5 border rounded-xl mt-1 focus:ring-2 focus:ring-orange-500 outline-none" value={editingPage.title} onChange={e => setEditingPage({...editingPage, title: e.target.value})} />
               </div>
-            ) : (
-              <div className="space-y-8 animate-in fade-in duration-300">
-                <div>
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Novo Componente</h3>
-                    <div className="grid grid-cols-1 gap-2">
-                    {[
-                        { type: 'hero', label: 'Hero (Topo)', icon: Layout },
-                        { type: 'text', label: 'Texto/Sobre', icon: TypeIcon },
-                        { type: 'features', label: 'Benefícios', icon: ListChecks },
-                        { type: 'pricing', label: 'Oferta/Preço', icon: CreditCard },
-                        { type: 'faq', label: 'FAQ', icon: HelpCircle },
-                        { type: 'image', label: 'Imagem', icon: ImageIcon }
-                    ].map(comp => (
-                        <button 
-                        key={comp.type} 
-                        onClick={() => addComponent(comp.type as any)}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-orange-200 hover:bg-orange-50 text-xs font-bold text-slate-600 transition-all text-left group"
-                        >
-                        <comp.icon size={16} className="text-orange-500 group-hover:scale-110 transition-transform" /> {comp.label}
-                        </button>
-                    ))}
-                    </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Propriedades da Página</h3>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Título da Página</label>
-                    <input className="w-full text-xs p-2.5 border rounded-xl mt-1 focus:ring-2 focus:ring-orange-500 outline-none" value={editingPage.title} onChange={e => setEditingPage({...editingPage, title: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Slug amigável</label>
-                    <input className="w-full text-xs p-2.5 border rounded-xl mt-1 font-mono focus:ring-2 focus:ring-orange-500 outline-none" value={editingPage.slug} onChange={e => setEditingPage({...editingPage, slug: slugify(e.target.value)})} />
-                  </div>
-                </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Slug amigável</label>
+                <input className="w-full text-xs p-2.5 border rounded-xl mt-1 font-mono focus:ring-2 focus:ring-orange-500 outline-none" value={editingPage.slug} onChange={e => setEditingPage({...editingPage, slug: slugify(e.target.value)})} />
               </div>
-            )}
-            <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100 mt-auto">
-                <p className="text-[10px] text-orange-800 leading-relaxed"><Info size={12} className="inline mr-1"/> <strong>Dica:</strong> Clique em qualquer bloco na visualização para abrir os detalhes de edição na lateral.</p>
+            </div>
+            <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                <p className="text-[10px] text-orange-800 leading-relaxed"><Info size={12} className="inline mr-1"/> <strong>Dica de Edição:</strong> Clicar nos textos da página permite alterar o conteúdo instantaneamente. Use as setas para reordenar.</p>
             </div>
           </aside>
 
@@ -536,63 +393,45 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   <div className="bg-slate-900 text-white px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest opacity-50 cursor-not-allowed">Visualização do Site</div>
                </nav>
 
-               {editingPage.content?.sections?.map((section, idx) => {
-                 const isSelected = selectedSectionId === section.id;
-                 const sectionStyles = {
-                   textAlign: section.content.textAlign || 'left',
-                   fontFamily: section.content.fontFamily === 'serif' ? 'serif' : section.content.fontFamily === 'mono' ? 'monospace' : 'sans-serif',
-                   fontSize: section.content.fontSize === 'xs' ? '0.75rem' : section.content.fontSize === 'sm' ? '0.875rem' : section.content.fontSize === 'lg' ? '1.25rem' : section.content.fontSize === 'xl' ? '1.5rem' : '1rem'
-                 } as any;
-
-                 return (
-                   <div 
-                    key={section.id} 
-                    onClick={() => setSelectedSectionId(section.id)}
-                    className={clsx(
-                      "relative group/section border-4 transition-all cursor-pointer", 
-                      isSelected ? "border-orange-400" : "border-transparent hover:border-orange-200"
-                    )}
-                   >
+               {editingPage.content?.sections?.map((section, idx) => (
+                 <div key={section.id} className="relative group/section border-4 border-transparent hover:border-orange-400 transition-all">
                     {/* Controles de Seção Modernos */}
                     <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover/section:opacity-100 transition-opacity z-50">
                        <div className="bg-white/90 backdrop-blur-md p-1 rounded-xl shadow-2xl border border-slate-100 flex gap-1">
-                            <button onClick={(e) => { e.stopPropagation(); moveSection(idx, 'up'); }} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 hover:text-orange-600 transition-all" title="Mover para Cima"><ArrowUp size={16}/></button>
-                            <button onClick={(e) => { e.stopPropagation(); moveSection(idx, 'down'); }} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 hover:text-orange-600 transition-all" title="Mover para Baixo"><ArrowDown size={16}/></button>
+                            <button onClick={() => moveSection(idx, 'up')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 hover:text-orange-600 transition-all" title="Mover para Cima"><ArrowUp size={16}/></button>
+                            <button onClick={() => moveSection(idx, 'down')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 hover:text-orange-600 transition-all" title="Mover para Baixo"><ArrowDown size={16}/></button>
                             <div className="w-px h-4 bg-slate-200 self-center mx-1"></div>
-                            <button onClick={(e) => { e.stopPropagation(); removeSection(section.id); }} className="p-2 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 transition-all" title="Excluir Seção"><Trash2 size={16}/></button>
+                            <button onClick={() => removeSection(section.id)} className="p-2 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 transition-all" title="Excluir Seção"><Trash2 size={16}/></button>
                        </div>
                        <span className="bg-orange-500 text-white text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-widest shadow-lg">{section.type}</span>
                     </div>
 
-                    <div className="relative" style={sectionStyles}>
+                    <div className="relative">
                       {/* RENDERIZAÇÃO DE ALTA FIDELIDADE */}
                       {section.type === 'hero' && (
                         <header className="pt-24 pb-16 px-6 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative">
                           <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-orange-100/50 rounded-full blur-3xl"></div>
-                          <div className={clsx(
-                            "max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10",
-                            section.content.textAlign === 'center' ? 'text-center' : section.content.textAlign === 'right' ? 'text-right' : 'text-left'
-                          )}>
+                          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10">
                             <div className="space-y-6">
-                              <div className={clsx(
-                                "inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
-                                section.content.textAlign === 'center' ? 'mx-auto' : section.content.textAlign === 'right' ? 'ml-auto' : ''
-                              )}>
+                              <div className="inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
                                   <Award size={14}/> Formação Profissional Premium
                               </div>
-                              <h1 className="w-full text-4xl md:text-5xl font-black tracking-tight text-slate-900 leading-[1.1]">
-                                {section.content.headline}
-                              </h1>
-                              <p className="w-full text-lg text-slate-500 leading-relaxed font-medium">
-                                {section.content.subheadline}
-                              </p>
-                              <div className={clsx(
-                                "flex flex-col sm:flex-row items-center gap-4",
-                                section.content.textAlign === 'center' ? 'justify-center' : section.content.textAlign === 'right' ? 'justify-end' : 'justify-start'
-                              )}>
-                                  <div className="bg-orange-600 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-orange-600/20 hover:bg-orange-700 transition-all cursor-text outline-none">
-                                    {section.content.ctaText}
-                                  </div>
+                              <textarea 
+                                className="w-full text-4xl md:text-5xl font-black tracking-tight text-slate-900 leading-[1.1] bg-transparent border-none focus:ring-0 resize-none h-auto p-0 focus:outline-none" 
+                                value={section.content.headline} 
+                                onChange={e => updateSection(section.id, {...section.content, headline: e.target.value})}
+                              />
+                              <textarea 
+                                className="w-full text-lg text-slate-500 leading-relaxed font-medium bg-transparent border-none focus:ring-0 resize-none h-auto p-0 focus:outline-none" 
+                                value={section.content.subheadline} 
+                                onChange={e => updateSection(section.id, {...section.content, subheadline: e.target.value})}
+                              />
+                              <div className="flex flex-col sm:flex-row items-center gap-4">
+                                  <input 
+                                    className="bg-orange-600 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-orange-600/20 hover:bg-orange-700 transition-all cursor-text focus:ring-2 focus:ring-orange-300 outline-none" 
+                                    value={section.content.ctaText} 
+                                    onChange={e => updateSection(section.id, {...section.content, ctaText: e.target.value})}
+                                  />
                                   <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
                                     <ShieldCheck size={16} className="text-teal-500" /> Garantia incondicional de 7 dias
                                   </div>
@@ -606,9 +445,18 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                     ) : (
                                         <div className="text-slate-300 flex flex-col items-center gap-2">
                                             <ImageIcon size={64}/>
-                                            <span className="text-[10px] font-black uppercase">Imagem do Topo</span>
+                                            <span className="text-[10px] font-black uppercase">Clique para subir imagem</span>
                                         </div>
                                     )}
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img-hero:opacity-100 flex items-center justify-center transition-opacity cursor-pointer" onClick={() => handleImageUploadForSection(section.id)}>
+                                        <Upload className="text-white" size={32}/>
+                                    </div>
+                                </div>
+                                <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-3xl shadow-xl border border-slate-100 hidden md:block">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-bold">100%</div>
+                                        <p className="text-xs font-black text-slate-800 uppercase leading-tight">Satisfação<br/>Garantida</p>
+                                    </div>
                                 </div>
                             </div>
                           </div>
@@ -618,15 +466,19 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       {section.type === 'text' && (
                         <section className="py-20 px-8 bg-slate-50 border-y border-slate-100">
                             <div className="max-w-4xl mx-auto space-y-6">
-                              <div className={clsx("flex items-center gap-2", section.content.textAlign === 'center' ? 'justify-center' : section.content.textAlign === 'right' ? 'justify-end' : '')}>
+                              <div className="flex items-center gap-2">
                                 <Info className="text-orange-500" size={24}/>
-                                <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-                                    {section.content.title}
-                                </h2>
+                                <input 
+                                    className="text-2xl font-black text-slate-800 tracking-tight bg-transparent border-none focus:ring-0 p-0 w-full focus:outline-none" 
+                                    value={section.content.title} 
+                                    onChange={e => updateSection(section.id, {...section.content, title: e.target.value})}
+                                />
                               </div>
-                              <p className="w-full text-lg text-slate-600 leading-relaxed whitespace-pre-wrap">
-                                {section.content.text}
-                              </p>
+                              <textarea 
+                                className="w-full text-lg text-slate-600 leading-relaxed whitespace-pre-wrap bg-transparent border-none focus:ring-0 p-0 h-48 focus:outline-none" 
+                                value={section.content.text} 
+                                onChange={e => updateSection(section.id, {...section.content, text: e.target.value})}
+                              />
                             </div>
                         </section>
                       )}
@@ -635,21 +487,50 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                         <section className="py-20 px-8 bg-white">
                           <div className="max-w-7xl mx-auto">
                             <div className="text-center mb-16">
-                              <h2 className="w-full text-3xl font-black text-slate-900 tracking-tight mb-4">
-                                {section.content.mainTitle}
-                              </h2>
+                              <input 
+                                className="w-full text-center text-3xl font-black text-slate-900 tracking-tight mb-4 bg-transparent border-none focus:ring-0 p-0 focus:outline-none" 
+                                value={section.content.mainTitle} 
+                                onChange={e => updateSection(section.id, {...section.content, mainTitle: e.target.value})}
+                              />
                               <div className="h-1.5 w-24 bg-orange-500 mx-auto rounded-full"></div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                               {section.content.items?.map((feature: any, i: number) => (
                                 <div key={i} className="p-8 rounded-[2.5rem] bg-slate-50 border border-slate-100 hover:border-orange-200 transition-all group/feat text-center relative">
+                                  <button onClick={() => {
+                                      const newItems = section.content.items.filter((_: any, idx: number) => idx !== i);
+                                      updateSection(section.id, {...section.content, items: newItems});
+                                  }} className="absolute top-4 right-4 opacity-0 group-hover/feat:opacity-100 text-red-400 hover:text-red-600 transition-opacity"><Trash2 size={14}/></button>
                                   <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-orange-600 mb-6 group-hover/feat:scale-110 transition-transform mx-auto">
                                     <CheckCircle2 size={24} />
                                   </div>
-                                  <h3 className="w-full font-black text-slate-800 mb-3 text-xl">{feature.title}</h3>
-                                  <p className="w-full text-slate-500 leading-relaxed font-medium">{feature.description}</p>
+                                  <input 
+                                    className="w-full text-center font-black text-slate-800 mb-3 bg-transparent border-none focus:ring-0 p-0 focus:outline-none text-xl" 
+                                    value={feature.title} 
+                                    onChange={e => {
+                                      const newItems = [...section.content.items];
+                                      newItems[i].title = e.target.value;
+                                      updateSection(section.id, {...section.content, items: newItems});
+                                    }}
+                                  />
+                                  <textarea 
+                                    className="w-full text-center text-slate-500 leading-relaxed font-medium bg-transparent border-none focus:ring-0 p-0 h-24 resize-none focus:outline-none" 
+                                    value={feature.description}
+                                    onChange={e => {
+                                      const newItems = [...section.content.items];
+                                      newItems[i].description = e.target.value;
+                                      updateSection(section.id, {...section.content, items: newItems});
+                                    }}
+                                  />
                                 </div>
                               ))}
+                              <button 
+                                onClick={() => updateSection(section.id, {...section.content, items: [...(section.content.items || []), { title: 'Novo Destaque', description: 'Explicação curta aqui.' }]})}
+                                className="p-8 border-2 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 transition-all gap-2"
+                              >
+                                <PlusCircle size={32} />
+                                <span className="text-[10px] font-black uppercase tracking-widest">Adicionar Benefício</span>
+                              </button>
                             </div>
                           </div>
                         </section>
@@ -664,33 +545,29 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                               <div className="absolute top-0 right-10 -mt-5 bg-orange-500 text-white px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest shadow-xl">Oferta por tempo limitado</div>
                               <p className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em] mb-4">Acesso Imediato por apenas:</p>
                               <div className="mb-4">
-                                <h3 className="w-full text-5xl md:text-7xl font-black tracking-tighter text-slate-900">
-                                    {section.content.price}
-                                </h3>
+                                <input 
+                                    className="w-full text-center text-5xl md:text-7xl font-black tracking-tighter text-slate-900 bg-transparent border-none focus:ring-0 p-0 focus:outline-none" 
+                                    value={section.content.price} 
+                                    onChange={e => updateSection(section.id, {...section.content, price: e.target.value})}
+                                />
                               </div>
                               <div className="flex justify-center items-center gap-2 mb-10">
                                 <span className="text-lg font-bold text-indigo-400">Ou em até</span>
-                                <span className="text-lg font-bold text-indigo-600">{section.content.installments}</span>
+                                <input 
+                                    className="text-lg font-bold text-indigo-600 bg-transparent border-none focus:ring-0 p-0 w-48 focus:outline-none" 
+                                    value={section.content.installments}
+                                    onChange={e => updateSection(section.id, {...section.content, installments: e.target.value})}
+                                />
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left mb-10 border-y border-slate-100 py-8">
                                 <div className="flex items-center gap-3 text-sm font-bold text-slate-600"><CheckCircle2 className="text-teal-500" size={18}/> Acesso completo à plataforma</div>
                                 <div className="flex items-center gap-3 text-sm font-bold text-slate-600"><CheckCircle2 className="text-teal-500" size={18}/> Suporte direto com instrutores</div>
                               </div>
-                              <div className="w-full bg-orange-600 text-white py-6 rounded-2xl font-black text-xl uppercase tracking-widest shadow-2xl shadow-orange-600/30 transition-all text-center">
-                                {section.content.ctaText}
-                              </div>
-                              
-                              {section.content.formId && (
-                                <div className="mt-8 pt-8 border-t border-slate-100">
-                                  <div className="bg-slate-50 p-6 rounded-2xl border-2 border-dashed border-indigo-200 flex flex-col items-center gap-2">
-                                     <FileText className="text-indigo-600" size={24}/>
-                                     <p className="text-xs font-bold text-indigo-900">Formulário Vinculado:</p>
-                                     <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-white px-2 py-0.5 rounded border">
-                                       {availableForms.find(f => f.id === section.content.formId)?.title || 'ID: ' + section.content.formId}
-                                     </span>
-                                  </div>
-                                </div>
-                              )}
+                              <input 
+                                className="w-full bg-orange-600 hover:bg-orange-700 text-white py-6 rounded-2xl font-black text-xl uppercase tracking-widest shadow-2xl shadow-orange-600/30 transition-all focus:ring-4 focus:ring-orange-200 outline-none cursor-text text-center" 
+                                value={section.content.ctaText}
+                                onChange={e => updateSection(section.id, {...section.content, ctaText: e.target.value})}
+                              />
                             </div>
                           </div>
                         </section>
@@ -703,10 +580,36 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                             <div className="space-y-4">
                               {section.content.items?.map((item: any, i: number) => (
                                 <div key={i} className="bg-white rounded-3xl border border-slate-200 p-6 group/faq relative">
-                                  <h4 className="w-full font-black text-slate-800 mb-3">{item.question}</h4>
-                                  <p className="w-full text-sm text-slate-500 leading-relaxed font-medium">{item.answer}</p>
+                                  <button onClick={() => {
+                                      const newItems = section.content.items.filter((_: any, idx: number) => idx !== i);
+                                      updateSection(section.id, {...section.content, items: newItems});
+                                  }} className="absolute top-4 right-4 opacity-0 group-hover/faq:opacity-100 text-red-400 hover:text-red-600 transition-opacity"><X size={14}/></button>
+                                  <input 
+                                    className="w-full font-black text-slate-800 bg-transparent border-none focus:ring-0 p-0 mb-3 focus:outline-none" 
+                                    value={item.question}
+                                    onChange={e => {
+                                      const newItems = [...section.content.items];
+                                      newItems[i].question = e.target.value;
+                                      updateSection(section.id, {...section.content, items: newItems});
+                                    }}
+                                  />
+                                  <textarea 
+                                    className="w-full text-sm text-slate-500 leading-relaxed font-medium bg-transparent border-none focus:ring-0 p-0 h-16 resize-none focus:outline-none" 
+                                    value={item.answer}
+                                    onChange={e => {
+                                      const newItems = [...section.content.items];
+                                      newItems[i].answer = e.target.value;
+                                      updateSection(section.id, {...section.content, items: newItems});
+                                    }}
+                                  />
                                 </div>
                               ))}
+                              <button 
+                                onClick={() => updateSection(section.id, {...section.content, items: [...(section.content.items || []), { question: 'Qual a dúvida?', answer: 'Escreva a resposta aqui...' }]})}
+                                className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl flex items-center justify-center text-slate-400 hover:bg-white transition-all font-bold text-xs uppercase tracking-widest"
+                              >
+                                + Adicionar Pergunta ao FAQ
+                              </button>
                             </div>
                           </div>
                         </section>
@@ -720,15 +623,18 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                 ) : (
                                     <div className="text-slate-300 flex flex-col items-center gap-2">
                                         <ImageIcon size={64}/>
-                                        <span className="text-[10px] font-black uppercase">Clique para subir imagem</span>
+                                        <span className="text-[10px] font-black uppercase">Clique para subir imagem de bloco</span>
                                     </div>
                                 )}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 flex items-center justify-center transition-opacity cursor-pointer" onClick={() => handleImageUploadForSection(section.id)}>
+                                    <Upload className="text-white" size={32}/>
+                                </div>
                             </div>
                          </div>
                       )}
                     </div>
                  </div>
-               )})}
+               ))}
 
                {editingPage.content?.sections?.length === 0 && (
                  <div className="h-screen flex flex-col items-center justify-center text-slate-300">
@@ -859,11 +765,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                      <div className="grid grid-cols-1 gap-6">
                         <div>
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
-                            <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
+                            <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-base font-bold outline-none" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
                         </div>
                         <div>
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto</label>
-                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm h-24 resize-none outline-none" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Fale sobre os benefícios e o que o aluno aprende..." />
+                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-24 resize-none outline-none" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Fale sobre os benefícios e o que o aluno aprende..." />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>

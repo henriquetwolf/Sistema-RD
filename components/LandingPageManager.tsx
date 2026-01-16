@@ -111,15 +111,20 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const templateReference = aiPrompt.referenceTemplate 
-        ? `IMPORTANTE: Baseie a estrutura, ordem das seções e o tom de voz no modelo de página de referência: ${aiPrompt.referenceTemplate}.` 
+        ? `IMPORTANTE: Baseie a estrutura, ordem das seções, tom de voz e estilo no modelo de página de referência: ${aiPrompt.referenceTemplate}.` 
         : '';
 
-      const prompt = `Crie uma página de vendas persuasiva para o produto "${aiPrompt.productName}".
+      const prompt = `Crie uma página de vendas persuasiva e completa para o produto "${aiPrompt.productName}".
       Descrição do produto: ${aiPrompt.productDescription}
       Público-alvo: ${aiPrompt.targetAudience}
       Benefícios principais: ${aiPrompt.mainBenefits}
       Preço/Oferta: ${aiPrompt.price}
       ${templateReference}
+      
+      REGRAS OBRIGATÓRIAS:
+      1. Gere no MÍNIMO 3 benefícios na seção 'features'.
+      2. Gere no MÍNIMO 3 perguntas e respostas na seção 'faq'.
+      3. Inclua obrigatoriamente as seções: 'hero', 'features', 'text', 'pricing' e 'faq'.
       
       Retorne um JSON estruturado seguindo o esquema solicitado. 
       Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
@@ -337,9 +342,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     switch(type) {
       case 'hero': return { headline: 'Título Impactante', subheadline: 'Descrição curta persuasiva.', ctaText: 'Quero Garantir', ctaUrl: '', imageUrl: '' };
       case 'text': return { title: 'Sobre o Produto', text: 'Escreva detalhes aqui...' };
-      case 'features': return { mainTitle: 'Por que escolher?', items: [{ title: 'Destaque 1', description: 'Explicação.' }] };
+      case 'features': return { mainTitle: 'Por que escolher?', items: [{ title: 'Destaque 1', description: 'Explicação.' }, { title: 'Destaque 2', description: 'Explicação.' }, { title: 'Destaque 3', description: 'Explicação.' }] };
       case 'pricing': return { price: 'R$ 997,00', installments: '12x R$ 97,00', ctaText: 'Comprar Agora', ctaUrl: '' };
-      case 'faq': return { items: [{ question: 'Como funciona?', answer: 'Explicação detalhada.' }] };
+      case 'faq': return { items: [{ question: 'Como funciona?', answer: 'Explicação detalhada.' }, { question: 'Qual a garantia?', answer: '7 dias.' }, { question: 'O acesso é vitalício?', answer: 'Sim.' }] };
       case 'image': return { url: '' };
       case 'form': return { title: 'Inscreva-se', formId: '' };
       default: return {};
@@ -915,7 +920,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
               <h3 className="text-2xl font-black text-slate-800 tracking-tight">Criar com Inteligência Artificial</h3>
               <button onClick={() => { setShowModal(false); setCurrentDraft(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
@@ -1106,7 +1111,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                                   {section.content.items?.map((item: any, iIdx: number) => (
                                                       <div key={iIdx} className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm">
                                                           <div className="relative group">
-                                                              <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">Título {iIdx + 1}</label>
+                                                              <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">Título Benefício {iIdx + 1}</label>
                                                               <input className="w-full px-3 py-1.5 border rounded-lg text-xs font-bold pr-8" value={item.title} onChange={e => {
                                                                   const newSections = [...currentDraft.content!.sections];
                                                                   newSections[sIdx].content.items[iIdx].title = e.target.value;
@@ -1161,6 +1166,48 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                               </div>
                                           </div>
                                       )}
+
+                                      {section.type === 'faq' && (
+                                          <div className="space-y-4">
+                                              <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Perguntas Frequentes (FAQ)</label>
+                                              <div className="grid grid-cols-1 gap-4">
+                                                  {section.content.items?.map((item: any, iIdx: number) => (
+                                                      <div key={iIdx} className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm">
+                                                          <div className="relative group">
+                                                              <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">Pergunta {iIdx + 1}</label>
+                                                              <input className="w-full px-3 py-1.5 border rounded-lg text-xs font-bold pr-8" value={item.question} onChange={e => {
+                                                                  const newSections = [...currentDraft.content!.sections];
+                                                                  newSections[sIdx].content.items[iIdx].question = e.target.value;
+                                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                              }} placeholder="Pergunta" />
+                                                              <button 
+                                                                onClick={() => handleRefineFieldWithAi(section.id, `items.${iIdx}.question`, item.question)}
+                                                                disabled={isRefiningField === `${section.id}-items.${iIdx}.question`}
+                                                                className="absolute right-1 top-[18px] p-1 text-indigo-600 hover:text-indigo-800 transition-all"
+                                                              >
+                                                                  {isRefiningField === `${section.id}-items.${iIdx}.question` ? <Loader2 size={10} className="animate-spin"/> : <Wand2 size={10}/>}
+                                                              </button>
+                                                          </div>
+                                                          <div className="relative group">
+                                                              <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">Resposta {iIdx + 1}</label>
+                                                              <textarea className="w-full px-3 py-1.5 border rounded-lg text-[10px] h-16 resize-none pr-8 leading-tight" value={item.answer} onChange={e => {
+                                                                  const newSections = [...currentDraft.content!.sections];
+                                                                  newSections[sIdx].content.items[iIdx].answer = e.target.value;
+                                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                              }} placeholder="Resposta" />
+                                                              <button 
+                                                                onClick={() => handleRefineFieldWithAi(section.id, `items.${iIdx}.answer`, item.answer)}
+                                                                disabled={isRefiningField === `${section.id}-items.${iIdx}.answer`}
+                                                                className="absolute right-1 top-[18px] p-1 text-indigo-600 hover:text-indigo-800 transition-all"
+                                                                >
+                                                                    {isRefiningField === `${section.id}-items.${iIdx}.answer` ? <Loader2 size={10} className="animate-spin"/> : <Wand2 size={10}/>}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                   </div>
                               ))}
                           </div>

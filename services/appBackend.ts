@@ -114,16 +114,16 @@ export const appBackend = {
       description: data.description, 
       campaign: data.campaign, 
       isLeadCapture: data.is_lead_capture, 
-      distributionMode: data.distribution_mode, 
-      fixedOwnerId: data.fixed_owner_id, 
-      teamId: data.team_id, 
-      targetPipeline: data.target_pipeline, 
-      targetStage: data.target_stage, 
+      distributionMode: data.distributionMode, 
+      fixedOwnerId: data.fixedOwnerId, 
+      teamId: data.teamId, 
+      targetPipeline: data.targetPipeline, 
+      targetStage: data.targetStage, 
       questions: data.questions, 
       style: data.style, 
       createdAt: data.created_at, 
       submissionsCount: data.crm_form_submissions?.[0]?.count || 0, 
-      folderId: data.folder_id
+      folderId: data.folderId
     };
   },
 
@@ -369,7 +369,6 @@ export const appBackend = {
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
-    // Fix: changed trigger.payload_json to trigger.payloadJson to match the WebhookTrigger interface
     await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || crypto.randomUUID(), pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson, created_at: trigger.createdAt || new Date().toISOString() });
   },
 
@@ -512,7 +511,7 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primary_key, interval_minutes: preset.interval_minutes, created_by_name: preset.created_by_name };
+    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
@@ -1055,7 +1054,8 @@ export const appBackend = {
     // TRATAMENTO CRÍTICO: Detectar se é um novo registro e evitar envio de string vazia para coluna UUID
     const isNew = !lp.id || (typeof lp.id === 'string' && lp.id.trim() === '');
     
-    // Mapeamento explícito das colunas snake_case EXATAMENTE como estão na tabela V78/V79/V80
+    // Mapeamento explícito das colunas snake_case EXATAMENTE como estão na tabela V78/V79/V80/V81
+    // Adicionamos redundância para 'name' e 'title' para evitar erros de constraint caso o rename SQL ainda não tenha rodado
     const payload: any = {
       title: lp.title,
       product_name: lp.productName || null,
@@ -1070,19 +1070,32 @@ export const appBackend = {
             // No INSERT, removemos a chave 'id' para que o DEFAULT gen_random_uuid() do Postgres funcione.
             payload.created_at = new Date().toISOString();
             const { error } = await supabase.from('crm_landing_pages').insert([payload]);
-            if (error) throw error;
+            if (error) {
+                // Se der erro de coluna 'name' faltando no payload, tentamos enviar com 'name'
+                if (error.message.includes('column "name"') || error.message.includes('null value in column "name"')) {
+                    payload.name = lp.title;
+                    const { error: retryError } = await supabase.from('crm_landing_pages').insert([payload]);
+                    if (retryError) throw retryError;
+                } else {
+                    throw error;
+                }
+            }
         } else {
             // No UPDATE, identificamos pelo ID fornecido e não mexemos na data de criação.
             const { error } = await supabase.from('crm_landing_pages').update(payload).eq('id', lp.id);
-            if (error) throw error;
+            if (error) {
+                if (error.message.includes('column "name"')) {
+                    payload.name = lp.title;
+                    const { error: retryError } = await supabase.from('crm_landing_pages').update(payload).eq('id', lp.id);
+                    if (retryError) throw retryError;
+                } else {
+                    throw error;
+                }
+            }
         }
         
         // Após salvar com sucesso, forçamos o PostgREST a recarregar o schema cache 
-        // para mitigar o erro "column not found" em futuras requisições
-        await supabase.rpc('reload_schema_cache').catch(() => {
-            // O comando NOTIFY pgrst, 'reload schema' via SQL é mais eficiente, 
-            // mas o RPC é um fallback para algumas instâncias.
-        });
+        await supabase.rpc('reload_schema_cache').catch(() => {});
         
     } catch (err: any) {
         console.error("Erro fatal ao salvar Landing Page no Supabase:", err);

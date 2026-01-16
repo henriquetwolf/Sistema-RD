@@ -176,7 +176,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         }
       });
 
-      const text = response.text || "{}";
+      const text = response.text;
+      if (!text) {
+        throw new Error("A IA não retornou um conteúdo válido.");
+      }
+
       const generated = JSON.parse(text);
       
       const newPage: Partial<LandingPage> = {
@@ -193,7 +197,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       setCurrentDraft(newPage);
     } catch (e: any) {
       console.error("Erro na geração:", e);
-      alert("Erro ao gerar com IA. Verifique sua conexão ou tente novamente.");
+      alert("Houve uma falha na geração da página. Por favor, tente novamente clicando no botão Gerar.");
     } finally {
       setIsGenerating(false);
     }

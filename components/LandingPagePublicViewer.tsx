@@ -1,9 +1,8 @@
-
 import React from 'react';
 import { LandingPage, LandingPageSection } from '../types';
 import { 
   CheckCircle2, ArrowRight, MessageSquare, ChevronRight, 
-  HelpCircle, ShieldCheck, CreditCard, Award, GraduationCap, Smartphone, AlertCircle, Edit2, Info, CheckCircle
+  HelpCircle, ShieldCheck, CreditCard, Award, GraduationCap, Smartphone, AlertCircle, Info, CheckCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -182,7 +181,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 overflow-x-hidden">
-      {/* Navbar Minimalist */}
+      {/* Navbar Minimalist - Botão Editar Removido conforme solicitado */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-8 object-contain" />

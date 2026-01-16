@@ -1,9 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, Search, Edit2, Trash2, ExternalLink, ArrowLeft, 
   Save, X, Loader2, Sparkles, MonitorPlay, Copy, CheckCircle, 
-  // Add missing Check import
   RefreshCw, Layout, Globe, Smartphone, CreditCard, MessageSquare, 
   HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText,
   ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check
@@ -72,9 +70,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       Benefícios principais: ${aiPrompt.mainBenefits}
       Preço/Oferta: ${aiPrompt.price}
       
-      Retorne um JSON com: 
-      - title: nome da página
-      - sections: array de objetos { id, type, content } onde type pode ser 'hero', 'text', 'features', 'pricing', 'faq'.
+      Retorne um JSON estruturado seguindo o esquema solicitado. 
       Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
 
       const response = await ai.models.generateContent({
@@ -85,19 +81,45 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           responseSchema: {
             type: SchemaType.OBJECT,
             properties: {
-              title: { type: SchemaType.STRING },
+              title: { type: SchemaType.STRING, description: "Título interno da página" },
               sections: {
                 type: SchemaType.ARRAY,
                 items: {
                   type: SchemaType.OBJECT,
                   properties: {
                     id: { type: SchemaType.STRING },
-                    type: { type: SchemaType.STRING },
-                    content: { type: SchemaType.OBJECT }
-                  }
+                    type: { type: SchemaType.STRING, enum: ['hero', 'text', 'features', 'pricing', 'faq'] },
+                    content: { 
+                        type: SchemaType.OBJECT,
+                        properties: {
+                            headline: { type: SchemaType.STRING },
+                            subheadline: { type: SchemaType.STRING },
+                            ctaText: { type: SchemaType.STRING },
+                            title: { type: SchemaType.STRING },
+                            text: { type: SchemaType.STRING },
+                            mainTitle: { type: SchemaType.STRING },
+                            price: { type: SchemaType.STRING },
+                            installments: { type: SchemaType.STRING },
+                            items: {
+                                type: SchemaType.ARRAY,
+                                items: {
+                                    type: SchemaType.OBJECT,
+                                    properties: {
+                                        title: { type: SchemaType.STRING },
+                                        description: { type: SchemaType.STRING },
+                                        question: { type: SchemaType.STRING },
+                                        answer: { type: SchemaType.STRING }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                  },
+                  required: ["id", "type", "content"]
                 }
               }
-            }
+            },
+            required: ["title", "sections"]
           }
         }
       });
@@ -121,7 +143,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       setShowModal(false);
     } catch (e: any) {
       console.error(e);
-      alert("Erro ao gerar com IA: " + e.message);
+      alert("Erro ao gerar com IA: " + (e.message || JSON.stringify(e)));
     } finally {
       setIsGenerating(false);
     }
@@ -142,12 +164,38 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     }
   };
 
+  // Fix: Implemented missing handleDelete function for landing pages
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Excluir esta página?")) return;
-    try {
-      await appBackend.deleteLandingPage(id);
-      setPages(prev => prev.filter(p => p.id !== id));
-    } catch (e) { alert("Erro ao excluir."); }
+    if (window.confirm("Deseja realmente excluir esta página permanentemente?")) {
+      try {
+        await appBackend.deleteLandingPage(id);
+        setPages(prev => prev.filter(p => p.id !== id));
+      } catch (e: any) {
+        alert("Erro ao excluir: " + e.message);
+      }
+    }
+  };
+
+  const handleImageUploadForSection = (sectionId: string) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = (e: any) => {
+          const file = e.target.files[0];
+          if (file) {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                  const base64 = reader.result as string;
+                  updateSection(sectionId, { 
+                      ...(editingPage?.content?.sections.find(s => s.id === sectionId)?.content || {}),
+                      imageUrl: base64,
+                      url: base64 // Para compatibilidade com componente 'image'
+                  });
+              };
+              reader.readAsDataURL(file);
+          }
+      };
+      input.click();
   };
 
   const addComponent = (type: LandingPageSection['type']) => {
@@ -262,6 +310,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                 <input className="w-full text-xs p-2 border rounded mt-1 font-mono" value={editingPage.slug} onChange={e => setEditingPage({...editingPage, slug: slugify(e.target.value)})} />
               </div>
             </div>
+            <div className="p-4 bg-orange-50 rounded-xl border border-orange-100">
+                <p className="text-[10px] text-orange-800 leading-relaxed"><Info size={12} className="inline mr-1"/> <strong>Dica:</strong> Clique nos textos da visualização para editá-los diretamente.</p>
+            </div>
           </aside>
 
           {/* Área de Visualização/Edição */}
@@ -271,62 +322,146 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                  <div key={section.id} className="relative group/section border-2 border-transparent hover:border-orange-400 transition-all">
                     {/* Controles de Seção */}
                     <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover/section:opacity-100 transition-opacity z-50">
-                       <button onClick={() => moveSection(idx, 'up')} className="p-1.5 bg-white border shadow-md rounded-lg text-slate-600 hover:text-orange-600"><ArrowUp size={14}/></button>
-                       <button onClick={() => moveSection(idx, 'down')} className="p-1.5 bg-white border shadow-md rounded-lg text-slate-600 hover:text-orange-600"><ArrowDown size={14}/></button>
-                       <button onClick={() => removeSection(section.id)} className="p-1.5 bg-white border shadow-md rounded-lg text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
+                       <button onClick={() => moveSection(idx, 'up')} className="p-1.5 bg-white border shadow-md rounded-lg text-slate-600 hover:text-orange-600" title="Mover para Cima"><ArrowUp size={14}/></button>
+                       <button onClick={() => moveSection(idx, 'down')} className="p-1.5 bg-white border shadow-md rounded-lg text-slate-600 hover:text-orange-600" title="Mover para Baixo"><ArrowDown size={14}/></button>
+                       <button onClick={() => removeSection(section.id)} className="p-1.5 bg-white border shadow-md rounded-lg text-red-400 hover:text-red-600" title="Excluir Seção"><Trash2 size={14}/></button>
                     </div>
 
-                    <div className="pointer-events-none">
-                      {/* Renderização Simplificada para o Editor */}
+                    <div className="relative">
+                      {/* Renderização com Edição In-line */}
                       {section.type === 'hero' && (
                         <div className="bg-slate-50 p-16 text-center lg:text-left grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
                            <div>
-                              <h1 className="text-4xl font-black text-slate-800 mb-4">{section.content.headline}</h1>
-                              <p className="text-slate-500 mb-8">{section.content.subheadline}</p>
-                              <div className="inline-block bg-orange-600 text-white px-8 py-4 rounded-2xl font-black text-sm uppercase">{section.content.ctaText}</div>
+                              <textarea 
+                                className="w-full text-4xl font-black text-slate-800 mb-4 bg-transparent border-none focus:ring-0 resize-none h-auto p-0" 
+                                value={section.content.headline} 
+                                onChange={e => updateSection(section.id, {...section.content, headline: e.target.value})}
+                              />
+                              <textarea 
+                                className="w-full text-slate-500 mb-8 bg-transparent border-none focus:ring-0 resize-none h-auto p-0" 
+                                value={section.content.subheadline} 
+                                onChange={e => updateSection(section.id, {...section.content, subheadline: e.target.value})}
+                              />
+                              <input 
+                                className="inline-block bg-orange-600 text-white px-8 py-4 rounded-2xl font-black text-sm uppercase cursor-text border-none focus:ring-2 focus:ring-white" 
+                                value={section.content.ctaText} 
+                                onChange={e => updateSection(section.id, {...section.content, ctaText: e.target.value})}
+                              />
                            </div>
-                           <div className="bg-slate-200 rounded-[2rem] aspect-video flex items-center justify-center">
-                              {section.content.imageUrl ? <img src={section.content.imageUrl} className="w-full h-full object-cover rounded-[2rem]"/> : <ImageIcon className="text-slate-300" size={48}/>}
+                           <div className="bg-slate-200 rounded-[2rem] aspect-video flex items-center justify-center relative group/img overflow-hidden">
+                              {section.content.imageUrl ? (
+                                <img src={section.content.imageUrl} className="w-full h-full object-cover" />
+                              ) : (
+                                <ImageIcon className="text-slate-300" size={48}/>
+                              )}
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity cursor-pointer" onClick={() => handleImageUploadForSection(section.id)}>
+                                <Upload className="text-white" size={32}/>
+                              </div>
                            </div>
                         </div>
                       )}
                       {section.type === 'text' && (
                         <div className="p-16">
-                           <h2 className="text-2xl font-black text-slate-800 mb-4">{section.content.title}</h2>
-                           <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{section.content.text}</p>
+                           <input 
+                            className="w-full text-2xl font-black text-slate-800 mb-4 bg-transparent border-none focus:ring-0 p-0" 
+                            value={section.content.title} 
+                            onChange={e => updateSection(section.id, {...section.content, title: e.target.value})}
+                           />
+                           <textarea 
+                            className="w-full text-slate-600 leading-relaxed whitespace-pre-wrap bg-transparent border-none focus:ring-0 p-0 h-32" 
+                            value={section.content.text} 
+                            onChange={e => updateSection(section.id, {...section.content, text: e.target.value})}
+                           />
                         </div>
                       )}
                       {section.type === 'features' && (
                         <div className="p-16 bg-white border-y">
-                           <h2 className="text-center text-2xl font-black mb-10">{section.content.mainTitle}</h2>
+                           <input 
+                             className="w-full text-center text-2xl font-black mb-10 bg-transparent border-none focus:ring-0 p-0" 
+                             value={section.content.mainTitle} 
+                             onChange={e => updateSection(section.id, {...section.content, mainTitle: e.target.value})}
+                           />
                            <div className="grid grid-cols-3 gap-6">
                               {section.content.items?.map((f: any, i: number) => (
-                                <div key={i} className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                                <div key={i} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 relative group/feat">
+                                   <button 
+                                     onClick={() => {
+                                        const newItems = section.content.items.filter((_: any, idx: number) => idx !== i);
+                                        updateSection(section.id, {...section.content, items: newItems});
+                                     }}
+                                     className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1 opacity-0 group-hover/feat:opacity-100"
+                                   >
+                                     <X size={12}/>
+                                   </button>
                                    <div className="w-8 h-8 bg-orange-100 text-orange-600 rounded-lg mb-4 flex items-center justify-center"><Check size={16}/></div>
-                                   <p className="font-bold text-slate-800 text-sm">{f.title}</p>
-                                   <p className="text-xs text-slate-500 mt-2">{f.description}</p>
+                                   <input 
+                                     className="font-bold text-slate-800 text-sm w-full bg-transparent border-none focus:ring-0 p-0 mb-1" 
+                                     value={f.title} 
+                                     onChange={e => {
+                                        const newItems = [...section.content.items];
+                                        newItems[i].title = e.target.value;
+                                        updateSection(section.id, {...section.content, items: newItems});
+                                     }}
+                                   />
+                                   <textarea 
+                                     className="text-xs text-slate-500 mt-2 w-full bg-transparent border-none focus:ring-0 p-0 resize-none h-16" 
+                                     value={f.description}
+                                     onChange={e => {
+                                        const newItems = [...section.content.items];
+                                        newItems[i].description = e.target.value;
+                                        updateSection(section.id, {...section.content, items: newItems});
+                                     }}
+                                   />
                                 </div>
                               ))}
+                              <button 
+                                onClick={() => updateSection(section.id, {...section.content, items: [...(section.content.items || []), { title: 'Novo Benefício', description: 'Descrição aqui' }]})}
+                                className="p-6 border-2 border-dashed border-slate-100 rounded-3xl flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 transition-all"
+                              >
+                                <PlusCircle size={24} />
+                                <span className="text-[10px] font-bold mt-2 uppercase">Adicionar</span>
+                              </button>
                            </div>
                         </div>
                       )}
                       {section.type === 'pricing' && (
                          <div className="p-16 bg-slate-900 text-white text-center">
                             <h2 className="text-xl font-bold opacity-60 uppercase mb-4 tracking-widest">Oferta Especial</h2>
-                            <div className="text-6xl font-black mb-2">{section.content.price}</div>
-                            <p className="text-orange-400 font-bold mb-10">Ou até {section.content.installments}</p>
-                            <div className="inline-block bg-orange-600 text-white px-12 py-5 rounded-2xl font-black text-base uppercase shadow-2xl">{section.content.ctaText}</div>
+                            <input 
+                                className="w-full text-center text-6xl font-black mb-2 bg-transparent border-none focus:ring-0 p-0 text-white" 
+                                value={section.content.price} 
+                                onChange={e => updateSection(section.id, {...section.content, price: e.target.value})}
+                            />
+                            <div className="flex justify-center items-center gap-2 mb-10">
+                                <span className="text-orange-400 font-bold">Ou até</span>
+                                <input 
+                                    className="text-orange-400 font-bold bg-transparent border-none focus:ring-0 p-0 w-40" 
+                                    value={section.content.installments}
+                                    onChange={e => updateSection(section.id, {...section.content, installments: e.target.value})}
+                                />
+                            </div>
+                            <input 
+                                className="inline-block bg-orange-600 text-white px-12 py-5 rounded-2xl font-black text-base uppercase shadow-2xl border-none focus:ring-2 focus:ring-white" 
+                                value={section.content.ctaText}
+                                onChange={e => updateSection(section.id, {...section.content, ctaText: e.target.value})}
+                            />
+                         </div>
+                      )}
+                      {section.type === 'image' && (
+                         <div className="py-12 flex justify-center bg-white">
+                            <div className="max-w-4xl w-full aspect-video bg-slate-100 rounded-[2rem] overflow-hidden flex items-center justify-center relative group/img2">
+                                {section.content.url ? (
+                                    <img src={section.content.url} className="w-full h-full object-cover" />
+                                ) : (
+                                    <ImageIcon className="text-slate-300" size={64}/>
+                                )}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img2:opacity-100 flex items-center justify-center transition-opacity cursor-pointer" onClick={() => handleImageUploadForSection(section.id)}>
+                                    <Upload className="text-white" size={32}/>
+                                </div>
+                            </div>
                          </div>
                       )}
                     </div>
-
-                    {/* Overlay de Edição Direta */}
-                    <div className="absolute inset-0 z-20 cursor-pointer" onClick={() => {
-                        const newContent = prompt("Edição Rápida (JSON) - Melhore no formulário futuro:", JSON.stringify(section.content));
-                        if (newContent) {
-                          try { updateSection(section.id, JSON.parse(newContent)); } catch(e) { alert("JSON Inválido"); }
-                        }
-                    }}></div>
                  </div>
                ))}
 
@@ -348,7 +483,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
             <ArrowLeft size={20} />
           </button>
           <div>
@@ -360,7 +495,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         </div>
         <button 
           onClick={() => {
-            setAiPrompt({ productName: '', productDescription: '', targetAudience: '', mainBenefits: '', price: '' });
+            setAiPrompt({ productName: '', productDescription: '', targetAudience: '', mainBenefits: '', price: '', offerDetails: '' });
             setEditingPage(null);
             setShowModal(true);
           }}
@@ -378,7 +513,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
             placeholder="Buscar páginas..." 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm"
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
           />
         </div>
         <button onClick={fetchPages} className="p-2 text-slate-400 hover:text-orange-600 transition-all"><RefreshCw size={20} className={isLoading ? "animate-spin" : ""} /></button>
@@ -395,7 +530,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         ) : (
           pages.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase())).map(page => (
             <div key={page.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
-              <div className="h-32 bg-gradient-to-br from-orange-50 to-indigo-600 p-6 flex items-end relative overflow-hidden">
+              <div className="h-32 bg-gradient-to-br from-orange-500 to-indigo-600 p-6 flex items-end relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10"><Globe size={80}/></div>
                 <h3 className="text-white font-black text-lg line-clamp-1">{page.title}</h3>
               </div>
@@ -430,7 +565,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   >
                     {copiedId === page.id ? <CheckCircle size={14}/> : <ExternalLink size={14}/>} {copiedId === page.id ? 'Copiado!' : 'Link Público'}
                   </button>
-                  <button onClick={() => handleDelete(page.id)} className="p-2 text-slate-300 hover:text-red-600 rounded-lg"><Trash2 size={16}/></button>
+                  <button onClick={() => handleDelete(page.id)} className="p-2 text-slate-300 hover:text-red-600 rounded-lg transition-colors"><Trash2 size={16}/></button>
                 </div>
               </div>
             </div>

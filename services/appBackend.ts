@@ -145,7 +145,7 @@ export const appBackend = {
       style: item.style, 
       createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
-      folderId: item.folder_id
+      folderId: data.folder_id
     }));
   },
 
@@ -495,11 +495,13 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
+    // Fix: Changed interval_minutes property name to intervalMinutes to match SyncJob interface
+    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, intervalMinutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
     if (!isConfigured) return;
+    // Fix: Changed job.interval_minutes to job.intervalMinutes to correctly access property on SyncJob
     await supabase.from('crm_sync_jobs').upsert({ id: job.id, name: job.name, sheet_url: job.sheetUrl, config: job.config, last_sync: job.lastSync, status: job.status, last_message: job.lastMessage, active: job.active, interval_minutes: job.intervalMinutes, created_by: job.createdBy, created_at: job.createdAt });
   },
 
@@ -591,13 +593,13 @@ export const appBackend = {
   getSupportTickets: async (): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role, targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role, subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response, assignedId: item.assigned_id, assignedName: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at }));
+    return (data || []).map((item: any) => ({ id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role, targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role, subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response, assignedId: item.assigned_id, assigned_name: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at }));
   },
 
   getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${senderId},target_id.eq.${senderId}`).order('updated_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role, targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role, subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response, assignedId: item.assigned_id, assignedName: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at }));
+    return (data || []).map((item: any) => ({ id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role, targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role, subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response, assignedId: item.assigned_id, assigned_name: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at }));
   },
 
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
@@ -816,7 +818,7 @@ export const appBackend = {
       price: course.price, 
       payment_link: course.paymentLink, 
       image_url: course.imageUrl, 
-      certificate_template_id: course.certificateTemplateId || null, 
+      certificate_template_id: course.certificate_template_id || null, 
       created_at: course.createdAt || new Date().toISOString() 
     }, { onConflict: 'title' });
   },
@@ -916,7 +918,7 @@ export const appBackend = {
 
   saveWorkshop: async (ws: Workshop): Promise<Workshop> => {
     if (!isConfigured) throw new Error("Not configured");
-    const { data, error = null } = await supabase.from('crm_workshops').upsert({ id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
+    const { data, error = null } = await supabase.from('crm_workshops').upsert({ id: ws.id, event_id: ws.eventId, block_id: ws.block_id, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
     if (error) throw error;
     return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
   },
@@ -980,7 +982,7 @@ export const appBackend = {
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_inventory').upsert({ id: record.id || crypto.randomUUID(), type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments, created_at: record.createdAt || new Date().toISOString() });
+    await supabase.from('crm_inventory').upsert({ id: record.id || crypto.randomUUID(), type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.tracking_code, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments, created_at: record.createdAt || new Date().toISOString() });
   },
 
   deleteInventoryRecord: async (id: string): Promise<void> => {
@@ -1060,22 +1062,32 @@ export const appBackend = {
 
   saveLandingPage: async (lp: LandingPage): Promise<void> => {
     if (!isConfigured) return;
+    
+    // Criar o payload exatamente conforme as colunas snake_case do Supabase
     const payload: any = {
       title: lp.title,
       product_name: lp.productName,
       content: lp.content,
-      created_at: lp.createdAt || new Date().toISOString(),
       updated_at: new Date().toISOString(),
       is_active: lp.isActive !== false,
       theme: lp.theme || 'modern'
     };
     
+    // Se tiver ID (edição), envia o ID. Se não, o banco gera um novo (DEFAULT gen_random_uuid())
     if (lp.id && lp.id.trim() !== '') {
         payload.id = lp.id;
     }
     
+    // Se for um novo registro, define a data de criação
+    if (!lp.id) {
+        payload.created_at = lp.createdAt || new Date().toISOString();
+    }
+
     const { error } = await supabase.from('crm_landing_pages').upsert(payload);
-    if (error) throw error;
+    if (error) {
+        console.error("Supabase upsert error (Landing Page):", error);
+        throw error;
+    }
   },
 
   deleteLandingPage: async (id: string): Promise<void> => {

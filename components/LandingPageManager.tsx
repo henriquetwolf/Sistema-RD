@@ -126,11 +126,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       });
 
       const text = response.text || "{}";
-      const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      const generatedContent = JSON.parse(cleanJson);
+      const generatedContent = JSON.parse(text);
       
-      const newPage: LandingPage = {
-        id: crypto.randomUUID(),
+      const newPage: Partial<LandingPage> = {
+        id: '', // Deixa vazio para o Supabase gerar o UUID
         title: generatedContent.title || aiPrompt.productName,
         productName: aiPrompt.productName,
         content: generatedContent,
@@ -158,6 +157,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       setShowModal(false);
       setEditingPage(null);
     } catch (e) {
+      console.error("Save failure:", e);
       alert("Erro ao salvar no banco. Verifique se rodou o script SQL no Supabase.");
     } finally {
       setIsLoading(false);
@@ -355,7 +355,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   </div>
                 </div>
               ) : (
-                <div className="space-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="space-y-10 animate-in fade-in slide-in-from-right-4 duration-300">
                   <div className="flex items-center justify-between border-b pb-6">
                     <h4 className="text-xl font-black text-slate-800">Editor de Conteúdo</h4>
                     <button onClick={() => setEditingPage(null)} className="text-xs font-bold text-orange-600 hover:underline">Reiniciar Geração</button>

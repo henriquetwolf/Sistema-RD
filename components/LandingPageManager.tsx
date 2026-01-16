@@ -7,7 +7,7 @@ import {
   HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText,
   ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check,
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
-  Palette, FormInput
+  Palette, FormInput, Building
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel } from '../types';
@@ -23,6 +23,24 @@ const FONT_FAMILIES = [
     { label: 'Elegante (Serif)', value: 'ui-serif, Georgia, Cambria, "Times New Roman"' },
     { label: 'Moderno (Inter)', value: '"Inter", sans-serif' },
     { label: 'Impacto', value: '"Oswald", sans-serif' }
+];
+
+const REFERENCE_TEMPLATES = [
+    { id: 'alura', name: 'Alura', url: 'https://www.alura.com.br/', description: 'Formações e páginas de curso' },
+    { id: 'rocketseat', name: 'Rocketseat', url: 'https://www.rocketseat.com.br/', description: 'Cursos e eventos' },
+    { id: 'ebac', name: 'EBAC Online', url: 'https://ebaconline.com.br/', description: 'Catálogo e LPs de cursos' },
+    { id: 'descomplica', name: 'Descomplica', url: 'https://www.descomplica.com.br/', description: 'Pós & cursos' },
+    { id: 'conquer', name: 'Conquer', url: 'https://escolaconquer.com.br/', description: 'Turmas/Imersões' },
+    { id: 'g4', name: 'G4 Educação', url: 'https://g4educacao.com/', description: 'Imersões executivas' },
+    { id: 'dnc', name: 'DNC', url: 'https://www.escoladnc.com.br/', description: 'Páginas com oferta clara' },
+    { id: 'tera', name: 'Tera', url: 'https://somostera.com/', description: 'Prova social forte' },
+    { id: 'k21', name: 'K21', url: 'https://k21.global/pt/cursos', description: 'Cursos e certificações' },
+    { id: 'insper', name: 'Insper', url: 'https://www.insper.edu.br/educacao-executiva/', description: 'Educação Executiva' },
+    { id: 'fgv', name: 'FGV', url: 'https://educacao-executiva.fgv.br/', description: 'Educação Executiva' },
+    { id: 'rdsummit', name: 'RD Summit', url: 'https://rdsummit.com.br/', description: 'Estrutura de evento grande' },
+    { id: 'pipefy', name: 'Pipefy', url: 'https://www.pipefy.com/pt-br/', description: 'Fluxos e CTA demo' },
+    { id: 'nuvemshop', name: 'Nuvemshop', url: 'https://www.nuvemshop.com.br/', description: 'SaaS com planos' },
+    { id: 'novomercado', name: 'O Novo Mercado', url: 'https://onovomercado.com/assinatura-pv-10/', description: 'Assinatura e Vendas' }
 ];
 
 export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }) => {
@@ -46,7 +64,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       targetAudience: '',
       mainBenefits: '',
       price: '',
-      offerDetails: ''
+      offerDetails: '',
+      referenceTemplate: ''
   });
 
   useEffect(() => {
@@ -84,11 +103,16 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
+      const templateReference = aiPrompt.referenceTemplate 
+        ? `IMPORTANTE: Baseie a estrutura, ordem das seções e o tom de voz no modelo de página de referência: ${aiPrompt.referenceTemplate}.` 
+        : '';
+
       const prompt = `Crie uma página de vendas persuasiva para o produto "${aiPrompt.productName}".
       Descrição do produto: ${aiPrompt.productDescription}
       Público-alvo: ${aiPrompt.targetAudience}
       Benefícios principais: ${aiPrompt.mainBenefits}
       Preço/Oferta: ${aiPrompt.price}
+      ${templateReference}
       
       Retorne um JSON estruturado seguindo o esquema solicitado. 
       Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
@@ -680,7 +704,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         </div>
         <button 
           onClick={() => {
-            setAiPrompt({ productName: '', productDescription: '', targetAudience: '', mainBenefits: '', price: '', offerDetails: '' });
+            setAiPrompt({ productName: '', productDescription: '', targetAudience: '', mainBenefits: '', price: '', offerDetails: '', referenceTemplate: '' });
             setEditingPage(null);
             setCurrentDraft(null);
             setShowModal(true);
@@ -771,6 +795,31 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                {!currentDraft ? (
                   <div className="space-y-8">
                      <div className="grid grid-cols-1 gap-6">
+                        <div>
+                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Modelo de Referência (Opcional)</label>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                {REFERENCE_TEMPLATES.map((tmpl) => (
+                                    <button
+                                        key={tmpl.id}
+                                        type="button"
+                                        onClick={() => setAiPrompt({...aiPrompt, referenceTemplate: tmpl.url})}
+                                        className={clsx(
+                                            "p-3 rounded-2xl border-2 text-left transition-all group",
+                                            aiPrompt.referenceTemplate === tmpl.url 
+                                                ? "border-orange-500 bg-orange-50 shadow-sm" 
+                                                : "border-slate-100 hover:border-orange-200 bg-white"
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className={clsx("text-xs font-black", aiPrompt.referenceTemplate === tmpl.url ? "text-orange-700" : "text-slate-800")}>{tmpl.name}</span>
+                                            {aiPrompt.referenceTemplate === tmpl.url && <CheckCircle size={14} className="text-orange-600" />}
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 font-medium leading-tight">{tmpl.description}</p>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
                         <div>
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
                             <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-base font-bold outline-none" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
@@ -943,15 +992,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                                                 onClick={() => handleRefineFieldWithAi(section.id, `items.${iIdx}.description`, item.description)}
                                                                 disabled={isRefiningField === `${section.id}-items.${iIdx}.description`}
                                                                 className="absolute right-1 top-[18px] p-1 text-indigo-600 hover:text-indigo-800 transition-all"
-                                                              >
-                                                                  {isRefiningField === `${section.id}-items.${iIdx}.description` ? <Loader2 size={10} className="animate-spin"/> : <Wand2 size={10}/>}
-                                                              </button>
-                                                          </div>
-                                                      </div>
-                                                  ))}
-                                              </div>
-                                          </div>
-                                      )}
+                                                                >
+                                                                    {isRefiningField === `${section.id}-items.${iIdx}.description` ? <Loader2 size={10} className="animate-spin"/> : <Wand2 size={10}/>}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
 
                                       {section.type === 'pricing' && (
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

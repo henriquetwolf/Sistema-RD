@@ -155,6 +155,7 @@ export const appBackend = {
       targetPipeline: item.target_pipeline, 
       targetStage: item.target_stage, 
       questions: item.questions || [], 
+      // Fix: Change data.style to item.style to correctly map the property from the iterated item
       style: item.style || {}, 
       createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
@@ -198,9 +199,9 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
-      distribution_mode: form.distribution_mode || 'fixed', 
+      distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
-      team_id: form.team_id || null, 
+      team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
       questions: form.questions || [], 
@@ -528,16 +529,11 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    // Fix: Access createdByName instead of created_by_name on a TypeScript interface that uses camelCase.
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
+    // Fix: interval_minutes should be intervalMinutes to match SavedPreset interface
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
-  },
-
-  deletePreset: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from(PRESETS_TABLE).delete().eq('id', id);
   },
 
   getContracts: async (): Promise<Contract[]> => {
@@ -655,7 +651,7 @@ export const appBackend = {
       rentValue: item.rent_value || '', 
       methodology: item.methodology || '', 
       studioType: item.studio_type || '', 
-      name_on_site: item.name_on_site || '', 
+      nameOnSite: item.name_on_site || '', 
       bank: item.bank || '', 
       agency: item.agency || '', 
       account: item.account || '', 
@@ -824,7 +820,7 @@ export const appBackend = {
       title: course.title, 
       description: course.description, 
       price: course.price, 
-      payment_link: course.paymentLink, 
+      payment_link: course.payment_link, 
       image_url: course.imageUrl, 
       certificate_template_id: course.certificateTemplateId || null, 
       created_at: course.createdAt || new Date().toISOString() 
@@ -1008,7 +1004,7 @@ export const appBackend = {
     if (!isConfigured) return;
     await supabase.from('crm_billing_negotiations').upsert({ 
         id: neg.id || crypto.randomUUID(), 
-        open_installments: neg.openInstallments, 
+        open_installments: neg.open_installments, 
         total_negotiated_value: neg.totalNegotiatedValue, 
         total_installments: neg.totalInstallments, 
         due_date: neg.dueDate, 
@@ -1044,7 +1040,7 @@ export const appBackend = {
       id: item.id,
       title: item.title || item.name || 'Sem título',
       productName: item.product_name || '',
-      slug: item.slug || '',
+      slug: item.domain || '',
       content: item.content || {},
       createdAt: item.created_at,
       updatedAt: item.updated_at,
@@ -1061,7 +1057,7 @@ export const appBackend = {
       id: data.id,
       title: data.title || data.name || 'Sem título',
       productName: data.product_name || '',
-      slug: data.slug || '',
+      slug: data.domain || '',
       content: data.content || {},
       createdAt: data.created_at,
       updatedAt: data.updated_at,
@@ -1078,7 +1074,7 @@ export const appBackend = {
     
     const payload: any = {
       title: lp.title || 'Nova Página',
-      slug: lp.slug || slugify(lp.title),
+      domain: lp.slug || slugify(lp.title), // CORREÇÃO: Enviando para a coluna domain correta
       product_name: lp.productName || null,
       content: lp.content || {},
       is_active: lp.isActive !== false,
@@ -1106,5 +1102,20 @@ export const appBackend = {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_landing_pages').delete().eq('id', id);
     if (error) throw error;
+  },
+
+  getPresets: async (): Promise<SavedPreset[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from(PRESETS_TABLE).select('*').order('name');
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Preset', url: item.url || '', key: item.key || '', tableName: item.table_name || '', primaryKey: item.primary_key || '', intervalMinutes: item.interval_minutes || 5, createdByName: item.created_by_name }));
+  },
+
+  savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
+    if (!isConfigured) throw new Error("Supabase não configurado");
+    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
+    const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
+    if (error) throw error;
+    // Fix: interval_minutes should be intervalMinutes to match SavedPreset interface
+    return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
   }
 };

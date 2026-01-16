@@ -127,11 +127,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const text = response.text || "{}";
       const generatedContent = JSON.parse(text);
       
+      // GERAÇÃO IMEDIATA DO SLUG/LINK
+      const finalTitle = generatedContent.title || aiPrompt.productName;
+      const finalSlug = slugify(finalTitle);
+
       const newPage: Partial<LandingPage> = {
         id: undefined,
-        title: generatedContent.title || aiPrompt.productName,
+        title: finalTitle,
         productName: aiPrompt.productName,
-        slug: slugify(generatedContent.title || aiPrompt.productName),
+        slug: finalSlug, // JÁ PREENCHE O LINK
         content: generatedContent,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

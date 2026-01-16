@@ -163,12 +163,12 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V86 (REPARO TOTAL DE SCHEMA - SEGURANÇA DE SLUG)
--- 1. Tabela de Páginas de Venda (Garantir existência correta)
+-- SCRIPT DE FUNDAÇÃO CRM V87 (ESTABILIZAÇÃO DE SCHEMA LANDING PAGES)
+-- 1. Garantir existência da tabela
 CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL DEFAULT 'Nova Página',
-    slug text,
+    domain text,
     product_name text,
     content jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at timestamp with time zone DEFAULT now(),
@@ -177,24 +177,30 @@ CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     theme text DEFAULT 'modern'
 );
 
--- 2. Tratamento de Conflito de Nomes de Coluna (Renomear domain para slug se necessário)
+-- 2. Correção de Nome de Coluna: Se existir 'slug', vamos garantir que o dado vá para 'domain'
 DO $$ 
 BEGIN 
-    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='domain') AND 
-       NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='slug') THEN
-        ALTER TABLE public.crm_landing_pages RENAME COLUMN "domain" TO "slug";
-    ELSIF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='slug') THEN
-        ALTER TABLE public.crm_landing_pages ADD COLUMN "slug" text;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='slug') AND 
+       EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='domain') THEN
+        
+        -- Sincroniza dados da slug para domain se domain estiver vazio
+        UPDATE public.crm_landing_pages SET domain = slug WHERE domain IS NULL OR domain = '';
+        -- Remove a coluna slug para evitar confusão futura
+        ALTER TABLE public.crm_landing_pages DROP COLUMN "slug";
+        
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='slug') THEN
+        -- Se só existir a slug, renomeia para domain
+        ALTER TABLE public.crm_landing_pages RENAME COLUMN "slug" TO "domain";
     END IF;
 END $$;
 
--- 3. Preencher slugs vazios com valor único baseado no ID
-UPDATE public.crm_landing_pages SET "slug" = 'pagina-' || substring(id::text, 1, 8) WHERE "slug" IS NULL OR "slug" = '';
+-- 3. Preencher domínios vazios para evitar erro de constraint NOT NULL
+UPDATE public.crm_landing_pages SET "domain" = 'url-' || substring(id::text, 1, 8) WHERE "domain" IS NULL OR "domain" = '';
 
--- 4. Tornar campo obrigatório e único com proteção total
-ALTER TABLE public.crm_landing_pages ALTER COLUMN "slug" SET NOT NULL;
-ALTER TABLE public.crm_landing_pages DROP CONSTRAINT IF EXISTS crm_landing_pages_slug_key;
-ALTER TABLE public.crm_landing_pages ADD CONSTRAINT crm_landing_pages_slug_key UNIQUE ("slug");
+-- 4. Tornar campo domain OBRIGATÓRIO e ÚNICO
+ALTER TABLE public.crm_landing_pages ALTER COLUMN "domain" SET NOT NULL;
+ALTER TABLE public.crm_landing_pages DROP CONSTRAINT IF EXISTS crm_landing_pages_domain_key;
+ALTER TABLE public.crm_landing_pages ADD CONSTRAINT crm_landing_pages_domain_key UNIQUE ("domain");
 
 -- 5. Habilitar RLS e Permissões
 ALTER TABLE public.crm_landing_pages ENABLE ROW LEVEL SECURITY;
@@ -266,8 +272,8 @@ NOTIFY pgrst, 'reload schema';
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Terminal size={140}/></div>
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
-                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V86</h3>
-                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script corrige o erro de salvamento de páginas, garantindo que a coluna de link amigável (<strong>slug</strong>) seja obrigatória e única.</p>
+                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V87</h3>
+                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script corrige definitivamente o erro de salvamento das páginas de venda, estabilizando a coluna <strong>domain</strong>.</p>
                     </div>
                     <button onClick={copySql} className={clsx("px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg transition-all flex items-center gap-2 shrink-0 active:scale-95", sqlCopied ? "bg-green-600 text-white" : "bg-red-600 hover:bg-red-700 text-white")}>
                         {sqlCopied ? <><Check size={18}/> Copiado!</> : <><Copy size={18}/> Copiar SQL</>}

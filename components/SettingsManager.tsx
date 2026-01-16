@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Upload, Image as ImageIcon, CheckCircle, Save, Database, 
-    Copy, Users, Lock, Unlock, Check, X, ShieldCheck, 
+    Copy, Users, User, Lock, Unlock, Check, X, ShieldCheck, 
     Trash2, Building2, Plus, Edit2, Palette, History, RefreshCw, 
     Zap, Loader2, Table, DollarSign, Terminal, Tag as TagIcon, Layout, Globe,
     Search, Info, AlertTriangle, AlertCircle, ChevronDown, CheckCircle2
@@ -205,8 +205,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V78 (REPARO DEFINITIVO PÁGINAS DE VENDA)
--- 1. Tabela de Páginas de Venda
+-- SCRIPT DE FUNDAÇÃO CRM V79 (REPARO DEFINITIVO PÁGINAS DE VENDA)
+-- 1. Tabela de Páginas de Venda (Garantir existência e nome de colunas)
 CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text NOT NULL,
@@ -218,31 +218,38 @@ CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     theme text DEFAULT 'modern'
 );
 
--- 2. Garantir coluna is_active
-ALTER TABLE public.crm_landing_pages ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
+-- 2. Correção de colunas faltantes ou renomeadas por erro de cache
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='product_name') THEN
+        ALTER TABLE public.crm_landing_pages ADD COLUMN product_name text;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='is_active') THEN
+        ALTER TABLE public.crm_landing_pages ADD COLUMN is_active boolean DEFAULT true;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='theme') THEN
+        ALTER TABLE public.crm_landing_pages ADD COLUMN theme text DEFAULT 'modern';
+    END IF;
+END $$;
 
 -- 3. Habilitar RLS
 ALTER TABLE public.crm_landing_pages ENABLE ROW LEVEL SECURITY;
 
--- 4. Criar Política de Acesso Irrestrito (Evita erro ao salvar)
-DROP POLICY IF EXISTS "Acesso público para visualização" ON public.crm_landing_pages;
-DROP POLICY IF EXISTS "Acesso total para administradores" ON public.crm_landing_pages;
+-- 4. Criar Política de Acesso Irrestrito (Garante que o Admin salve sem erros)
 DROP POLICY IF EXISTS "Permitir tudo" ON public.crm_landing_pages;
-
 CREATE POLICY "Permitir tudo" ON public.crm_landing_pages FOR ALL USING (true) WITH CHECK (true);
 
--- 5. Tabelas de suporte extras
-CREATE TABLE IF NOT EXISTS public.crm_external_certificates (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    student_id text NOT NULL,
-    course_name text NOT NULL,
-    completion_date date NOT NULL,
-    file_url text NOT NULL,
-    file_name text NOT NULL,
-    created_at timestamp with time zone DEFAULT now()
-);
+-- 5. Função de recarregamento forçado do Cache (PostgREST)
+CREATE OR REPLACE FUNCTION reload_schema_cache()
+RETURNS void AS $$
+BEGIN
+  NOTIFY pgrst, 'reload schema';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Atualizar Schema
+-- Executar Recarregamento
 NOTIFY pgrst, 'reload schema';
   `.trim();
 
@@ -380,12 +387,10 @@ NOTIFY pgrst, 'reload schema';
 
         {activeTab === 'instructor_levels' && (
             <div className="bg-white rounded-xl border border-slate-200 p-8">
-                <div className="flex justify-between items-center mb-6">
-                    <div className="flex items-center gap-3">
-                        <h3 className="text-lg font-bold">Níveis de Instrutores (Honorários)</h3>
-                        <button onClick={fetchInstructorLevels} className="p-2 text-slate-400 hover:text-rose-600 transition-all"><RefreshCw size={16} className={clsx(isLoadingLevels && "animate-spin")} /></button>
-                    </div>
-                    <button onClick={() => setEditingLevel({ id: '', name: '', honorarium: 0, observations: '' })} className="bg-rose-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-rose-700">+ Novo Nível</button>
+                <div className="flex items-center gap-3 mb-6">
+                    <h3 className="text-lg font-bold">Níveis de Instrutores (Honorários)</h3>
+                    <button onClick={fetchInstructorLevels} className="p-2 text-slate-400 hover:text-rose-600 transition-all"><RefreshCw size={16} className={clsx(isLoadingLevels && "animate-spin")} /></button>
+                    <button onClick={() => setEditingLevel({ id: '', name: '', honorarium: 0, observations: '' })} className="bg-rose-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-rose-700 ml-auto">+ Novo Nível</button>
                 </div>
                 <div className="space-y-3">
                     {isLoadingLevels ? <Loader2 className="animate-spin mx-auto text-rose-600"/> : instructorLevels.length === 0 ? (
@@ -429,12 +434,9 @@ NOTIFY pgrst, 'reload schema';
                     {isLoadingTags ? <Loader2 className="animate-spin mx-auto text-emerald-600"/> : supportTags.length === 0 ? (
                         <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhuma tag de suporte cadastrada.</div>
                     ) : supportTags.map(t => (
-                        <div key={t.id} className="p-4 border rounded-xl flex items-center justify-between group hover:border-emerald-300 transition-all">
-                            <div>
-                                <p className="font-bold text-slate-800">{t.name}</p>
-                                <p className="text-[10px] text-slate-400 uppercase font-black tracking-tighter">Público Alvo: {t.role === 'all' ? 'Todos' : t.role}</p>
-                            </div>
-                            <div className="flex gap-2"><button onClick={() => setEditingTag(t)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteSupportTag?.(t.id).then(fetchSupportTags)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
+                        <div key={t.id} className="p-4 border rounded-xl flex items-center justify-between group">
+                            <div><p className="font-bold">{t.name}</p><p className="text-[10px] text-slate-400 uppercase">Público: {t.role}</p></div>
+                            <div className="flex gap-2"><button onClick={() => setEditingTag(t)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => appBackend.deleteSupportTag(t.id).then(fetchSupportTags)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
                         </div>
                     ))}
                 </div>
@@ -442,47 +444,64 @@ NOTIFY pgrst, 'reload schema';
         )}
 
         {activeTab === 'connection_plug' && (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 space-y-6">
-                <div className="flex justify-between items-center border-b pb-4">
-                    <div>
-                        <h3 className="text-lg font-bold text-indigo-800 flex items-center gap-2"><Zap className="text-indigo-600" size={20}/> Connection Plug (Webhooks)</h3>
-                        <p className="text-xs text-slate-500">Disparar webhooks de faturamento ao mover negócios no CRM.</p>
-                    </div>
-                    <button onClick={() => setEditingTrigger({ id: '', pipelineName: '', stageId: '', payloadJson: '' })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700">+ Novo Gatilho</button>
+            <div className="bg-white rounded-xl border border-slate-200 p-8 space-y-10">
+                <div className="space-y-2">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Zap className="text-indigo-600" size={20}/> Connection Plug (Webhooks)</h3>
+                    <p className="text-sm text-slate-500">Configure disparos automáticos para sistemas externos baseados no CRM.</p>
                 </div>
-                <div className="space-y-4">
-                    {isLoadingTriggers ? <Loader2 className="animate-spin mx-auto text-indigo-600"/> : webhookTriggers.length === 0 ? (
-                        <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhum gatilho de webhook configurado.</div>
-                    ) : webhookTriggers.map(tr => (
-                        <div key={tr.id} className="p-4 border rounded-xl flex items-center justify-between group">
-                            <div>
-                                <p className="font-bold text-slate-800">{tr.pipelineName} → {pipelines.find(p => p.name === tr.pipelineName)?.stages.find(s => s.id === tr.stageId)?.title || tr.stageId}</p>
-                                <p className="text-[10px] text-slate-400 font-mono">Dispara ao entrar nesta etapa</p>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => setEditingTrigger(tr)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button>
-                                <button onClick={() => appBackend.deleteWebhookTrigger?.(tr.id).then(fetchWebhookTriggers)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>
-                            </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-6">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Ativadores de Webhook</h4>
+                            <button onClick={() => setEditingTrigger({ id: '', pipelineName: '', stageId: '', payloadJson: '' })} className="text-[10px] font-bold text-indigo-600 uppercase">+ Adicionar</button>
                         </div>
-                    ))}
+                        <div className="space-y-3">
+                            {webhookTriggers.map(t => (
+                                <div key={t.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between group">
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-bold text-slate-800 truncate">{t.pipelineName} / {t.stageId}</p>
+                                        <p className="text-[10px] text-slate-400 font-mono truncate">{t.id}</p>
+                                    </div>
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => setEditingTrigger(t)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"><Edit2 size={14}/></button>
+                                        <button onClick={() => appBackend.deleteWebhookTrigger(t.id!).then(fetchWebhookTriggers)} className="p-1.5 text-red-600 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="p-6 bg-indigo-900 rounded-3xl text-white relative overflow-hidden flex flex-col justify-center">
+                        <div className="absolute top-0 right-0 p-8 opacity-10"><Terminal size={120}/></div>
+                        <h4 className="text-xl font-black mb-2">Automação RD / CRM</h4>
+                        <p className="text-sm text-indigo-200 leading-relaxed mb-6">Quando uma negociação atinge uma etapa com gatilho, os dados são enviados para o endpoint configurado na Empresa do faturamento.</p>
+                        <div className="flex items-center gap-2 text-xs font-bold text-indigo-400"><CheckCircle size={16}/> Sincronização em tempo real</div>
+                    </div>
                 </div>
             </div>
         )}
 
         {activeTab === 'logs' && (
             <div className="bg-white rounded-xl border border-slate-200 p-8">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold flex items-center gap-2"><History size={20}/> Histórico de Auditoria</h3>
-                    <button onClick={fetchLogs} className="p-2 text-slate-400 hover:text-indigo-600 transition-all"><RefreshCw size={18} className={clsx(isLoadingLogs && "animate-spin")} /></button>
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold flex items-center gap-2"><History className="text-slate-600" size={20}/> Log de Atividades do Sistema</h3>
+                    <button onClick={fetchLogs} className="p-2 text-slate-400 hover:text-slate-600 transition-all"><RefreshCw size={18} className={clsx(isLoadingLogs && "animate-spin")} /></button>
                 </div>
                 <div className="space-y-3">
                     {isLoadingLogs ? <Loader2 className="animate-spin mx-auto text-slate-400"/> : logs.length === 0 ? (
-                        <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">Nenhum log de auditoria encontrado.</div>
-                    ) : logs.map(log => (
-                        <div key={log.id} className="p-3 border-b border-slate-50 text-xs flex items-start gap-4 animate-in fade-in">
-                            <span className="text-slate-400 w-32 shrink-0 font-mono">{new Date(log.createdAt).toLocaleString()}</span>
-                            <span className="font-bold text-slate-700 w-40 shrink-0 truncate">{log.userName}</span>
-                            <span className="flex-1 text-slate-600 leading-relaxed"><span className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-black uppercase mr-2">{log.action}</span> {log.details}</span>
+                        <div className="p-12 text-center text-slate-300 italic">Nenhum log registrado.</div>
+                    ) : logs.map(l => (
+                        <div key={l.id} className="p-3 border-b border-slate-50 flex items-start justify-between text-xs hover:bg-slate-50 transition-colors">
+                            <div className="flex gap-3">
+                                {/* Fixed: changed Users to User */}
+                                <div className="p-2 bg-slate-100 rounded text-slate-400"><User size={14}/></div>
+                                <div>
+                                    <p className="font-bold text-slate-700">{l.userName}</p>
+                                    <p className="text-slate-500">{l.details}</p>
+                                </div>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-mono">{new Date(l.createdAt).toLocaleString()}</span>
                         </div>
                     ))}
                 </div>
@@ -490,383 +509,278 @@ NOTIFY pgrst, 'reload schema';
         )}
 
         {activeTab === 'database' && (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 space-y-6">
-                <div className="flex items-center gap-3 border-b pb-4">
-                    <Database className="text-amber-600" size={24}/>
-                    <div>
-                        <h3 className="text-lg font-bold text-slate-800">Gerenciador de Sincronização</h3>
-                        <p className="text-xs text-slate-500">Controle de conexões externas via Planilhas e Web.</p>
+            <div className="space-y-6">
+                <div className="bg-white rounded-xl border border-slate-200 p-8">
+                    <div className="flex justify-between items-center mb-8">
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <Database className="text-amber-600" size={20}/> Conexões Ativas (Google Sheets)
+                        </h3>
+                        <button onClick={onStartWizard} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-all">+ Nova Conexão</button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {jobs.map(job => (
+                            <div key={job.id} className="p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-4 hover:border-amber-300 transition-all group">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-3">
+                                        <div className={clsx("p-2 rounded-lg", job.active ? "bg-amber-100 text-amber-600" : "bg-slate-200 text-slate-400")}>
+                                            <RefreshCw size={20} className={clsx(job.status === 'syncing' && "animate-spin")} />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-slate-800">{job.name}</p>
+                                            <p className="text-[10px] text-slate-400 font-mono">Tabela: {job.config.tableName}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => onDeleteJob(job.id)} className="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16}/></button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className={clsx("px-2 py-0.5 rounded text-[9px] font-black uppercase border", 
+                                        job.status === 'success' ? "bg-green-50 text-green-700 border-green-200" : 
+                                        job.status === 'error' ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
+                                        {job.status.toUpperCase()}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Sinc: {job.intervalMinutes}m</span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 truncate bg-white p-2 rounded border border-slate-100" title={job.lastMessage}>{job.lastMessage || 'Aguardando primeiro ciclo...'}</p>
+                            </div>
+                        ))}
                     </div>
                 </div>
-                <div className="grid grid-cols-1 gap-4">
-                    {jobs.length === 0 ? (
-                        <div className="p-12 text-center text-slate-400 border-2 border-dashed rounded-2xl">Sem conexões ativas. Use o assistente para criar uma.</div>
-                    ) : jobs.map(job => (
-                        <div key={job.id} className="p-4 border rounded-xl flex items-center justify-between bg-slate-50/50 group">
-                            <div className="flex items-center gap-4">
-                                <div className={clsx("w-10 h-10 rounded-lg flex items-center justify-center", job.status === 'success' ? "bg-green-100 text-green-600" : job.status === 'syncing' ? "bg-blue-100 text-blue-600 animate-pulse" : "bg-red-100 text-red-600")}>
-                                    {job.status === 'syncing' ? <RefreshCw size={20} className="animate-spin"/> : <Table size={20}/>}
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-slate-800">{job.name}</h4>
-                                    <p className="text-[10px] text-slate-400 font-mono">{job.sheetUrl ? 'Automação Ativa' : 'Upload Manual'}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <div className="text-right hidden sm:block">
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Última Sinc:</p>
-                                    <p className="text-xs font-mono text-slate-600">{job.lastSync ? new Date(job.lastSync).toLocaleString() : '--'}</p>
-                                </div>
-                                <button onClick={() => onDeleteJob(job.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <button onClick={onStartWizard} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-2xl text-slate-500 font-bold hover:bg-slate-50 hover:border-amber-400 hover:text-amber-600 transition-all flex items-center justify-center gap-2">+ Abrir Assistente de Conexão</button>
             </div>
         )}
 
         {activeTab === 'sql_script' && (
-            <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 animate-in zoom-in-95 duration-200">
-                <div className="flex items-center gap-3 mb-4"><Terminal className="text-red-500" /><h3 className="text-lg font-bold text-white uppercase tracking-widest">Script SQL de Atualização V78</h3></div>
-                <p className="text-sm text-slate-400 mb-6 font-medium leading-relaxed">Este script repara a estrutura do banco de dados para os níveis de instrutores, certificados externos, tabelas de automação, bloqueio de eventos, pesquisas e agora suporte para <b>Páginas de Venda</b>. Copie e execute no **SQL Editor** do Supabase.</p>
-                <div className="relative">
-                    <pre className="bg-black text-emerald-400 p-6 rounded-2xl text-[10px] font-mono overflow-auto max-h-[400px] shadow-inner custom-scrollbar-dark border border-slate-800">
-                        {generateRepairSQL()}
-                    </pre>
-                    <button onClick={copySql} className="absolute top-4 right-4 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all flex items-center gap-2 border border-slate-700">
-                        {sqlCopied ? <><Check size={14}/> Copiado!</> : <><Copy size={14}/> Copiar Script</>}
+            <div className="bg-slate-900 rounded-3xl p-10 space-y-6 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-5"><Terminal size={140}/></div>
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div>
+                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V79</h3>
+                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script atualiza o banco de dados Supabase com as colunas necessárias para as <strong>Páginas de Venda</strong> e força o recarregamento do cache da API.</p>
+                    </div>
+                    <button onClick={copySql} className={clsx("px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg transition-all flex items-center gap-2 shrink-0 active:scale-95", sqlCopied ? "bg-green-600 text-white" : "bg-red-600 hover:bg-red-700 text-white")}>
+                        {sqlCopied ? <><Check size={18}/> Copiado!</> : <><Copy size={18}/> Copiar SQL</>}
                     </button>
+                </div>
+                <div className="relative mt-4">
+                    <pre className="bg-slate-950 p-6 rounded-2xl text-red-400 font-mono text-[11px] overflow-x-auto border border-white/5 max-h-64 leading-relaxed custom-scrollbar-dark whitespace-pre-wrap">{generateRepairSQL()}</pre>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-slate-500 bg-black/20 p-4 rounded-xl">
+                    <Info size={18} className="text-red-500 shrink-0"/>
+                    <p>Copie o código acima e cole no <strong>SQL Editor</strong> do seu dashboard Supabase para aplicar as correções e recarregar o cache.</p>
                 </div>
             </div>
         )}
       </div>
 
-      {/* MODAL GENÉRICO PARA CRUDS */}
-      {(editingRole || editingBanner || editingCompany || editingLevel || editingCourseInfo || editingTag || editingTrigger) && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh] my-8">
-                  <div className="p-6 border-b flex justify-between items-center bg-slate-50 shrink-0">
-                      <h3 className="font-bold uppercase text-xs tracking-widest text-slate-500">Configuração de Item</h3>
-                      <button onClick={() => { setEditingRole(null); setEditingBanner(null); setEditingCompany(null); setEditingLevel(null); setEditingCourseInfo(null); setEditingTag(null); setEditingTrigger(null); }}><X size={24}/></button>
+      {/* MODAL EDIT ROLE */}
+      {editingRole && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <h3 className="font-bold text-slate-800">Editar Perfil de Acesso</h3>
+                      <button onClick={() => setEditingRole(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded-lg"><X size={24}/></button>
                   </div>
-                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 flex-1 custom-scrollbar">
-                      
-                      {/* FORM ROLE / ACESSOS */}
-                      {editingRole && (
-                          <div className="space-y-6">
-                              <div>
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome do Perfil de Acesso</label>
-                                  <input 
-                                      className="w-full px-4 py-2.5 border-2 border-slate-100 rounded-xl font-bold text-slate-800 focus:border-indigo-500 outline-none transition-all" 
-                                      value={editingRole.name} 
-                                      onChange={e => setEditingRole({...editingRole, name: e.target.value})} 
-                                      placeholder="Ex: Consultor Comercial, Coordenador Pedagógico..." 
-                                  />
-                              </div>
-
-                              <div className="space-y-4">
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Permissões de Módulos</label>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                      {PERMISSION_MODULES.map(module => (
-                                          <label key={module.id} className={clsx(
-                                              "flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer group",
-                                              editingRole.permissions?.[module.id] ? "bg-indigo-50 border-indigo-500 text-indigo-900" : "bg-white border-slate-100 text-slate-500 hover:bg-slate-50"
-                                          )}>
-                                              <span className="text-sm font-bold">{module.label}</span>
-                                              <input 
-                                                  type="checkbox" 
-                                                  className="w-5 h-5 rounded text-indigo-600" 
-                                                  checked={!!editingRole.permissions?.[module.id]} 
-                                                  onChange={e => setEditingRole({
-                                                      ...editingRole, 
-                                                      permissions: { ...editingRole.permissions, [module.id]: e.target.checked }
-                                                  })} 
-                                              />
-                                          </label>
-                                      ))}
-                                  </div>
-                              </div>
-
-                              <button onClick={handleSaveRole} disabled={isSavingItem} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-600/20 active:scale-95 transition-all flex items-center justify-center gap-2">
-                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />} Salvar Perfil de Acesso
-                              </button>
+                  <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider">Nome do Perfil</label>
+                          <input type="text" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={editingRole.name} onChange={e => setEditingRole({...editingRole, name: e.target.value})} placeholder="Ex: Comercial, Diretor..." />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-4 uppercase tracking-wider">Permissões de Módulo</label>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {PERMISSION_MODULES.map(mod => (
+                                  <label key={mod.id} className={clsx("flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all", editingRole.permissions?.[mod.id] ? "bg-indigo-50 border-indigo-500" : "bg-white border-slate-100 hover:border-slate-200")}>
+                                      <span className="text-sm font-bold text-slate-700">{mod.label}</span>
+                                      <input type="checkbox" className="w-5 h-5 rounded text-indigo-600" checked={!!editingRole.permissions?.[mod.id]} onChange={e => setEditingRole({...editingRole, permissions: { ...editingRole.permissions, [mod.id]: e.target.checked }})} />
+                                  </label>
+                              ))}
                           </div>
-                      )}
-
-                      {/* FORM LEVEL */}
-                      {editingLevel && (
-                          <div className="space-y-6">
-                              <input placeholder="Nome do Nível" className="w-full px-4 py-2 border rounded-xl font-bold" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} />
-                              <div className="relative">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">R$</span>
-                                  <input type="number" placeholder="Valor Honorário (R$)" className="w-full pl-9 pr-4 py-2 border rounded-xl font-bold text-rose-600" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value) || 0})} />
-                              </div>
-                              <textarea placeholder="Observações e Critérios do Nível..." className="w-full px-4 py-2 border rounded-xl h-32 resize-none outline-none" value={editingLevel.observations} onChange={e => setEditingLevel({...editingLevel, observations: e.target.value})} />
-                              <button onClick={handleSaveLevel} disabled={isSavingItem} className="w-full py-3.5 bg-rose-600 text-white rounded-xl font-bold shadow-lg hover:bg-rose-700 transition-all">{isSavingItem ? 'Salvando...' : 'Salvar Nível Docente'}</button>
-                          </div>
-                      )}
-
-                      {/* FORM COMPANY */}
-                      {editingCompany && (
-                          <div className="space-y-6">
-                              <input className="w-full px-4 py-2.5 border rounded-xl font-bold" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} placeholder="Razão Social" />
-                              <input className="w-full px-4 py-2.5 border rounded-xl font-mono text-sm" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} placeholder="CNPJ" />
-                              <input className="w-full px-4 py-2.5 border rounded-xl text-blue-600 font-mono text-xs" value={editingCompany.webhookUrl} onChange={e => setEditingCompany({...editingCompany, webhookUrl: e.target.value})} placeholder="URL de Webhook" />
-                              
-                              <div className="space-y-4">
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Vincular a Tipos de Produto</label>
-                                  <div className="flex flex-wrap gap-2">
-                                      {['Digital', 'Presencial', 'Evento'].map(type => (
-                                          <button 
-                                            key={type}
-                                            onClick={() => {
-                                                const current = editingCompany.productTypes || [];
-                                                const updated = current.includes(type) ? current.filter(t => t !== type) : [...current, type];
-                                                setEditingCompany({...editingCompany, productTypes: updated});
-                                            }}
-                                            className={clsx("px-4 py-1.5 rounded-full text-xs font-bold border-2 transition-all", editingCompany.productTypes?.includes(type) ? "bg-teal-600 border-teal-600 text-white shadow-md" : "bg-white border-slate-100 text-slate-400")}
-                                          >{type}</button>
-                                      ))}
-                                  </div>
-                              </div>
-
-                              {/* VÍNCULO COM PRODUTOS ESPECÍFICOS */}
-                              <div className="space-y-4">
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Vincular a Produtos Específicos</label>
-                                  <div className="flex gap-2">
-                                      <select 
-                                          className="flex-1 px-4 py-2 border rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-teal-500"
-                                          onChange={(e) => {
-                                              const val = e.target.value;
-                                              if (!val) return;
-                                              const current = editingCompany.productIds || [];
-                                              if (!current.includes(val)) {
-                                                  setEditingCompany({...editingCompany, productIds: [...current, val]});
-                                              }
-                                              e.target.value = '';
-                                          }}
-                                      >
-                                          <option value="">Adicionar produto específico...</option>
-                                          {allProducts.map(p => (
-                                              <option key={p.id} value={p.name}>{p.name}</option>
-                                          ))}
-                                      </select>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2">
-                                      {(editingCompany.productIds || []).map(prodName => (
-                                          <span key={prodName} className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100 group">
-                                              {prodName}
-                                              <button 
-                                                  onClick={() => setEditingCompany({...editingCompany, productIds: (editingCompany.productIds || []).filter(p => p !== prodName)})}
-                                                  className="hover:text-red-500 transition-colors"
-                                              >
-                                                  <X size={12} />
-                                              </button>
-                                          </span>
-                                      ))}
-                                      {(editingCompany.productIds || []).length === 0 && (
-                                          <p className="text-[10px] text-slate-400 italic">Nenhum produto específico vinculado.</p>
-                                      )}
-                                  </div>
-                              </div>
-
-                              <button onClick={handleSaveCompany} disabled={isSavingItem} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2 transition-all active:scale-95">
-                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Empresa
-                              </button>
-                          </div>
-                      )}
-
-                      {/* FORM BANNER */}
-                      {editingBanner && (
-                          <div className="space-y-6">
-                              <div className="flex flex-col items-center gap-4 bg-slate-50 p-6 rounded-2xl border-2 border-dashed border-slate-200">
-                                  <div className="w-full h-40 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
-                                      {editingBanner.imageUrl ? <img src={editingBanner.imageUrl} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-100" size={48} />}
-                                  </div>
-                                  <button onClick={() => bannerFileInputRef.current?.click()} className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-xs font-bold">Trocar Imagem</button>
-                                  <input type="file" ref={bannerFileInputRef} className="hidden" accept="image/*" onChange={handleBannerUpload} />
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Título do Banner</label>
-                                  <input className="w-full px-4 py-2.5 border rounded-xl font-bold text-slate-800" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} placeholder="Título do Banner" />
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">URL do Link</label>
-                                  <input className="w-full px-4 py-2.5 border rounded-xl text-xs font-mono text-blue-600" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} placeholder="Ex: https://..." />
-                              </div>
-                              <div className="space-y-2">
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Público de Exibição</label>
-                                  <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
-                                      <button onClick={() => setEditingBanner({...editingBanner, targetAudience: 'student'})} className={clsx("flex-1 py-2 text-xs font-bold rounded-lg transition-all", editingBanner.targetAudience === 'student' ? "bg-white shadow text-orange-700" : "text-slate-500")}>Portal do Aluno</button>
-                                      <button onClick={() => setEditingBanner({...editingBanner, targetAudience: 'instructor'})} className={clsx("flex-1 py-2 text-xs font-bold rounded-lg transition-all", editingBanner.targetAudience === 'instructor' ? "bg-white shadow text-orange-700" : "text-slate-500")}>Portal do Instrutor</button>
-                                  </div>
-                              </div>
-                              <div className="pt-4">
-                                  <button onClick={handleSaveBanner} disabled={isSavingItem} className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-orange-600/20 active:scale-95 transition-all flex items-center justify-center gap-2">
-                                      {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Banner
-                                  </button>
-                              </div>
-                          </div>
-                      )}
-
-                      {/* FORM COURSE INFO / PORTAL */}
-                      {editingCourseInfo && (
-                          <div className="space-y-6">
-                              <div>
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome do Curso</label>
-                                  <input 
-                                      className="w-full px-4 py-2.5 border-2 border-slate-100 rounded-xl font-bold text-slate-800 focus:border-blue-500 outline-none transition-all" 
-                                      value={editingCourseInfo.courseName} 
-                                      onChange={e => setEditingCourseInfo({...editingCourseInfo, courseName: e.target.value})} 
-                                      placeholder="Ex: Formação Completa em Pilates" 
-                                  />
-                              </div>
-
-                              <div>
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Detalhes Técnicos e Ementa</label>
-                                  <textarea 
-                                      className="w-full px-4 py-2.5 border-2 border-slate-100 rounded-xl text-sm h-32 resize-none outline-none focus:border-blue-500 transition-all" 
-                                      value={editingCourseInfo.details} 
-                                      onChange={e => setEditingCourseInfo({...editingCourseInfo, details: e.target.value})} 
-                                      placeholder="Descreva os tópicos abordados, módulos e carga horária..." 
-                                  />
-                              </div>
-
-                              <div>
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Materiais de Apoio (Drive/Links)</label>
-                                  <textarea 
-                                      className="w-full px-4 py-2.5 border-2 border-slate-100 rounded-xl text-sm h-32 resize-none outline-none focus:border-blue-500 transition-all font-mono" 
-                                      value={editingCourseInfo.materials} 
-                                      onChange={e => setEditingCourseInfo({...editingCourseInfo, materials: e.target.value})} 
-                                      placeholder="Links para apostilas, vídeos complementares ou pastas no Drive..." 
-                                  />
-                              </div>
-
-                              <div>
-                                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Pré-requisitos para Instrutores</label>
-                                  <textarea 
-                                      className="w-full px-4 py-2.5 border-2 border-slate-100 rounded-xl text-sm h-32 resize-none outline-none focus:border-blue-500 transition-all" 
-                                      value={editingCourseInfo.requirements} 
-                                      onChange={e => setEditingCourseInfo({...editingCourseInfo, requirements: e.target.value})} 
-                                      placeholder="Quais competências o instrutor deve ter para ministrar este curso?" 
-                                  />
-                              </div>
-
-                              <button onClick={handleSaveCourseInfo} disabled={isSavingItem} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-600/20 active:scale-95 transition-all flex items-center justify-center gap-2">
-                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Informações de Curso
-                              </button>
-                          </div>
-                      )}
-
-                      {/* FORM TAG SUPPORT */}
-                      {editingTag && (
-                          <div className="space-y-6">
-                              <div>
-                                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nome da Tag</label>
-                                  <input className="w-full px-4 py-2.5 border rounded-xl font-bold" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro, Dúvida Técnica..." />
-                              </div>
-                              <div>
-                                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Público de Exibição</label>
-                                  <select className="w-full px-4 py-2.5 border rounded-xl bg-white font-medium" value={editingTag.role} onChange={e => setEditingTag({...editingTag, role: e.target.value as any})}>
-                                      <option value="all">Todos (Público)</option>
-                                      <option value="student">Apenas Alunos</option>
-                                      <option value="instructor">Apenas Instrutores</option>
-                                      <option value="studio">Apenas Studios</option>
-                                      <option value="admin">Apenas Adm (Interno)</option>
-                                  </select>
-                              </div>
-                              <button onClick={handleSaveTag} disabled={isSavingItem} className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2">
-                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Tag de Suporte
-                              </button>
-                          </div>
-                      )}
-
-                      {/* FORM WEBHOOK TRIGGER */}
-                      {editingTrigger && (
-                          <div className="space-y-6">
-                              <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 flex gap-3 text-indigo-700">
-                                  <Zap size={24} className="shrink-0" />
-                                  <p className="text-xs font-medium">Os gatilhos disparam o webhook das empresas quando um negócio atinge a etapa selecionada.</p>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div>
-                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">1. Selecione o Funil</label>
-                                      <select className="w-full px-4 py-2.5 border rounded-xl bg-white font-bold" value={editingTrigger.pipelineName} onChange={e => setEditingTrigger({...editingTrigger, pipelineName: e.target.value, stageId: ''})}>
-                                          <option value="">Escolha um funil...</option>
-                                          {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                                      </select>
-                                  </div>
-                                  <div>
-                                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">2. Selecione a Etapa (Gatilho)</label>
-                                      <select className="w-full px-4 py-2.5 border rounded-xl bg-white disabled:bg-slate-50" value={editingTrigger.stageId} onChange={e => setEditingTrigger({...editingTrigger, stageId: e.target.value})} disabled={!editingTrigger.pipelineName}>
-                                          <option value="">Escolha uma etapa...</option>
-                                          {pipelines.find(p => p.name === editingTrigger.pipelineName)?.stages.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
-                                      </select>
-                                  </div>
-                              </div>
-
-                              <div>
-                                  <div className="flex justify-between items-center mb-1.5 ml-1">
-                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">3. Payload JSON Customizado (Opcional)</label>
-                                      <button 
-                                          type="button"
-                                          onClick={() => {
-                                              const defaultJson = {
-                                                  "data_venda": "{{data_venda}}",
-                                                  "situacao_venda": "Aprovada",
-                                                  "numero_venda": "{{deal_number}}",
-                                                  "numero_negociacao": "{{deal_number}}",
-                                                  "nome_cliente": "{{nome_cliente}}",
-                                                  "email_cliente": "{{email_cliente}}",
-                                                  "telefone_cliente": "{{telefone_cliente}}",
-                                                  "cpf_cnpj_cliente": "{{cpf_cnpj_cliente}}",
-                                                  "nome_vendedor": "{{nome_vendedor}}",
-                                                  "tipo_produto": "{{tipo_produto}}",
-                                                  "curso_produto": "{{curso_produto}}",
-                                                  "fonte_negociacao": "{{fonte_negociacao}}",
-                                                  "campanha": "{{campanha}}",
-                                                  "funil_vendas": "{{funil_vendas}}",
-                                                  "etapa_funil": "{{etapa_funil}}",
-                                                  "cidade_cliente": "{{cidade_cliente}}",
-                                                  "turma_modulo": "{{turma_modulo}}",
-                                                  "valor_total": "{{valor_total}}",
-                                                  "itens_venda": "1",
-                                                  "forma_pagamento": "{{forma_pagamento}}",
-                                                  "valor_entrada": "{{valor_entrada}}",
-                                                  "numero_parcelas": "{{numero_parcelas}}",
-                                                  "valor_parcelas": "{{valor_parcelas}}",
-                                                  "dia_primeiro_vencimento": "{{dia_primeiro_vencimento}}",
-                                                  "link_comprovante": "{{link_comprovante}}",
-                                                  "codigo_transacao": "{{codigo_transacao}}"
-                                              };
-                                              setEditingTrigger({...editingTrigger, payloadJson: JSON.stringify(defaultJson, null, 2)});
-                                          }}
-                                          className="text-[9px] font-black text-indigo-600 uppercase hover:underline"
-                                      >
-                                          Carregar Código Padrão
-                                      </button>
-                                  </div>
-                                  <textarea 
-                                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-xs font-mono h-48 resize-none bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
-                                      value={editingTrigger.payloadJson || ''} 
-                                      onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} 
-                                      placeholder='{"data": "{{data_venda}}", "cliente": "{{nome_cliente}}", ...}'
-                                  />
-                                  <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                                      <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
-                                          <strong>Dica:</strong> Use as tags para dados dinâmicos: <br/>
-                                          <code>{"{{data_venda}}"}, {"{{deal_number}}"}, {"{{nome_cliente}}"}, {"{{email_cliente}}"}, {"{{telefone_cliente}}"}, {"{{cpf_cnpj_cliente}}"}, {"{{nome_vendedor}}"}, {"{{tipo_produto}}"}, {"{{curso_produto}}"}, {"{{valor_total}}"}, {"{{forma_pagamento}}"}</code>
-                                      </p>
-                                  </div>
-                              </div>
-
-                              <button onClick={handleSaveTrigger} disabled={isSavingItem} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2">
-                                  {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Gatilho de Plug
-                              </button>
-                          </div>
-                      )}
+                      </div>
                   </div>
+                  <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3 shrink-0"><button onClick={() => setEditingRole(null)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button><button onClick={handleSaveRole} disabled={isSavingItem} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2 transition-all active:scale-95">{isSavingItem ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Salvar Perfil</button></div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL EDIT BANNER */}
+      {editingBanner && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 flex flex-col">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <h3 className="font-bold text-slate-800">Gerenciar Banner</h3>
+                      <button onClick={() => setEditingBanner(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded-lg"><X size={24}/></button>
+                  </div>
+                  <div className="p-6 space-y-6 flex-1">
+                      <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Título / Referência Interna</label><input type="text" className="w-full px-4 py-2 border rounded-lg text-sm" value={editingBanner.title} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} /></div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Público de Exibição</label>
+                          <select className="w-full px-4 py-2 border rounded-lg text-sm bg-white" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
+                              <option value="student">Área do Aluno</option>
+                              <option value="instructor">Área do Instrutor</option>
+                          </select>
+                      </div>
+                      <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Link de Destino</label><input type="text" className="w-full px-4 py-2 border rounded-lg text-sm font-mono" value={editingBanner.linkUrl} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} placeholder="https://..." /></div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Imagem do Banner</label>
+                        <div onClick={() => bannerFileInputRef.current?.click()} className="cursor-pointer bg-slate-50 border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-2 hover:bg-slate-100 transition-all">
+                            {editingBanner.imageUrl ? <img src={editingBanner.imageUrl} className="max-h-32 rounded shadow-sm" /> : <ImageIcon size={32} className="text-slate-300"/>}
+                            <span className="text-xs text-slate-500 font-bold uppercase">Selecionar Arquivo</span>
+                            <input ref={bannerFileInputRef} type="file" className="hidden" accept="image/*" onChange={handleBannerUpload} />
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={editingBanner.active} onChange={e => setEditingBanner({...editingBanner, active: e.target.checked})} className="rounded text-orange-600" /><span className="text-xs font-bold text-slate-700 uppercase">Banner Ativado</span></label>
+                  </div>
+                  <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3 shrink-0"><button onClick={() => setEditingBanner(null)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button><button onClick={handleSaveBanner} disabled={isSavingItem} className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2 transition-all active:scale-95">{isSavingItem ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Salvar Banner</button></div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL EDIT COMPANY */}
+      {editingCompany && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 flex flex-col">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <h3 className="font-bold text-slate-800">Gerenciar Empresa</h3>
+                      <button onClick={() => setEditingCompany(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded-lg"><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Razão Social</label><input type="text" className="w-full px-4 py-2 border rounded-lg text-sm" value={editingCompany.legalName} onChange={e => setEditingCompany({...editingCompany, legalName: e.target.value})} /></div>
+                        <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">CNPJ</label><input type="text" className="w-full px-4 py-2 border rounded-lg text-sm" value={editingCompany.cnpj} onChange={e => setEditingCompany({...editingCompany, cnpj: e.target.value})} /></div>
+                        <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Webhook URL (Opcional)</label><input type="text" className="w-full px-4 py-2 border rounded-lg text-sm font-mono" value={editingCompany.webhookUrl} onChange={e => setEditingCompany({...editingCompany, webhookUrl: e.target.value})} /></div>
+                        
+                        <div className="col-span-2 pt-4 border-t">
+                            <label className="block text-xs font-bold text-slate-600 mb-3 uppercase tracking-widest">Vincular Tipos de Produto</label>
+                            <div className="flex gap-4">
+                                {['Digital', 'Presencial', 'Evento'].map(type => (
+                                    <label key={type} className="flex items-center gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border flex-1 hover:bg-white transition-all">
+                                        <input type="checkbox" className="w-4 h-4 rounded text-teal-600" checked={editingCompany.productTypes?.includes(type)} onChange={e => {
+                                            const current = editingCompany.productTypes || [];
+                                            const updated = e.target.checked ? [...current, type] : current.filter(t => t !== type);
+                                            setEditingCompany({...editingCompany, productTypes: updated});
+                                        }} />
+                                        <span className="text-xs font-bold text-slate-700">{type}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="col-span-2 pt-4">
+                            <label className="block text-xs font-bold text-slate-600 mb-3 uppercase tracking-widest">Exceção: Por Produto Específico</label>
+                            <div className="max-h-48 overflow-y-auto border rounded-xl p-4 bg-slate-50 space-y-2 custom-scrollbar">
+                                {allProducts.map(p => (
+                                    <label key={p.id} className="flex items-center gap-3 p-2 bg-white rounded-lg border shadow-sm cursor-pointer hover:border-teal-400 transition-all">
+                                        <input type="checkbox" className="w-4 h-4 rounded text-teal-600" checked={editingCompany.productIds?.includes(p.name)} onChange={e => {
+                                            const current = editingCompany.productIds || [];
+                                            const updated = e.target.checked ? [...current, p.name] : current.filter(name => name !== p.name);
+                                            setEditingCompany({...editingCompany, productIds: updated});
+                                        }} />
+                                        <span className="text-xs font-medium text-slate-800">{p.name}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                      </div>
+                  </div>
+                  <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3 shrink-0"><button onClick={() => setEditingCompany(null)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button><button onClick={handleSaveCompany} disabled={isSavingItem} className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2 transition-all active:scale-95">{isSavingItem ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Salvar Empresa</button></div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL EDIT INSTRUCTOR LEVEL */}
+      {editingLevel && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 flex flex-col">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <h3 className="font-bold text-slate-800">Gerenciar Nível Docente</h3>
+                      <button onClick={() => setEditingLevel(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded-lg"><X size={24}/></button>
+                  </div>
+                  <div className="p-6 space-y-6 flex-1">
+                      <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Nome do Nível</label><input type="text" className="w-full px-4 py-2 border rounded-lg text-sm" value={editingLevel.name} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} placeholder="Ex: Sênior, Mestre..." /></div>
+                      <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Honorário / Remuneração Padrão (R$)</label><input type="number" className="w-full px-4 py-2 border rounded-lg text-sm font-bold text-emerald-700" value={editingLevel.honorarium} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value) || 0})} /></div>
+                      <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Observações</label><textarea className="w-full px-4 py-2 border rounded-lg text-sm h-24 resize-none" value={editingLevel.observations} onChange={e => setEditingLevel({...editingLevel, observations: e.target.value})} /></div>
+                  </div>
+                  <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3 shrink-0"><button onClick={() => setEditingLevel(null)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button><button onClick={handleSaveLevel} disabled={isSavingItem} className="bg-rose-600 hover:bg-rose-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2 transition-all active:scale-95">{isSavingItem ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Salvar Nível</button></div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL EDIT COURSE INFO */}
+      {editingCourseInfo && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in-95 flex flex-col h-[90vh]">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <h3 className="font-bold text-slate-800">Info de Curso (Portal do Instrutor)</h3>
+                      <button onClick={() => setEditingCourseInfo(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded-lg"><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 bg-white">
+                      <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Nome do Curso / Formação (Identidade)</label><input type="text" className="w-full px-4 py-2 border rounded-lg text-sm font-bold" value={editingCourseInfo.courseName} onChange={e => setEditingCourseInfo({...editingCourseInfo, courseName: e.target.value})} placeholder="Ex: Formação Completa em Pilates" /></div>
+                      <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Detalhes e Ementa Técnica</label><textarea className="w-full px-4 py-2 border rounded-lg text-sm h-48 resize-none leading-relaxed" value={editingCourseInfo.details} onChange={e => setEditingCourseInfo({...editingCourseInfo, details: e.target.value})} /></div>
+                      <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Materiais e Apostilas Necessários</label><textarea className="w-full px-4 py-2 border rounded-lg text-sm h-32 resize-none" value={editingCourseInfo.materials} onChange={e => setEditingCourseInfo({...editingCourseInfo, materials: e.target.value})} /></div>
+                      <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Requisitos e Orientações Docentes</label><textarea className="w-full px-4 py-2 border rounded-lg text-sm h-32 resize-none" value={editingCourseInfo.requirements} onChange={e => setEditingCourseInfo({...editingCourseInfo, requirements: e.target.value})} /></div>
+                  </div>
+                  <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3 shrink-0"><button onClick={() => setEditingCourseInfo(null)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button><button onClick={handleSaveCourseInfo} disabled={isSavingItem} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2 transition-all active:scale-95">{isSavingItem ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Salvar Informação</button></div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL EDIT SUPPORT TAG */}
+      {editingTag && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 flex flex-col">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <h3 className="font-bold text-slate-800">Gerenciar Tag de Atendimento</h3>
+                      <button onClick={() => setEditingTag(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded-lg"><X size={24}/></button>
+                  </div>
+                  <div className="p-6 space-y-6 flex-1">
+                      <div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Nome da Tag</label><input type="text" className="w-full px-4 py-2 border rounded-lg text-sm font-bold" value={editingTag.name} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Suporte Financeiro, Dúvida Técnica..." /></div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Destino (Role)</label>
+                          <select className="w-full px-4 py-2 border rounded-lg text-sm bg-white" value={editingTag.role} onChange={e => setEditingTag({...editingTag, role: e.target.value as any})}>
+                              <option value="all">Todas as Áreas</option>
+                              <option value="student">Área do Aluno</option>
+                              <option value="instructor">Área do Instrutor</option>
+                              <option value="studio">Área do Studio</option>
+                          </select>
+                      </div>
+                  </div>
+                  <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3 shrink-0"><button onClick={() => setEditingTag(null)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button><button onClick={handleSaveTag} disabled={isSavingItem} className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2 transition-all active:scale-95">{isSavingItem ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Salvar Tag</button></div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL EDIT TRIGGER */}
+      {editingTrigger && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 flex flex-col">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2"><Zap size={20} className="text-indigo-600"/> Configurar Gatilho de Webhook</h3>
+                      <button onClick={() => setEditingTrigger(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded-lg"><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Funil (Pipeline)</label>
+                            <select className="w-full px-4 py-2 border rounded-lg text-sm bg-white" value={editingTrigger.pipelineName} onChange={e => setEditingTrigger({...editingTrigger, pipelineName: e.target.value, stageId: ''})}>
+                                <option value="">Selecione...</option>
+                                {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Etapa de Disparo</label>
+                            <select className="w-full px-4 py-2 border rounded-lg text-sm bg-white disabled:bg-slate-50" value={editingTrigger.stageId} onChange={e => setEditingTrigger({...editingTrigger, stageId: e.target.value})} disabled={!editingTrigger.pipelineName}>
+                                <option value="">Selecione a etapa...</option>
+                                {(pipelines.find(p => p.name === editingTrigger.pipelineName)?.stages || []).map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                            </select>
+                        </div>
+                        <div className="col-span-2">
+                            <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">JSON Payload Customizado (Opcional)</label>
+                            <textarea className="w-full px-4 py-2 border rounded-lg text-xs font-mono h-48 resize-none bg-slate-900 text-teal-400" value={editingTrigger.payloadJson} onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} placeholder='{"nome": "{{nome_cliente}}", "curso": "{{curso_produto}}"}' />
+                            <p className="text-[10px] text-slate-400 mt-2 italic">* Se vazio, o sistema enviará o objeto padrão VOLL. Use tags entre {"{{ }}"} para mapear campos do CRM.</p>
+                        </div>
+                      </div>
+                  </div>
+                  <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3 shrink-0"><button onClick={() => setEditingTrigger(null)} className="px-4 py-2 text-slate-600 font-medium text-sm">Cancelar</button><button onClick={handleSaveTrigger} disabled={isSavingItem} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2 transition-all active:scale-95">{isSavingItem ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Salvar Gatilho</button></div>
               </div>
           </div>
       )}

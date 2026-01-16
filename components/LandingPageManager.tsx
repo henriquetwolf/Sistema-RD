@@ -4,13 +4,15 @@ import {
   Save, X, Loader2, Sparkles, MonitorPlay, Copy, CheckCircle, 
   RefreshCw, Layout, Globe, Smartphone, CreditCard, MessageSquare, 
   HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText,
-  ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check,
+  /* Fixed Duplicate identifier 'Type' on line 7 by removing it from lucide-react import */
+  ArrowUp, ArrowDown, MousePointer2, Settings, PlusCircle, Check,
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
   Type as TypeIcon
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, FormModel } from '../types';
-import { GoogleGenAI, Type as SchemaType } from "@google/genai";
+/* Fixed Duplicate identifier 'Type' on line 13 by ensuring it is imported only from @google/genai */
+import { GoogleGenAI, Type } from "@google/genai";
 import clsx from 'clsx';
 
 interface LandingPageManagerProps {
@@ -76,55 +78,62 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       return;
     }
 
+    if (!process.env.API_KEY) {
+        alert("Chave de API não configurada.");
+        return;
+    }
+
     setIsGenerating(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      const prompt = `Crie uma página de vendas persuasiva para o produto "${aiPrompt.productName}".
-      Descrição do produto: ${aiPrompt.productDescription}
-      Público-alvo: ${aiPrompt.targetAudience}
-      Benefícios principais: ${aiPrompt.mainBenefits}
-      Preço/Oferta: ${aiPrompt.price}
+      const prompt = `Crie uma estrutura de página de vendas persuasiva para o produto "${aiPrompt.productName}".
+      Contexto: ${aiPrompt.productDescription}
+      Público: ${aiPrompt.targetAudience}
+      Benefícios: ${aiPrompt.mainBenefits}
+      Preço: ${aiPrompt.price}
       
-      Retorne um JSON estruturado seguindo o esquema solicitado. 
-      Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
+      Gere um JSON com título e um array de seções (hero, text, features, pricing, faq).
+      Cada seção deve ter id único, type e content (objetos com textos apropriados).
+      Retorne APENAS o JSON.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: prompt,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
+          thinkingConfig: { thinkingBudget: 0 },
           responseMimeType: "application/json",
           responseSchema: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
-              title: { type: SchemaType.STRING, description: "Título interno da página" },
+              title: { type: Type.STRING },
               sections: {
-                type: SchemaType.ARRAY,
+                type: Type.ARRAY,
                 items: {
-                  type: SchemaType.OBJECT,
+                  type: Type.OBJECT,
                   properties: {
-                    id: { type: SchemaType.STRING },
-                    type: { type: SchemaType.STRING, enum: ['hero', 'text', 'features', 'pricing', 'faq'] },
+                    id: { type: Type.STRING },
+                    type: { type: Type.STRING, enum: ['hero', 'text', 'features', 'pricing', 'faq'] },
                     content: { 
-                        type: SchemaType.OBJECT,
+                        type: Type.OBJECT,
                         properties: {
-                            headline: { type: SchemaType.STRING },
-                            subheadline: { type: SchemaType.STRING },
-                            ctaText: { type: SchemaType.STRING },
-                            title: { type: SchemaType.STRING },
-                            text: { type: SchemaType.STRING },
-                            mainTitle: { type: SchemaType.STRING },
-                            price: { type: SchemaType.STRING },
-                            installments: { type: SchemaType.STRING },
+                            headline: { type: Type.STRING },
+                            subheadline: { type: Type.STRING },
+                            ctaText: { type: Type.STRING },
+                            title: { type: Type.STRING },
+                            text: { type: Type.STRING },
+                            mainTitle: { type: Type.STRING },
+                            price: { type: Type.STRING },
+                            installments: { type: Type.STRING },
                             items: {
-                                type: SchemaType.ARRAY,
+                                type: Type.ARRAY,
                                 items: {
-                                    type: SchemaType.OBJECT,
+                                    type: Type.OBJECT,
                                     properties: {
-                                        title: { type: SchemaType.STRING },
-                                        description: { type: SchemaType.STRING },
-                                        question: { type: SchemaType.STRING },
-                                        answer: { type: SchemaType.STRING }
+                                        title: { type: Type.STRING },
+                                        description: { type: Type.STRING },
+                                        question: { type: Type.STRING },
+                                        answer: { type: Type.STRING }
                                     }
                                 }
                             }
@@ -140,7 +149,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         }
       });
 
-      const text = response.text || "{}";
+      const text = response.text;
+      if (!text) throw new Error("A IA não retornou conteúdo.");
+      
       const generated = JSON.parse(text);
       
       const newPage: Partial<LandingPage> = {
@@ -156,8 +167,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       setCurrentDraft(newPage);
     } catch (e: any) {
-      console.error(e);
-      alert("Erro ao gerar com IA: " + (e.message || JSON.stringify(e)));
+      console.error("Erro na geração por IA:", e);
+      alert("Erro ao gerar com IA: " + (e.message || "Tente novamente em instantes."));
     } finally {
       setIsGenerating(false);
     }
@@ -183,7 +194,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: prompt
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: { thinkingConfig: { thinkingBudget: 0 } }
       });
 
       const refinedText = (response.text || currentVal).trim();
@@ -847,11 +859,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                      <div className="grid grid-cols-1 gap-6">
                         <div>
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
-                            <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-base font-bold outline-none" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
+                            <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
                         </div>
                         <div>
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto</label>
-                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-24 resize-none outline-none" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Fale sobre os benefícios e o que o aluno aprende..." />
+                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm h-24 resize-none outline-none" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Fale sobre os benefícios e o que o aluno aprende..." />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>

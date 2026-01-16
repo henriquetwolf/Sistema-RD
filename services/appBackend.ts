@@ -155,7 +155,6 @@ export const appBackend = {
       targetPipeline: item.target_pipeline, 
       targetStage: item.target_stage, 
       questions: item.questions || [], 
-      // Fix: Change data.style to item.style to correctly map the property from the iterated item
       style: item.style || {}, 
       createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
@@ -199,11 +198,11 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
-      distribution_mode: form.distributionMode || 'fixed', 
-      fixed_owner_id: form.fixedOwnerId || null, 
-      team_id: form.teamId || null, 
-      target_pipeline: form.targetPipeline || null, 
-      target_stage: form.targetStage || null, 
+      distribution_mode: form.distribution_mode || 'fixed', 
+      fixed_owner_id: form.fixed_owner_id || null, 
+      team_id: form.team_id || null, 
+      target_pipeline: form.target_pipeline || null, 
+      target_stage: form.target_stage || null, 
       questions: form.questions || [], 
       style: form.style || {}, 
       folder_id: form.folderId || null, 
@@ -521,518 +520,6 @@ export const appBackend = {
     await supabase.from('crm_sync_jobs').delete().eq('id', id);
   },
 
-  getPresets: async (): Promise<SavedPreset[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from(PRESETS_TABLE).select('*').order('name');
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Preset', url: item.url || '', key: item.key || '', tableName: item.table_name || '', primaryKey: item.primary_key || '', intervalMinutes: item.interval_minutes || 5, createdByName: item.created_by_name }));
-  },
-
-  savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
-    if (!isConfigured) throw new Error("Supabase não configurado");
-    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
-    const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
-    if (error) throw error;
-    // Fix: interval_minutes should be intervalMinutes to match SavedPreset interface
-    return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
-  },
-
-  getContracts: async (): Promise<Contract[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title || 'Contrato', content: item.content || '', city: item.city || '', contractDate: item.contract_date || '', status: item.status || 'sent', folderId: item.folder_id, signers: item.signers || [], createdAt: item.created_at }));
-  },
-
-  getContractById: async (id: string): Promise<Contract | null> => {
-    if (!isConfigured) return null;
-    const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
-    if (!data) return null;
-    return { id: data.id, createdAt: data.created_at, status: data.status, title: data.title || 'Contrato', content: data.content || '', city: data.city || '', contractDate: data.contract_date || '', signers: data.signers || [], folderId: data.folder_id };
-  },
-
-  saveContract: async (contract: Contract): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_contracts').upsert({ id: contract.id, title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contractDate, status: contract.status, folder_id: contract.folderId, signers: contract.signers, created_at: contract.createdAt });
-  },
-
-  deleteContract: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_contracts').delete().eq('id', id);
-  },
-
-  signContract: async (contractId: string, signerId: string, signatureData: string): Promise<void> => {
-    if (!isConfigured) return;
-    const { data: contract } = await supabase.from('crm_contracts').select('signers').eq('id', contractId).single();
-    if (!contract) throw new Error("Contrato não encontrado");
-    const signers = (contract.signers as ContractSigner[]).map(s => { if (s.id === signerId) return { ...s, status: 'signed' as const, signatureData, signedAt: new Date().toISOString() }; return s; });
-    const allSigned = signers.every(s => s.status === 'signed');
-    await supabase.from('crm_contracts').update({ signers, status: allSigned ? 'signed' : 'sent' }).eq('id', contractId);
-  },
-
-  getPendingContractsByEmail: async (email: string): Promise<Contract[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_contracts').select('*').eq('status', 'sent');
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, content: item.content, city: item.city, contractDate: item.contract_date, status: item.status, folderId: item.folder_id, signers: item.signers, createdAt: item.created_at })).filter((c: Contract) => (c.signers || []).some(s => s.email?.toLowerCase() === email.toLowerCase() && s.status === 'pending'));
-  },
-
-  getContractFolders: async (): Promise<ContractFolder[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_contract_folders').select('*').order('name');
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Sem nome', createdAt: item.created_at }));
-  },
-
-  saveContractFolder: async (folder: ContractFolder): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_contract_folders').upsert({ id: folder.id, name: folder.name, created_at: folder.createdAt });
-  },
-
-  deleteContractFolder: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_contract_folders').delete().eq('id', id);
-  },
-
-  sendContractEmailSimulation: async (email: string, name: string, title: string): Promise<void> => { console.log(`Email simulado: ${name} (${email}) - ${title}`); return Promise.resolve(); },
-
-  getSupportTickets: async (): Promise<SupportTicket[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role, targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role, subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response, assignedId: item.assigned_id, assignedName: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at }));
-  },
-
-  getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${senderId},target_id.eq.${senderId}`).order('updated_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role, targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role, subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response, assignedId: item.assigned_id, assignedName: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at }));
-  },
-
-  getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-    return (data || []).map((item: any) => ({ id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role, content: item.content || '', attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at }));
-  },
-
-  saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_support_tickets').upsert({ id: ticket.id || crypto.randomUUID(), sender_id: ticket.senderId, sender_name: ticket.senderName, sender_email: ticket.senderEmail, sender_role: ticket.senderRole, target_id: ticket.targetId, target_name: ticket.targetName, target_email: ticket.targetEmail, target_role: ticket.targetRole, subject: ticket.subject, message: ticket.message, tag: ticket.tag, status: ticket.status, response: ticket.response, assigned_id: ticket.assignedId, assigned_name: ticket.assignedName, updated_at: ticket.updatedAt || new Date().toISOString() });
-  },
-
-  deleteSupportTicket: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_support_tickets').delete().eq('id', id);
-  },
-
-  addSupportMessage: async (msg: Partial<SupportMessage>): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_support_messages').insert([{ id: crypto.randomUUID(), ticket_id: (msg as any).ticketId, sender_id: (msg as any).senderId, sender_name: (msg as any).senderName, sender_role: (msg as any).senderRole, content: msg.content, attachment_url: (msg as any).attachmentUrl, attachment_name: (msg as any).attachmentName }]);
-  },
-
-  getPartnerStudios: async (): Promise<PartnerStudio[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    return (data || []).map((item: any) => ({ 
-      id: item.id, 
-      status: item.status || 'inactive', 
-      responsibleName: item.responsible_name || '', 
-      cpf: item.cpf || '', 
-      phone: item.phone || '', 
-      email: item.email || '', 
-      password: item.password || '', 
-      secondContactName: item.second_contact_name || '', 
-      secondContactPhone: item.second_contact_phone || '', 
-      fantasyName: item.fantasy_name || 'Sem nome', 
-      legalName: item.legal_name || '', 
-      cnpj: item.cnpj || '', 
-      studioPhone: item.studio_phone || '', 
-      address: item.address || '', 
-      city: item.city || '', 
-      state: item.state || '', 
-      country: item.country || 'Brasil', 
-      sizeM2: item.size_m2 || '', 
-      studentCapacity: item.student_capacity || '', 
-      rentValue: item.rent_value || '', 
-      methodology: item.methodology || '', 
-      studioType: item.studio_type || '', 
-      nameOnSite: item.name_on_site || '', 
-      bank: item.bank || '', 
-      agency: item.agency || '', 
-      account: item.account || '', 
-      beneficiary: item.beneficiary || '', 
-      pixKey: item.pix_key || '', 
-      hasReformer: !!item.has_reformer, 
-      qtyReformer: Number(item.qty_reformer || 0), 
-      hasLadderBarrel: !!item.has_ladder_barrel, 
-      qtyLadderBarrel: Number(item.qty_ladder_barrel || 0), 
-      hasChair: !!item.has_chair, 
-      qtyChair: Number(item.qty_chair || 0), 
-      hasCadillac: !!item.has_cadillac, 
-      qtyCadillac: Number(item.qty_cadillac || 0), 
-      hasChairsForCourse: !!item.has_chairs_for_course, 
-      hasTv: !!item.has_tv, 
-      maxKitsCapacity: item.max_kits_capacity || '', 
-      attachments: item.attachments || '' 
-    }));
-  },
-
-  savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_partner_studios').upsert({ 
-      id: studio.id || crypto.randomUUID(), 
-      status: studio.status, 
-      responsible_name: studio.responsibleName, 
-      cpf: studio.cpf, 
-      phone: studio.phone, 
-      email: studio.email, 
-      password: studio.password, 
-      second_contact_name: studio.secondContactName, 
-      second_contact_phone: studio.secondContactPhone, 
-      fantasy_name: studio.fantasyName, 
-      legal_name: studio.legalName, 
-      cnpj: studio.cnpj, 
-      studio_phone: studio.studioPhone, 
-      address: studio.address, 
-      city: studio.city, 
-      state: studio.state, 
-      country: studio.country, 
-      size_m2: studio.sizeM2, 
-      student_capacity: studio.studentCapacity, 
-      rent_value: studio.rentValue, 
-      methodology: studio.methodology, 
-      studio_type: studio.studioType, 
-      name_on_site: studio.nameOnSite, 
-      bank: studio.bank, 
-      agency: studio.agency, 
-      account: studio.account, 
-      beneficiary: studio.beneficiary, 
-      pix_key: studio.pixKey, 
-      has_reformer: studio.hasReformer, 
-      qty_reformer: studio.qtyReformer, 
-      has_ladder_barrel: studio.hasLadderBarrel, 
-      qty_ladder_barrel: studio.qtyLadderBarrel, 
-      has_chair: studio.hasChair, 
-      qty_chair: studio.qtyChair, 
-      has_cadillac: studio.hasCadillac, 
-      qty_cadillac: studio.qtyCadillac, 
-      has_chairs_for_course: studio.hasChairsForCourse, 
-      has_tv: studio.hasTv, 
-      max_kits_capacity: studio.maxKitsCapacity, 
-      attachments: studio.attachments 
-    });
-  },
-
-  deletePartnerStudio: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_partner_studios').delete().eq('id', id);
-  },
-
-  getTeacherNews: async (): Promise<TeacherNews[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title || 'Comunicado', content: item.content || '', imageUrl: item.image_url, createdAt: item.created_at }));
-  },
-
-  saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_teacher_news').upsert({ id: news.id || crypto.randomUUID(), title: news.title, content: news.content, image_url: news.imageUrl, created_at: news.createdAt || new Date().toISOString() });
-  },
-
-  deleteTeacherNews: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_teacher_news').delete().eq('id', id);
-  },
-
-  getCertificates: async (): Promise<CertificateModel[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title || 'Certificado', background_data: item.background_data, back_background_data: item.back_background_data, linked_product_id: item.linked_product_id, body_text: item.body_text || '', layout_config: item.layout_config || {}, createdAt: item.created_at }));
-  },
-
-  saveCertificate: async (cert: CertificateModel): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
-  },
-
-  deleteCertificate: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_certificates').delete().eq('id', id);
-  },
-
-  issueCertificate: async (studentDealId: string, templateId: string): Promise<string> => {
-    if (!isConfigured) throw new Error("Banco não configurado");
-    const hash = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
-    await supabase.from('crm_student_certificates').insert([{ student_deal_id: studentDealId, certificate_template_id: templateId, hash: hash, issued_at: new Date().toISOString() }]);
-    return hash;
-  },
-
-  getStudentCertificate: async (hash: string): Promise<any> => {
-    if (!isConfigured) return null;
-    try {
-        const { data: issuedCert } = await supabase.from('crm_student_certificates').select('*, crm_certificates(*), crm_deals(contact_name, company_name, course_city)').eq('hash', hash).maybeSingle();
-        if (!issuedCert) return null;
-        return { studentName: issuedCert.crm_deals.company_name || issuedCert.crm_deals.contact_name, studentCity: issuedCert.crm_deals.course_city || 'VOLL Pilates', template: { id: issuedCert.crm_certificates.id, title: issuedCert.crm_certificates.title, backgroundData: issuedCert.crm_certificates.background_data, backBackgroundData: issuedCert.crm_certificates.back_background_data, bodyText: issuedCert.crm_certificates.body_text, layoutConfig: issuedCert.crm_certificates.layout_config }, issuedAt: issuedCert.issued_at };
-    } catch (e) { return null; }
-  },
-
-  saveExternalCertificate: async (cert: Omit<ExternalCertificate, 'id' | 'created_at'>): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_external_certificates').insert([{
-        id: crypto.randomUUID(),
-        student_id: cert.student_id,
-        course_name: cert.course_name,
-        completion_date: cert.completion_date,
-        file_url: cert.file_url,
-        file_name: cert.file_name,
-        created_at: new Date().toISOString()
-    }]);
-  },
-
-  getExternalCertificates: async (studentId: string): Promise<ExternalCertificate[]> => {
-    if (!isConfigured) return [];
-    const { data = null } = await supabase.from('crm_external_certificates').select('*').eq('student_id', studentId).order('completion_date', { ascending: false });
-    return (data || []).map((item: any) => ({
-        id: item.id,
-        student_id: item.student_id,
-        course_name: item.course_name || 'Certificado',
-        completion_date: item.completion_date || '',
-        file_url: item.file_url || '',
-        file_name: item.file_name || 'arquivo.pdf',
-        created_at: item.created_at
-    }));
-  },
-
-  getOnlineCourses: async (): Promise<OnlineCourse[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ 
-      id: item.id, 
-      title: item.title || 'Curso', 
-      description: item.description || '', 
-      price: Number(item.price || 0), 
-      paymentLink: item.payment_link || '',
-      imageUrl: item.image_url,
-      certificate_template_id: item.certificate_template_id,
-      createdAt: item.created_at 
-    }));
-  },
-
-  saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_online_courses').upsert({ 
-      id: course.id || crypto.randomUUID(), 
-      title: course.title, 
-      description: course.description, 
-      price: course.price, 
-      payment_link: course.payment_link, 
-      image_url: course.imageUrl, 
-      certificate_template_id: course.certificateTemplateId || null, 
-      created_at: course.createdAt || new Date().toISOString() 
-    }, { onConflict: 'title' });
-  },
-
-  getCourseModules: async (courseId: string): Promise<CourseModule[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_course_modules').select('*').eq('course_id', courseId).order('order_index');
-    return (data || []).map((item: any) => ({ id: item.id, courseId: item.course_id, title: item.title || 'Módulo', orderIndex: item.order_index || 0 }));
-  },
-
-  saveCourseModule: async (mod: Partial<CourseModule>): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_course_modules').upsert({ id: mod.id || crypto.randomUUID(), course_id: mod.courseId, title: mod.title, order_index: mod.orderIndex });
-  },
-
-  deleteCourseModule: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_course_modules').delete().eq('id', id);
-  },
-
-  getModuleLessons: async (moduleId: string): Promise<CourseLesson[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index');
-    return (data || []).map((item: any) => ({ id: item.id, moduleId: item.module_id, title: item.title || 'Aula', description: item.description || '', videoUrl: item.video_url || '', materials: item.materials || [], orderIndex: item.order_index || 0 }));
-  },
-
-  saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_course_lessons').upsert({ id: lesson.id || crypto.randomUUID(), module_id: lesson.moduleId, title: lesson.title, description: lesson.description, video_url: lesson.videoUrl, materials: lesson.materials, order_index: lesson.orderIndex });
-  },
-
-  deleteCourseLesson: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_course_lessons').delete().eq('id', id);
-  },
-
-  getStudentCourseAccess: async (studentDealId: string): Promise<string[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_student_course_access').select('course_id').eq('student_deal_id', studentDealId);
-    return (data || []).map(item => item.course_id);
-  },
-
-  getStudentLessonProgress: async (studentDealId: string): Promise<string[]> => {
-    if (!isConfigured) return [];
-    const { data = null } = await supabase.from('crm_student_lesson_progress').select('lesson_id').eq('student_deal_id', studentDealId);
-    return (data || []).map(item => item.lesson_id);
-  },
-
-  toggleLessonProgress: async (studentDealId: string, lessonId: string, completed: boolean): Promise<void> => {
-    if (!isConfigured) return;
-    if (completed) await supabase.from('crm_student_lesson_progress').upsert({ student_deal_id: studentDealId, lesson_id: lessonId, completed_at: new Date().toISOString() });
-    else await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', studentDealId).eq('lesson_id', lessonId);
-  },
-
-  getEvents: async (): Promise<EventModel[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Evento', description: item.description || '', location: item.location || '', dates: item.dates || [], createdAt: item.created_at, registrationOpen: !!item.registration_open }));
-  },
-
-  saveEvent: async (event: EventModel): Promise<EventModel> => {
-    if (!isConfigured) throw new Error("Banco não configurado");
-    const payload = { id: event.id || crypto.randomUUID(), name: event.name, description: event.description, location: event.location, dates: event.dates, created_at: event.createdAt || new Date().toISOString(), registration_open: event.registrationOpen };
-    const { data, error } = await supabase.from('crm_events').upsert(payload).select().single();
-    if (error) throw error;
-    return { id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates || [], createdAt: data.created_at, registrationOpen: data.registration_open };
-  },
-
-  deleteEvent: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_events').delete().eq('id', id);
-  },
-
-  getBlocks: async (eventId: string): Promise<EventBlock[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date');
-    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, date: item.date || '', title: item.title || 'Bloco', maxSelections: item.max_selections || 1 }));
-  },
-
-  saveBlock: async (block: EventBlock): Promise<EventBlock> => {
-    if (!isConfigured) throw new Error("Not configured");
-    const { data, error = null } = await supabase.from('crm_event_blocks').upsert({ id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections }).select().single();
-    if (error) throw error;
-    return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
-  },
-
-  deleteBlock: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_event_blocks').delete().eq('id', id);
-  },
-
-  getWorkshops: async (eventId: string): Promise<Workshop[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_workshops').select('*').eq('event_id', eventId).order('date');
-    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, blockId: item.block_id, title: item.title || 'Workshop', description: item.description || '', speaker: item.speaker || '', date: item.date || '', time: item.time || '', spots: Number(item.spots || 0) }));
-  },
-
-  saveWorkshop: async (ws: Workshop): Promise<Workshop> => {
-    if (!isConfigured) throw new Error("Not configured");
-    const { data, error = null } = await supabase.from('crm_workshops').upsert({ id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
-    if (error) throw error;
-    return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
-  },
-
-  deleteWorkshop: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_workshops').delete().eq('id', id);
-  },
-
-  getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId).order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, workshopId: item.workshop_id, studentId: item.student_id, studentName: item.student_name || '', studentEmail: item.student_email || '', registeredAt: item.created_at, locked: !!item.locked }));
-  },
-
-  getWAAutomationRules: async (): Promise<WAAutomationRule[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((d: any) => ({ 
-        id: d.id, 
-        name: d.name || 'Regra', 
-        triggerType: d.trigger_type, 
-        pipelineName: d.pipeline_name || '',
-        stageId: d.stage_id || '',
-        productType: d.product_type || '',
-        productId: d.product_id || '',
-        messageTemplate: d.message_template || '',
-        isActive: !!d.is_active, 
-        createdAt: d.created_at 
-    }));
-  },
-
-  saveWAAutomationRule: async (rule: Partial<WAAutomationRule>): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_wa_automations').upsert({ id: rule.id || crypto.randomUUID(), name: rule.name, trigger_type: rule.triggerType, pipeline_name: rule.pipelineName, stage_id: rule.stageId, product_type: rule.productType, product_id: rule.productId, message_template: rule.messageTemplate, is_active: rule.isActive, created_at: rule.createdAt || new Date().toISOString() });
-  },
-
-  deleteWAAutomationRule: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_wa_automations').delete().eq('id', id);
-  },
-
-  getWAAutomationLogs: async (): Promise<WAAutomationLog[]> => {
-    if (!isConfigured) return [];
-    const { data, error = null } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, ruleName: d.rule_name || '', student_name: d.student_name || '', phone: d.phone || '', message: d.message || '', createdAt: d.created_at }));
-  },
-
-  logWAAutomation: async (log: Omit<WAAutomationLog, 'id' | 'createdAt'>): Promise<void> => {
-      if (!isConfigured) return;
-      await supabase.from('crm_wa_automation_logs').insert([{ rule_name: log.ruleName, student_name: log.studentName, phone: log.phone, message: log.message }]);
-  },
-
-  getInventory: async (): Promise<InventoryRecord[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, type: item.type || 'entry', itemApostilaNova: Number(item.item_apostila_nova || 0), itemApostilaClassico: Number(item.item_apostila_classico || 0), itemSacochila: Number(item.item_sacochila || 0), itemLapis: Number(item.item_lapis || 0), registrationDate: item.registration_date || '', studioId: item.studio_id || '', trackingCode: item.tracking_code || '', observations: item.observations || '', conferenceDate: item.conference_date || '', attachments: item.attachments || '', createdAt: item.created_at }));
-  },
-
-  saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_inventory').upsert({ id: record.id || crypto.randomUUID(), type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments, created_at: record.createdAt || new Date().toISOString() });
-  },
-
-  deleteInventoryRecord: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_inventory').delete().eq('id', id);
-  },
-
-  getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
-    if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, openInstallments: Number(item.open_installments || 0), totalNegotiatedValue: Number(item.total_negotiated_value || 0), totalInstallments: Number(item.total_installments || 1), due_date: item.due_date, responsible_agent: item.responsible_agent, identifier_code: item.identifier_code, full_name: item.full_name || '', product_name: item.product_name || '', original_value: Number(item.original_value || 0), payment_method: item.payment_method, observations: item.observations, status: item.status || 'Pendente', team: item.team, voucher_link_1: item.voucher_link_1, test_date: item.test_date, voucher_link_2: item.voucher_link_2, voucher_link_3: item.voucher_link_3, boletos_link: item.boletos_link, negotiation_reference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at }));
-  },
-
-  saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_billing_negotiations').upsert({ 
-        id: neg.id || crypto.randomUUID(), 
-        open_installments: neg.open_installments, 
-        total_negotiated_value: neg.totalNegotiatedValue, 
-        total_installments: neg.totalInstallments, 
-        due_date: neg.dueDate, 
-        responsible_agent: neg.responsibleAgent, 
-        identifier_code: neg.identifierCode, 
-        full_name: neg.fullName, 
-        product_name: neg.productName, 
-        original_value: neg.originalValue, 
-        payment_method: neg.paymentMethod, 
-        observations: neg.observations, 
-        status: neg.status, 
-        team: neg.team, 
-        voucher_link_1: neg.voucherLink1, 
-        test_date: neg.testDate, 
-        voucher_link_2: neg.voucherLink2, 
-        voucher_link_3: neg.voucherLink3, 
-        boletos_link: neg.boletosLink, 
-        negotiation_reference: neg.negotiationReference, 
-        attachments: neg.attachments, 
-        created_at: neg.createdAt || new Date().toISOString() 
-    });
-  },
-
-  deleteBillingNegotiation: async (id: string): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_billing_negotiations').delete().eq('id', id);
-  },
-
   getLandingPages: async (): Promise<LandingPage[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_landing_pages').select('*').order('created_at', { ascending: false });
@@ -1091,7 +578,6 @@ export const appBackend = {
             const { error } = await supabase.from('crm_landing_pages').update(payload).eq('id', lp.id);
             if (error) throw error;
         }
-        await supabase.rpc('reload_schema_cache').catch(() => {});
     } catch (err: any) {
         console.error("Erro fatal ao salvar Landing Page no Supabase:", err);
         throw err;
@@ -1117,5 +603,820 @@ export const appBackend = {
     if (error) throw error;
     // Fix: interval_minutes should be intervalMinutes to match SavedPreset interface
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
+  },
+
+  // Added missing deletePreset method
+  deletePreset: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from(PRESETS_TABLE).delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // Added missing getContractById method
+  getContractById: async (id: string): Promise<Contract | null> => {
+    if (!isConfigured) return null;
+    const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
+    if (!data) return null;
+    return {
+      id: data.id,
+      title: data.title || '',
+      content: data.content || '',
+      city: data.city || '',
+      contractDate: data.contract_date || '',
+      status: data.status as any,
+      folderId: data.folder_id,
+      signers: data.signers || [],
+      createdAt: data.created_at
+    };
+  },
+
+  // Added missing logWAAutomation method
+  logWAAutomation: async (log: Omit<WAAutomationLog, 'id' | 'createdAt'>): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_wa_automation_logs').insert([{
+      rule_name: log.ruleName,
+      student_name: log.studentName,
+      phone: log.phone,
+      message: log.message
+    }]);
+  },
+
+  // Added missing saveSupportTicket method
+  saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: ticket.id || crypto.randomUUID(),
+        sender_id: ticket.senderId,
+        sender_name: ticket.senderName,
+        sender_email: ticket.senderEmail,
+        sender_role: ticket.senderRole,
+        target_id: ticket.targetId || null,
+        target_name: ticket.targetName || null,
+        target_email: ticket.targetEmail || null,
+        target_role: ticket.targetRole || null,
+        subject: ticket.subject,
+        message: ticket.message,
+        tag: ticket.tag,
+        status: ticket.status || 'open',
+        assigned_id: ticket.assignedId || null,
+        assigned_name: ticket.assignedName || null,
+        created_at: ticket.createdAt || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    };
+    const { error } = await supabase.from('crm_support_tickets').upsert(payload);
+    if (error) throw error;
+  },
+
+  // Added missing getPartnerStudios method
+  getPartnerStudios: async (): Promise<PartnerStudio[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
+    return (data || []).map((s: any) => ({
+        id: s.id,
+        status: s.status,
+        responsibleName: s.responsible_name,
+        cpf: s.cpf,
+        phone: s.phone,
+        email: s.email,
+        password: s.password,
+        secondContactName: s.second_contact_name,
+        secondContactPhone: s.second_contact_phone,
+        fantasyName: s.fantasy_name,
+        legalName: s.legal_name,
+        cnpj: s.cnpj,
+        studioPhone: s.studio_phone,
+        address: s.address,
+        city: s.city,
+        state: s.state,
+        country: s.country,
+        sizeM2: s.size_m2,
+        studentCapacity: s.student_capacity,
+        rentValue: s.rent_value,
+        methodology: s.methodology,
+        studioType: s.studio_type,
+        nameOnSite: s.name_on_site,
+        bank: s.bank,
+        agency: s.agency,
+        account: s.account,
+        beneficiary: s.beneficiary,
+        pixKey: s.pix_key,
+        hasReformer: !!s.has_reformer,
+        qtyReformer: s.qty_reformer,
+        hasLadderBarrel: !!s.has_ladder_barrel,
+        qtyLadderBarrel: s.qty_ladder_barrel,
+        hasChair: !!s.has_chair,
+        qtyChair: s.qty_chair,
+        hasCadillac: !!s.has_cadillac,
+        qtyCadillac: s.qty_cadillac,
+        hasChairsForCourse: !!s.has_chairs_for_course,
+        hasTv: !!s.has_tv,
+        maxKitsCapacity: s.max_kits_capacity,
+        attachments: s.attachments
+    }));
+  },
+
+  // Added missing savePartnerStudio method
+  savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: studio.id || crypto.randomUUID(),
+        status: studio.status,
+        responsible_name: studio.responsibleName,
+        cpf: studio.cpf,
+        phone: studio.phone,
+        email: studio.email,
+        password: studio.password,
+        second_contact_name: studio.secondContactName,
+        second_contact_phone: studio.secondContactPhone,
+        fantasy_name: studio.fantasyName,
+        legal_name: studio.legalName,
+        cnpj: studio.cnpj,
+        studio_phone: studio.studioPhone,
+        address: studio.address,
+        city: studio.city,
+        state: studio.state,
+        country: studio.country,
+        size_m2: studio.sizeM2,
+        student_capacity: studio.studentCapacity,
+        rent_value: studio.rentValue,
+        methodology: studio.methodology,
+        studio_type: studio.studioType,
+        name_on_site: studio.nameOnSite,
+        bank: studio.bank,
+        agency: studio.agency,
+        account: studio.account,
+        beneficiary: studio.beneficiary,
+        pix_key: studio.pixKey,
+        has_reformer: !!studio.hasReformer,
+        qty_reformer: studio.qtyReformer,
+        has_ladder_barrel: !!studio.hasLadderBarrel,
+        qty_ladder_barrel: studio.qtyLadderBarrel,
+        has_chair: !!studio.hasChair,
+        qty_chair: studio.qtyChair,
+        has_cadillac: !!studio.hasCadillac,
+        qty_cadillac: studio.qtyCadillac,
+        has_chairs_for_course: !!studio.hasChairsForCourse,
+        has_tv: !!studio.hasTv,
+        max_kits_capacity: studio.maxKitsCapacity,
+        attachments: studio.attachments
+    };
+    const { error } = await supabase.from('crm_partner_studios').upsert(payload);
+    if (error) throw error;
+  },
+
+  // Added missing deletePartnerStudio method
+  deletePartnerStudio: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_partner_studios').delete().eq('id', id);
+  },
+
+  // Added missing getTeacherNews method
+  getTeacherNews: async (): Promise<TeacherNews[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
+    return (data || []).map((n: any) => ({
+        id: n.id,
+        title: n.title,
+        content: n.content,
+        imageUrl: n.image_url,
+        createdAt: n.created_at
+    }));
+  },
+
+  // Added missing saveTeacherNews method
+  saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: news.id || crypto.randomUUID(),
+        title: news.title,
+        content: news.content,
+        image_url: news.imageUrl,
+        created_at: news.createdAt || new Date().toISOString()
+    };
+    const { error } = await supabase.from('crm_teacher_news').upsert(payload);
+    if (error) throw error;
+  },
+
+  // Added missing deleteTeacherNews method
+  deleteTeacherNews: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_teacher_news').delete().eq('id', id);
+  },
+
+  // Added missing signContract method
+  signContract: async (contractId: string, signerId: string, signatureData: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { data: contract } = await supabase.from('crm_contracts').select('signers, status').eq('id', contractId).single();
+    if (!contract) throw new Error("Contrato não encontrado");
+
+    const signers = (contract.signers || []) as ContractSigner[];
+    const updatedSigners = signers.map(s => 
+        s.id === signerId ? { ...s, status: 'signed' as const, signatureData, signedAt: new Date().toISOString() } : s
+    );
+
+    const allSigned = updatedSigners.every(s => s.status === 'signed');
+
+    const { error } = await supabase.from('crm_contracts').update({
+        signers: updatedSigners,
+        status: allSigned ? 'signed' : 'sent',
+        updated_at: new Date().toISOString()
+    }).eq('id', contractId);
+
+    if (error) throw error;
+  },
+
+  // Added missing getContracts method
+  getContracts: async (): Promise<Contract[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
+    return (data || []).map((d: any) => ({
+      id: d.id,
+      title: d.title || '',
+      content: d.content || '',
+      city: d.city || '',
+      contractDate: d.contract_date || '',
+      status: d.status as any,
+      folderId: d.folder_id,
+      signers: d.signers || [],
+      createdAt: d.created_at
+    }));
+  },
+
+  // Added missing getContractFolders method
+  getContractFolders: async (): Promise<ContractFolder[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_contract_folders').select('*').order('name');
+    return (data || []).map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        createdAt: f.created_at
+    }));
+  },
+
+  // Added missing saveContract method
+  saveContract: async (contract: Contract): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: contract.id || crypto.randomUUID(),
+        title: contract.title,
+        content: contract.content,
+        city: contract.city,
+        contract_date: contract.contractDate,
+        status: contract.status,
+        folder_id: contract.folderId,
+        signers: contract.signers,
+        created_at: contract.createdAt || new Date().toISOString()
+    };
+    const { error } = await supabase.from('crm_contracts').upsert(payload);
+    if (error) throw error;
+  },
+
+  // Added missing sendContractEmailSimulation method
+  sendContractEmailSimulation: async (email: string, name: string, title: string): Promise<void> => {
+      console.log(`[SIMULAÇÃO] Enviando e-mail de contrato para ${name} (${email}): ${title}`);
+      return Promise.resolve();
+  },
+
+  // Added missing saveContractFolder method
+  saveContractFolder: async (folder: ContractFolder): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_contract_folders').upsert({
+        id: folder.id || crypto.randomUUID(),
+        name: folder.name,
+        created_at: folder.createdAt || new Date().toISOString()
+    });
+  },
+
+  // Added missing deleteContractFolder method
+  deleteContractFolder: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_contract_folders').delete().eq('id', id);
+  },
+
+  // Added missing deleteContract method
+  deleteContract: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_contracts').delete().eq('id', id);
+  },
+
+  // Added missing issueCertificate method
+  issueCertificate: async (studentDealId: string, templateId: string): Promise<string> => {
+    if (!isConfigured) return 'mock-hash';
+    const hash = crypto.randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase();
+    const { error } = await supabase.from('crm_student_certificates').insert([{
+        student_deal_id: studentDealId,
+        certificate_template_id: templateId,
+        hash: hash,
+        issued_at: new Date().toISOString()
+    }]);
+    if (error) throw error;
+    return hash;
+  },
+
+  // Added missing getOnlineCourses method
+  getOnlineCourses: async (): Promise<OnlineCourse[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_online_courses').select('*').order('title');
+    return (data || []).map((c: any) => ({
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        price: Number(c.price || 0),
+        paymentLink: c.payment_link,
+        imageUrl: c.image_url,
+        certificateTemplateId: c.certificate_template_id,
+        createdAt: c.created_at
+    }));
+  },
+
+  // Added missing saveOnlineCourse method
+  saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: course.id || crypto.randomUUID(),
+        title: course.title,
+        description: course.description,
+        price: course.price,
+        payment_link: course.paymentLink,
+        image_url: course.imageUrl,
+        certificate_template_id: course.certificateTemplateId || null,
+        created_at: course.createdAt || new Date().toISOString()
+    };
+    const { error } = await supabase.from('crm_online_courses').upsert(payload);
+    if (error) throw error;
+  },
+
+  // Added missing getCertificates method
+  getCertificates: async (): Promise<CertificateModel[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_certificates').select('*').order('title');
+    return (data || []).map((c: any) => ({
+        id: c.id,
+        title: c.title,
+        backgroundData: c.background_data,
+        backBackgroundData: c.back_background_data,
+        linkedProductId: c.linked_product_id,
+        bodyText: c.body_text,
+        layoutConfig: c.layout_config,
+        createdAt: c.created_at
+    }));
+  },
+
+  // Added missing saveCertificate method
+  saveCertificate: async (cert: CertificateModel): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: cert.id || crypto.randomUUID(),
+        title: cert.title,
+        background_data: cert.backgroundData,
+        back_background_data: cert.backBackgroundData,
+        linked_product_id: cert.linkedProductId,
+        body_text: cert.bodyText,
+        layout_config: cert.layoutConfig,
+        created_at: cert.createdAt || new Date().toISOString()
+    };
+    const { error } = await supabase.from('crm_certificates').upsert(payload);
+    if (error) throw error;
+  },
+
+  // Added missing deleteCertificate method
+  deleteCertificate: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_certificates').delete().eq('id', id);
+  },
+
+  // Added missing getCourseModules method
+  getCourseModules: async (courseId: string): Promise<CourseModule[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_course_modules').select('*').eq('course_id', courseId).order('order_index');
+    return (data || []).map((m: any) => ({
+        id: m.id,
+        courseId: m.course_id,
+        title: m.title,
+        orderIndex: m.order_index
+    }));
+  },
+
+  // Added missing saveCourseModule method
+  saveCourseModule: async (mod: Partial<CourseModule>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: mod.id || crypto.randomUUID(),
+        course_id: mod.courseId,
+        title: mod.title,
+        order_index: mod.orderIndex
+    };
+    const { error } = await supabase.from('crm_course_modules').upsert(payload);
+    if (error) throw error;
+  },
+
+  // Added missing deleteCourseModule method
+  deleteCourseModule: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_course_modules').delete().eq('id', id);
+  },
+
+  // Added missing getModuleLessons method
+  getModuleLessons: async (moduleId: string): Promise<CourseLesson[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index');
+    return (data || []).map((l: any) => ({
+        id: l.id,
+        moduleId: l.module_id,
+        title: l.title,
+        description: l.description,
+        videoUrl: l.video_url,
+        materials: l.materials || [],
+        orderIndex: l.order_index
+    }));
+  },
+
+  // Added missing saveCourseLesson method
+  saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: lesson.id || crypto.randomUUID(),
+        module_id: lesson.moduleId,
+        title: lesson.title,
+        description: lesson.description,
+        video_url: lesson.videoUrl,
+        materials: lesson.materials || [],
+        order_index: lesson.orderIndex
+    };
+    const { error } = await supabase.from('crm_course_lessons').upsert(payload);
+    if (error) throw error;
+  },
+
+  // Added missing deleteCourseLesson method
+  deleteCourseLesson: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_course_lessons').delete().eq('id', id);
+  },
+
+  // Added missing getPendingContractsByEmail method
+  getPendingContractsByEmail: async (email: string): Promise<Contract[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_contracts').select('*').eq('status', 'sent');
+    const filtered = (data || []).filter((c: any) => 
+        (c.signers || []).some((s: any) => s.email.toLowerCase() === email.toLowerCase() && s.status === 'pending')
+    );
+    return filtered.map((d: any) => ({
+      id: d.id,
+      title: d.title || '',
+      content: d.content || '',
+      city: d.city || '',
+      contractDate: d.contract_date || '',
+      status: d.status as any,
+      folderId: d.folder_id,
+      signers: d.signers || [],
+      createdAt: d.created_at
+    }));
+  },
+
+  // Added missing getSupportTicketsBySender method
+  getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${senderId},target_id.eq.${senderId}`).order('updated_at', { ascending: false });
+    return (data || []).map((item: any) => ({
+      id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role,
+      targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role,
+      subject: item.subject, message: item.message, tag: item.tag, status: item.status, assignedId: item.assigned_id, assignedName: item.assigned_name,
+      createdAt: item.created_at, updatedAt: item.updated_at
+    }));
+  },
+
+  // Added missing getSupportTickets method
+  getSupportTickets: async (): Promise<SupportTicket[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
+    return (data || []).map((item: any) => ({
+      id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role,
+      targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role,
+      subject: item.subject, message: item.message, tag: item.tag, status: item.status, assignedId: item.assigned_id, assignedName: item.assigned_name,
+      createdAt: item.created_at, updatedAt: item.updated_at
+    }));
+  },
+
+  // Added missing getSupportTicketMessages method
+  getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
+    return (data || []).map((item: any) => ({
+      id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role, content: item.content, attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at
+    }));
+  },
+
+  // Added missing addSupportMessage method
+  addSupportMessage: async (message: Partial<SupportMessage>): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_support_messages').insert([{
+        ticket_id: message.ticketId,
+        sender_id: message.senderId,
+        sender_name: message.senderName,
+        sender_role: message.senderRole,
+        content: message.content,
+        attachment_url: message.attachmentUrl,
+        attachment_name: message.attachmentName
+    }]);
+  },
+
+  // Added missing deleteSupportTicket method
+  deleteSupportTicket: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_support_messages').delete().eq('ticket_id', id);
+    await supabase.from('crm_support_tickets').delete().eq('id', id);
+  },
+
+  // Added missing getStudentCertificate method
+  getStudentCertificate: async (hash: string): Promise<any> => {
+    if (!isConfigured) return null;
+    const { data, error } = await supabase.from('crm_student_certificates').select('*, crm_certificates(*), crm_deals(company_name, contact_name, course_city)').eq('hash', hash).single();
+    if (error || !data) return null;
+    return {
+        studentName: data.crm_deals?.company_name || data.crm_deals?.contact_name || 'Aluno',
+        studentCity: data.crm_deals?.course_city || 'Brasil',
+        template: {
+            id: data.crm_certificates.id,
+            title: data.crm_certificates.title,
+            backgroundData: data.crm_certificates.background_data,
+            backBackgroundData: data.crm_certificates.back_background_data,
+            bodyText: data.crm_certificates.body_text,
+            layoutConfig: data.crm_certificates.layout_config
+        },
+        issuedAt: data.issued_at
+    };
+  },
+
+  // Added missing getExternalCertificates method
+  getExternalCertificates: async (studentId: string): Promise<ExternalCertificate[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_external_certificates').select('*').eq('student_id', studentId).order('created_at', { ascending: false });
+    return (data || []).map((c: any) => ({
+        id: c.id,
+        student_id: c.student_id,
+        course_name: c.course_name,
+        completion_date: c.completion_date,
+        file_url: c.file_url,
+        file_name: c.file_name,
+        created_at: c.created_at
+    }));
+  },
+
+  // Added missing saveExternalCertificate method
+  saveExternalCertificate: async (cert: Partial<ExternalCertificate>): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_external_certificates').insert([cert]);
+  },
+
+  // Added missing getWorkshops method
+  getWorkshops: async (eventId: string): Promise<Workshop[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_event_workshops').select('*').eq('event_id', eventId).order('time');
+    return (data || []).map((w: any) => ({
+        id: w.id, eventId: w.event_id, blockId: w.block_id, title: w.title, description: w.description, speaker: w.speaker, date: w.date, time: w.time, spots: w.spots
+    }));
+  },
+
+  // Added missing saveWorkshop method
+  saveWorkshop: async (workshop: Partial<Workshop>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: workshop.id || crypto.randomUUID(),
+        event_id: workshop.eventId,
+        block_id: workshop.blockId,
+        title: workshop.title,
+        description: workshop.description,
+        speaker: workshop.speaker,
+        date: workshop.date,
+        time: workshop.time,
+        spots: workshop.spots
+    };
+    await supabase.from('crm_event_workshops').upsert(payload);
+  },
+
+  // Added missing deleteWorkshop method
+  deleteWorkshop: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_event_workshops').delete().eq('id', id);
+  },
+
+  // Added missing getBlocks method
+  getBlocks: async (eventId: string): Promise<EventBlock[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date');
+    return (data || []).map((b: any) => ({
+        id: b.id, eventId: b.event_id, date: b.date, title: b.title, maxSelections: b.max_selections
+    }));
+  },
+
+  // Added missing saveBlock method
+  saveBlock: async (block: Partial<EventBlock>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: block.id || crypto.randomUUID(),
+        event_id: block.eventId,
+        date: block.date,
+        title: block.title,
+        max_selections: block.maxSelections
+    };
+    await supabase.from('crm_event_blocks').upsert(payload);
+  },
+
+  // Added missing deleteBlock method
+  deleteBlock: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_event_workshops').delete().eq('block_id', id);
+    await supabase.from('crm_event_blocks').delete().eq('id', id);
+  },
+
+  // Added missing getEvents method
+  getEvents: async (): Promise<EventModel[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
+    return (data || []).map((e: any) => ({
+        id: e.id, name: e.name, description: e.description, location: e.location, dates: e.dates || [], registrationOpen: !!e.registration_open, createdAt: e.created_at
+    }));
+  },
+
+  // Added missing saveEvent method
+  saveEvent: async (event: Partial<EventModel>): Promise<EventModel> => {
+    if (!isConfigured) throw new Error("Not configured");
+    const payload = {
+        id: event.id || crypto.randomUUID(),
+        name: event.name,
+        description: event.description,
+        location: event.location,
+        dates: event.dates,
+        registration_open: !!event.registrationOpen,
+        created_at: event.createdAt || new Date().toISOString()
+    };
+    const { data, error } = await supabase.from('crm_events').upsert(payload).select().single();
+    if (error) throw error;
+    return {
+        id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates || [], registrationOpen: !!data.registration_open, createdAt: data.created_at
+    };
+  },
+
+  // Added missing deleteEvent method
+  deleteEvent: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_event_workshops').delete().eq('event_id', id);
+    await supabase.from('crm_event_blocks').delete().eq('event_id', id);
+    await supabase.from('crm_events').delete().eq('id', id);
+  },
+
+  // Added missing getEventRegistrations method
+  getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId);
+    return (data || []).map((r: any) => ({
+        id: r.id, eventId: r.event_id, workshopId: r.workshop_id, studentId: r.student_id, studentName: r.student_name, studentEmail: r.student_email, registeredAt: r.created_at, locked: !!r.locked
+    }));
+  },
+
+  // Added missing getStudentCourseAccess method
+  getStudentCourseAccess: async (studentDealId: string): Promise<string[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_student_course_access').select('course_id').eq('student_deal_id', studentDealId);
+    return (data || []).map((a: any) => a.course_id);
+  },
+
+  // Added missing getStudentLessonProgress method
+  getStudentLessonProgress: async (studentDealId: string): Promise<string[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_student_lesson_progress').select('lesson_id').eq('student_deal_id', studentDealId);
+    return (data || []).map((p: any) => p.lesson_id);
+  },
+
+  // Added missing toggleLessonProgress method
+  toggleLessonProgress: async (studentDealId: string, lessonId: string, completed: boolean): Promise<void> => {
+    if (!isConfigured) return;
+    if (completed) {
+        await supabase.from('crm_student_lesson_progress').upsert({ student_deal_id: studentDealId, lesson_id: lessonId, completed_at: new Date().toISOString() });
+    } else {
+        await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', studentDealId).eq('lesson_id', lessonId);
+    }
+  },
+
+  // Added missing getInventory method
+  getInventory: async (): Promise<InventoryRecord[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
+    return (data || []).map((r: any) => ({
+        id: r.id, type: r.type, itemApostilaNova: r.item_apostila_nova, itemApostilaClassico: r.item_apostila_classico, itemSacochila: r.item_sacochila, itemLapis: r.item_lapis, registrationDate: r.registration_date, studioId: r.studio_id, trackingCode: r.tracking_code, observations: r.observations, conferenceDate: r.conference_date, attachments: r.attachments
+    }));
+  },
+
+  // Added missing saveInventoryRecord method
+  saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: record.id || crypto.randomUUID(),
+        type: record.type,
+        item__apostila_nova: record.itemApostilaNova,
+        item__apostila_classico: record.itemApostilaClassico,
+        item_sacochila: record.itemSacochila,
+        item_lapis: record.itemLapis,
+        registration_date: record.registrationDate,
+        studio_id: record.studioId || null,
+        tracking_code: record.trackingCode,
+        observations: record.observations,
+        conference_date: record.conferenceDate || null,
+        attachments: record.attachments
+    };
+    await supabase.from('crm_inventory').upsert(payload);
+  },
+
+  // Added missing deleteInventoryRecord method
+  deleteInventoryRecord: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_inventory').delete().eq('id', id);
+  },
+
+  // Added missing getBillingNegotiations method
+  getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
+    return (data || []).map((n: any) => ({
+        id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifierCode: n.identifier_code, fullName: n.full_name, productName: n.product_name, originalValue: n.original_value, paymentMethod: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucherLink1: n.voucher_link_1, testDate: n.test_date, voucherLink2: n.voucher_link_2, voucherLink3: n.voucher_link_3, boletosLink: n.boletos_link, negotiationReference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at
+    }));
+  },
+
+  // Added missing saveBillingNegotiation method
+  saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: neg.id || crypto.randomUUID(),
+        open_installments: neg.openInstallments,
+        total_negotiated_value: neg.totalNegotiatedValue,
+        total_installments: neg.totalInstallments,
+        due_date: neg.dueDate,
+        responsible_agent: neg.responsibleAgent,
+        identifier_code: neg.identifier_code,
+        full_name: neg.fullName,
+        product_name: neg.product_name,
+        original_value: neg.original_value,
+        payment_method: neg.payment_method,
+        observations: neg.observations,
+        status: neg.status,
+        team: neg.team,
+        voucher_link_1: neg.voucherLink1,
+        test_date: neg.testDate,
+        voucher_link_2: neg.voucherLink2,
+        voucher_link_3: neg.voucherLink3,
+        boletos_link: neg.boletosLink,
+        negotiation_reference: neg.negotiation_reference,
+        attachments: neg.attachments,
+        created_at: neg.createdAt || new Date().toISOString()
+    };
+    await supabase.from('crm_billing_negotiations').upsert(payload);
+  },
+
+  // Added missing deleteBillingNegotiation method
+  deleteBillingNegotiation: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_billing_negotiations').delete().eq('id', id);
+  },
+
+  // Added missing getWAAutomationRules method
+  getWAAutomationRules: async (): Promise<WAAutomationRule[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
+    return (data || []).map((r: any) => ({
+        id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, messageTemplate: r.message_template, isActive: !!r.is_active, createdAt: r.created_at
+    }));
+  },
+
+  // Added missing saveWAAutomationRule method
+  saveWAAutomationRule: async (rule: WAAutomationRule): Promise<void> => {
+    if (!isConfigured) return;
+    const payload = {
+        id: rule.id || crypto.randomUUID(),
+        name: rule.name,
+        trigger_type: rule.triggerType,
+        pipeline_name: rule.pipelineName,
+        stage_id: rule.stageId,
+        product_type: rule.productType,
+        product_id: rule.productId,
+        message_template: rule.messageTemplate,
+        is_active: !!rule.isActive,
+        created_at: rule.createdAt || new Date().toISOString()
+    };
+    await supabase.from('crm_wa_automations').upsert(payload);
+  },
+
+  // Added missing deleteWAAutomationRule method
+  deleteWAAutomationRule: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_wa_automations').delete().eq('id', id);
+  },
+
+  // Added missing getWAAutomationLogs method
+  getWAAutomationLogs: async (): Promise<WAAutomationLog[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
+    return (data || []).map((l: any) => ({
+        id: l.id, ruleName: l.rule_name, studentName: l.student_name, phone: l.phone, message: l.message, createdAt: l.created_at
+    }));
   }
 };

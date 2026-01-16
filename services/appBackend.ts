@@ -353,7 +353,7 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_companies').upsert({ id: company.id || crypto.randomUUID(), legal_name: company.legalName, cnpj: company.cnpj, webhook_url: company.webhookUrl, product_types: company.productTypes, product_ids: company.productIds });
+    await supabase.from('crm_companies').upsert({ id: company.id || crypto.randomUUID(), legal_name: company.legal_name, cnpj: company.cnpj, webhook_url: company.webhook_url, product_types: company.productTypes, product_ids: company.productIds });
   },
 
   deleteCompany: async (id: string): Promise<void> => {
@@ -511,6 +511,7 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
+    /* Fix: Property 'interval_minutes' does not exist on type 'Partial<SavedPreset>'. Did you mean 'intervalMinutes'? */
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
@@ -888,7 +889,7 @@ export const appBackend = {
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
     if (!isConfigured) throw new Error("Not configured");
-    const { data, error } = await supabase.from('crm_event_blocks').upsert({ id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections }).select().single();
+    const { data, error = null } = await supabase.from('crm_event_blocks').upsert({ id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections }).select().single();
     if (error) throw error;
     return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
   },
@@ -930,7 +931,7 @@ export const appBackend = {
         id: d.id, 
         name: d.name, 
         triggerType: d.trigger_type, 
-        pipelineName: d.pipeline_name,
+        pipeline_name: d.pipeline_name,
         stageId: d.stage_id,
         productType: d.product_type,
         productId: d.product_id,
@@ -1054,8 +1055,6 @@ export const appBackend = {
     // TRATAMENTO CRÍTICO: Detectar se é um novo registro e evitar envio de string vazia para coluna UUID
     const isNew = !lp.id || (typeof lp.id === 'string' && lp.id.trim() === '');
     
-    // Mapeamento explícito das colunas snake_case EXATAMENTE como estão na tabela V78/V79/V80/V81
-    // Adicionamos redundância para 'name' e 'title' para evitar erros de constraint caso o rename SQL ainda não tenha rodado
     const payload: any = {
       title: lp.title,
       product_name: lp.productName || null,
@@ -1067,34 +1066,15 @@ export const appBackend = {
     
     try {
         if (isNew) {
-            // No INSERT, removemos a chave 'id' para que o DEFAULT gen_random_uuid() do Postgres funcione.
             payload.created_at = new Date().toISOString();
             const { error } = await supabase.from('crm_landing_pages').insert([payload]);
-            if (error) {
-                // Se der erro de coluna 'name' faltando no payload, tentamos enviar com 'name'
-                if (error.message.includes('column "name"') || error.message.includes('null value in column "name"')) {
-                    payload.name = lp.title;
-                    const { error: retryError } = await supabase.from('crm_landing_pages').insert([payload]);
-                    if (retryError) throw retryError;
-                } else {
-                    throw error;
-                }
-            }
+            if (error) throw error;
         } else {
-            // No UPDATE, identificamos pelo ID fornecido e não mexemos na data de criação.
             const { error } = await supabase.from('crm_landing_pages').update(payload).eq('id', lp.id);
-            if (error) {
-                if (error.message.includes('column "name"')) {
-                    payload.name = lp.title;
-                    const { error: retryError } = await supabase.from('crm_landing_pages').update(payload).eq('id', lp.id);
-                    if (retryError) throw retryError;
-                } else {
-                    throw error;
-                }
-            }
+            if (error) throw error;
         }
         
-        // Após salvar com sucesso, forçamos o PostgREST a recarregar o schema cache 
+        // Atualiza cache do PostgREST
         await supabase.rpc('reload_schema_cache').catch(() => {});
         
     } catch (err: any) {

@@ -205,11 +205,11 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V81 (REPARO DEFINITIVO DE SCHEMA E CACHE)
+-- SCRIPT DE FUNDAÇÃO CRM V82 (REPARO DEFINITIVO DE SCHEMA E CONFLITOS)
 -- 1. Tabela de Páginas de Venda (Garantir existência correta)
 CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    title text NOT NULL,
+    title text NOT NULL DEFAULT 'Nova Página',
     product_name text,
     content jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at timestamp with time zone DEFAULT now(),
@@ -218,21 +218,27 @@ CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     theme text DEFAULT 'modern'
 );
 
--- 2. Correção Crítica: Se existir coluna 'name', renomeia para 'title' para bater com o código
+-- 2. Tratamento de Conflito Crítico: Se existirem 'name' e 'title' juntas, vamos migrar e remover 'name'
 DO $$ 
 BEGIN 
-    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='name') THEN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='name') AND 
+       EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='title') THEN
+        
+        -- Sincroniza dados
+        UPDATE public.crm_landing_pages SET title = name WHERE title IS NULL OR title = 'Nova Página';
+        -- Remove restrição e deleta coluna
+        ALTER TABLE public.crm_landing_pages ALTER COLUMN name DROP NOT NULL;
+        ALTER TABLE public.crm_landing_pages DROP COLUMN "name";
+        
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='name') THEN
+        -- Caso só exista a name, renomeia
         ALTER TABLE public.crm_landing_pages RENAME COLUMN "name" TO "title";
     END IF;
 END $$;
 
--- 3. Garantir que todas as colunas existem
+-- 3. Garantir que todas as colunas essenciais existem sem duplicidade
 DO $$ 
 BEGIN 
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='title') THEN
-        ALTER TABLE public.crm_landing_pages ADD COLUMN title text NOT NULL DEFAULT 'Nova Página';
-    END IF;
-
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='product_name') THEN
         ALTER TABLE public.crm_landing_pages ADD COLUMN product_name text;
     END IF;
@@ -563,7 +569,7 @@ NOTIFY pgrst, 'reload schema';
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Terminal size={140}/></div>
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
-                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V81</h3>
+                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V82</h3>
                         <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script atualiza o banco de dados Supabase com as colunas necessárias para as <strong>Páginas de Venda</strong> e força o recarregamento do cache da API.</p>
                     </div>
                     <button onClick={copySql} className={clsx("px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg transition-all flex items-center gap-2 shrink-0 active:scale-95", sqlCopied ? "bg-green-600 text-white" : "bg-red-600 hover:bg-red-700 text-white")}>

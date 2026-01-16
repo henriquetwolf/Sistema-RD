@@ -26,21 +26,21 @@ const FONT_FAMILIES = [
 ];
 
 const REFERENCE_TEMPLATES = [
-    { id: 'alura', name: 'Alura', url: 'https://www.alura.com.br/', description: 'Formações e páginas de curso' },
-    { id: 'rocketseat', name: 'Rocketseat', url: 'https://www.rocketseat.com.br/', description: 'Cursos e eventos' },
-    { id: 'ebac', name: 'EBAC Online', url: 'https://ebaconline.com.br/', description: 'Catálogo e LPs de cursos' },
-    { id: 'descomplica', name: 'Descomplica', url: 'https://www.descomplica.com.br/', description: 'Pós & cursos' },
-    { id: 'conquer', name: 'Conquer', url: 'https://escolaconquer.com.br/', description: 'Turmas/Imersões' },
-    { id: 'g4', name: 'G4 Educação', url: 'https://g4educacao.com/', description: 'Imersões executivas' },
-    { id: 'dnc', name: 'DNC', url: 'https://www.escoladnc.com.br/', description: 'Páginas com oferta clara' },
-    { id: 'tera', name: 'Tera', url: 'https://somostera.com/', description: 'Prova social forte' },
-    { id: 'k21', name: 'K21', url: 'https://k21.global/pt/cursos', description: 'Cursos e certificações' },
-    { id: 'insper', name: 'Insper', url: 'https://www.insper.edu.br/educacao-executiva/', description: 'Educação Executiva' },
-    { id: 'fgv', name: 'FGV', url: 'https://educacao-executiva.fgv.br/', description: 'Educação Executiva' },
-    { id: 'rdsummit', name: 'RD Summit', url: 'https://rdsummit.com.br/', description: 'Estrutura de evento grande' },
-    { id: 'pipefy', name: 'Pipefy', url: 'https://www.pipefy.com/pt-br/', description: 'Fluxos e CTA demo' },
-    { id: 'nuvemshop', name: 'Nuvemshop', url: 'https://www.nuvemshop.com.br/', description: 'SaaS com planos' },
-    { id: 'novomercado', name: 'O Novo Mercado', url: 'https://onovomercado.com/assinatura-pv-10/', description: 'Assinatura e Vendas' }
+    { id: 'alura', name: 'Alura', url: 'https://www.alura.com.br/', description: 'Cursos e formações tecnológicas', imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=400&auto=format&fit=crop' },
+    { id: 'rocketseat', name: 'Rocketseat', url: 'https://www.rocketseat.com.br/', description: 'Comunidade e eventos de dev', imageUrl: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=400&auto=format&fit=crop' },
+    { id: 'ebac', name: 'EBAC Online', url: 'https://ebaconline.com.br/', description: 'Design e Artes digitais', imageUrl: 'https://images.unsplash.com/photo-1558655146-d09347e92766?q=80&w=400&auto=format&fit=crop' },
+    { id: 'descomplica', name: 'Descomplica', url: 'https://www.descomplica.com.br/', description: 'Educação universitária e pós', imageUrl: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=400&auto=format&fit=crop' },
+    { id: 'conquer', name: 'Conquer', url: 'https://escolaconquer.com.br/', description: 'Soft skills e imersões', imageUrl: 'https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=400&auto=format&fit=crop' },
+    { id: 'g4', name: 'G4 Educação', url: 'https://g4educacao.com/', description: 'Liderança e gestão executiva', imageUrl: 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?q=80&w=400&auto=format&fit=crop' },
+    { id: 'dnc', name: 'DNC', url: 'https://www.escoladnc.com.br/', description: 'Foco em empregabilidade', imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=400&auto=format&fit=crop' },
+    { id: 'tera', name: 'Tera', url: 'https://somostera.com/', description: 'Habilidades da economia digital', imageUrl: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?q=80&w=400&auto=format&fit=crop' },
+    { id: 'k21', name: 'K21', url: 'https://k21.global/pt/cursos', description: 'Agilidade e transformação digital', imageUrl: 'https://images.unsplash.com/photo-1551434678-e076c223a692?q=80&w=400&auto=format&fit=crop' },
+    { id: 'insper', name: 'Insper', url: 'https://www.insper.edu.br/educacao-executiva/', description: 'Executiva de alto nível', imageUrl: 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=400&auto=format&fit=crop' },
+    { id: 'fgv', name: 'FGV', url: 'https://educacao-executiva.fgv.br/', description: 'Referência em gestão e economia', imageUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=400&auto=format&fit=crop' },
+    { id: 'rdsummit', name: 'RD Summit', url: 'https://rdsummit.com.br/', description: 'Grandes eventos de marketing', imageUrl: 'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?q=80&w=400&auto=format&fit=crop' },
+    { id: 'pipefy', name: 'Pipefy', url: 'https://www.pipefy.com/pt-br/', description: 'SaaS e produtividade corporativa', imageUrl: 'https://images.unsplash.com/photo-1551288049-bbbda536339a?q=80&w=400&auto=format&fit=crop' },
+    { id: 'nuvemshop', name: 'Nuvemshop', url: 'https://www.nuvemshop.com.br/', description: 'E-commerce e planos SaaS', imageUrl: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?q=80&w=400&auto=format&fit=crop' },
+    { id: 'novomercado', name: 'O Novo Mercado', url: 'https://onovomercado.com/assinatura-pv-10/', description: 'Vendas e marketing digital', imageUrl: 'https://images.unsplash.com/photo-1454165833767-0279c29c896d?q=80&w=400&auto=format&fit=crop' }
 ];
 
 export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }) => {
@@ -118,7 +118,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3-pro-preview",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -185,8 +185,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       setCurrentDraft(newPage);
     } catch (e: any) {
-      console.error(e);
-      alert("Erro ao gerar com IA: " + (e.message || JSON.stringify(e)));
+      console.error("Erro na geração:", e);
+      alert("Erro ao gerar com IA. Verifique sua conexão ou tente novamente.");
     } finally {
       setIsGenerating(false);
     }
@@ -785,7 +785,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
               <h3 className="text-2xl font-black text-slate-800 tracking-tight">Criar com Inteligência Artificial</h3>
               <button onClick={() => { setShowModal(false); setCurrentDraft(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
@@ -796,25 +796,34 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   <div className="space-y-8">
                      <div className="grid grid-cols-1 gap-6">
                         <div>
-                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Modelo de Referência (Opcional)</label>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Selecione um Modelo de Referência (Opcional)</label>
+                            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
                                 {REFERENCE_TEMPLATES.map((tmpl) => (
                                     <button
                                         key={tmpl.id}
                                         type="button"
                                         onClick={() => setAiPrompt({...aiPrompt, referenceTemplate: tmpl.url})}
                                         className={clsx(
-                                            "p-3 rounded-2xl border-2 text-left transition-all group",
+                                            "flex flex-col rounded-2xl border-2 transition-all group overflow-hidden bg-white text-left",
                                             aiPrompt.referenceTemplate === tmpl.url 
-                                                ? "border-orange-500 bg-orange-50 shadow-sm" 
-                                                : "border-slate-100 hover:border-orange-200 bg-white"
+                                                ? "border-orange-500 ring-4 ring-orange-50 shadow-lg scale-[1.02]" 
+                                                : "border-slate-100 hover:border-orange-200"
                                         )}
                                     >
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className={clsx("text-xs font-black", aiPrompt.referenceTemplate === tmpl.url ? "text-orange-700" : "text-slate-800")}>{tmpl.name}</span>
-                                            {aiPrompt.referenceTemplate === tmpl.url && <CheckCircle size={14} className="text-orange-600" />}
+                                        <div className="h-24 w-full overflow-hidden relative border-b border-slate-100">
+                                            <img src={tmpl.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={tmpl.name} />
+                                            {aiPrompt.referenceTemplate === tmpl.url && (
+                                              <div className="absolute inset-0 bg-orange-600/20 flex items-center justify-center">
+                                                <div className="bg-orange-600 text-white p-1 rounded-full"><Check size={12}/></div>
+                                              </div>
+                                            )}
                                         </div>
-                                        <p className="text-[10px] text-slate-400 font-medium leading-tight">{tmpl.description}</p>
+                                        <div className="p-3">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className={clsx("text-[10px] font-black uppercase tracking-tight", aiPrompt.referenceTemplate === tmpl.url ? "text-orange-700" : "text-slate-800")}>{tmpl.name}</span>
+                                            </div>
+                                            <p className="text-[9px] text-slate-400 font-medium leading-tight line-clamp-2">{tmpl.description}</p>
+                                        </div>
                                     </button>
                                 ))}
                             </div>
@@ -822,11 +831,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
                         <div>
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
-                            <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-base font-bold outline-none" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
+                            <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
                         </div>
                         <div>
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto</label>
-                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-24 resize-none outline-none" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Fale sobre os benefícios e o que o aluno aprende..." />
+                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Fale sobre os benefícios e o que o aluno aprende..." />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>

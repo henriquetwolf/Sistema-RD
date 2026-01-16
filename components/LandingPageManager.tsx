@@ -1,10 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+/* Add missing FileText icon to the lucide-react imports */
 import { 
   Plus, Search, Edit2, Trash2, ExternalLink, ArrowLeft, 
   Save, X, Loader2, Sparkles, MonitorPlay, Copy, CheckCircle, 
   RefreshCw, Layout, Globe, Smartphone, CreditCard, MessageSquare, 
-  HelpCircle, ListChecks, Target, Info, Link2
+  HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent } from '../types';
@@ -23,10 +24,13 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const [isGenerating, setIsGenerating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Form State
   const [editingPage, setEditingPage] = useState<Partial<LandingPage> | null>(null);
   const [aiPrompt, setAiPrompt] = useState({
       productName: '',
+      productDescription: '',
       targetAudience: '',
       mainBenefits: '',
       price: '',
@@ -50,6 +54,26 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     }
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0] && editingPage) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setEditingPage({
+          ...editingPage,
+          content: {
+            ...((editingPage.content as any) || {}),
+            hero: {
+              ...((editingPage.content?.hero as any) || {}),
+              imageUrl: base64
+            }
+          }
+        });
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    }
+  };
+
   const handleCreateWithAi = async () => {
     if (!aiPrompt.productName || !aiPrompt.targetAudience) {
       alert("Informe pelo menos o nome do produto e o público-alvo.");
@@ -61,6 +85,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const prompt = `Crie uma página de vendas poderosa e persuasiva para o produto "${aiPrompt.productName}".
+      Descrição do produto: ${aiPrompt.productDescription}
       Público-alvo: ${aiPrompt.targetAudience}
       Benefícios principais: ${aiPrompt.mainBenefits}
       Preço/Oferta: ${aiPrompt.price}
@@ -78,6 +103,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
             type: Type.OBJECT,
             properties: {
               title: { type: Type.STRING, description: "Título chamativo da página" },
+              productDescription: { type: Type.STRING, description: "Uma descrição detalhada e persuasiva do produto baseada no prompt" },
               hero: {
                 type: Type.OBJECT,
                 properties: {
@@ -119,7 +145,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                 }
               }
             },
-            required: ["title", "hero", "features", "pricing", "faq"]
+            required: ["title", "productDescription", "hero", "features", "pricing", "faq"]
           }
         }
       });
@@ -127,7 +153,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const text = response.text || "{}";
       const generatedContent = JSON.parse(text);
       
-      // GERAÇÃO IMEDIATA DO SLUG/LINK
       const finalTitle = generatedContent.title || aiPrompt.productName;
       const finalSlug = slugify(finalTitle);
 
@@ -135,7 +160,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         id: undefined,
         title: finalTitle,
         productName: aiPrompt.productName,
-        slug: finalSlug, // JÁ PREENCHE O LINK
+        slug: finalSlug,
         content: generatedContent,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -210,7 +235,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         </div>
         <button 
           onClick={() => {
-            setAiPrompt({ productName: '', targetAudience: '', mainBenefits: '', price: '', offerDetails: '' });
+            setAiPrompt({ productName: '', productDescription: '', targetAudience: '', mainBenefits: '', price: '', offerDetails: '' });
             setEditingPage(null);
             setShowModal(true);
           }}
@@ -293,7 +318,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       {/* MODAL: CREATE/EDIT LANDING PAGE */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh] overflow-hidden">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh] overflow-hidden">
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-orange-600 text-white rounded-2xl shadow-xl shadow-orange-600/20">
@@ -327,6 +352,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                         placeholder="Ex: Formação Completa em Pilates 2024" 
                       />
                     </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição Detalhada do Produto</label>
+                      <textarea 
+                        className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-32 resize-none outline-none transition-all" 
+                        value={aiPrompt.productDescription} 
+                        onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} 
+                        placeholder="Descreva o que é o produto, como funciona e qual o diferencial..." 
+                      />
+                    </div>
                     <div>
                       <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Público-Alvo</label>
                       <input 
@@ -346,7 +380,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Benefícios Principais</label>
+                      <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Benefícios Principais (Bullets)</label>
                       <textarea 
                         className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-32 resize-none outline-none transition-all" 
                         value={aiPrompt.mainBenefits} 
@@ -360,7 +394,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                     <button 
                       onClick={handleCreateWithAi}
                       disabled={isGenerating || !aiPrompt.productName}
-                      className="w-full py-5 bg-orange-600 hover:bg-orange-700 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl shadow-orange-600/30 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+                      className="w-full py-5 bg-orange-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl shadow-orange-600/30 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
                     >
                       {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Sparkles size={24} />}
                       {isGenerating ? 'A Inteligência Artificial está escrevendo...' : 'Gerar Página de Vendas'}
@@ -406,8 +440,25 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                         placeholder="url-da-pagina"
                                     />
                                 </div>
-                                <p className="text-[9px] text-slate-400 mt-2 italic">* O endereço é gerado automaticamente a partir do título, mas pode ser editado.</p>
                             </div>
+                        </div>
+
+                        <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
+                          <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><ImageIcon size={16}/> Imagem da Página</h5>
+                          <div className="flex flex-col gap-4">
+                              <div className="w-full h-40 bg-white border rounded-2xl overflow-hidden flex items-center justify-center relative group">
+                                  {editingPage.content?.hero?.imageUrl ? (
+                                      <img src={editingPage.content.hero.imageUrl} className="w-full h-full object-cover" />
+                                  ) : (
+                                      <ImageIcon className="text-slate-200" size={48} />
+                                  )}
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                      <button onClick={() => fileInputRef.current?.click()} className="p-3 bg-white rounded-full text-indigo-600 shadow-xl"><Upload size={20}/></button>
+                                  </div>
+                              </div>
+                              <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                              <p className="text-[10px] text-slate-400 italic text-center">Recomendado: Imagem horizontal (1200x600px)</p>
+                          </div>
                         </div>
                         
                         <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
@@ -415,6 +466,16 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                           <input className="w-full px-4 py-2 border rounded-lg text-sm font-bold" value={editingPage.content?.hero?.headline || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), hero: {...(editingPage.content?.hero as any), headline: e.target.value}}})} placeholder="Headline" />
                           <textarea className="w-full px-4 py-2 border rounded-lg text-xs h-20 resize-none" value={editingPage.content?.hero?.subheadline || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), hero: {...(editingPage.content?.hero as any), subheadline: e.target.value}}})} placeholder="Subheadline" />
                           <input className="w-full px-4 py-2 border rounded-lg text-xs font-black uppercase" value={editingPage.content?.hero?.ctaText || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), hero: {...(editingPage.content?.hero as any), ctaText: e.target.value}}})} placeholder="Texto do Botão" />
+                        </div>
+
+                        <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
+                          <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><FileText size={16}/> Descrição do Produto</h5>
+                          <textarea 
+                            className="w-full px-4 py-3 border rounded-xl text-sm h-32 resize-none outline-none focus:ring-2 focus:ring-indigo-100" 
+                            value={editingPage.content?.productDescription || ''} 
+                            onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), productDescription: e.target.value}})} 
+                            placeholder="Texto detalhado sobre o produto..." 
+                          />
                         </div>
 
                         <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">

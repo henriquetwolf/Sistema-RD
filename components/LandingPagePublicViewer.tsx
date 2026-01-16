@@ -1,9 +1,10 @@
 
 import React from 'react';
 import { LandingPage } from '../types';
+/* Add missing Info icon to the lucide-react imports */
 import { 
   CheckCircle2, ArrowRight, MessageSquare, ChevronRight, 
-  HelpCircle, ShieldCheck, CreditCard, Award, GraduationCap, Smartphone, AlertCircle
+  HelpCircle, ShieldCheck, CreditCard, Award, GraduationCap, Smartphone, AlertCircle, Edit2, Info
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -16,7 +17,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
   if (!landingPage) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
-        <Loader2 className="animate-spin text-orange-600 mb-4" size={40} />
+        <div className="animate-spin text-orange-600 mb-4 h-10 w-10 border-4 border-current border-t-transparent rounded-full" />
         <h1 className="text-xl font-bold text-slate-800">Carregando conteúdo...</h1>
       </div>
     );
@@ -36,35 +37,76 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-8 object-contain" />
-          <a href="#pricing" className="bg-slate-900 text-white px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest hover:bg-orange-600 transition-all">Quero me inscrever</a>
+          <div className="flex items-center gap-4">
+            <a href="/" className="hidden md:flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-xs font-bold border border-slate-200 hover:bg-slate-200 transition-all">
+                <Edit2 size={14}/> Editar Página
+            </a>
+            <a href="#pricing" className="bg-slate-900 text-white px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest hover:bg-orange-600 transition-all">Quero me inscrever</a>
+          </div>
         </div>
       </nav>
 
       {/* Hero Section */}
       <header className="pt-32 pb-20 px-6 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative">
         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-orange-100/50 rounded-full blur-3xl"></div>
-        <div className="max-w-5xl mx-auto text-center relative z-10">
-          <div className="inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-8">
-            <Award size={14}/> Formação Profissional Premium
-          </div>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-slate-900 mb-8 leading-[1.1]">
-            {hero.headline || 'Destaque'}
-          </h1>
-          {hero.subheadline && (
-            <p className="text-xl text-slate-500 max-w-2xl mx-auto mb-10 leading-relaxed font-medium">
-              {hero.subheadline}
-            </p>
-          )}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a href="#pricing" className="w-full sm:w-auto bg-orange-600 text-white px-10 py-5 rounded-2xl font-black text-base uppercase tracking-widest shadow-2xl shadow-orange-600/20 hover:bg-orange-700 transition-all transform hover:scale-105 text-center">
-              {hero.ctaText || 'Matricular-se'}
-            </a>
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-               <ShieldCheck size={16} className="text-teal-500" /> Garantia incondicional de 7 dias
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10 text-center lg:text-left">
+          <div className="space-y-8">
+            <div className="inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mx-auto lg:mx-0">
+                <Award size={14}/> Formação Profissional Premium
             </div>
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-slate-900 leading-[1.1]">
+                {hero.headline || 'Destaque'}
+            </h1>
+            {hero.subheadline && (
+                <p className="text-xl text-slate-500 max-w-2xl mx-auto lg:mx-0 leading-relaxed font-medium">
+                {hero.subheadline}
+                </p>
+            )}
+            <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
+                <a href="#pricing" className="w-full sm:w-auto bg-orange-600 text-white px-10 py-5 rounded-2xl font-black text-base uppercase tracking-widest shadow-2xl shadow-orange-600/20 hover:bg-orange-700 transition-all transform hover:scale-105 text-center">
+                {hero.ctaText || 'Matricular-se'}
+                </a>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                <ShieldCheck size={16} className="text-teal-500" /> Garantia incondicional de 7 dias
+                </div>
+            </div>
+          </div>
+
+          <div className="relative">
+              {hero.imageUrl ? (
+                  <div className="rounded-[3rem] overflow-hidden shadow-2xl border-8 border-white animate-in zoom-in-95 duration-700">
+                      <img src={hero.imageUrl} className="w-full h-auto" alt="Destaque" />
+                  </div>
+              ) : (
+                  <div className="aspect-video bg-slate-100 rounded-[3rem] flex items-center justify-center text-slate-300">
+                      <ImageIcon size={80} className="opacity-20" />
+                  </div>
+              )}
+              <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-3xl shadow-xl border border-slate-100 hidden md:block animate-bounce-subtle">
+                  <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-bold">100%</div>
+                      <p className="text-xs font-black text-slate-800 uppercase leading-tight">Satisfação<br/>Garantida</p>
+                  </div>
+              </div>
           </div>
         </div>
       </header>
+
+      {/* Product Description Section */}
+      {content.productDescription && (
+          <section className="py-24 px-6 bg-slate-50 border-y border-slate-100">
+              <div className="max-w-4xl mx-auto text-center lg:text-left space-y-6">
+                <h2 className="text-3xl font-black text-slate-800 tracking-tight flex items-center justify-center lg:justify-start gap-2">
+                    <Info className="text-orange-500" size={24}/> Sobre o Produto
+                </h2>
+                <div className="prose prose-lg prose-slate max-w-none">
+                    <p className="text-lg text-slate-600 leading-relaxed whitespace-pre-wrap">
+                        {content.productDescription}
+                    </p>
+                </div>
+              </div>
+          </section>
+      )}
 
       {/* Features/Benefits */}
       {features && features.length > 0 && (
@@ -163,7 +205,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
   );
 };
 
-const Loader2 = ({ className, size }: { className?: string, size?: number }) => (
+const ImageIcon = ({ className, size }: { className?: string, size?: number }) => (
     <svg 
       className={className} 
       width={size} 
@@ -175,6 +217,8 @@ const Loader2 = ({ className, size }: { className?: string, size?: number }) => 
       strokeLinecap="round" 
       strokeLinejoin="round"
     >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
     </svg>
 );

@@ -626,7 +626,9 @@ export interface LandingPageContent {
     headline: string;
     subheadline: string;
     ctaText: string;
+    imageUrl?: string;
   };
+  productDescription?: string;
   features: {
     title: string;
     description: string;

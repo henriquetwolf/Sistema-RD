@@ -51,7 +51,7 @@ const generateDealNumber = () => {
     return Number(`${yyyy}${mm}${dd}${hh}${min}${random}`);
 };
 
-const slugify = (text: string) => {
+export const slugify = (text: string) => {
     if (!text) return Math.random().toString(36).substring(7);
     return text.toString().toLowerCase().trim()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -158,7 +158,7 @@ export const appBackend = {
       style: item.style || {}, 
       createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
-      folderId: data.folder_id
+      folderId: item.folder_id
     }));
   },
 
@@ -198,9 +198,9 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
-      distribution_mode: form.distributionMode || 'fixed', 
+      distribution_mode: form.distribution_mode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
-      team_id: form.teamId || null, 
+      team_id: form.team_id || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
       questions: form.questions || [], 
@@ -379,7 +379,7 @@ export const appBackend = {
   getWebhookTriggers: async (): Promise<WebhookTrigger[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_webhook_triggers').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, pipelineName: item.pipeline_name, stageId: item.stage_id, payloadJson: item.payload_json, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, pipelineName: item.pipeline_name, stageId: item.stage_id, payload_json: item.payload_json, createdAt: item.created_at }));
   },
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
@@ -528,6 +528,7 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
+    // Fix: Access createdByName instead of created_by_name on a TypeScript interface that uses camelCase.
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
@@ -654,7 +655,7 @@ export const appBackend = {
       rentValue: item.rent_value || '', 
       methodology: item.methodology || '', 
       studioType: item.studio_type || '', 
-      nameOnSite: item.name_on_site || '', 
+      name_on_site: item.name_on_site || '', 
       bank: item.bank || '', 
       agency: item.agency || '', 
       account: item.account || '', 
@@ -973,7 +974,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, ruleName: d.rule_name || '', studentName: d.student_name || '', phone: d.phone || '', message: d.message || '', createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, ruleName: d.rule_name || '', student_name: d.student_name || '', phone: d.phone || '', message: d.message || '', createdAt: d.created_at }));
   },
 
   logWAAutomation: async (log: Omit<WAAutomationLog, 'id' | 'createdAt'>): Promise<void> => {
@@ -1072,7 +1073,9 @@ export const appBackend = {
   saveLandingPage: async (lp: LandingPage): Promise<void> => {
     if (!isConfigured) return;
     
+    // TRATAMENTO: Isolar o payload e garantir que o ID não seja enviado como string vazia
     const isNew = !lp.id || (typeof lp.id === 'string' && lp.id.trim() === '');
+    
     const payload: any = {
       title: lp.title || 'Nova Página',
       slug: lp.slug || slugify(lp.title),

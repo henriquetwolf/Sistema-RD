@@ -163,7 +163,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE FUNDAÇÃO CRM V85 (REPARO TOTAL DE SCHEMA - COLUNA SLUG)
+-- SCRIPT DE FUNDAÇÃO CRM V86 (REPARO TOTAL DE SCHEMA - SEGURANÇA DE SLUG)
 -- 1. Tabela de Páginas de Venda (Garantir existência correta)
 CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -177,7 +177,7 @@ CREATE TABLE IF NOT EXISTS public.crm_landing_pages (
     theme text DEFAULT 'modern'
 );
 
--- 2. Tratamento de Conflito de Nomes de Coluna (Renomear domain para slug se existir)
+-- 2. Tratamento de Conflito de Nomes de Coluna (Renomear domain para slug se necessário)
 DO $$ 
 BEGIN 
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_landing_pages' AND column_name='domain') AND 
@@ -188,12 +188,11 @@ BEGIN
     END IF;
 END $$;
 
--- 3. Preencher slugs vazios para evitar erro de constraint
-UPDATE public.crm_landing_pages SET "slug" = lower(replace(title, ' ', '-')) || '-' || substring(id::text, 1, 5) WHERE "slug" IS NULL;
+-- 3. Preencher slugs vazios com valor único baseado no ID
+UPDATE public.crm_landing_pages SET "slug" = 'pagina-' || substring(id::text, 1, 8) WHERE "slug" IS NULL OR "slug" = '';
 
--- 4. Tornar campos obrigatórios e únicos
+-- 4. Tornar campo obrigatório e único com proteção total
 ALTER TABLE public.crm_landing_pages ALTER COLUMN "slug" SET NOT NULL;
-ALTER TABLE public.crm_landing_pages ALTER COLUMN "title" SET NOT NULL;
 ALTER TABLE public.crm_landing_pages DROP CONSTRAINT IF EXISTS crm_landing_pages_slug_key;
 ALTER TABLE public.crm_landing_pages ADD CONSTRAINT crm_landing_pages_slug_key UNIQUE ("slug");
 
@@ -202,7 +201,7 @@ ALTER TABLE public.crm_landing_pages ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir tudo" ON public.crm_landing_pages;
 CREATE POLICY "Permitir tudo" ON public.crm_landing_pages FOR ALL USING (true) WITH CHECK (true);
 
--- 6. Recarregamento de Cache
+-- 6. Recarregamento de Cache da API
 NOTIFY pgrst, 'reload schema';
   `.trim();
 
@@ -267,8 +266,8 @@ NOTIFY pgrst, 'reload schema';
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Terminal size={140}/></div>
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
-                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V85</h3>
-                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script corrige o erro de salvamento de páginas, renomeando a coluna de domínio para <strong>slug</strong> e garantindo as restrições de banco de dados.</p>
+                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V86</h3>
+                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script corrige o erro de salvamento de páginas, garantindo que a coluna de link amigável (<strong>slug</strong>) seja obrigatória e única.</p>
                     </div>
                     <button onClick={copySql} className={clsx("px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg transition-all flex items-center gap-2 shrink-0 active:scale-95", sqlCopied ? "bg-green-600 text-white" : "bg-red-600 hover:bg-red-700 text-white")}>
                         {sqlCopied ? <><Check size={18}/> Copiado!</> : <><Copy size={18}/> Copiar SQL</>}

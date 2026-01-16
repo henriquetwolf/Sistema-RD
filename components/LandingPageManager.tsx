@@ -4,9 +4,9 @@ import {
   Plus, Search, Edit2, Trash2, ExternalLink, ArrowLeft, 
   Save, X, Loader2, Sparkles, MonitorPlay, Copy, CheckCircle, 
   RefreshCw, Layout, Globe, Smartphone, CreditCard, MessageSquare, 
-  HelpCircle, ListChecks, Target, Info
+  HelpCircle, ListChecks, Target, Info, Link2
 } from 'lucide-react';
-import { appBackend } from '../services/appBackend';
+import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent } from '../types';
 import { GoogleGenAI, Type } from "@google/genai";
 import clsx from 'clsx';
@@ -67,7 +67,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       Detalhes adicionais: ${aiPrompt.offerDetails}
       
       Use gatilhos mentais de escassez, autoridade e prova social.
-      Traduza tudo para um tom profissional e inspirador.
       Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
 
       const response = await ai.models.generateContent({
@@ -129,9 +128,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const generatedContent = JSON.parse(text);
       
       const newPage: Partial<LandingPage> = {
-        id: undefined, // Garantir id como undefined para nova inserção
+        id: undefined,
         title: generatedContent.title || aiPrompt.productName,
         productName: aiPrompt.productName,
+        slug: slugify(generatedContent.title || aiPrompt.productName),
         content: generatedContent,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -150,6 +150,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
   const handleSave = async () => {
     if (!editingPage) return;
+    if (!editingPage.slug) {
+        alert("O endereço da página (URL) é obrigatório.");
+        return;
+    }
+
     setIsLoading(true);
     try {
       await appBackend.saveLandingPage(editingPage as LandingPage);
@@ -158,8 +163,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       setEditingPage(null);
     } catch (e: any) {
       console.error("Save failure:", e);
-      // Exibimos a mensagem real do erro para facilitar o diagnóstico (ex: se a tabela realmente não existe)
-      alert(`Erro ao salvar no banco: ${e.message || 'Verifique se rodou o script SQL V78 no Supabase.'}`);
+      alert(`Erro ao salvar no banco: ${e.message || 'Erro inesperado.'}`);
     } finally {
       setIsLoading(false);
     }
@@ -223,7 +227,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm"
           />
         </div>
-        <button onClick={fetchPages} className="p-2 text-slate-400 hover:text-orange-600"><RefreshCw size={20} className={isLoading ? "animate-spin" : ""} /></button>
+        <button onClick={fetchPages} className="p-2 text-slate-400 hover:text-orange-600 transition-all"><RefreshCw size={20} className={isLoading ? "animate-spin" : ""} /></button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -244,6 +248,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
               </div>
               <div className="p-6 flex-1 flex flex-col">
                 <p className="text-xs text-slate-500 font-medium mb-1">Produto: <span className="font-bold text-slate-700">{page.productName || '--'}</span></p>
+                <div className="flex items-center gap-1 mb-4">
+                    <Globe size={10} className="text-teal-500" />
+                    <span className="text-[10px] font-mono text-slate-400">/{page.slug}</span>
+                </div>
                 <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-6">Criada em: {page.createdAt ? new Date(page.createdAt).toLocaleDateString() : '--'}</p>
                 
                 <div className="flex gap-2 mt-auto">
@@ -289,7 +297,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                 </div>
                 <div>
                   <h3 className="text-2xl font-black text-slate-800 tracking-tight">Gerador de Páginas de Venda</h3>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Transforme ofertas em lucros com Copywriting IA</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Inteligência Artificial & Copywriting</p>
                 </div>
               </div>
               <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
@@ -301,7 +309,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   <div className="bg-orange-50 p-6 rounded-3xl border border-orange-100 flex gap-4 text-orange-800">
                     <Info size={24} className="shrink-0" />
                     <p className="text-sm font-medium leading-relaxed">
-                      Preencha os campos abaixo com os dados da sua oferta. Nossa IA criará uma estrutura completa incluindo Headline matadora, quebra de objeções, FAQ e botões de chamada para ação.
+                      Preencha os dados da sua oferta. Nossa IA criará Headline, benefícios, FAQ e botões de conversão automaticamente.
                     </p>
                   </div>
 
@@ -334,7 +342,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Benefícios Principais (Gatilhos)</label>
+                      <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Benefícios Principais</label>
                       <textarea 
                         className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-32 resize-none outline-none transition-all" 
                         value={aiPrompt.mainBenefits} 
@@ -364,9 +372,38 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                     <div className="space-y-6">
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Título da Página</label>
-                          <input className="w-full px-4 py-3 border border-slate-200 rounded-xl font-bold" value={editingPage.title || ''} onChange={e => setEditingPage({...editingPage, title: e.target.value})} />
+                        <div className="p-8 bg-indigo-50 border-2 border-indigo-100 rounded-[2.5rem] space-y-6">
+                            <h5 className="font-black text-[10px] uppercase tracking-[0.2em] text-indigo-500 flex items-center gap-2"><Globe size={14}/> Identidade & URL</h5>
+                            <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Título Interno</label>
+                              <input 
+                                className="w-full px-4 py-3 border border-slate-200 rounded-xl font-bold bg-white outline-none focus:border-indigo-500" 
+                                value={editingPage.title || ''} 
+                                onChange={e => {
+                                    const newTitle = e.target.value;
+                                    setEditingPage(prev => ({
+                                        ...prev!, 
+                                        title: newTitle,
+                                        slug: prev?.id ? prev.slug : slugify(newTitle)
+                                    }));
+                                }} 
+                              />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Endereço da Página (Slug)</label>
+                                <div className="flex items-center gap-2 bg-white px-4 py-3 border border-slate-200 rounded-xl shadow-inner">
+                                    <Link2 size={16} className="text-slate-300" />
+                                    <span className="text-slate-400 text-xs font-medium">/{window.location.host}/</span>
+                                    <input 
+                                        className="flex-1 bg-transparent border-none p-0 text-sm font-bold text-indigo-600 outline-none focus:ring-0" 
+                                        value={editingPage.slug || ''} 
+                                        onChange={e => setEditingPage({...editingPage!, slug: slugify(e.target.value)})} 
+                                        placeholder="url-da-pagina"
+                                    />
+                                </div>
+                                <p className="text-[9px] text-slate-400 mt-2 italic">* O endereço é gerado automaticamente a partir do título, mas pode ser editado.</p>
+                            </div>
                         </div>
                         
                         <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
@@ -389,20 +426,20 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                         <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
                            <div className="flex justify-between items-center">
                               <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><ListChecks size={16}/> Benefícios</h5>
-                              <button onClick={() => setEditingPage({...editingPage, content: {...(editingPage.content as any), features: [...(editingPage.content?.features || []), { title: 'Novo Benefício', description: 'Descrição aqui' }]}})} className="text-[10px] font-black uppercase text-indigo-600">+ Add</button>
+                              <button onClick={() => setEditingPage({...editingPage!, content: {...(editingPage.content as any), features: [...(editingPage.content?.features || []), { title: 'Novo Benefício', description: 'Descrição aqui' }]}})} className="text-[10px] font-black uppercase text-indigo-600">+ Add</button>
                            </div>
                            {(editingPage.content?.features || []).map((f, i) => (
                              <div key={i} className="bg-white p-3 rounded-xl border border-slate-200 relative">
-                                <button onClick={() => setEditingPage({...editingPage, content: {...(editingPage.content as any), features: (editingPage.content?.features || []).filter((_, idx) => idx !== i)}})} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={12}/></button>
+                                <button onClick={() => setEditingPage({...editingPage!, content: {...(editingPage.content as any), features: (editingPage.content?.features || []).filter((_, idx) => idx !== i)}})} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={12}/></button>
                                 <input className="w-full mb-1 text-xs font-bold outline-none border-none p-0" value={f.title || ''} onChange={e => {
                                   const newFeat = [...(editingPage.content?.features || [])];
                                   newFeat[i].title = e.target.value;
-                                  setEditingPage({...editingPage, content: {...(editingPage.content as any), features: newFeat}});
+                                  setEditingPage({...editingPage!, content: {...(editingPage.content as any), features: newFeat}});
                                 }} />
                                 <textarea className="w-full text-[10px] text-slate-500 outline-none border-none p-0 resize-none h-12" value={f.description || ''} onChange={e => {
                                   const newFeat = [...(editingPage.content?.features || [])];
                                   newFeat[i].description = e.target.value;
-                                  setEditingPage({...editingPage, content: {...(editingPage.content as any), features: newFeat}});
+                                  setEditingPage({...editingPage!, content: {...(editingPage.content as any), features: newFeat}});
                                 }} />
                              </div>
                            ))}
@@ -411,20 +448,20 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                         <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
                            <div className="flex justify-between items-center">
                               <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><HelpCircle size={16}/> FAQ</h5>
-                              <button onClick={() => setEditingPage({...editingPage, content: {...(editingPage.content as any), faq: [...(editingPage.content?.faq || []), { question: 'Pergunta?', answer: 'Resposta aqui' }]}})} className="text-[10px] font-black uppercase text-indigo-600">+ Add</button>
+                              <button onClick={() => setEditingPage({...editingPage!, content: {...(editingPage.content as any), faq: [...(editingPage.content?.faq || []), { question: 'Pergunta?', answer: 'Resposta aqui' }]}})} className="text-[10px] font-black uppercase text-indigo-600">+ Add</button>
                            </div>
                            {(editingPage.content?.faq || []).map((item, i) => (
                              <div key={i} className="bg-white p-3 rounded-xl border border-slate-200 relative">
-                                <button onClick={() => setEditingPage({...editingPage, content: {...(editingPage.content as any), faq: (editingPage.content?.faq || []).filter((_, idx) => idx !== i)}})} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={12}/></button>
+                                <button onClick={() => setEditingPage({...editingPage!, content: {...(editingPage.content as any), faq: (editingPage.content?.faq || []).filter((_, idx) => idx !== i)}})} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={12}/></button>
                                 <input className="w-full mb-1 text-xs font-bold outline-none border-none p-0" value={item.question || ''} onChange={e => {
                                   const newFaq = [...(editingPage.content?.faq || [])];
                                   newFaq[i].question = e.target.value;
-                                  setEditingPage({...editingPage, content: {...(editingPage.content as any), faq: newFaq}});
+                                  setEditingPage({...editingPage!, content: {...(editingPage.content as any), faq: newFaq}});
                                 }} />
                                 <textarea className="w-full text-[10px] text-slate-500 outline-none border-none p-0 resize-none h-12" value={item.answer || ''} onChange={e => {
                                   const newFaq = [...(editingPage.content?.faq || [])];
                                   newFaq[i].answer = e.target.value;
-                                  setEditingPage({...editingPage, content: {...(editingPage.content as any), faq: newFaq}});
+                                  setEditingPage({...editingPage!, content: {...(editingPage.content as any), faq: newFaq}});
                                 }} />
                              </div>
                            ))}

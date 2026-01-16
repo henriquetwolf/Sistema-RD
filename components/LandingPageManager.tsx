@@ -1,15 +1,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-/* Add missing FileText icon to the lucide-react imports */
 import { 
   Plus, Search, Edit2, Trash2, ExternalLink, ArrowLeft, 
   Save, X, Loader2, Sparkles, MonitorPlay, Copy, CheckCircle, 
+  // Add missing Check import
   RefreshCw, Layout, Globe, Smartphone, CreditCard, MessageSquare, 
-  HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText
+  HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText,
+  ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
-import { LandingPage, LandingPageContent } from '../types';
-import { GoogleGenAI, Type } from "@google/genai";
+import { LandingPage, LandingPageContent, LandingPageSection } from '../types';
+import { GoogleGenAI, Type as SchemaType } from "@google/genai";
 import clsx from 'clsx';
 
 interface LandingPageManagerProps {
@@ -23,6 +24,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const [showModal, setShowModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [view, setView] = useState<'list' | 'visual_editor'>('list');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,26 +56,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0] && editingPage) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setEditingPage({
-          ...editingPage,
-          content: {
-            ...((editingPage.content as any) || {}),
-            hero: {
-              ...((editingPage.content?.hero as any) || {}),
-              imageUrl: base64
-            }
-          }
-        });
-      };
-      reader.readAsDataURL(e.target.files[0]);
-    }
-  };
-
   const handleCreateWithAi = async () => {
     if (!aiPrompt.productName || !aiPrompt.targetAudience) {
       alert("Informe pelo menos o nome do produto e o público-alvo.");
@@ -84,14 +66,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      const prompt = `Crie uma página de vendas poderosa e persuasiva para o produto "${aiPrompt.productName}".
+      const prompt = `Crie uma página de vendas persuasiva para o produto "${aiPrompt.productName}".
       Descrição do produto: ${aiPrompt.productDescription}
       Público-alvo: ${aiPrompt.targetAudience}
       Benefícios principais: ${aiPrompt.mainBenefits}
       Preço/Oferta: ${aiPrompt.price}
-      Detalhes adicionais: ${aiPrompt.offerDetails}
       
-      Use gatilhos mentais de escassez, autoridade e prova social.
+      Retorne um JSON com: 
+      - title: nome da página
+      - sections: array de objetos { id, type, content } onde type pode ser 'hero', 'text', 'features', 'pricing', 'faq'.
       Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
 
       const response = await ai.models.generateContent({
@@ -100,68 +83,33 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         config: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: {
-              title: { type: Type.STRING, description: "Título chamativo da página" },
-              productDescription: { type: Type.STRING, description: "Uma descrição detalhada e persuasiva do produto baseada no prompt" },
-              hero: {
-                type: Type.OBJECT,
-                properties: {
-                  headline: { type: Type.STRING },
-                  subheadline: { type: Type.STRING },
-                  ctaText: { type: Type.STRING }
-                },
-                required: ["headline", "subheadline", "ctaText"]
-              },
-              features: {
-                type: Type.ARRAY,
+              title: { type: SchemaType.STRING },
+              sections: {
+                type: SchemaType.ARRAY,
                 items: {
-                  type: Type.OBJECT,
+                  type: SchemaType.OBJECT,
                   properties: {
-                    title: { type: Type.STRING },
-                    description: { type: Type.STRING }
-                  },
-                  required: ["title", "description"]
-                }
-              },
-              pricing: {
-                type: Type.OBJECT,
-                properties: {
-                  price: { type: Type.STRING },
-                  installments: { type: Type.STRING },
-                  ctaText: { type: Type.STRING }
-                },
-                required: ["price", "installments", "ctaText"]
-              },
-              faq: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    question: { type: Type.STRING },
-                    answer: { type: Type.STRING }
-                  },
-                  required: ["question", "answer"]
+                    id: { type: SchemaType.STRING },
+                    type: { type: SchemaType.STRING },
+                    content: { type: SchemaType.OBJECT }
+                  }
                 }
               }
-            },
-            required: ["title", "productDescription", "hero", "features", "pricing", "faq"]
+            }
           }
         }
       });
 
       const text = response.text || "{}";
-      const generatedContent = JSON.parse(text);
+      const generated = JSON.parse(text);
       
-      const finalTitle = generatedContent.title || aiPrompt.productName;
-      const finalSlug = slugify(finalTitle);
-
       const newPage: Partial<LandingPage> = {
-        id: undefined,
-        title: finalTitle,
+        title: generated.title || aiPrompt.productName,
         productName: aiPrompt.productName,
-        slug: finalSlug,
-        content: generatedContent,
+        slug: slugify(generated.title || aiPrompt.productName),
+        content: { sections: generated.sections || [] },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isActive: true,
@@ -169,9 +117,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       };
 
       setEditingPage(newPage);
+      setView('visual_editor');
+      setShowModal(false);
     } catch (e: any) {
       console.error(e);
-      alert("Erro ao gerar página com IA: " + e.message);
+      alert("Erro ao gerar com IA: " + e.message);
     } finally {
       setIsGenerating(false);
     }
@@ -179,45 +129,220 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
   const handleSave = async () => {
     if (!editingPage) return;
-    if (!editingPage.slug) {
-        alert("O endereço da página (URL) é obrigatório.");
-        return;
-    }
-
     setIsLoading(true);
     try {
       await appBackend.saveLandingPage(editingPage as LandingPage);
       await fetchPages();
-      setShowModal(false);
+      setView('list');
       setEditingPage(null);
     } catch (e: any) {
-      console.error("Save failure:", e);
-      alert(`Erro ao salvar no banco: ${e.message || 'Erro inesperado.'}`);
+      alert(`Erro ao salvar: ${e.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Excluir esta página permanentemente?")) return;
+    if (!window.confirm("Excluir esta página?")) return;
     try {
       await appBackend.deleteLandingPage(id);
       setPages(prev => prev.filter(p => p.id !== id));
-    } catch (e) {
-      alert("Erro ao excluir.");
+    } catch (e) { alert("Erro ao excluir."); }
+  };
+
+  const addComponent = (type: LandingPageSection['type']) => {
+    if (!editingPage) return;
+    const newSection: LandingPageSection = {
+      id: crypto.randomUUID(),
+      type,
+      content: getInitialContentForType(type)
+    };
+    setEditingPage({
+      ...editingPage,
+      content: {
+        ...editingPage.content!,
+        sections: [...(editingPage.content?.sections || []), newSection]
+      }
+    });
+  };
+
+  const getInitialContentForType = (type: string) => {
+    switch(type) {
+      case 'hero': return { headline: 'Título Impactante', subheadline: 'Descrição curta persuasiva.', ctaText: 'Quero Garantir', imageUrl: '' };
+      case 'text': return { title: 'Sobre o Produto', text: 'Escreva detalhes aqui...' };
+      case 'features': return { mainTitle: 'Por que escolher?', items: [{ title: 'Destaque 1', description: 'Explicação.' }] };
+      case 'pricing': return { price: 'R$ 997,00', installments: '12x R$ 97,00', ctaText: 'Comprar Agora' };
+      case 'faq': return { items: [{ question: 'Como funciona?', answer: 'Explicação detalhada.' }] };
+      case 'image': return { url: '' };
+      default: return {};
     }
   };
 
-  const copyPublicLink = (id: string) => {
-    const url = `${window.location.origin}/?landingPageId=${id}`;
-    navigator.clipboard.writeText(url);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const updateSection = (id: string, newContent: any) => {
+    if (!editingPage) return;
+    setEditingPage({
+      ...editingPage,
+      content: {
+        ...editingPage.content!,
+        sections: editingPage.content!.sections.map(s => s.id === id ? { ...s, content: newContent } : s)
+      }
+    });
   };
 
-  const filteredPages = pages.filter(p => 
-    (p.title || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const moveSection = (index: number, direction: 'up' | 'down') => {
+    if (!editingPage) return;
+    const newSections = [...(editingPage.content?.sections || [])];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newSections.length) return;
+    [newSections[index], newSections[targetIndex]] = [newSections[targetIndex], newSections[index]];
+    setEditingPage({
+      ...editingPage,
+      content: { ...editingPage.content!, sections: newSections }
+    });
+  };
+
+  const removeSection = (id: string) => {
+    if (!editingPage) return;
+    setEditingPage({
+      ...editingPage,
+      content: {
+        ...editingPage.content!,
+        sections: editingPage.content!.sections.filter(s => s.id !== id)
+      }
+    });
+  };
+
+  if (view === 'visual_editor' && editingPage) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col animate-in fade-in">
+        <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><ArrowLeft size={20}/></button>
+            <div className="h-6 w-px bg-slate-200"></div>
+            <h2 className="font-bold text-slate-800">{editingPage.title} <span className="text-xs text-slate-400 font-normal ml-2">Editor Visual</span></h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={handleSave} className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-2 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95">
+              {isLoading ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} Salvar Página
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 flex overflow-hidden">
+          {/* Toolbar Lateral */}
+          <aside className="w-64 bg-white border-r border-slate-200 p-6 space-y-6 overflow-y-auto custom-scrollbar">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Componentes</h3>
+            <div className="grid grid-cols-1 gap-2">
+              {[
+                { type: 'hero', label: 'Hero (Topo)', icon: Layout },
+                { type: 'text', label: 'Texto/Sobre', icon: Type },
+                { type: 'features', label: 'Benefícios', icon: ListChecks },
+                { type: 'pricing', label: 'Oferta/Preço', icon: CreditCard },
+                { type: 'faq', label: 'FAQ', icon: HelpCircle },
+                { type: 'image', label: 'Imagem', icon: ImageIcon }
+              ].map(comp => (
+                <button 
+                  key={comp.type} 
+                  onClick={() => addComponent(comp.type as any)}
+                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-orange-200 hover:bg-orange-50 text-xs font-bold text-slate-600 transition-all text-left"
+                >
+                  <comp.icon size={16} className="text-orange-500" /> {comp.label}
+                </button>
+              ))}
+            </div>
+            
+            <div className="pt-6 border-t space-y-4">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Configurações Gerais</h3>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Título da Página</label>
+                <input className="w-full text-xs p-2 border rounded mt-1" value={editingPage.title} onChange={e => setEditingPage({...editingPage, title: e.target.value})} />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Endereço (Slug)</label>
+                <input className="w-full text-xs p-2 border rounded mt-1 font-mono" value={editingPage.slug} onChange={e => setEditingPage({...editingPage, slug: slugify(e.target.value)})} />
+              </div>
+            </div>
+          </aside>
+
+          {/* Área de Visualização/Edição */}
+          <main className="flex-1 bg-slate-200 p-10 overflow-y-auto custom-scrollbar flex flex-col items-center">
+            <div className="bg-white w-full max-w-5xl shadow-2xl rounded-3xl overflow-hidden min-h-screen relative">
+               {editingPage.content?.sections?.map((section, idx) => (
+                 <div key={section.id} className="relative group/section border-2 border-transparent hover:border-orange-400 transition-all">
+                    {/* Controles de Seção */}
+                    <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover/section:opacity-100 transition-opacity z-50">
+                       <button onClick={() => moveSection(idx, 'up')} className="p-1.5 bg-white border shadow-md rounded-lg text-slate-600 hover:text-orange-600"><ArrowUp size={14}/></button>
+                       <button onClick={() => moveSection(idx, 'down')} className="p-1.5 bg-white border shadow-md rounded-lg text-slate-600 hover:text-orange-600"><ArrowDown size={14}/></button>
+                       <button onClick={() => removeSection(section.id)} className="p-1.5 bg-white border shadow-md rounded-lg text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
+                    </div>
+
+                    <div className="pointer-events-none">
+                      {/* Renderização Simplificada para o Editor */}
+                      {section.type === 'hero' && (
+                        <div className="bg-slate-50 p-16 text-center lg:text-left grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+                           <div>
+                              <h1 className="text-4xl font-black text-slate-800 mb-4">{section.content.headline}</h1>
+                              <p className="text-slate-500 mb-8">{section.content.subheadline}</p>
+                              <div className="inline-block bg-orange-600 text-white px-8 py-4 rounded-2xl font-black text-sm uppercase">{section.content.ctaText}</div>
+                           </div>
+                           <div className="bg-slate-200 rounded-[2rem] aspect-video flex items-center justify-center">
+                              {section.content.imageUrl ? <img src={section.content.imageUrl} className="w-full h-full object-cover rounded-[2rem]"/> : <ImageIcon className="text-slate-300" size={48}/>}
+                           </div>
+                        </div>
+                      )}
+                      {section.type === 'text' && (
+                        <div className="p-16">
+                           <h2 className="text-2xl font-black text-slate-800 mb-4">{section.content.title}</h2>
+                           <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{section.content.text}</p>
+                        </div>
+                      )}
+                      {section.type === 'features' && (
+                        <div className="p-16 bg-white border-y">
+                           <h2 className="text-center text-2xl font-black mb-10">{section.content.mainTitle}</h2>
+                           <div className="grid grid-cols-3 gap-6">
+                              {section.content.items?.map((f: any, i: number) => (
+                                <div key={i} className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                                   <div className="w-8 h-8 bg-orange-100 text-orange-600 rounded-lg mb-4 flex items-center justify-center"><Check size={16}/></div>
+                                   <p className="font-bold text-slate-800 text-sm">{f.title}</p>
+                                   <p className="text-xs text-slate-500 mt-2">{f.description}</p>
+                                </div>
+                              ))}
+                           </div>
+                        </div>
+                      )}
+                      {section.type === 'pricing' && (
+                         <div className="p-16 bg-slate-900 text-white text-center">
+                            <h2 className="text-xl font-bold opacity-60 uppercase mb-4 tracking-widest">Oferta Especial</h2>
+                            <div className="text-6xl font-black mb-2">{section.content.price}</div>
+                            <p className="text-orange-400 font-bold mb-10">Ou até {section.content.installments}</p>
+                            <div className="inline-block bg-orange-600 text-white px-12 py-5 rounded-2xl font-black text-base uppercase shadow-2xl">{section.content.ctaText}</div>
+                         </div>
+                      )}
+                    </div>
+
+                    {/* Overlay de Edição Direta */}
+                    <div className="absolute inset-0 z-20 cursor-pointer" onClick={() => {
+                        const newContent = prompt("Edição Rápida (JSON) - Melhore no formulário futuro:", JSON.stringify(section.content));
+                        if (newContent) {
+                          try { updateSection(section.id, JSON.parse(newContent)); } catch(e) { alert("JSON Inválido"); }
+                        }
+                    }}></div>
+                 </div>
+               ))}
+
+               {editingPage.content?.sections?.length === 0 && (
+                 <div className="h-screen flex flex-col items-center justify-center text-slate-300">
+                    <MonitorPlay size={100} className="opacity-10 mb-6" />
+                    <p className="font-bold">A página está vazia.</p>
+                    <p className="text-sm">Selecione componentes na lateral para começar.</p>
+                 </div>
+               )}
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -235,13 +360,13 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         </div>
         <button 
           onClick={() => {
-            setAiPrompt({ productName: '', productDescription: '', targetAudience: '', mainBenefits: '', price: '', offerDetails: '' });
+            setAiPrompt({ productName: '', productDescription: '', targetAudience: '', mainBenefits: '', price: '' });
             setEditingPage(null);
             setShowModal(true);
           }}
           className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95"
         >
-          <Plus size={18} /> Criar com IA
+          <Sparkles size={18} /> Gerar com IA
         </button>
       </div>
 
@@ -266,35 +391,38 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           <div className="col-span-full py-20 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
             <Layout size={48} className="mx-auto mb-4 opacity-20" />
             <p className="font-bold">Nenhuma página de venda criada.</p>
-            <p className="text-sm">Use o botão acima para gerar sua primeira página com IA.</p>
           </div>
         ) : (
-          filteredPages.map(page => (
+          pages.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase())).map(page => (
             <div key={page.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
-              <div className="h-32 bg-gradient-to-br from-orange-500 to-indigo-600 p-6 flex items-end relative overflow-hidden">
+              <div className="h-32 bg-gradient-to-br from-orange-50 to-indigo-600 p-6 flex items-end relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10"><Globe size={80}/></div>
-                <h3 className="text-white font-black text-lg line-clamp-1">{page.title || 'Sem Título'}</h3>
+                <h3 className="text-white font-black text-lg line-clamp-1">{page.title}</h3>
               </div>
               <div className="p-6 flex-1 flex flex-col">
-                <p className="text-xs text-slate-500 font-medium mb-1">Produto: <span className="font-bold text-slate-700">{page.productName || '--'}</span></p>
+                <p className="text-xs text-slate-500 font-medium mb-1">Produto: <span className="font-bold text-slate-700">{page.productName}</span></p>
                 <div className="flex items-center gap-1 mb-4">
                     <Globe size={10} className="text-teal-500" />
                     <span className="text-[10px] font-mono text-slate-400">/{page.slug}</span>
                 </div>
-                <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-6">Criada em: {page.createdAt ? new Date(page.createdAt).toLocaleDateString() : '--'}</p>
                 
                 <div className="flex gap-2 mt-auto">
                   <button 
                     onClick={() => {
                       setEditingPage(page);
-                      setShowModal(true);
+                      setView('visual_editor');
                     }}
                     className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-slate-200 transition-all"
                   >
-                    <Edit2 size={14}/> Editar
+                    <Edit2 size={14}/> Visualizar / Editar
                   </button>
                   <button 
-                    onClick={() => copyPublicLink(page.id)}
+                    onClick={() => {
+                      const url = `${window.location.origin}/?landingPageId=${page.id}`;
+                      navigator.clipboard.writeText(url);
+                      setCopiedId(page.id);
+                      setTimeout(() => setCopiedId(null), 2000);
+                    }}
                     className={clsx(
                       "flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all border",
                       copiedId === page.id ? "bg-green-50 border-green-200 text-green-600" : "bg-orange-50 border-orange-100 text-orange-600 hover:bg-orange-100"
@@ -302,12 +430,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   >
                     {copiedId === page.id ? <CheckCircle size={14}/> : <ExternalLink size={14}/>} {copiedId === page.id ? 'Copiado!' : 'Link Público'}
                   </button>
-                  <button 
-                    onClick={() => handleDelete(page.id)}
-                    className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                  >
-                    <Trash2 size={16}/>
-                  </button>
+                  <button onClick={() => handleDelete(page.id)} className="p-2 text-slate-300 hover:text-red-600 rounded-lg"><Trash2 size={16}/></button>
                 </div>
               </div>
             </div>
@@ -315,233 +438,42 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         )}
       </div>
 
-      {/* MODAL: CREATE/EDIT LANDING PAGE */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh] overflow-hidden">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-3xl my-8 animate-in zoom-in-95 flex flex-col">
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-orange-600 text-white rounded-2xl shadow-xl shadow-orange-600/20">
-                  <span className="text-white font-black text-2xl">V</span>
-                </div>
-                <div>
-                  <h3 className="text-2xl font-black text-slate-800 tracking-tight">Gerador de Páginas de Venda</h3>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Inteligência Artificial & Copywriting</p>
-                </div>
-              </div>
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight">Criar com Inteligência Artificial</h3>
               <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
             </div>
-
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-10 bg-white">
-              {!editingPage ? (
-                <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
-                  <div className="bg-orange-50 p-6 rounded-3xl border border-orange-100 flex gap-4 text-orange-800">
-                    <Info size={24} className="shrink-0" />
-                    <p className="text-sm font-medium leading-relaxed">
-                      Preencha os dados da sua oferta. Nossa IA criará Headline, benefícios, FAQ e botões de conversão automaticamente.
-                    </p>
+            <div className="p-10 space-y-8">
+               <div className="grid grid-cols-1 gap-6">
+                  <div>
+                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
+                      <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-base font-bold outline-none" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="md:col-span-2">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto/Curso</label>
-                      <input 
-                        className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" 
-                        value={aiPrompt.productName} 
-                        onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} 
-                        placeholder="Ex: Formação Completa em Pilates 2024" 
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição Detalhada do Produto</label>
-                      <textarea 
-                        className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-32 resize-none outline-none transition-all" 
-                        value={aiPrompt.productDescription} 
-                        onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} 
-                        placeholder="Descreva o que é o produto, como funciona e qual o diferencial..." 
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Público-Alvo</label>
-                      <input 
-                        className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" 
-                        value={aiPrompt.targetAudience} 
-                        onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} 
-                        placeholder="Ex: Fisioterapeutas e Educadores Físicos" 
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço / Oferta</label>
-                      <input 
-                        className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" 
-                        value={aiPrompt.price} 
-                        onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} 
-                        placeholder="Ex: R$ 1.997,00 em até 12x" 
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Benefícios Principais (Bullets)</label>
-                      <textarea 
-                        className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-32 resize-none outline-none transition-all" 
-                        value={aiPrompt.mainBenefits} 
-                        onChange={e => setAiPrompt({...aiPrompt, mainBenefits: e.target.value})} 
-                        placeholder="Ex: Certificado Internacional, Mentoria ao vivo, Acesso vitalício..." 
-                      />
-                    </div>
+                  <div>
+                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto</label>
+                      <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-24 resize-none outline-none" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Fale sobre os benefícios e o que o aluno aprende..." />
                   </div>
-
-                  <div className="pt-6">
-                    <button 
-                      onClick={handleCreateWithAi}
-                      disabled={isGenerating || !aiPrompt.productName}
-                      className="w-full py-5 bg-orange-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl shadow-orange-600/30 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
-                    >
-                      {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Sparkles size={24} />}
-                      {isGenerating ? 'A Inteligência Artificial está escrevendo...' : 'Gerar Página de Vendas'}
-                    </button>
+                  <div className="grid grid-cols-2 gap-4">
+                      <div>
+                          <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Público-Alvo</label>
+                          <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" />
+                      </div>
+                      <div>
+                          <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço / Oferta</label>
+                          <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.price} onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} placeholder="Ex: R$ 1.997,00" />
+                      </div>
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-10 animate-in fade-in slide-in-from-right-4 duration-300">
-                  <div className="flex items-center justify-between border-b pb-6">
-                    <h4 className="text-xl font-black text-slate-800">Editor de Conteúdo</h4>
-                    <button onClick={() => setEditingPage(null)} className="text-xs font-bold text-orange-600 hover:underline">Reiniciar Geração</button>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                    <div className="space-y-6">
-                        <div className="p-8 bg-indigo-50 border-2 border-indigo-100 rounded-[2.5rem] space-y-6">
-                            <h5 className="font-black text-[10px] uppercase tracking-[0.2em] text-indigo-500 flex items-center gap-2"><Globe size={14}/> Identidade & URL</h5>
-                            <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Título Interno</label>
-                              <input 
-                                className="w-full px-4 py-3 border border-slate-200 rounded-xl font-bold bg-white outline-none focus:border-indigo-500" 
-                                value={editingPage.title || ''} 
-                                onChange={e => {
-                                    const newTitle = e.target.value;
-                                    setEditingPage(prev => ({
-                                        ...prev!, 
-                                        title: newTitle,
-                                        slug: prev?.id ? prev.slug : slugify(newTitle)
-                                    }));
-                                }} 
-                              />
-                            </div>
-                            
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Endereço da Página (Slug)</label>
-                                <div className="flex items-center gap-2 bg-white px-4 py-3 border border-slate-200 rounded-xl shadow-inner">
-                                    <Link2 size={16} className="text-slate-300" />
-                                    <span className="text-slate-400 text-xs font-medium">/{window.location.host}/</span>
-                                    <input 
-                                        className="flex-1 bg-transparent border-none p-0 text-sm font-bold text-indigo-600 outline-none focus:ring-0" 
-                                        value={editingPage.slug || ''} 
-                                        onChange={e => setEditingPage({...editingPage!, slug: slugify(e.target.value)})} 
-                                        placeholder="url-da-pagina"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
-                          <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><ImageIcon size={16}/> Imagem da Página</h5>
-                          <div className="flex flex-col gap-4">
-                              <div className="w-full h-40 bg-white border rounded-2xl overflow-hidden flex items-center justify-center relative group">
-                                  {editingPage.content?.hero?.imageUrl ? (
-                                      <img src={editingPage.content.hero.imageUrl} className="w-full h-full object-cover" />
-                                  ) : (
-                                      <ImageIcon className="text-slate-200" size={48} />
-                                  )}
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                      <button onClick={() => fileInputRef.current?.click()} className="p-3 bg-white rounded-full text-indigo-600 shadow-xl"><Upload size={20}/></button>
-                                  </div>
-                              </div>
-                              <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                              <p className="text-[10px] text-slate-400 italic text-center">Recomendado: Imagem horizontal (1200x600px)</p>
-                          </div>
-                        </div>
-                        
-                        <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
-                          <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><Layout size={16}/> Hero Section (Destaque)</h5>
-                          <input className="w-full px-4 py-2 border rounded-lg text-sm font-bold" value={editingPage.content?.hero?.headline || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), hero: {...(editingPage.content?.hero as any), headline: e.target.value}}})} placeholder="Headline" />
-                          <textarea className="w-full px-4 py-2 border rounded-lg text-xs h-20 resize-none" value={editingPage.content?.hero?.subheadline || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), hero: {...(editingPage.content?.hero as any), subheadline: e.target.value}}})} placeholder="Subheadline" />
-                          <input className="w-full px-4 py-2 border rounded-lg text-xs font-black uppercase" value={editingPage.content?.hero?.ctaText || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), hero: {...(editingPage.content?.hero as any), ctaText: e.target.value}}})} placeholder="Texto do Botão" />
-                        </div>
-
-                        <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
-                          <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><FileText size={16}/> Descrição do Produto</h5>
-                          <textarea 
-                            className="w-full px-4 py-3 border rounded-xl text-sm h-32 resize-none outline-none focus:ring-2 focus:ring-indigo-100" 
-                            value={editingPage.content?.productDescription || ''} 
-                            onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), productDescription: e.target.value}})} 
-                            placeholder="Texto detalhado sobre o produto..." 
-                          />
-                        </div>
-
-                        <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
-                          <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><CreditCard size={16}/> Preço e Oferta</h5>
-                          <div className="grid grid-cols-2 gap-4">
-                            <input className="w-full px-4 py-2 border rounded-lg text-sm font-bold" value={editingPage.content?.pricing?.price || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), pricing: {...(editingPage.content?.pricing as any), price: e.target.value}}})} placeholder="Preço" />
-                            <input className="w-full px-4 py-2 border rounded-lg text-sm" value={editingPage.content?.pricing?.installments || ''} onChange={e => setEditingPage({...editingPage, content: {...(editingPage.content as any), pricing: {...(editingPage.content?.pricing as any), installments: e.target.value}}})} placeholder="Parcelamento" />
-                          </div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-6">
-                        <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
-                           <div className="flex justify-between items-center">
-                              <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><ListChecks size={16}/> Benefícios</h5>
-                              <button onClick={() => setEditingPage({...editingPage!, content: {...(editingPage.content as any), features: [...(editingPage.content?.features || []), { title: 'Novo Benefício', description: 'Descrição aqui' }]}})} className="text-[10px] font-black uppercase text-indigo-600">+ Add</button>
-                           </div>
-                           {(editingPage.content?.features || []).map((f, i) => (
-                             <div key={i} className="bg-white p-3 rounded-xl border border-slate-200 relative">
-                                <button onClick={() => setEditingPage({...editingPage!, content: {...(editingPage.content as any), features: (editingPage.content?.features || []).filter((_, idx) => idx !== i)}})} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={12}/></button>
-                                <input className="w-full mb-1 text-xs font-bold outline-none border-none p-0" value={f.title || ''} onChange={e => {
-                                  const newFeat = [...(editingPage.content?.features || [])];
-                                  newFeat[i].title = e.target.value;
-                                  setEditingPage({...editingPage!, content: {...(editingPage.content as any), features: newFeat}});
-                                }} />
-                                <textarea className="w-full text-[10px] text-slate-500 outline-none border-none p-0 resize-none h-12" value={f.description || ''} onChange={e => {
-                                  const newFeat = [...(editingPage.content?.features || [])];
-                                  newFeat[i].description = e.target.value;
-                                  setEditingPage({...editingPage!, content: {...(editingPage.content as any), features: newFeat}});
-                                }} />
-                             </div>
-                           ))}
-                        </div>
-
-                        <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
-                           <div className="flex justify-between items-center">
-                              <h5 className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2"><HelpCircle size={16}/> FAQ</h5>
-                              <button onClick={() => setEditingPage({...editingPage!, content: {...(editingPage.content as any), faq: [...(editingPage.content?.faq || []), { question: 'Pergunta?', answer: 'Resposta aqui' }]}})} className="text-[10px] font-black uppercase text-indigo-600">+ Add</button>
-                           </div>
-                           {(editingPage.content?.faq || []).map((item, i) => (
-                             <div key={i} className="bg-white p-3 rounded-xl border border-slate-200 relative">
-                                <button onClick={() => setEditingPage({...editingPage!, content: {...(editingPage.content as any), faq: (editingPage.content?.faq || []).filter((_, idx) => idx !== i)}})} className="absolute -top-2 -right-2 bg-white text-red-500 rounded-full border shadow-sm p-1"><X size={12}/></button>
-                                <input className="w-full mb-1 text-xs font-bold outline-none border-none p-0" value={item.question || ''} onChange={e => {
-                                  const newFaq = [...(editingPage.content?.faq || [])];
-                                  newFaq[i].question = e.target.value;
-                                  setEditingPage({...editingPage!, content: {...(editingPage.content as any), faq: newFaq}});
-                                }} />
-                                <textarea className="w-full text-[10px] text-slate-500 outline-none border-none p-0 resize-none h-12" value={item.answer || ''} onChange={e => {
-                                  const newFaq = [...(editingPage.content?.faq || [])];
-                                  newFaq[i].answer = e.target.value;
-                                  setEditingPage({...editingPage!, content: {...(editingPage.content as any), faq: newFaq}});
-                                }} />
-                             </div>
-                           ))}
-                        </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-end gap-3 pt-6 border-t">
-                    <button onClick={() => setShowModal(false)} className="px-6 py-2.5 text-slate-500 font-bold text-sm">Cancelar</button>
-                    <button onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-3 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center gap-2 active:scale-95 transition-all">
-                      <Save size={18}/> Salvar Página Final
-                    </button>
-                  </div>
-                </div>
-              )}
+               </div>
+               <button 
+                  onClick={handleCreateWithAi}
+                  disabled={isGenerating || !aiPrompt.productName}
+                  className="w-full py-5 bg-orange-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+               >
+                  {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Sparkles size={24} />}
+                  {isGenerating ? 'Criando Estrutura Persuasiva...' : 'Gerar Página Completa'}
+               </button>
             </div>
           </div>
         </div>

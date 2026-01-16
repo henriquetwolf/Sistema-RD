@@ -216,7 +216,6 @@ export interface ExternalCertificate {
   created_at: string;
 }
 
-// Added to resolve error in components/ClassStudentsViewer.tsx
 export interface StudentCertificateStatus {
   hash: string;
   issuedAt: string;
@@ -354,37 +353,23 @@ export interface BillingNegotiation {
   openInstallments: number;
   totalNegotiatedValue: number;
   totalInstallments: number;
-  due_date?: string;
   dueDate?: string;
-  responsible_agent?: string;
   responsibleAgent?: string;
-  identifier_code?: string;
   identifierCode?: string;
-  full_name?: string;
   fullName?: string;
-  product_name?: string;
   productName?: string;
-  original_value?: number;
   originalValue?: number;
-  payment_method?: string;
   paymentMethod?: string;
   observations?: string;
   status: string;
   team?: string;
-  voucher_link_1?: string;
   voucherLink1?: string;
-  test_date?: string;
   testDate?: string;
-  voucher_link_2?: string;
   voucherLink2?: string;
-  voucher_link_3?: string;
   voucherLink3?: string;
-  boletos_link?: string;
   boletosLink?: string;
-  negotiation_reference?: string;
   negotiationReference?: string;
   attachments?: string;
-  created_at?: string;
   createdAt?: string;
 }
 
@@ -453,7 +438,6 @@ export interface CompanySetting {
   productIds: string[];
 }
 
-// Added to resolve error on line 459
 export type PipelineStage = { id: string; title: string; color?: string; };
 
 export interface Pipeline {
@@ -594,7 +578,7 @@ export interface WAAutomationRule {
   pipelineName: string;
   stageId: string;
   productType?: 'Digital' | 'Presencial' | 'Evento' | '';
-  productId: string; // ID ou Nome do produto/curso
+  productId: string; 
   messageTemplate: string;
   isActive: boolean;
   createdAt: string;
@@ -621,30 +605,12 @@ export interface LandingPage {
   theme: 'modern' | 'clean' | 'dark' | 'corporate';
 }
 
+export interface LandingPageSection {
+  id: string;
+  type: 'hero' | 'text' | 'features' | 'pricing' | 'faq' | 'image' | 'socialProof';
+  content: any;
+}
+
 export interface LandingPageContent {
-  hero: {
-    headline: string;
-    subheadline: string;
-    ctaText: string;
-    imageUrl?: string;
-  };
-  productDescription?: string;
-  features: {
-    title: string;
-    description: string;
-    icon?: string;
-  }[];
-  pricing: {
-    price: string;
-    installments: string;
-    ctaText: string;
-  };
-  faq: {
-    question: string;
-    answer: string;
-  }[];
-  socialProof?: {
-    text: string;
-    author: string;
-  }[];
+  sections: LandingPageSection[];
 }

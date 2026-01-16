@@ -178,7 +178,23 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       if (currentDraft && currentDraft.content) {
           const newSections = currentDraft.content.sections.map(s => {
               if (s.id === sectionId) {
-                  return { ...s, content: { ...s.content, [fieldKey]: refinedText } };
+                  const content = { ...s.content };
+                  // Suporte para campos aninhados como "items.0.title"
+                  if (fieldKey.includes('.')) {
+                      const parts = fieldKey.split('.');
+                      if (parts.length === 3) {
+                          const [listKey, index, subKey] = parts;
+                          const idx = parseInt(index);
+                          const newList = [...(content[listKey] || [])];
+                          if (newList[idx]) {
+                              newList[idx] = { ...newList[idx], [subKey]: refinedText };
+                              content[listKey] = newList;
+                          }
+                      }
+                  } else {
+                      content[fieldKey] = refinedText;
+                  }
+                  return { ...s, content };
               }
               return s;
           });
@@ -868,6 +884,63 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                                   >
                                                       {isRefiningField === `${section.id}-text` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
                                                   </button>
+                                              </div>
+                                          </div>
+                                      )}
+
+                                      {section.type === 'features' && (
+                                          <div className="space-y-6">
+                                              <div className="relative group">
+                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Título da Seção de Benefícios</label>
+                                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold pr-10" value={section.content.mainTitle} onChange={e => {
+                                                      const newSections = [...currentDraft.content!.sections];
+                                                      newSections[sIdx].content.mainTitle = e.target.value;
+                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                  }} placeholder="Ex: Por que escolher este treinamento?" />
+                                                  <button 
+                                                    onClick={() => handleRefineFieldWithAi(section.id, 'mainTitle', section.content.mainTitle)}
+                                                    disabled={isRefiningField === `${section.id}-mainTitle`}
+                                                    className="absolute right-2 top-[22px] p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all"
+                                                    title="Melhorar com IA"
+                                                  >
+                                                      {isRefiningField === `${section.id}-mainTitle` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
+                                                  </button>
+                                              </div>
+                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                  {section.content.items?.map((item: any, iIdx: number) => (
+                                                      <div key={iIdx} className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm">
+                                                          <div className="relative group">
+                                                              <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">Título {iIdx + 1}</label>
+                                                              <input className="w-full px-3 py-1.5 border rounded-lg text-xs font-bold pr-8" value={item.title} onChange={e => {
+                                                                  const newSections = [...currentDraft.content!.sections];
+                                                                  newSections[sIdx].content.items[iIdx].title = e.target.value;
+                                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                              }} placeholder="Título" />
+                                                              <button 
+                                                                onClick={() => handleRefineFieldWithAi(section.id, `items.${iIdx}.title`, item.title)}
+                                                                disabled={isRefiningField === `${section.id}-items.${iIdx}.title`}
+                                                                className="absolute right-1 top-[18px] p-1 text-indigo-600 hover:text-indigo-800 transition-all"
+                                                              >
+                                                                  {isRefiningField === `${section.id}-items.${iIdx}.title` ? <Loader2 size={10} className="animate-spin"/> : <Wand2 size={10}/>}
+                                                              </button>
+                                                          </div>
+                                                          <div className="relative group">
+                                                              <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">Descrição {iIdx + 1}</label>
+                                                              <textarea className="w-full px-3 py-1.5 border rounded-lg text-[10px] h-16 resize-none pr-8 leading-tight" value={item.description} onChange={e => {
+                                                                  const newSections = [...currentDraft.content!.sections];
+                                                                  newSections[sIdx].content.items[iIdx].description = e.target.value;
+                                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                              }} placeholder="Descrição" />
+                                                              <button 
+                                                                onClick={() => handleRefineFieldWithAi(section.id, `items.${iIdx}.description`, item.description)}
+                                                                disabled={isRefiningField === `${section.id}-items.${iIdx}.description`}
+                                                                className="absolute right-1 top-[18px] p-1 text-indigo-600 hover:text-indigo-800 transition-all"
+                                                              >
+                                                                  {isRefiningField === `${section.id}-items.${iIdx}.description` ? <Loader2 size={10} className="animate-spin"/> : <Wand2 size={10}/>}
+                                                              </button>
+                                                          </div>
+                                                      </div>
+                                                  ))}
                                               </div>
                                           </div>
                                       )}

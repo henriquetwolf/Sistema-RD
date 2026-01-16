@@ -605,10 +605,18 @@ export interface LandingPage {
   theme: 'modern' | 'clean' | 'dark' | 'corporate';
 }
 
+export interface ElementStyles {
+    fontSize?: string;
+    fontFamily?: string;
+    textAlign?: 'left' | 'center' | 'right';
+    color?: string;
+}
+
 export interface LandingPageSection {
   id: string;
-  type: 'hero' | 'text' | 'features' | 'pricing' | 'faq' | 'image' | 'socialProof';
+  type: 'hero' | 'text' | 'features' | 'pricing' | 'faq' | 'image' | 'socialProof' | 'form';
   content: any;
+  styles?: Record<string, ElementStyles>;
 }
 
 export interface LandingPageContent {

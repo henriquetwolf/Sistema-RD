@@ -29,6 +29,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
   // Form State
   const [editingPage, setEditingPage] = useState<Partial<LandingPage> | null>(null);
+  const [currentDraft, setCurrentDraft] = useState<Partial<LandingPage> | null>(null);
   const [aiPrompt, setAiPrompt] = useState({
       productName: '',
       productDescription: '',
@@ -139,14 +140,21 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         theme: 'modern'
       };
 
-      setEditingPage(newPage);
-      setView('visual_editor');
-      setShowModal(false);
+      setCurrentDraft(newPage);
     } catch (e: any) {
       console.error(e);
       alert("Erro ao gerar com IA: " + (e.message || JSON.stringify(e)));
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const confirmDraft = () => {
+    if (currentDraft) {
+      setEditingPage(currentDraft);
+      setView('visual_editor');
+      setShowModal(false);
+      setCurrentDraft(null);
     }
   };
 
@@ -340,7 +348,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                     </div>
 
                     <div className="relative">
-                      {/* RENDERIZAÇÃO DE ALTA FIDELIDADE (Copiada do PublicViewer) */}
+                      {/* RENDERIZAÇÃO DE ALTA FIDELIDADE */}
                       {section.type === 'hero' && (
                         <header className="pt-24 pb-16 px-6 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative">
                           <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-orange-100/50 rounded-full blur-3xl"></div>
@@ -607,6 +615,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           onClick={() => {
             setAiPrompt({ productName: '', productDescription: '', targetAudience: '', mainBenefits: '', price: '', offerDetails: '' });
             setEditingPage(null);
+            setCurrentDraft(null);
             setShowModal(true);
           }}
           className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95"
@@ -685,40 +694,122 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-3xl my-8 animate-in zoom-in-95 flex flex-col">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
               <h3 className="text-2xl font-black text-slate-800 tracking-tight">Criar com Inteligência Artificial</h3>
-              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
+              <button onClick={() => { setShowModal(false); setCurrentDraft(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
             </div>
-            <div className="p-10 space-y-8">
-               <div className="grid grid-cols-1 gap-6">
-                  <div>
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
-                      <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-base font-bold outline-none" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
+            
+            <div className="p-10 overflow-y-auto custom-scrollbar flex-1">
+               {!currentDraft ? (
+                  <div className="space-y-8">
+                     <div className="grid grid-cols-1 gap-6">
+                        <div>
+                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
+                            <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-base font-bold outline-none" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto</label>
+                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-24 resize-none outline-none" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Fale sobre os benefícios e o que o aluno aprende..." />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Público-Alvo</label>
+                                <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço / Oferta</label>
+                                <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.price} onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} placeholder="Ex: R$ 1.997,00" />
+                            </div>
+                        </div>
+                     </div>
+                     <button 
+                        onClick={handleCreateWithAi}
+                        disabled={isGenerating || !aiPrompt.productName}
+                        className="w-full py-5 bg-orange-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+                     >
+                        {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Sparkles size={24} />}
+                        {isGenerating ? 'Criando Estrutura Persuasiva...' : 'Gerar Estrutura e Textos'}
+                     </button>
                   </div>
-                  <div>
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto</label>
-                      <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-24 resize-none outline-none" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Fale sobre os benefícios e o que o aluno aprende..." />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                      <div>
-                          <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Público-Alvo</label>
-                          <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" />
+               ) : (
+                  <div className="space-y-8 animate-in slide-in-from-right-4">
+                      <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 flex items-center gap-4 mb-4">
+                          <div className="p-3 bg-indigo-600 text-white rounded-2xl"><Sparkles size={24}/></div>
+                          <div>
+                              <h4 className="font-black text-indigo-900 uppercase text-xs tracking-widest">Rascunho Gerado!</h4>
+                              <p className="text-sm text-indigo-700 font-medium">Revise e ajuste os textos principais abaixo antes de criar a página visual.</p>
+                          </div>
                       </div>
-                      <div>
-                          <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço / Oferta</label>
-                          <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.price} onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} placeholder="Ex: R$ 1.997,00" />
+
+                      <div className="space-y-6">
+                          <div>
+                              <label className="block text-[11px] font-black text-slate-400 uppercase mb-1.5 ml-1">Título da Página</label>
+                              <input className="w-full px-5 py-3 border rounded-2xl font-bold" value={currentDraft.title} onChange={e => setCurrentDraft({...currentDraft, title: e.target.value})} />
+                          </div>
+
+                          <div className="space-y-4">
+                              {currentDraft.content?.sections.map((section, sIdx) => (
+                                  <div key={section.id} className="p-6 bg-slate-50 border rounded-3xl space-y-4">
+                                      <div className="flex items-center gap-2 mb-2">
+                                          <span className="px-2 py-0.5 bg-slate-200 text-slate-600 text-[9px] font-black uppercase rounded">{section.type}</span>
+                                      </div>
+                                      
+                                      {section.type === 'hero' && (
+                                          <div className="space-y-4">
+                                              <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.headline} onChange={e => {
+                                                  const newSections = [...currentDraft.content!.sections];
+                                                  newSections[sIdx].content.headline = e.target.value;
+                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                              }} placeholder="Headline" />
+                                              <textarea className="w-full px-4 py-2 border rounded-xl text-xs h-20 resize-none" value={section.content.subheadline} onChange={e => {
+                                                  const newSections = [...currentDraft.content!.sections];
+                                                  newSections[sIdx].content.subheadline = e.target.value;
+                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                              }} placeholder="Subheadline" />
+                                          </div>
+                                      )}
+
+                                      {section.type === 'text' && (
+                                          <div className="space-y-4">
+                                              <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.title} onChange={e => {
+                                                  const newSections = [...currentDraft.content!.sections];
+                                                  newSections[sIdx].content.title = e.target.value;
+                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                              }} placeholder="Título do Bloco" />
+                                              <textarea className="w-full px-4 py-2 border rounded-xl text-xs h-32 resize-none" value={section.content.text} onChange={e => {
+                                                  const newSections = [...currentDraft.content!.sections];
+                                                  newSections[sIdx].content.text = e.target.value;
+                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                              }} placeholder="Conteúdo" />
+                                          </div>
+                                      )}
+
+                                      {section.type === 'pricing' && (
+                                          <div className="grid grid-cols-2 gap-4">
+                                              <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.price} onChange={e => {
+                                                  const newSections = [...currentDraft.content!.sections];
+                                                  newSections[sIdx].content.price = e.target.value;
+                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                              }} placeholder="Preço" />
+                                              <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.installments} onChange={e => {
+                                                  const newSections = [...currentDraft.content!.sections];
+                                                  newSections[sIdx].content.installments = e.target.value;
+                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                              }} placeholder="Parcelas" />
+                                          </div>
+                                      )}
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+
+                      <div className="flex gap-4 pt-6 border-t">
+                          <button onClick={() => setCurrentDraft(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Voltar</button>
+                          <button onClick={confirmDraft} className="flex-[2] py-4 bg-orange-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-orange-600/20 hover:bg-orange-700 transition-all active:scale-95">Criar Página e Abrir Editor</button>
                       </div>
                   </div>
-               </div>
-               <button 
-                  onClick={handleCreateWithAi}
-                  disabled={isGenerating || !aiPrompt.productName}
-                  className="w-full py-5 bg-orange-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
-               >
-                  {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Sparkles size={24} />}
-                  {isGenerating ? 'Criando Estrutura Persuasiva...' : 'Gerar Página Completa'}
-               </button>
+               )}
             </div>
           </div>
         </div>

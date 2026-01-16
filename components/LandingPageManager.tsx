@@ -5,7 +5,7 @@ import {
   RefreshCw, Layout, Globe, Smartphone, CreditCard, MessageSquare, 
   HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText,
   ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check,
-  Award, ShieldCheck, CheckCircle2, ChevronRight
+  Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection } from '../types';
@@ -22,6 +22,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRefiningField, setIsRefiningField] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'visual_editor'>('list');
 
@@ -146,6 +147,48 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       alert("Erro ao gerar com IA: " + (e.message || JSON.stringify(e)));
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleRefineFieldWithAi = async (sectionId: string, fieldKey: string, currentVal: string) => {
+    if (!aiPrompt.productName) return;
+    
+    const fieldIdentifier = `${sectionId}-${fieldKey}`;
+    setIsRefiningField(fieldIdentifier);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      
+      const prompt = `Melhore e torne extremamente persuasivo o seguinte campo para uma página de vendas do produto "${aiPrompt.productName}":
+      Contexto do Produto: ${aiPrompt.productDescription}
+      Público-alvo: ${aiPrompt.targetAudience}
+      
+      Campo a ser otimizado: "${fieldKey}"
+      Texto atual: "${currentVal}"
+      
+      Retorne APENAS o novo texto sugerido, sem aspas, focado em conversão e gatilhos mentais adequados para o campo "${fieldKey}".`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt
+      });
+
+      const refinedText = (response.text || currentVal).trim();
+
+      if (currentDraft && currentDraft.content) {
+          const newSections = currentDraft.content.sections.map(s => {
+              if (s.id === sectionId) {
+                  return { ...s, content: { ...s.content, [fieldKey]: refinedText } };
+              }
+              return s;
+          });
+          setCurrentDraft({ ...currentDraft, content: { sections: newSections } });
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Erro ao refinar com IA: " + e.message);
+    } finally {
+      setIsRefiningField(null);
     }
   };
 
@@ -757,46 +800,96 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                       
                                       {section.type === 'hero' && (
                                           <div className="space-y-4">
-                                              <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.headline} onChange={e => {
-                                                  const newSections = [...currentDraft.content!.sections];
-                                                  newSections[sIdx].content.headline = e.target.value;
-                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                              }} placeholder="Headline" />
-                                              <textarea className="w-full px-4 py-2 border rounded-xl text-xs h-20 resize-none" value={section.content.subheadline} onChange={e => {
-                                                  const newSections = [...currentDraft.content!.sections];
-                                                  newSections[sIdx].content.subheadline = e.target.value;
-                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                              }} placeholder="Subheadline" />
+                                              <div className="relative group">
+                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Headline Principal</label>
+                                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold pr-10" value={section.content.headline} onChange={e => {
+                                                      const newSections = [...currentDraft.content!.sections];
+                                                      newSections[sIdx].content.headline = e.target.value;
+                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                  }} placeholder="Headline" />
+                                                  <button 
+                                                    onClick={() => handleRefineFieldWithAi(section.id, 'headline', section.content.headline)}
+                                                    disabled={isRefiningField === `${section.id}-headline`}
+                                                    className="absolute right-2 top-[22px] p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all"
+                                                    title="Melhorar com IA"
+                                                  >
+                                                      {isRefiningField === `${section.id}-headline` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
+                                                  </button>
+                                              </div>
+                                              <div className="relative group">
+                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Subheadline de Apoio</label>
+                                                  <textarea className="w-full px-4 py-2 border rounded-xl text-xs h-20 resize-none pr-10" value={section.content.subheadline} onChange={e => {
+                                                      const newSections = [...currentDraft.content!.sections];
+                                                      newSections[sIdx].content.subheadline = e.target.value;
+                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                  }} placeholder="Subheadline" />
+                                                  <button 
+                                                    onClick={() => handleRefineFieldWithAi(section.id, 'subheadline', section.content.subheadline)}
+                                                    disabled={isRefiningField === `${section.id}-subheadline`}
+                                                    className="absolute right-2 top-[22px] p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all"
+                                                    title="Melhorar com IA"
+                                                  >
+                                                      {isRefiningField === `${section.id}-subheadline` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
+                                                  </button>
+                                              </div>
                                           </div>
                                       )}
 
                                       {section.type === 'text' && (
                                           <div className="space-y-4">
-                                              <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.title} onChange={e => {
-                                                  const newSections = [...currentDraft.content!.sections];
-                                                  newSections[sIdx].content.title = e.target.value;
-                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                              }} placeholder="Título do Bloco" />
-                                              <textarea className="w-full px-4 py-2 border rounded-xl text-xs h-32 resize-none" value={section.content.text} onChange={e => {
-                                                  const newSections = [...currentDraft.content!.sections];
-                                                  newSections[sIdx].content.text = e.target.value;
-                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                              }} placeholder="Conteúdo" />
+                                              <div className="relative group">
+                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Título do Bloco</label>
+                                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold pr-10" value={section.content.title} onChange={e => {
+                                                      const newSections = [...currentDraft.content!.sections];
+                                                      newSections[sIdx].content.title = e.target.value;
+                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                  }} placeholder="Título do Bloco" />
+                                                  <button 
+                                                    onClick={() => handleRefineFieldWithAi(section.id, 'title', section.content.title)}
+                                                    disabled={isRefiningField === `${section.id}-title`}
+                                                    className="absolute right-2 top-[22px] p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all"
+                                                    title="Melhorar com IA"
+                                                  >
+                                                      {isRefiningField === `${section.id}-title` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
+                                                  </button>
+                                              </div>
+                                              <div className="relative group">
+                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Texto de Conteúdo</label>
+                                                  <textarea className="w-full px-4 py-2 border rounded-xl text-xs h-32 resize-none pr-10 leading-relaxed" value={section.content.text} onChange={e => {
+                                                      const newSections = [...currentDraft.content!.sections];
+                                                      newSections[sIdx].content.text = e.target.value;
+                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                  }} placeholder="Conteúdo" />
+                                                  <button 
+                                                    onClick={() => handleRefineFieldWithAi(section.id, 'text', section.content.text)}
+                                                    disabled={isRefiningField === `${section.id}-text`}
+                                                    className="absolute right-2 top-[22px] p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all"
+                                                    title="Melhorar com IA"
+                                                  >
+                                                      {isRefiningField === `${section.id}-text` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
+                                                  </button>
+                                              </div>
                                           </div>
                                       )}
 
                                       {section.type === 'pricing' && (
-                                          <div className="grid grid-cols-2 gap-4">
-                                              <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.price} onChange={e => {
-                                                  const newSections = [...currentDraft.content!.sections];
-                                                  newSections[sIdx].content.price = e.target.value;
-                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                              }} placeholder="Preço" />
-                                              <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.installments} onChange={e => {
-                                                  const newSections = [...currentDraft.content!.sections];
-                                                  newSections[sIdx].content.installments = e.target.value;
-                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                              }} placeholder="Parcelas" />
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                              <div>
+                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Preço Principal</label>
+                                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.price} onChange={e => {
+                                                      const newSections = [...currentDraft.content!.sections];
+                                                      newSections[sIdx].content.price = e.target.value;
+                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                  }} placeholder="Preço" />
+                                              </div>
+                                              <div>
+                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Texto de Parcelas</label>
+                                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.installments} onChange={e => {
+                                                      const newSections = [...currentDraft.content!.sections];
+                                                      newSections[sIdx].content.installments = e.target.value;
+                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
+                                                  }} placeholder="Parcelas" />
+                                              </div>
                                           </div>
                                       )}
                                   </div>

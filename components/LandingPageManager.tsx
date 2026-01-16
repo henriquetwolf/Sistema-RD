@@ -156,9 +156,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       await fetchPages();
       setShowModal(false);
       setEditingPage(null);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Save failure:", e);
-      alert("Erro ao salvar no banco. Verifique se rodou o script SQL no Supabase.");
+      // Exibimos a mensagem real do erro para facilitar o diagnóstico (ex: se a tabela realmente não existe)
+      alert(`Erro ao salvar no banco: ${e.message || 'Verifique se rodou o script SQL V78 no Supabase.'}`);
     } finally {
       setIsLoading(false);
     }

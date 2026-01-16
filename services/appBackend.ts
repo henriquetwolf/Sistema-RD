@@ -52,8 +52,9 @@ const generateDealNumber = () => {
 };
 
 const slugify = (text: string) => {
+    if (!text) return Math.random().toString(36).substring(7);
     return text.toString().toLowerCase().trim()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove acentos
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/\s+/g, '-')
       .replace(/[^\w-]+/g, '')
       .replace(/--+/g, '-')
@@ -88,21 +89,23 @@ export const appBackend = {
   logActivity: async (log: Omit<ActivityLog, 'id' | 'createdAt' | 'userName'>): Promise<void> => {
       if (!isConfigured) return;
       let userName = 'Sistema';
-      const savedCollab = sessionStorage.getItem('collaborator_session');
-      if (savedCollab) {
-          const collab = JSON.parse(savedCollab) as CollaboratorSession;
-          userName = collab.name;
-      } else {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) userName = user.email || 'Admin';
-      }
-      await supabase.from('crm_activity_logs').insert([{
-          user_name: userName,
-          action: log.action,
-          module: log.module,
-          details: log.details,
-          record_id: (log as any).recordId
-      }]);
+      try {
+          const savedCollab = sessionStorage.getItem('collaborator_session');
+          if (savedCollab) {
+              const collab = JSON.parse(savedCollab) as CollaboratorSession;
+              userName = collab.name;
+          } else {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) userName = user.email || 'Admin';
+          }
+          await supabase.from('crm_activity_logs').insert([{
+              user_name: userName,
+              action: log.action,
+              module: log.module,
+              details: log.details,
+              record_id: (log as any).recordId
+          }]);
+      } catch (e) {}
   },
 
   getActivityLogs: async (limit = 100): Promise<ActivityLog[]> => {
@@ -120,17 +123,17 @@ export const appBackend = {
     if (!data) return null;
     return {
       id: data.id, 
-      title: data.title, 
-      description: data.description, 
-      campaign: data.campaign, 
-      isLeadCapture: data.is_lead_capture, 
-      distributionMode: data.distribution_mode, 
+      title: data.title || 'Sem título', 
+      description: data.description || '', 
+      campaign: data.campaign || '', 
+      isLeadCapture: !!data.is_lead_capture, 
+      distributionMode: data.distribution_mode || 'fixed', 
       fixedOwnerId: data.fixed_owner_id, 
       teamId: data.team_id, 
       targetPipeline: data.target_pipeline, 
       targetStage: data.target_stage, 
-      questions: data.questions, 
-      style: data.style, 
+      questions: data.questions || [], 
+      style: data.style || {}, 
       createdAt: data.created_at, 
       submissionsCount: data.crm_form_submissions?.[0]?.count || 0, 
       folderId: data.folder_id
@@ -142,20 +145,20 @@ export const appBackend = {
     const { data } = await supabase.from('crm_forms').select('*, crm_form_submissions(count)').eq('type', 'form').order('created_at', { ascending: false });
     return (data || []).map((item: any) => ({
       id: item.id, 
-      title: item.title, 
-      description: item.description, 
-      campaign: item.campaign, 
-      isLeadCapture: item.is_lead_capture, 
-      distributionMode: item.distribution_mode, 
+      title: item.title || 'Sem título', 
+      description: item.description || '', 
+      campaign: item.campaign || '', 
+      isLeadCapture: !!item.is_lead_capture, 
+      distributionMode: item.distribution_mode || 'fixed', 
       fixedOwnerId: item.fixed_owner_id, 
       teamId: item.team_id, 
       targetPipeline: item.target_pipeline, 
       targetStage: item.target_stage, 
-      questions: item.questions, 
-      style: item.style, 
+      questions: item.questions || [], 
+      style: item.style || {}, 
       createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
-      folderId: item.folder_id
+      folderId: data.folder_id
     }));
   },
 
@@ -164,17 +167,17 @@ export const appBackend = {
     const { data } = await supabase.from('crm_forms').select('*, crm_form_submissions(count)').eq('type', 'survey').order('created_at', { ascending: false });
     return (data || []).map((item: any) => ({
       id: item.id, 
-      title: item.title, 
-      description: item.description, 
-      campaign: item.campaign, 
-      isLeadCapture: item.is_lead_capture, 
-      distributionMode: item.distribution_mode, 
+      title: item.title || 'Sem título', 
+      description: item.description || '', 
+      campaign: item.campaign || '', 
+      isLeadCapture: !!item.is_lead_capture, 
+      distributionMode: item.distribution_mode || 'fixed', 
       fixedOwnerId: item.fixed_owner_id, 
       teamId: item.team_id, 
       targetPipeline: item.target_pipeline, 
       targetStage: item.target_stage, 
-      questions: item.questions, 
-      style: item.style, 
+      questions: item.questions || [], 
+      style: item.style || {}, 
       createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id,
@@ -182,7 +185,7 @@ export const appBackend = {
       targetType: item.target_type || 'all', 
       targetProductType: item.target_product_type, 
       targetProductName: item.target_product_name, 
-      onlyIfFinished: item.only_if_finished || false, 
+      onlyIfFinished: !!item.only_if_finished, 
       isActive: item.is_active !== false
     }));
   },
@@ -239,16 +242,18 @@ export const appBackend = {
 
   deleteForm: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_form_counters').delete().eq('form_id', id);
-    await supabase.from('crm_form_submissions').delete().eq('form_id', id);
+    try {
+        await supabase.from('crm_form_counters').delete().eq('form_id', id);
+        await supabase.from('crm_form_submissions').delete().eq('form_id', id);
+    } catch (e) {}
     const { error } = await supabase.from('crm_forms').delete().eq('id', id);
     if (error) throw error;
   },
 
   getFormFolders: async (type: 'form' | 'survey' = 'form'): Promise<FormFolder[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_form_folders').select('*').order('name');
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, createdAt: item.created_at }));
+    const { data } = await supabase.from('crm_form_folders').select('*').eq('type', type).order('name');
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Sem nome', createdAt: item.created_at }));
   },
 
   saveFormFolder: async (folder: FormFolder, type: 'form' | 'survey'): Promise<void> => {
@@ -300,7 +305,7 @@ export const appBackend = {
     if (!isConfigured) return [{ id: '1', name: 'Mestre', honorarium: 1500 }, { id: '2', name: 'Sênior', honorarium: 1200 }];
     const { data, error = null } = await supabase.from('crm_teacher_levels').select('*').order('name');
     if (error) throw error;
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, honorarium: Number(item.honorarium || 0), observations: item.observations }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Sem nível', honorarium: Number(item.honorarium || 0), observations: item.observations }));
   },
 
   saveInstructorLevel: async (level: Partial<InstructorLevel>): Promise<void> => {
@@ -319,7 +324,7 @@ export const appBackend = {
   getRoles: async (): Promise<Role[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_roles').select('*').order('name');
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, permissions: item.permissions || {} }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Sem cargo', permissions: item.permissions || {} }));
   },
 
   saveRole: async (role: Role): Promise<void> => {
@@ -335,7 +340,7 @@ export const appBackend = {
   getBanners: async (audience: 'student' | 'instructor'): Promise<Banner[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_banners').select('*').eq('target_audience', audience).eq('active', true).order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, imageUrl: item.image_url, linkUrl: item.link_url, targetAudience: item.target_audience, active: item.active, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title || '', imageUrl: item.image_url || '', linkUrl: item.link_url || '', targetAudience: item.target_audience, active: !!item.active, createdAt: item.created_at }));
   },
 
   saveBanner: async (banner: Banner): Promise<void> => {
@@ -353,9 +358,9 @@ export const appBackend = {
     const { data } = await supabase.from('crm_companies').select('*').order('legal_name');
     return (data || []).map((item: any) => ({ 
       id: item.id, 
-      legalName: item.legal_name, 
-      cnpj: item.cnpj, 
-      webhookUrl: item.webhook_url, 
+      legalName: item.legal_name || 'Sem nome', 
+      cnpj: item.cnpj || '', 
+      webhookUrl: item.webhook_url || '', 
       productTypes: item.product_types || [], 
       productIds: item.product_ids || [] 
     }));
@@ -390,7 +395,7 @@ export const appBackend = {
   getCourseInfos: async (): Promise<CourseInfo[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_course_info').select('*').order('course_name');
-    return (data || []).map((item: any) => ({ id: item.id, courseName: item.course_name, details: item.details, materials: item.materials, requirements: item.requirements, updatedAt: item.updated_at }));
+    return (data || []).map((item: any) => ({ id: item.id, courseName: item.course_name || 'Sem curso', details: item.details || '', materials: item.materials || '', requirements: item.requirements || '', updatedAt: item.updated_at }));
   },
 
   saveCourseInfo: async (info: Partial<CourseInfo>): Promise<void> => {
@@ -408,7 +413,7 @@ export const appBackend = {
     let query = supabase.from('crm_support_tags').select('*').order('name');
     if (role && role !== 'all') query = query.or(`role.eq.${role},role.eq.all`);
     const { data } = await query;
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, role: item.role, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Sem tag', role: item.role || 'all', createdAt: item.created_at }));
   },
 
   saveSupportTag: async (tag: Partial<SupportTag>): Promise<void> => {
@@ -424,7 +429,7 @@ export const appBackend = {
   getPipelines: async (): Promise<Pipeline[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_pipelines').select('*').order('name');
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, stages: item.stages }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Sem nome', stages: item.stages || [] }));
   },
 
   savePipeline: async (pipeline: Pipeline): Promise<void> => {
@@ -441,8 +446,10 @@ export const appBackend = {
     const local = localStorage.getItem('crm_app_logo');
     if (local) return local;
     if (!isConfigured) return null;
-    const { data } = await supabase.from('crm_settings').select('value').eq('key', 'app_logo').maybeSingle();
-    return data?.value || null;
+    try {
+        const { data } = await supabase.from('crm_settings').select('value').eq('key', 'app_logo').maybeSingle();
+        return data?.value || null;
+    } catch (e) { return null; }
   },
 
   saveAppLogo: async (url: string): Promise<void> => {
@@ -455,8 +462,10 @@ export const appBackend = {
     const local = localStorage.getItem('crm_inventory_margin');
     if (local) return parseInt(local);
     if (!isConfigured) return 5;
-    const { data } = await supabase.from('crm_settings').select('value').eq('key', 'inventory_security_margin').maybeSingle();
-    return data ? parseInt(data.value) : 5;
+    try {
+        const { data } = await supabase.from('crm_settings').select('value').eq('key', 'inventory_security_margin').maybeSingle();
+        return data ? parseInt(data.value) : 5;
+    } catch (e) { return 5; }
   },
 
   saveInventorySecurityMargin: async (margin: number): Promise<void> => {
@@ -470,19 +479,17 @@ export const appBackend = {
     if (local) {
       try {
         return JSON.parse(local);
-      } catch (e) {
-        return null;
-      }
+      } catch (e) { return null; }
     }
     if (!isConfigured) return null;
-    const { data } = await supabase.from('crm_settings').select('value').eq('key', 'whatsapp_config').maybeSingle();
-    if (data?.value) {
-      try {
-        return JSON.parse(data.value);
-      } catch (e) {
-        return null;
-      }
-    }
+    try {
+        const { data } = await supabase.from('crm_settings').select('value').eq('key', 'whatsapp_config').maybeSingle();
+        if (data?.value) {
+          try {
+            return JSON.parse(data.value);
+          } catch (e) { return null; }
+        }
+    } catch (e) { return null; }
     return null;
   },
 
@@ -495,7 +502,7 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    return (data || []).map((j: any) => ({ id: j.id, name: j.name, sheetUrl: j.sheet_url, config: j.config, lastSync: j.last_sync, status: j.status, lastMessage: j.last_message, active: j.active, interval_minutes: j.interval_minutes, createdBy: j.created_by, createdAt: j.created_at }));
+    return (data || []).map((j: any) => ({ id: j.id, name: j.name || 'Sincronização', sheetUrl: j.sheet_url || '', config: j.config || {}, lastSync: j.last_sync, status: j.status || 'idle', lastMessage: j.last_message || '', active: !!j.active, intervalMinutes: j.interval_minutes || 5, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
@@ -516,7 +523,7 @@ export const appBackend = {
   getPresets: async (): Promise<SavedPreset[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from(PRESETS_TABLE).select('*').order('name');
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, url: item.url, key: item.key, tableName: item.table_name, primaryKey: item.primary_key, intervalMinutes: item.interval_minutes, createdByName: item.created_by_name }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Preset', url: item.url || '', key: item.key || '', tableName: item.table_name || '', primaryKey: item.primary_key || '', intervalMinutes: item.interval_minutes || 5, createdByName: item.created_by_name }));
   },
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
@@ -535,14 +542,14 @@ export const appBackend = {
   getContracts: async (): Promise<Contract[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, content: item.content, city: item.city, contractDate: item.contract_date, status: item.status, folderId: item.folder_id, signers: item.signers, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title || 'Contrato', content: item.content || '', city: item.city || '', contractDate: item.contract_date || '', status: item.status || 'sent', folderId: item.folder_id, signers: item.signers || [], createdAt: item.created_at }));
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
-    return { id: data.id, createdAt: data.created_at, status: data.status, title: data.title, content: data.content, city: data.city, contractDate: data.contract_date, signers: data.signers, folderId: data.folder_id };
+    return { id: data.id, createdAt: data.created_at, status: data.status, title: data.title || 'Contrato', content: data.content || '', city: data.city || '', contractDate: data.contract_date || '', signers: data.signers || [], folderId: data.folder_id };
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
@@ -573,7 +580,7 @@ export const appBackend = {
   getContractFolders: async (): Promise<ContractFolder[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contract_folders').select('*').order('name');
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Sem nome', createdAt: item.created_at }));
   },
 
   saveContractFolder: async (folder: ContractFolder): Promise<void> => {
@@ -603,7 +610,7 @@ export const appBackend = {
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-    return (data || []).map((item: any) => ({ id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role, content: item.content, attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, ticketId: item.ticket_id, senderId: item.sender_id, senderName: item.sender_name, senderRole: item.sender_role, content: item.content || '', attachmentUrl: item.attachment_url, attachmentName: item.attachment_name, createdAt: item.created_at }));
   },
 
   saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
@@ -626,45 +633,45 @@ export const appBackend = {
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
     return (data || []).map((item: any) => ({ 
       id: item.id, 
-      status: item.status, 
-      responsibleName: item.responsible_name, 
-      cpf: item.cpf, 
-      phone: item.phone, 
-      email: item.email, 
-      password: item.password, 
-      secondContactName: item.second_contact_name, 
-      secondContactPhone: item.second_contact_phone, 
-      fantasyName: item.fantasy_name, 
-      legalName: item.legal_name, 
-      cnpj: item.cnpj, 
-      studio_phone: item.studio_phone, 
-      address: item.address, 
-      city: item.city, 
-      state: item.state, 
-      country: item.country, 
-      sizeM2: item.size_m2, 
-      studentCapacity: item.student_capacity, 
-      rentValue: item.rent_value, 
-      methodology: item.methodology, 
-      studioType: item.studio_type, 
-      name_on_site: item.name_on_site, 
-      bank: item.bank, 
-      agency: item.agency, 
-      account: item.account, 
-      beneficiary: item.beneficiary, 
-      pixKey: item.pix_key, 
-      has_reformer: !!item.has_reformer, 
-      qtyReformer: item.qty_reformer, 
-      has_ladder_barrel: !!item.has_ladder_barrel, 
-      qtyLadderBarrel: item.qty_ladder_barrel, 
-      has_chair: !!item.has_chair, 
-      qtyChair: item.qty_chair, 
-      has_cadillac: !!item.has_cadillac, 
-      qtyCadillac: item.qty_cadillac, 
-      has_chairs_for_course: !!item.has_chairs_for_course, 
-      has_tv: !!item.has_tv, 
-      maxKitsCapacity: item.max_kits_capacity, 
-      attachments: item.attachments 
+      status: item.status || 'inactive', 
+      responsibleName: item.responsible_name || '', 
+      cpf: item.cpf || '', 
+      phone: item.phone || '', 
+      email: item.email || '', 
+      password: item.password || '', 
+      secondContactName: item.second_contact_name || '', 
+      secondContactPhone: item.second_contact_phone || '', 
+      fantasyName: item.fantasy_name || 'Sem nome', 
+      legalName: item.legal_name || '', 
+      cnpj: item.cnpj || '', 
+      studioPhone: item.studio_phone || '', 
+      address: item.address || '', 
+      city: item.city || '', 
+      state: item.state || '', 
+      country: item.country || 'Brasil', 
+      sizeM2: item.size_m2 || '', 
+      studentCapacity: item.student_capacity || '', 
+      rentValue: item.rent_value || '', 
+      methodology: item.methodology || '', 
+      studioType: item.studio_type || '', 
+      nameOnSite: item.name_on_site || '', 
+      bank: item.bank || '', 
+      agency: item.agency || '', 
+      account: item.account || '', 
+      beneficiary: item.beneficiary || '', 
+      pixKey: item.pix_key || '', 
+      hasReformer: !!item.has_reformer, 
+      qtyReformer: Number(item.qty_reformer || 0), 
+      hasLadderBarrel: !!item.has_ladder_barrel, 
+      qtyLadderBarrel: Number(item.qty_ladder_barrel || 0), 
+      hasChair: !!item.has_chair, 
+      qtyChair: Number(item.qty_chair || 0), 
+      hasCadillac: !!item.has_cadillac, 
+      qtyCadillac: Number(item.qty_cadillac || 0), 
+      hasChairsForCourse: !!item.has_chairs_for_course, 
+      hasTv: !!item.has_tv, 
+      maxKitsCapacity: item.max_kits_capacity || '', 
+      attachments: item.attachments || '' 
     }));
   },
 
@@ -722,7 +729,7 @@ export const appBackend = {
   getTeacherNews: async (): Promise<TeacherNews[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, content: item.content, imageUrl: item.image_url, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title || 'Comunicado', content: item.content || '', imageUrl: item.image_url, createdAt: item.created_at }));
   },
 
   saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
@@ -738,12 +745,12 @@ export const appBackend = {
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, background_data: item.background_data, back_background_data: item.back_background_data, linked_product_id: item.linked_product_id, body_text: item.body_text, layout_config: item.layout_config, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title || 'Certificado', background_data: item.background_data, back_background_data: item.back_background_data, linked_product_id: item.linked_product_id, body_text: item.body_text || '', layout_config: item.layout_config || {}, createdAt: item.created_at }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, backBackgroundData: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
+    await supabase.from('crm_certificates').upsert({ id: cert.id, title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -760,9 +767,11 @@ export const appBackend = {
 
   getStudentCertificate: async (hash: string): Promise<any> => {
     if (!isConfigured) return null;
-    const { data: issuedCert } = await supabase.from('crm_student_certificates').select('*, crm_certificates(*), crm_deals(contact_name, company_name, course_city)').eq('hash', hash).maybeSingle();
-    if (!issuedCert) return null;
-    return { studentName: issuedCert.crm_deals.company_name || issuedCert.crm_deals.contact_name, studentCity: issuedCert.crm_deals.course_city || 'VOLL Pilates', template: { id: issuedCert.crm_certificates.id, title: issuedCert.crm_certificates.title, backgroundData: issuedCert.crm_certificates.background_data, backBackgroundData: issuedCert.crm_certificates.back_background_data, bodyText: issuedCert.crm_certificates.body_text, layoutConfig: issuedCert.crm_certificates.layout_config }, issuedAt: issuedCert.issued_at };
+    try {
+        const { data: issuedCert } = await supabase.from('crm_student_certificates').select('*, crm_certificates(*), crm_deals(contact_name, company_name, course_city)').eq('hash', hash).maybeSingle();
+        if (!issuedCert) return null;
+        return { studentName: issuedCert.crm_deals.company_name || issuedCert.crm_deals.contact_name, studentCity: issuedCert.crm_deals.course_city || 'VOLL Pilates', template: { id: issuedCert.crm_certificates.id, title: issuedCert.crm_certificates.title, backgroundData: issuedCert.crm_certificates.background_data, backBackgroundData: issuedCert.crm_certificates.back_background_data, bodyText: issuedCert.crm_certificates.body_text, layoutConfig: issuedCert.crm_certificates.layout_config }, issuedAt: issuedCert.issued_at };
+    } catch (e) { return null; }
   },
 
   saveExternalCertificate: async (cert: Omit<ExternalCertificate, 'id' | 'created_at'>): Promise<void> => {
@@ -784,10 +793,10 @@ export const appBackend = {
     return (data || []).map((item: any) => ({
         id: item.id,
         student_id: item.student_id,
-        course_name: item.course_name,
-        completion_date: item.completion_date,
-        file_url: item.file_url,
-        file_name: item.file_name,
+        course_name: item.course_name || 'Certificado',
+        completion_date: item.completion_date || '',
+        file_url: item.file_url || '',
+        file_name: item.file_name || 'arquivo.pdf',
         created_at: item.created_at
     }));
   },
@@ -797,10 +806,10 @@ export const appBackend = {
     const { data } = await supabase.from('crm_online_courses').select('*').order('created_at', { ascending: false });
     return (data || []).map((item: any) => ({ 
       id: item.id, 
-      title: item.title, 
-      description: item.description, 
-      price: item.price, 
-      paymentLink: item.payment_link,
+      title: item.title || 'Curso', 
+      description: item.description || '', 
+      price: Number(item.price || 0), 
+      paymentLink: item.payment_link || '',
       imageUrl: item.image_url,
       certificate_template_id: item.certificate_template_id,
       createdAt: item.created_at 
@@ -824,7 +833,7 @@ export const appBackend = {
   getCourseModules: async (courseId: string): Promise<CourseModule[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_course_modules').select('*').eq('course_id', courseId).order('order_index');
-    return (data || []).map((item: any) => ({ id: item.id, courseId: item.course_id, title: item.title, orderIndex: item.order_index }));
+    return (data || []).map((item: any) => ({ id: item.id, courseId: item.course_id, title: item.title || 'Módulo', orderIndex: item.order_index || 0 }));
   },
 
   saveCourseModule: async (mod: Partial<CourseModule>): Promise<void> => {
@@ -840,7 +849,7 @@ export const appBackend = {
   getModuleLessons: async (moduleId: string): Promise<CourseLesson[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index');
-    return (data || []).map((item: any) => ({ id: item.id, moduleId: item.module_id, title: item.title, description: item.description, videoUrl: item.video_url, materials: item.materials || [], orderIndex: item.order_index }));
+    return (data || []).map((item: any) => ({ id: item.id, moduleId: item.module_id, title: item.title || 'Aula', description: item.description || '', videoUrl: item.video_url || '', materials: item.materials || [], orderIndex: item.order_index || 0 }));
   },
 
   saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
@@ -874,7 +883,7 @@ export const appBackend = {
   getEvents: async (): Promise<EventModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name, description: item.description, location: item.location, dates: item.dates || [], createdAt: item.created_at, registrationOpen: item.registration_open }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Evento', description: item.description || '', location: item.location || '', dates: item.dates || [], createdAt: item.created_at, registrationOpen: !!item.registration_open }));
   },
 
   saveEvent: async (event: EventModel): Promise<EventModel> => {
@@ -893,7 +902,7 @@ export const appBackend = {
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date');
-    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, date: item.date, title: item.title, maxSelections: item.max_selections }));
+    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, date: item.date || '', title: item.title || 'Bloco', maxSelections: item.max_selections || 1 }));
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
@@ -911,7 +920,7 @@ export const appBackend = {
   getWorkshops: async (eventId: string): Promise<Workshop[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_workshops').select('*').eq('event_id', eventId).order('date');
-    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, blockId: item.block_id, title: item.title, description: item.description, speaker: item.speaker, date: item.date, time: item.time, spots: item.spots }));
+    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, blockId: item.block_id, title: item.title || 'Workshop', description: item.description || '', speaker: item.speaker || '', date: item.date || '', time: item.time || '', spots: Number(item.spots || 0) }));
   },
 
   saveWorkshop: async (ws: Workshop): Promise<Workshop> => {
@@ -929,7 +938,7 @@ export const appBackend = {
   getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId).order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, workshopId: item.workshop_id, studentId: item.student_id, studentName: item.student_name, studentEmail: item.student_email, registeredAt: item.created_at, locked: item.locked }));
+    return (data || []).map((item: any) => ({ id: item.id, eventId: item.event_id, workshopId: item.workshop_id, studentId: item.student_id, studentName: item.student_name || '', studentEmail: item.student_email || '', registeredAt: item.created_at, locked: !!item.locked }));
   },
 
   getWAAutomationRules: async (): Promise<WAAutomationRule[]> => {
@@ -938,14 +947,14 @@ export const appBackend = {
     if (error) throw error;
     return (data || []).map((d: any) => ({ 
         id: d.id, 
-        name: d.name, 
+        name: d.name || 'Regra', 
         triggerType: d.trigger_type, 
-        pipeline_name: d.pipeline_name,
-        stageId: d.stage_id,
-        productType: d.product_type,
-        productId: d.product_id,
-        messageTemplate: d.message_template,
-        isActive: d.is_active, 
+        pipelineName: d.pipeline_name || '',
+        stageId: d.stage_id || '',
+        productType: d.product_type || '',
+        productId: d.product_id || '',
+        messageTemplate: d.message_template || '',
+        isActive: !!d.is_active, 
         createdAt: d.created_at 
     }));
   },
@@ -964,7 +973,7 @@ export const appBackend = {
     if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map((d: any) => ({ id: d.id, ruleName: d.rule_name, studentName: d.student_name, phone: d.phone, message: d.message, createdAt: d.created_at }));
+    return (data || []).map((d: any) => ({ id: d.id, ruleName: d.rule_name || '', studentName: d.student_name || '', phone: d.phone || '', message: d.message || '', createdAt: d.created_at }));
   },
 
   logWAAutomation: async (log: Omit<WAAutomationLog, 'id' | 'createdAt'>): Promise<void> => {
@@ -975,7 +984,7 @@ export const appBackend = {
   getInventory: async (): Promise<InventoryRecord[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, type: item.type, itemApostilaNova: item.item_apostila_nova, itemApostilaClassico: item.item_apostila_classico, itemSacochila: item.item_sacochila, itemLapis: item.item_lapis, registrationDate: item.registration_date, studioId: item.studio_id, trackingCode: item.tracking_code, observations: item.observations, conferenceDate: item.conference_date, attachments: item.attachments, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, type: item.type || 'entry', itemApostilaNova: Number(item.item_apostila_nova || 0), itemApostilaClassico: Number(item.item_apostila_classico || 0), itemSacochila: Number(item.item_sacochila || 0), itemLapis: Number(item.item_lapis || 0), registrationDate: item.registration_date || '', studioId: item.studio_id || '', trackingCode: item.tracking_code || '', observations: item.observations || '', conferenceDate: item.conference_date || '', attachments: item.attachments || '', createdAt: item.created_at }));
   },
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
@@ -991,7 +1000,7 @@ export const appBackend = {
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, openInstallments: item.open_installments, totalNegotiatedValue: item.total_negotiated_value, totalInstallments: item.total_installments, due_date: item.due_date, responsible_agent: item.responsible_agent, identifier_code: item.identifier_code, full_name: item.full_name, product_name: item.product_name, original_value: item.original_value, payment_method: item.payment_method, observations: item.observations, status: item.status, team: item.team, voucher_link_1: item.voucher_link_1, test_date: item.test_date, voucher_link_2: item.voucher_link_2, voucher_link_3: item.voucher_link_3, boletos_link: item.boletos_link, negotiation_reference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, openInstallments: Number(item.open_installments || 0), totalNegotiatedValue: Number(item.total_negotiated_value || 0), totalInstallments: Number(item.total_installments || 1), due_date: item.due_date, responsible_agent: item.responsible_agent, identifier_code: item.identifier_code, full_name: item.full_name || '', product_name: item.product_name || '', original_value: Number(item.original_value || 0), payment_method: item.payment_method, observations: item.observations, status: item.status || 'Pendente', team: item.team, voucher_link_1: item.voucher_link_1, test_date: item.test_date, voucher_link_2: item.voucher_link_2, voucher_link_3: item.voucher_link_3, boletos_link: item.boletos_link, negotiation_reference: item.negotiation_reference, attachments: item.attachments, createdAt: item.created_at }));
   },
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
@@ -1032,14 +1041,14 @@ export const appBackend = {
     const { data } = await supabase.from('crm_landing_pages').select('*').order('created_at', { ascending: false });
     return (data || []).map((item: any) => ({
       id: item.id,
-      title: item.title,
-      productName: item.product_name,
-      slug: item.domain,
-      content: item.content,
+      title: item.title || item.name || 'Sem título',
+      productName: item.product_name || '',
+      slug: item.slug || '',
+      content: item.content || {},
       createdAt: item.created_at,
       updatedAt: item.updated_at,
-      isActive: item.is_active,
-      theme: item.theme
+      isActive: item.is_active !== false,
+      theme: item.theme || 'modern'
     }));
   },
 
@@ -1049,26 +1058,24 @@ export const appBackend = {
     if (!data) return null;
     return {
       id: data.id,
-      title: data.title,
-      productName: data.product_name,
-      slug: data.domain,
-      content: data.content,
+      title: data.title || data.name || 'Sem título',
+      productName: data.product_name || '',
+      slug: data.slug || '',
+      content: data.content || {},
       createdAt: data.created_at,
       updatedAt: data.updated_at,
-      isActive: data.is_active,
-      theme: data.theme
+      isActive: data.is_active !== false,
+      theme: data.theme || 'modern'
     };
   },
 
   saveLandingPage: async (lp: LandingPage): Promise<void> => {
     if (!isConfigured) return;
     
-    // TRATAMENTO CRÍTICO: Detectar se é um novo registro e evitar envio de string vazia para coluna UUID
     const isNew = !lp.id || (typeof lp.id === 'string' && lp.id.trim() === '');
-    
     const payload: any = {
-      title: lp.title,
-      domain: lp.slug || slugify(lp.title),
+      title: lp.title || 'Nova Página',
+      slug: lp.slug || slugify(lp.title),
       product_name: lp.productName || null,
       content: lp.content || {},
       is_active: lp.isActive !== false,
@@ -1085,10 +1092,7 @@ export const appBackend = {
             const { error } = await supabase.from('crm_landing_pages').update(payload).eq('id', lp.id);
             if (error) throw error;
         }
-        
-        // Atualiza cache do PostgREST
         await supabase.rpc('reload_schema_cache').catch(() => {});
-        
     } catch (err: any) {
         console.error("Erro fatal ao salvar Landing Page no Supabase:", err);
         throw err;

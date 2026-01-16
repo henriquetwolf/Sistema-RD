@@ -51,6 +51,16 @@ const generateDealNumber = () => {
     return Number(`${yyyy}${mm}${dd}${hh}${min}${random}`);
 };
 
+const slugify = (text: string) => {
+    return text.toString().toLowerCase().trim()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove acentos
+      .replace(/\s+/g, '-')
+      .replace(/[^\w-]+/g, '')
+      .replace(/--+/g, '-')
+      .replace(/^-+/, '')
+      .replace(/-+$/, '');
+};
+
 export const appBackend = {
   isLocalMode: !isConfigured,
   client: supabase,
@@ -114,16 +124,16 @@ export const appBackend = {
       description: data.description, 
       campaign: data.campaign, 
       isLeadCapture: data.is_lead_capture, 
-      distributionMode: data.distributionMode, 
-      fixedOwnerId: data.fixedOwnerId, 
-      teamId: data.teamId, 
-      targetPipeline: data.targetPipeline, 
-      targetStage: data.targetStage, 
+      distributionMode: data.distribution_mode, 
+      fixedOwnerId: data.fixed_owner_id, 
+      teamId: data.team_id, 
+      targetPipeline: data.target_pipeline, 
+      targetStage: data.target_stage, 
       questions: data.questions, 
       style: data.style, 
       createdAt: data.created_at, 
       submissionsCount: data.crm_form_submissions?.[0]?.count || 0, 
-      folderId: data.folderId
+      folderId: data.folder_id
     };
   },
 
@@ -353,7 +363,7 @@ export const appBackend = {
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_companies').upsert({ id: company.id || crypto.randomUUID(), legal_name: company.legal_name, cnpj: company.cnpj, webhook_url: company.webhook_url, product_types: company.productTypes, product_ids: company.productIds });
+    await supabase.from('crm_companies').upsert({ id: company.id || crypto.randomUUID(), legal_name: company.legalName, cnpj: company.cnpj, webhook_url: company.webhookUrl, product_types: company.productTypes, product_ids: company.productIds });
   },
 
   deleteCompany: async (id: string): Promise<void> => {
@@ -511,7 +521,6 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    /* Fix: Property 'interval_minutes' does not exist on type 'Partial<SavedPreset>'. Did you mean 'intervalMinutes'? */
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
@@ -558,7 +567,7 @@ export const appBackend = {
   getPendingContractsByEmail: async (email: string): Promise<Contract[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').eq('status', 'sent');
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, content: item.content, city: item.city, contractDate: item.contract_date, status: item.status, folderId: item.folder_id, signers: item.signers, createdAt: item.created_at })).filter((c: Contract) => c.signers.some(s => s.email.toLowerCase() === email.toLowerCase() && s.status === 'pending'));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title, content: item.content, city: item.city, contractDate: item.contract_date, status: item.status, folderId: item.folder_id, signers: item.signers, createdAt: item.created_at })).filter((c: Contract) => (c.signers || []).some(s => s.email?.toLowerCase() === email.toLowerCase() && s.status === 'pending'));
   },
 
   getContractFolders: async (): Promise<ContractFolder[]> => {
@@ -582,13 +591,13 @@ export const appBackend = {
   getSupportTickets: async (): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_tickets').select('*').order('updated_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role, targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role, subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response, assignedId: item.assigned_id, assigned_name: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at }));
+    return (data || []).map((item: any) => ({ id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role, targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role, subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response, assignedId: item.assigned_id, assignedName: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at }));
   },
 
   getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_support_tickets').select('*').or(`sender_id.eq.${senderId},target_id.eq.${senderId}`).order('updated_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role, targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role, subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response, assignedId: item.assigned_id, assigned_name: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at }));
+    return (data || []).map((item: any) => ({ id: item.id, senderId: item.sender_id, senderName: item.sender_name, senderEmail: item.sender_email, senderRole: item.sender_role, targetId: item.target_id, targetName: item.target_name, targetEmail: item.target_email, targetRole: item.target_role, subject: item.subject, message: item.message, tag: item.tag, status: item.status, response: item.response, assignedId: item.assigned_id, assignedName: item.assigned_name, createdAt: item.created_at, updatedAt: item.updated_at }));
   },
 
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
@@ -729,7 +738,7 @@ export const appBackend = {
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({ id: item.id, title: item.title, backgroundData: item.background_data, backBackgroundData: item.back_background_data, linkedProductId: item.linked_product_id, bodyText: item.body_text, layoutConfig: item.layout_config, createdAt: item.created_at }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title, background_data: item.background_data, back_background_data: item.back_background_data, linked_product_id: item.linked_product_id, body_text: item.body_text, layout_config: item.layout_config, createdAt: item.created_at }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
@@ -793,7 +802,7 @@ export const appBackend = {
       price: item.price, 
       paymentLink: item.payment_link,
       imageUrl: item.image_url,
-      certificateTemplateId: item.certificate_template_id,
+      certificate_template_id: item.certificate_template_id,
       createdAt: item.created_at 
     }));
   },
@@ -1025,6 +1034,7 @@ export const appBackend = {
       id: item.id,
       title: item.title,
       productName: item.product_name,
+      slug: item.domain,
       content: item.content,
       createdAt: item.created_at,
       updatedAt: item.updated_at,
@@ -1041,6 +1051,7 @@ export const appBackend = {
       id: data.id,
       title: data.title,
       productName: data.product_name,
+      slug: data.domain,
       content: data.content,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
@@ -1057,6 +1068,7 @@ export const appBackend = {
     
     const payload: any = {
       title: lp.title,
+      domain: lp.slug || slugify(lp.title),
       product_name: lp.productName || null,
       content: lp.content || {},
       is_active: lp.isActive !== false,

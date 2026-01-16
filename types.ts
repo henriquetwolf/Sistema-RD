@@ -613,6 +613,7 @@ export interface LandingPage {
   id: string;
   title: string;
   productName: string;
+  slug?: string;
   content: LandingPageContent;
   createdAt: string;
   updatedAt: string;

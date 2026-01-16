@@ -129,7 +129,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const generatedContent = JSON.parse(text);
       
       const newPage: Partial<LandingPage> = {
-        id: '', // Deixa vazio para o Supabase gerar o UUID
+        id: undefined, // Garantir id como undefined para nova inserção
         title: generatedContent.title || aiPrompt.productName,
         productName: aiPrompt.productName,
         content: generatedContent,
@@ -280,11 +280,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       {/* MODAL: CREATE/EDIT LANDING PAGE */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl my-8 animate-in zoom-in-95 flex flex-col max-h-[95vh] overflow-hidden">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh] overflow-hidden">
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-orange-600 text-white rounded-2xl shadow-xl shadow-orange-600/20">
-                  <Sparkles size={24} />
+                  <span className="text-white font-black text-2xl">V</span>
                 </div>
                 <div>
                   <h3 className="text-2xl font-black text-slate-800 tracking-tight">Gerador de Páginas de Venda</h3>

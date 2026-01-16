@@ -185,7 +185,6 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
-      // Fixed: changed form.distribution_mode, form.fixed_owner_id, etc. to camelCase
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
       team_id: form.teamId || null, 
@@ -208,7 +207,6 @@ export const appBackend = {
       description: survey.description || null, 
       campaign: survey.campaign || null, 
       is_lead_capture: !!survey.isLeadCapture, 
-      // Fixed: changed survey.distribution_mode, survey.fixed_owner_id, etc. to camelCase
       distribution_mode: survey.distributionMode || 'fixed', 
       fixed_owner_id: survey.fixedOwnerId || null, 
       team_id: survey.teamId || null, 
@@ -290,7 +288,7 @@ export const appBackend = {
 
   getInstructorLevels: async (): Promise<InstructorLevel[]> => {
     if (!isConfigured) return [{ id: '1', name: 'Mestre', honorarium: 1500 }, { id: '2', name: 'Sênior', honorarium: 1200 }];
-    const { data, error } = await supabase.from('crm_teacher_levels').select('*').order('name');
+    const { data, error = null } = await supabase.from('crm_teacher_levels').select('*').order('name');
     if (error) throw error;
     return (data || []).map((item: any) => ({ id: item.id, name: item.name, honorarium: Number(item.honorarium || 0), observations: item.observations }));
   },
@@ -371,6 +369,7 @@ export const appBackend = {
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
+    // Fix: changed trigger.payload_json to trigger.payloadJson to match the WebhookTrigger interface
     await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || crypto.randomUUID(), pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson, created_at: trigger.createdAt || new Date().toISOString() });
   },
 
@@ -513,8 +512,7 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    // Fixed: changed preset.primary_key and preset.interval_minutes to camelCase
-    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
+    const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primary_key, interval_minutes: preset.interval_minutes, created_by_name: preset.created_by_name };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
@@ -891,7 +889,7 @@ export const appBackend = {
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
     if (!isConfigured) throw new Error("Not configured");
-    const { data, error } = await supabase.from('crm_event_blocks').upsert({ id: block.id, event_id: block.eventId, date: block.date, title: block.title, max__selections: block.maxSelections }).select().single();
+    const { data, error } = await supabase.from('crm_event_blocks').upsert({ id: block.id, event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections }).select().single();
     if (error) throw error;
     return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
   },
@@ -973,7 +971,6 @@ export const appBackend = {
 
   saveInventoryRecord: async (record: InventoryRecord): Promise<void> => {
     if (!isConfigured) return;
-    // Fixed: tracking_code -> trackingCode
     await supabase.from('crm_inventory').upsert({ id: record.id || crypto.randomUUID(), type: record.type, item_apostila_nova: record.itemApostilaNova, item_apostila_classico: record.itemApostilaClassico, item_sacochila: record.itemSacochila, item_lapis: record.itemLapis, registration_date: record.registrationDate, studio_id: record.studioId || null, tracking_code: record.trackingCode, observations: record.observations, conference_date: record.conferenceDate || null, attachments: record.attachments, created_at: record.createdAt || new Date().toISOString() });
   },
 
@@ -1058,7 +1055,7 @@ export const appBackend = {
     // TRATAMENTO CRÍTICO: Detectar se é um novo registro e evitar envio de string vazia para coluna UUID
     const isNew = !lp.id || (typeof lp.id === 'string' && lp.id.trim() === '');
     
-    // Mapeamento explícito das colunas snake_case EXATAMENTE como estão na tabela V78/V79
+    // Mapeamento explícito das colunas snake_case EXATAMENTE como estão na tabela V78/V79/V80
     const payload: any = {
       title: lp.title,
       product_name: lp.productName || null,
@@ -1071,7 +1068,6 @@ export const appBackend = {
     try {
         if (isNew) {
             // No INSERT, removemos a chave 'id' para que o DEFAULT gen_random_uuid() do Postgres funcione.
-            // E garantimos a data de criação.
             payload.created_at = new Date().toISOString();
             const { error } = await supabase.from('crm_landing_pages').insert([payload]);
             if (error) throw error;
@@ -1081,9 +1077,11 @@ export const appBackend = {
             if (error) throw error;
         }
         
-        // Após salvar com sucesso, forçamos o PostgREST a recarregar o schema cache para refletir as colunas
+        // Após salvar com sucesso, forçamos o PostgREST a recarregar o schema cache 
+        // para mitigar o erro "column not found" em futuras requisições
         await supabase.rpc('reload_schema_cache').catch(() => {
-            // Se o RPC não existir (comum), o erro será ignorado e o PostgREST atualizará em alguns segundos.
+            // O comando NOTIFY pgrst, 'reload schema' via SQL é mais eficiente, 
+            // mas o RPC é um fallback para algumas instâncias.
         });
         
     } catch (err: any) {

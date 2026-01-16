@@ -7,7 +7,7 @@ import {
   HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText,
   ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check,
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
-  Palette, FormInput, Building
+  Palette, FormInput, Building, Move, Maximize2
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel } from '../types';
@@ -54,6 +54,13 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'visual_editor'>('list');
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [selectedElementKey, setSelectedElementKey] = useState<string | null>(null);
+
+  // Drag state
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ x: number, y: number } | null>(null);
+  const elementStartPosRef = useRef<{ x: number, y: number } | null>(null);
+  const currentSectionRef = useRef<HTMLDivElement>(null);
 
   // Form State
   const [editingPage, setEditingPage] = useState<Partial<LandingPage> | null>(null);
@@ -387,11 +394,121 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     });
   };
 
+  const handleElementMouseDown = (e: React.MouseEvent, sectionId: string, elementKey: string) => {
+    e.stopPropagation();
+    setIsDragging(true);
+    setSelectedSectionId(sectionId);
+    setSelectedElementKey(elementKey);
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    
+    const section = editingPage?.content?.sections.find(s => s.id === sectionId);
+    const styles = section?.styles?.[elementKey];
+    
+    elementStartPosRef.current = { 
+        x: styles?.x !== undefined ? styles.x : 0, 
+        y: styles?.y !== undefined ? styles.y : 0 
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !selectedSectionId || !selectedElementKey || !dragStartRef.current || !elementStartPosRef.current) return;
+    
+    const targetSectionEl = document.getElementById(`lp-section-${selectedSectionId}`);
+    if (!targetSectionEl) return;
+
+    const rect = targetSectionEl.getBoundingClientRect();
+    const deltaX = e.clientX - dragStartRef.current.x;
+    const deltaY = e.clientY - dragStartRef.current.y;
+
+    const percentX = (deltaX / rect.width) * 100;
+    const percentY = (deltaY / rect.height) * 100;
+
+    const newX = Math.max(0, Math.min(100, elementStartPosRef.current.x + percentX));
+    const newY = Math.max(0, Math.min(100, elementStartPosRef.current.y + percentY));
+
+    updateSectionStyles(selectedSectionId, selectedElementKey, { x: newX, y: newY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    dragStartRef.current = null;
+    elementStartPosRef.current = null;
+  };
+
   const selectedSection = editingPage?.content?.sections.find(s => s.id === selectedSectionId);
+
+  const renderInteractableText = (section: LandingPageSection, elementKey: string, defaultValue: string, type: 'input' | 'textarea' = 'input') => {
+    const isSelected = selectedElementKey === elementKey && selectedSectionId === section.id;
+    const styles = section.styles?.[elementKey] || {};
+    const value = section.content[elementKey] || defaultValue;
+
+    const commonClasses = clsx(
+        "bg-transparent border-none focus:ring-0 p-0 transition-all outline-none resize-none cursor-text",
+        isSelected && "ring-2 ring-orange-500 bg-orange-50/20"
+    );
+
+    const inlineStyle: React.CSSProperties = {
+        fontSize: styles.fontSize || (elementKey === 'headline' ? '48px' : '16px'),
+        fontFamily: styles.fontFamily,
+        textAlign: styles.textAlign || 'left',
+        color: styles.color,
+        width: styles.width !== undefined ? `${styles.width}%` : '100%',
+        position: (styles.x !== undefined || styles.y !== undefined) ? 'absolute' : 'relative',
+        left: styles.x !== undefined ? `${styles.x}%` : undefined,
+        top: styles.y !== undefined ? `${styles.y}%` : undefined,
+        transform: (styles.x !== undefined || styles.y !== undefined) ? 'translate(-50%, -50%)' : undefined,
+        zIndex: isSelected ? 50 : 1
+    };
+
+    return (
+        <div 
+            className="group/el relative inline-block w-full"
+            style={styles.x !== undefined ? { position: 'static' } : {}}
+        >
+            <div 
+                className={clsx(
+                    "absolute -top-6 -left-2 flex items-center gap-1 opacity-0 group-hover/el:opacity-100 transition-opacity z-[60]",
+                    isSelected && "opacity-100"
+                )}
+            >
+                <div 
+                    onMouseDown={(e) => handleElementMouseDown(e, section.id, elementKey)}
+                    className="p-1 bg-orange-500 text-white rounded cursor-move shadow-md"
+                >
+                    <Move size={12}/>
+                </div>
+                <div 
+                    onClick={() => { setSelectedSectionId(section.id); setSelectedElementKey(elementKey); }}
+                    className="p-1 bg-indigo-600 text-white rounded cursor-pointer shadow-md"
+                >
+                    <Palette size={12}/>
+                </div>
+            </div>
+            
+            {type === 'input' ? (
+                <input 
+                    style={inlineStyle}
+                    className={commonClasses}
+                    value={value}
+                    onChange={e => updateSection(section.id, { ...section.content, [elementKey]: e.target.value })}
+                    onFocus={() => { setSelectedSectionId(section.id); setSelectedElementKey(elementKey); }}
+                />
+            ) : (
+                <textarea 
+                    style={inlineStyle}
+                    className={commonClasses}
+                    value={value}
+                    onChange={e => updateSection(section.id, { ...section.content, [elementKey]: e.target.value })}
+                    onFocus={() => { setSelectedSectionId(section.id); setSelectedElementKey(elementKey); }}
+                />
+            )}
+        </div>
+    );
+  };
 
   if (view === 'visual_editor' && editingPage) {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col animate-in fade-in">
+      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col animate-in fade-in" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
         <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-sm">
           <div className="flex items-center gap-4">
             <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
@@ -423,7 +540,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                     <button 
                     key={comp.type} 
                     onClick={() => addComponent(comp.type as any)}
-                    className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-orange-200 hover:bg-orange-50 text-xs font-bold text-slate-600 transition-all text-left group"
+                    className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-orange-200 hover:bg-orange-50 text-sm font-medium text-slate-700 transition-all text-left group"
                     >
                     <comp.icon size={16} className="text-orange-500 group-hover:scale-110 transition-transform" /> {comp.label}
                     </button>
@@ -445,7 +562,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           </aside>
 
           {/* Área de Visualização/Edição de ALTA FIDELIDADE */}
-          <main className="flex-1 bg-slate-200 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
+          <main className="flex-1 bg-slate-200 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center select-none">
             <div className="bg-white w-full max-w-6xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-40">
                <nav className="bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-40 rounded-t-[3rem]">
                   <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-8 object-contain" />
@@ -456,10 +573,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                  return (
                  <div 
                     key={section.id} 
-                    onClick={(e) => { e.stopPropagation(); setSelectedSectionId(section.id); }}
+                    id={`lp-section-${section.id}`}
+                    onClick={(e) => { e.stopPropagation(); setSelectedSectionId(section.id); setSelectedElementKey(null); }}
                     className={clsx(
                         "relative group/section border-4 transition-all cursor-pointer",
-                        isSelected ? "border-orange-500" : "border-transparent hover:border-orange-200"
+                        isSelected ? "border-orange-500/50" : "border-transparent hover:border-orange-200"
                     )}
                  >
                     {/* Controles de Seção */}
@@ -472,31 +590,14 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                        </div>
                     </div>
 
-                    <div className="relative">
+                    <div className="relative min-h-[100px]">
                       {section.type === 'hero' && (
-                        <header className="pt-24 pb-16 px-6 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative">
+                        <header className="pt-24 pb-16 px-6 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative min-h-[600px]">
                           <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10">
-                            <div className="space-y-6">
-                              <textarea 
-                                style={{
-                                    fontSize: section.styles?.headline?.fontSize || '48px',
-                                    fontFamily: section.styles?.headline?.fontFamily,
-                                    textAlign: section.styles?.headline?.textAlign || 'left'
-                                }}
-                                className="w-full font-black tracking-tight text-slate-900 leading-[1.1] bg-transparent border-none focus:ring-0 resize-none h-auto p-0" 
-                                value={section.content.headline} 
-                                onChange={e => updateSection(section.id, {...section.content, headline: e.target.value})}
-                              />
-                              <textarea 
-                                style={{
-                                    fontSize: section.styles?.subheadline?.fontSize || '18px',
-                                    fontFamily: section.styles?.subheadline?.fontFamily,
-                                    textAlign: section.styles?.subheadline?.textAlign || 'left'
-                                }}
-                                className="w-full text-slate-500 leading-relaxed font-medium bg-transparent border-none focus:ring-0 resize-none h-auto p-0" 
-                                value={section.content.subheadline} 
-                                onChange={e => updateSection(section.id, {...section.content, subheadline: e.target.value})}
-                              />
+                            <div className="space-y-6 relative min-h-[300px]">
+                              {renderInteractableText(section, 'headline', 'Título Impactante', 'textarea')}
+                              {renderInteractableText(section, 'subheadline', 'Descrição curta persuasiva.', 'textarea')}
+                              
                               <div className="flex flex-col sm:flex-row items-center gap-4">
                                   <input 
                                     className="bg-orange-600 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl hover:bg-orange-700 transition-all outline-none text-center" 
@@ -516,47 +617,20 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       )}
 
                       {section.type === 'text' && (
-                        <section className="py-20 px-8 bg-slate-50 border-y border-slate-100">
-                            <div className="max-w-4xl mx-auto space-y-6">
-                              <input 
-                                style={{
-                                    fontSize: section.styles?.title?.fontSize || '24px',
-                                    fontFamily: section.styles?.title?.fontFamily,
-                                    textAlign: section.styles?.title?.textAlign || 'left'
-                                }}
-                                className="font-black text-slate-800 tracking-tight bg-transparent border-none focus:ring-0 p-0 w-full" 
-                                value={section.content.title} 
-                                onChange={e => updateSection(section.id, {...section.content, title: e.target.value})}
-                              />
-                              <textarea 
-                                style={{
-                                    fontSize: section.styles?.text?.fontSize || '16px',
-                                    fontFamily: section.styles?.text?.fontFamily,
-                                    textAlign: section.styles?.text?.textAlign || 'left'
-                                }}
-                                className="w-full text-slate-600 leading-relaxed whitespace-pre-wrap bg-transparent border-none focus:ring-0 p-0 h-48" 
-                                value={section.content.text} 
-                                onChange={e => updateSection(section.id, {...section.content, text: e.target.value})}
-                              />
+                        <section className="py-20 px-8 bg-slate-50 border-y border-slate-100 min-h-[400px]">
+                            <div className="max-w-4xl mx-auto space-y-6 relative h-full min-h-[300px]">
+                              {renderInteractableText(section, 'title', 'Sobre o Produto')}
+                              {renderInteractableText(section, 'text', 'Escreva detalhes aqui...', 'textarea')}
                             </div>
                         </section>
                       )}
 
                       {section.type === 'pricing' && (
-                        <section className="py-24 px-8 bg-slate-900 text-white overflow-hidden relative text-center">
-                          <div className="max-w-4xl mx-auto bg-white rounded-[3rem] p-10 text-slate-900 shadow-2xl">
-                              <input 
-                                style={{ fontSize: section.styles?.price?.fontSize || '60px' }}
-                                className="w-full text-center font-black tracking-tighter text-slate-900 bg-transparent border-none focus:ring-0 p-0" 
-                                value={section.content.price} 
-                                onChange={e => updateSection(section.id, {...section.content, price: e.target.value})}
-                              />
-                              <input 
-                                style={{ fontSize: section.styles?.installments?.fontSize || '18px' }}
-                                className="w-full text-center font-bold text-indigo-600 bg-transparent border-none focus:ring-0 p-0" 
-                                value={section.content.installments}
-                                onChange={e => updateSection(section.id, {...section.content, installments: e.target.value})}
-                              />
+                        <section className="py-24 px-8 bg-slate-900 text-white overflow-hidden relative text-center min-h-[500px]">
+                          <div className="max-w-4xl mx-auto bg-white rounded-[3rem] p-10 text-slate-900 shadow-2xl min-h-[350px] relative">
+                              {renderInteractableText(section, 'price', 'R$ 0,00')}
+                              {renderInteractableText(section, 'installments', 'Ou em até 12x')}
+                              
                               <div className="h-px bg-slate-100 my-8"></div>
                               <input 
                                 className="w-full bg-orange-600 text-white py-6 rounded-2xl font-black text-xl uppercase tracking-widest shadow-2xl hover:bg-orange-700 outline-none text-center" 
@@ -581,8 +655,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                </div>
                           </section>
                       )}
-
-                      {/* Outras seções como features, faq, image continuam simplificadas conforme original ou expansíveis */}
                     </div>
                  </div>
                )})}
@@ -637,8 +709,19 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                           
                           {/* Mapear elementos editáveis por tipo de seção */}
                           {(['headline', 'subheadline', 'title', 'text', 'price', 'installments'] as const).filter(key => selectedSection.content[key] !== undefined).map(elKey => (
-                              <div key={elKey} className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                  <p className="text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Estilo: {elKey}</p>
+                              <div 
+                                key={elKey} 
+                                className={clsx(
+                                    "space-y-3 p-4 rounded-2xl border transition-all",
+                                    selectedElementKey === elKey ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-100"
+                                )}
+                              >
+                                  <div className="flex justify-between items-center">
+                                      <p className="text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Estilo: {elKey}</p>
+                                      {selectedElementKey !== elKey && (
+                                          <button onClick={() => setSelectedElementKey(elKey)} className="text-[9px] font-black uppercase text-slate-400 hover:text-indigo-600 transition-colors">Editar</button>
+                                      )}
+                                  </div>
                                   
                                   <div>
                                       <label className="text-[9px] font-bold text-slate-400 uppercase">Família da Fonte</label>
@@ -671,6 +754,49 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                               <button onClick={() => updateSectionStyles(selectedSection.id, elKey, { textAlign: 'right' })} className={clsx("flex-1 p-2 flex justify-center", selectedSection.styles?.[elKey]?.textAlign === 'right' ? "bg-indigo-100 text-indigo-600" : "text-slate-400")}><AlignRight size={14}/></button>
                                           </div>
                                       </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                          <label className="text-[9px] font-bold text-slate-400 uppercase">Cor do Texto</label>
+                                          <div className="flex items-center gap-2 mt-1">
+                                              <input 
+                                                  type="color" 
+                                                  className="w-8 h-8 rounded border p-0.5" 
+                                                  value={selectedSection.styles?.[elKey]?.color || '#1e293b'} 
+                                                  onChange={e => updateSectionStyles(selectedSection.id, elKey, { color: e.target.value })} 
+                                              />
+                                              <span className="text-[9px] font-mono uppercase text-slate-400">{selectedSection.styles?.[elKey]?.color || '#1e293b'}</span>
+                                          </div>
+                                      </div>
+                                      <div>
+                                          <label className="text-[9px] font-bold text-slate-400 uppercase">Largura (%)</label>
+                                          <input 
+                                              type="range" 
+                                              min="10" 
+                                              max="100" 
+                                              className="w-full mt-2 accent-orange-500" 
+                                              value={selectedSection.styles?.[elKey]?.width || 100}
+                                              onChange={e => updateSectionStyles(selectedSection.id, elKey, { width: parseInt(e.target.value) })}
+                                          />
+                                      </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 pt-2">
+                                      <button 
+                                        onClick={() => updateSectionStyles(selectedSection.id, elKey, { x: 50, y: 50, width: 50 })}
+                                        className="flex-1 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase flex items-center justify-center gap-1.5 hover:bg-indigo-100 transition-all"
+                                      >
+                                          <Move size={10}/> Ativar Modo Drag
+                                      </button>
+                                      {selectedSection.styles?.[elKey]?.x !== undefined && (
+                                          <button 
+                                            onClick={() => updateSectionStyles(selectedSection.id, elKey, { x: undefined, y: undefined, width: undefined })}
+                                            className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all"
+                                          >
+                                              <X size={10}/>
+                                          </button>
+                                      )}
                                   </div>
                               </div>
                           ))}
@@ -785,7 +911,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
               <h3 className="text-2xl font-black text-slate-800 tracking-tight">Criar com Inteligência Artificial</h3>
               <button onClick={() => { setShowModal(false); setCurrentDraft(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>

@@ -34,13 +34,19 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
 
   const sections = landingPage.content?.sections || [];
 
-  const getStyles = (section: LandingPageSection, key: string) => {
+  const getStyles = (section: LandingPageSection, key: string): React.CSSProperties => {
       const s = section.styles?.[key] || {};
       return {
           fontSize: s.fontSize || undefined,
           fontFamily: s.fontFamily || undefined,
           textAlign: s.textAlign || undefined,
-          color: s.color || undefined
+          color: s.color || undefined,
+          position: (s.x !== undefined || s.y !== undefined) ? 'absolute' : 'relative',
+          left: s.x !== undefined ? `${s.x}%` : undefined,
+          top: s.y !== undefined ? `${s.y}%` : undefined,
+          transform: (s.x !== undefined || s.y !== undefined) ? 'translate(-50%, -50%)' : undefined,
+          width: s.width !== undefined ? `${s.width}%` : undefined,
+          maxWidth: '100%'
       };
   };
 
@@ -49,10 +55,10 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
       case 'hero':
         const hero = section.content;
         return (
-          <header key={section.id} className="pt-32 pb-20 px-6 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative">
+          <header key={section.id} className="pt-32 pb-20 px-6 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative min-h-[600px]">
             <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-orange-100/50 rounded-full blur-3xl"></div>
             <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10 text-center lg:text-left">
-              <div className="space-y-8">
+              <div className="space-y-8 relative min-h-[400px]">
                 <div className="inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mx-auto lg:mx-0">
                     <Award size={14}/> Formação Profissional Premium
                 </div>
@@ -70,7 +76,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
                     {hero.subheadline}
                     </p>
                 )}
-                <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
+                <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-12">
                     <a 
                         href={hero.ctaUrl || "#pricing"} 
                         className="w-full sm:w-auto bg-orange-600 text-white px-10 py-5 rounded-2xl font-black text-base uppercase tracking-widest shadow-2xl shadow-orange-600/20 hover:bg-orange-700 transition-all transform hover:scale-105 text-center"
@@ -106,8 +112,8 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
 
       case 'text':
         return (
-          <section key={section.id} className="py-24 px-6 bg-slate-50 border-y border-slate-100">
-              <div className="max-w-4xl mx-auto text-center lg:text-left space-y-6">
+          <section key={section.id} className="py-24 px-6 bg-slate-50 border-y border-slate-100 min-h-[400px]">
+              <div className="max-w-4xl mx-auto text-center lg:text-left space-y-6 relative h-full min-h-[300px]">
                 <h2 
                     style={getStyles(section, 'title')}
                     className="text-3xl font-black text-slate-800 tracking-tight flex items-center justify-center lg:justify-start gap-2"
@@ -157,29 +163,29 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
       case 'pricing':
         const pricing = section.content;
         return (
-          <section key={section.id} id="pricing" className="py-24 px-6 bg-slate-900 text-white overflow-hidden relative">
+          <section key={section.id} id="pricing" className="py-24 px-6 bg-slate-900 text-white overflow-hidden relative min-h-[600px]">
             <div className="absolute top-0 right-0 -mt-32 -mr-32 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-3xl"></div>
-            <div className="max-w-4xl mx-auto text-center relative z-10">
+            <div className="max-w-4xl mx-auto text-center relative z-10 h-full">
               <h2 className="text-4xl font-black mb-12 tracking-tight">Comece sua transformação hoje</h2>
-              <div className="bg-white rounded-[3rem] p-10 md:p-16 text-slate-900 shadow-2xl relative">
+              <div className="bg-white rounded-[3rem] p-10 md:p-16 text-slate-900 shadow-2xl relative min-h-[400px]">
                 <div className="absolute top-0 right-10 -mt-5 bg-orange-500 text-white px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest shadow-xl">Oferta por tempo limitado</div>
                 <p className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em] mb-4">Acesso Imediato por apenas:</p>
-                <div className="mb-4">
+                <div className="mb-4 relative min-h-[150px]">
                   <span 
                     style={getStyles(section, 'price')}
                     className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900"
                   >
                       {pricing.price}
                   </span>
+                  {pricing.installments && (
+                      <p 
+                          style={getStyles(section, 'installments')}
+                          className="text-lg font-bold text-indigo-600 mb-10"
+                      >
+                          Ou em até {pricing.installments}
+                      </p>
+                  )}
                 </div>
-                {pricing.installments && (
-                    <p 
-                        style={getStyles(section, 'installments')}
-                        className="text-lg font-bold text-indigo-600 mb-10"
-                    >
-                        Ou em até {pricing.installments}
-                    </p>
-                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left mb-10 border-y border-slate-100 py-8">
                    <div className="flex items-center gap-3 text-sm font-bold text-slate-600"><CheckCircle2 className="text-teal-500" size={18}/> Acesso completo à plataforma</div>
                    <div className="flex items-center gap-3 text-sm font-bold text-slate-600"><CheckCircle2 className="text-teal-500" size={18}/> Suporte direto com instrutores</div>

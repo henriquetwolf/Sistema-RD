@@ -610,6 +610,9 @@ export interface ElementStyles {
     fontFamily?: string;
     textAlign?: 'left' | 'center' | 'right';
     color?: string;
+    x?: number;
+    y?: number;
+    width?: number;
 }
 
 export interface LandingPageSection {

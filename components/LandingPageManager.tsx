@@ -118,7 +118,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-pro-preview",
+        model: "gemini-3-flash-preview",
         contents: prompt,
         config: {
           responseMimeType: "application/json",

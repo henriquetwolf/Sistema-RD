@@ -137,7 +137,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         type: SchemaType.OBJECT,
         properties: {
           id: { type: SchemaType.STRING },
-          value: { type: SchemaType.STRING }, // Para itens simples como bullets ou consequências
+          value: { type: SchemaType.STRING }, 
           title: fieldSchema,
           description: fieldSchema,
           question: fieldSchema,
@@ -270,7 +270,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       const idx = parseInt(index);
                       const newList = [...(content[listKey] || [])];
                       if (newList[idx]) {
-                          newList[idx][subKey].value = refinedText;
+                          if (newList[idx][subKey] && typeof newList[idx][subKey] === 'object') {
+                              newList[idx][subKey].value = refinedText;
+                          } else {
+                              newList[idx][subKey] = refinedText;
+                          }
                           content[listKey] = newList;
                       }
                   }
@@ -425,8 +429,18 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                     rows={field.value.split('\n').length}
                     onChange={e => {
                         const content = { ...editingPage?.content };
-                        const s = content.sections.find((s: any) => s.id === sectionId);
-                        s.content[fieldKey].value = e.target.value;
+                        const sIdx = content.sections.findIndex((s: any) => s.id === sectionId);
+                        if (sIdx === -1) return;
+                        const section = content.sections[sIdx];
+                        
+                        if (fieldKey.includes('.')) {
+                            const [listKey, itemIdx, subKey] = fieldKey.split('.');
+                            const newList = [...section.content[listKey]];
+                            newList[parseInt(itemIdx)][subKey].value = e.target.value;
+                            section.content[listKey] = newList;
+                        } else {
+                            section.content[fieldKey].value = e.target.value;
+                        }
                         setEditingPage({ ...editingPage!, content });
                     }}
                   />
@@ -436,8 +450,18 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                     value={field.value}
                     onChange={e => {
                         const content = { ...editingPage?.content };
-                        const s = content.sections.find((s: any) => s.id === sectionId);
-                        s.content[fieldKey].value = e.target.value;
+                        const sIdx = content.sections.findIndex((s: any) => s.id === sectionId);
+                        if (sIdx === -1) return;
+                        const section = content.sections[sIdx];
+                        
+                        if (fieldKey.includes('.')) {
+                            const [listKey, itemIdx, subKey] = fieldKey.split('.');
+                            const newList = [...section.content[listKey]];
+                            newList[parseInt(itemIdx)][subKey].value = e.target.value;
+                            section.content[listKey] = newList;
+                        } else {
+                            section.content[fieldKey].value = e.target.value;
+                        }
                         setEditingPage({ ...editingPage!, content });
                     }}
                   />
@@ -449,7 +473,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   if (view === 'visual_editor' && editingPage) {
     const content = editingPage.content as LandingPageContent;
     return (
-      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col animate-in fade-in" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
+      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col animate-in fade-in h-screen overflow-hidden" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
         <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 z-50 shadow-sm">
           <div className="flex items-center gap-4">
             <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
@@ -519,9 +543,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           </aside>
 
           <main className="flex-1 bg-slate-200 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
-            <div className="bg-white w-full max-w-5xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-40 overflow-hidden">
+            <div className="bg-white w-full max-w-5xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-[200px]">
                 {content.sections.filter(s => s.enabled).map((section) => (
-                    <div key={section.id} id={`lp-section-${section.id}`} className="relative border-b border-slate-100">
+                    <div key={section.id} id={`lp-section-${section.id}`} className="relative border-b border-slate-100 p-4 min-h-[100px]">
                         {section.type === 'hero' && (
                             <section className="pt-24 pb-20 px-12 bg-gradient-to-br from-slate-50 to-white relative">
                                 <div className="max-w-4xl mx-auto text-center space-y-8">
@@ -536,13 +560,42 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                             </section>
                         )}
                         {!['hero'].includes(section.type) && (
-                            <section className="py-20 px-12 relative border-b border-slate-100">
+                            <section className="py-12 px-12 relative">
                                 <div className="absolute top-4 left-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Bloco: {section.type}</div>
                                 <div className="space-y-6">
                                     {Object.keys(section.content).map(key => {
                                         const field = section.content[key];
+                                        // Campos de texto padrão
                                         if (field && typeof field === 'object' && field.value !== undefined) {
                                             return <div key={key}>{renderInteractableField(section.id, key, field as LandingPageField, section.styles?.[key])}</div>
+                                        }
+                                        // Listas (ex: modules, items, consequences, features)
+                                        if (Array.isArray(field)) {
+                                            return (
+                                                <div key={key} className="space-y-4 pt-4">
+                                                    <div className="flex items-center gap-2 border-b border-slate-100 pb-1">
+                                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{key}</h4>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 gap-4">
+                                                        {field.map((item, itemIdx) => (
+                                                            <div key={item.id || itemIdx} className="p-5 bg-slate-50/50 rounded-[2rem] border border-slate-100 space-y-4">
+                                                                <div className="flex items-center gap-2 text-[8px] font-black text-indigo-400 uppercase tracking-widest">Item {itemIdx + 1}</div>
+                                                                {Object.keys(item).map(subKey => {
+                                                                    if (item[subKey] && typeof item[subKey] === 'object' && item[subKey].value !== undefined) {
+                                                                        return (
+                                                                            <div key={subKey} className="space-y-1">
+                                                                                <label className="text-[9px] font-bold text-slate-400 uppercase ml-2">{subKey}</label>
+                                                                                {renderInteractableField(section.id, `${key}.${itemIdx}.${subKey}`, item[subKey])}
+                                                                            </div>
+                                                                        )
+                                                                    }
+                                                                    return null;
+                                                                })}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )
                                         }
                                         return null;
                                     })}

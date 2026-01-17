@@ -9,7 +9,7 @@ import {
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
   Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
   Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code, FileUp, Sparkle,
-  LayoutGrid, MoveDiagonal, Type
+  LayoutGrid, MoveDiagonal, Type, ExternalLink as LinkIcon, PlayCircle
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField, FormFolder } from '../types';
@@ -59,6 +59,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const [view, setView] = useState<'list' | 'visual_editor'>('list');
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [selectedElementKey, setSelectedElementKey] = useState<string | null>(null);
+
+  // Estados para Edição Visual HTML (Modo Canva)
+  const [selectedHtmlElement, setSelectedHtmlElement] = useState<HTMLElement | null>(null);
+  const [htmlElementRect, setHtmlElementRect] = useState<DOMRect | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number, y: number } | null>(null);
@@ -643,6 +647,55 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       setEditingPage({ ...editingPage, content: { ...editingPage.content, sections: newSections } });
   };
 
+  // Lógica de seleção e edição visual para modo HTML
+  const handleHtmlCanvasClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    
+    // Evita selecionar o container principal
+    if (target === htmlEditorRef.current) {
+        setSelectedHtmlElement(null);
+        setHtmlElementRect(null);
+        return;
+    }
+
+    // Identifica o elemento relevante (A, IMG, ou container de IFRAME)
+    let relevantEl = target.closest('a, img, iframe') as HTMLElement | null;
+    
+    // Se clicou em um texto dentro de algo, mas não é um dos acima, o contentEditable já cuida.
+    // Mas para botões e imagens, queremos a barra de ferramentas estilo Canva.
+    if (relevantEl) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectedHtmlElement(relevantEl);
+        setHtmlElementRect(relevantEl.getBoundingClientRect());
+    } else {
+        setSelectedHtmlElement(null);
+        setHtmlElementRect(null);
+    }
+  };
+
+  const updateHtmlElementAttribute = (attr: string, value: string) => {
+      if (!selectedHtmlElement) return;
+      
+      if (selectedHtmlElement.tagName === 'IFRAME') {
+          // Para iframes, geralmente alteramos o src
+          selectedHtmlElement.setAttribute(attr, value);
+      } else if (selectedHtmlElement.tagName === 'IMG') {
+          selectedHtmlElement.setAttribute(attr, value);
+      } else if (selectedHtmlElement.tagName === 'A') {
+          selectedHtmlElement.setAttribute(attr, value);
+      }
+      
+      // Força atualização do rect
+      setHtmlElementRect(selectedHtmlElement.getBoundingClientRect());
+      
+      // Sincroniza o estado do código HTML
+      if (htmlEditorRef.current && editingPage?.content) {
+          const newContent = { ...editingPage.content, htmlCode: htmlEditorRef.current.innerHTML };
+          setEditingPage({ ...editingPage, content: newContent });
+      }
+  };
+
   const renderInteractableField = (sectionId: string, fieldKey: string, field: any, styles: ElementStyles = {}, isMultiline = false) => {
       if (!field) return null;
       
@@ -827,7 +880,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           <div className="flex items-center gap-4">
             <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
             <div className="h-6 w-px bg-slate-200"></div>
-            <h2 className="font-bold text-slate-800">{editingPage.title} {isHtmlMode && "(Modo HTML Visual)"}</h2>
+            <h2 className="font-bold text-slate-800">{editingPage.title} {isHtmlMode && "(Editor Visual Direto)"}</h2>
           </div>
           <div className="flex items-center gap-3">
              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 rounded-full border border-indigo-100">
@@ -846,7 +899,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
              {isHtmlMode ? (
                  <div className="space-y-6">
                     <div>
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Configuração HTML</h3>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Configuração Geral</h3>
                         <div className="space-y-4">
                             <div>
                                 <label className="text-[9px] font-bold text-slate-500 uppercase">Link Global do CTA</label>
@@ -887,7 +940,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
                     <div className="pt-6 border-t border-slate-100">
                         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <Sparkle size={14} className="text-orange-500" /> Refinar com IA
+                            <Sparkle size={14} className="text-orange-500" /> Refinar Layout com IA
                         </h3>
                         <div className="space-y-3">
                             <textarea 
@@ -902,10 +955,51 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-md"
                             >
                                 {isRewritingHtml ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16}/>}
-                                Reescrever Código com IA
+                                Reescrever via IA
                             </button>
                         </div>
                     </div>
+
+                    {selectedHtmlElement && (
+                        <div className="pt-6 border-t border-slate-100 animate-in slide-in-from-bottom-2">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <Settings size={14} className="text-indigo-500" /> Propriedades do Objeto
+                            </h3>
+                            <div className="space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                {selectedHtmlElement.tagName === 'A' && (
+                                    <>
+                                        <div>
+                                            <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Link do Botão (URL)</label>
+                                            <div className="relative">
+                                                <LinkIcon size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+                                                <input className="w-full pl-8 pr-3 py-2 border rounded-xl text-[10px] font-mono outline-none" value={selectedHtmlElement.getAttribute('href') || ''} onChange={e => updateHtmlElementAttribute('href', e.target.value)} />
+                                            </div>
+                                        </div>
+                                        <p className="text-[8px] text-slate-400 leading-relaxed italic">Para editar o texto do botão, clique nele e digite diretamente no canvas.</p>
+                                    </>
+                                )}
+                                {selectedHtmlElement.tagName === 'IMG' && (
+                                    <div>
+                                        <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">URL da Imagem</label>
+                                        <div className="relative">
+                                            <ImageIcon size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+                                            <input className="w-full pl-8 pr-3 py-2 border rounded-xl text-[10px] font-mono outline-none" value={selectedHtmlElement.getAttribute('src') || ''} onChange={e => updateHtmlElementAttribute('src', e.target.value)} />
+                                        </div>
+                                    </div>
+                                )}
+                                {selectedHtmlElement.tagName === 'IFRAME' && (
+                                    <div>
+                                        <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Fonte do Vídeo (src)</label>
+                                        <div className="relative">
+                                            <PlayCircle size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+                                            <input className="w-full pl-8 pr-3 py-2 border rounded-xl text-[10px] font-mono outline-none" value={selectedHtmlElement.getAttribute('src') || ''} onChange={e => updateHtmlElementAttribute('src', e.target.value)} />
+                                        </div>
+                                    </div>
+                                )}
+                                <button onClick={() => setSelectedHtmlElement(null)} className="w-full py-2 bg-white text-slate-400 hover:text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all">Desmarcar Objeto</button>
+                            </div>
+                        </div>
+                    )}
                  </div>
              ) : (
                  <>
@@ -965,15 +1059,35 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                 
                 {isHtmlMode ? (
                     <div className="p-0 relative min-h-screen flex flex-col">
-                        <div className="bg-amber-50 p-3 flex items-center justify-center gap-2 border-b border-amber-100 text-[10px] font-black text-amber-700 uppercase tracking-widest">
-                           <MousePointerClick size={14} /> Modo Edição Visual Ativo: Clique nos textos para alterar
+                        <div className="bg-amber-50 p-3 flex items-center justify-center gap-2 border-b border-amber-100 text-[10px] font-black text-amber-700 uppercase tracking-widest z-50">
+                           <MousePointerClick size={14} /> Modo Edição Visual Ativo: Clique nos textos, imagens ou botões para alterar
                         </div>
+                        
+                        {/* Indicador de Seleção Estilo Canva */}
+                        {selectedHtmlElement && htmlElementRect && (
+                            <div 
+                                className="absolute border-2 border-blue-500 pointer-events-none z-[100] transition-all"
+                                style={{
+                                    left: htmlElementRect.left - (htmlEditorRef.current?.getBoundingClientRect().left || 0),
+                                    top: htmlElementRect.top - (htmlEditorRef.current?.getBoundingClientRect().top || 0),
+                                    width: htmlElementRect.width,
+                                    height: htmlElementRect.height
+                                }}
+                            >
+                                <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-blue-500 rounded-full"></div>
+                                <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-500 rounded-full"></div>
+                                <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-blue-500 rounded-full"></div>
+                                <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-500 rounded-full"></div>
+                            </div>
+                        )}
+
                         <div 
                             ref={htmlEditorRef}
                             contentEditable
                             suppressContentEditableWarning
-                            className="w-full min-h-screen p-0 outline-none hover:[&_*]:ring-1 hover:[&_*]:ring-blue-400/50 transition-all cursor-text selection:bg-blue-100"
+                            className="w-full min-h-screen p-0 outline-none hover:[&_*]:ring-1 hover:[&_*]:ring-blue-400/30 transition-all cursor-text selection:bg-blue-100"
                             dangerouslySetInnerHTML={{ __html: content.htmlCode || '' }}
+                            onClick={handleHtmlCanvasClick}
                             onBlur={(e) => {
                                 const newContent = {...content};
                                 newContent.htmlCode = e.currentTarget.innerHTML;
@@ -983,7 +1097,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                         <div className="p-10 bg-slate-50 border-t border-slate-200">
                              <div className="max-w-xl mx-auto bg-blue-50 border border-blue-100 p-5 rounded-[2rem] flex gap-4 text-sm text-blue-800 shadow-sm">
                                 <Info size={24} className="shrink-0 text-blue-600" />
-                                <p>Você está editando o design gerado pela IA. Use o <strong>painel lateral</strong> para mudanças de layout por comando de voz/IA ou <strong>digite diretamente</strong> nos blocos para alterar o conteúdo.</p>
+                                <p>Você está editando o design gerado pela IA. Clique em <strong>textos</strong> para digitar, ou em <strong>imagens/botões</strong> para abrir as configurações no painel lateral.</p>
                             </div>
                         </div>
                     </div>
@@ -1075,7 +1189,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                                             <div key={item.id || itemIdx} className="group/item relative p-8 bg-white rounded-[3rem] border border-slate-100 hover:border-blue-500 hover:shadow-2xl transition-all space-y-4">
                                                                 <button 
                                                                     onClick={() => handleRemoveItemFromList(section.id, key, itemIdx)}
-                                                                    className="absolute top-6 right-6 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                                                    className="absolute top-6 right-6 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                                                 >
                                                                     <Trash2 size={16}/>
                                                                 </button>

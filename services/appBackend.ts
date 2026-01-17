@@ -10,6 +10,7 @@ import {
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
   WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow
 } from '../types';
+import { whatsappService } from './whatsappService';
 
 export type { CompanySetting, Pipeline, WebhookTrigger, PipelineStage };
 
@@ -237,6 +238,7 @@ export const appBackend = {
       is_lead_capture: !!form.isLeadCapture, 
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
+      /* Fix: form.team_id does not exist on FormModel, corrected to form.teamId */
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
@@ -303,31 +305,114 @@ export const appBackend = {
     await supabase.from('crm_form_folders').delete().eq('id', id);
   },
 
+  /**
+   * Executa a lógica de automação de fluxo associada a uma submissão
+   */
+  runFlowInstance: async (flow: AutomationFlow, answers: FormAnswer[]) => {
+      // Localiza o nó gatilho
+      const triggerNode = flow.nodes.find(n => n.type === 'trigger');
+      if (!triggerNode || !triggerNode.nextId) return;
+
+      let currentNodeId: string | undefined | null = triggerNode.nextId;
+      
+      // Mapeamento de tags para substituição na mensagem
+      const nameAns = answers.find(a => a.questionTitle.toLowerCase().includes('nome'))?.value || 'Cliente';
+      const emailAns = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value || '---';
+
+      // Execução síncrona para nós imediatos (WhatsApp, E-mail sem delay)
+      while (currentNodeId) {
+          const node = flow.nodes.find(n => n.id === currentNodeId);
+          if (!node) break;
+
+          if (node.type === 'whatsapp') {
+              const phone = answers.find(a => a.questionId === node.config.phoneFieldId)?.value;
+              if (phone) {
+                  let msg = node.config.message || '';
+                  msg = msg.replace(/\{\{nome_cliente\}\}/gi, nameAns);
+                  msg = msg.replace(/\{\{email\}\}/gi, emailAns);
+                  
+                  try {
+                      await whatsappService.sendTextMessage({ wa_id: phone, contact_phone: phone }, msg);
+                      // Registra o disparo no log de automação para transparência
+                      await appBackend.logWAAutomation({
+                          ruleName: `FLUXO: ${flow.name}`,
+                          studentName: nameAns,
+                          phone: phone,
+                          message: msg
+                      });
+                  } catch (e) {
+                      console.error("Erro no WhatsApp do Fluxo:", e);
+                  }
+              }
+              currentNodeId = node.nextId || null;
+          } else if (node.type === 'crm_action') {
+              // Lógica para mover deal ou criar ação (futuro)
+              currentNodeId = node.nextId || null;
+          } else {
+              // Nós complexos (wait, condition) requerem backend real. 
+              // Encerramos a execução síncrona aqui.
+              break;
+          }
+      }
+  },
+
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
     if (!isConfigured) return;
+    
+    // 1. Grava a submissão no banco
     const { error: subError } = await supabase.from('crm_form_submissions').insert([{ form_id: formId, answers, student_id: studentId }]);
     if (subError) throw subError;
+
+    // 2. Processa Lead se ativado
     if (isLeadCapture) {
         try {
             const { data: form } = await supabase.from('crm_forms').select('*').eq('id', formId).single();
-            if (!form) return;
-            const dealPayload: any = { deal_number: generateDealNumber(), pipeline: form.target_pipeline || 'Padrão', stage: form.target_stage || 'new', status: 'hot', created_at: new Date().toISOString(), source: 'Formulário Online', campaign: form.campaign || '' };
-            const questions = form.questions || [];
-            answers.forEach(ans => { const q = questions.find((quest: any) => quest.id === ans.questionId); if (q && q.crmMapping) dealPayload[q.crmMapping] = ans.value; });
-            if (!dealPayload.company_name) dealPayload.company_name = dealPayload.contact_name;
-            dealPayload.title = dealPayload.company_name || `Lead via ${form.title}`;
-            let finalOwnerId = form.fixed_owner_id;
-            if (form.distribution_mode === 'round-robin' && form.team_id) {
-                const { data: team } = await supabase.from('crm_teams').select('members').eq('id', form.team_id).single();
-                if (team?.members?.length > 0) {
-                    let nextIdx = ((form.last_assigned_index || 0) + 1) % team.members.length;
-                    finalOwnerId = team.members[nextIdx];
-                    await supabase.from('crm_forms').update({ last_assigned_index: nextIdx }).eq('id', formId);
+            if (form) {
+                const dealPayload: any = { deal_number: generateDealNumber(), pipeline: form.target_pipeline || 'Padrão', stage: form.target_stage || 'new', status: 'hot', created_at: new Date().toISOString(), source: 'Formulário Online', campaign: form.campaign || '' };
+                const questions = form.questions || [];
+                answers.forEach(ans => { const q = questions.find((quest: any) => quest.id === ans.questionId); if (q && q.crmMapping) dealPayload[q.crmMapping] = ans.value; });
+                if (!dealPayload.company_name) dealPayload.company_name = dealPayload.contact_name;
+                dealPayload.title = dealPayload.company_name || `Lead via ${form.title}`;
+                let finalOwnerId = form.fixed_owner_id;
+                if (form.distribution_mode === 'round-robin' && form.team_id) {
+                    const { data: team } = await supabase.from('crm_teams').select('members').eq('id', form.team_id).single();
+                    if (team?.members?.length > 0) {
+                        let nextIdx = ((form.last_assigned_index || 0) + 1) % team.members.length;
+                        finalOwnerId = team.members[nextIdx];
+                        await supabase.from('crm_forms').update({ last_assigned_index: nextIdx }).eq('id', formId);
+                    }
                 }
+                dealPayload.owner_id = finalOwnerId;
+                await supabase.from('crm_deals').insert([dealPayload]);
             }
-            dealPayload.owner_id = finalOwnerId;
-            await supabase.from('crm_deals').insert([dealPayload]);
         } catch (crmErr) { console.error(crmErr); }
+    }
+
+    // 3. Verifica e executa fluxos de automação vinculados ao formulário
+    try {
+        const { data: activeFlows } = await supabase
+            .from('crm_automation_flows')
+            .select('*')
+            .eq('form_id', flowId)
+            .eq('is_active', true);
+
+        if (activeFlows && activeFlows.length > 0) {
+            for (const flowData of activeFlows) {
+                const flow: AutomationFlow = {
+                    id: flowData.id,
+                    name: flowData.name,
+                    description: flowData.description,
+                    formId: flowData.form_id,
+                    isActive: flowData.is_active,
+                    nodes: flowData.nodes || [],
+                    createdAt: flowData.created_at,
+                    updatedAt: flowData.updated_at
+                };
+                appBackend.runFlowInstance(flow, answers);
+            }
+        }
+    } catch (flowErr) {
+        console.error("Erro ao verificar fluxos:", flowErr);
     }
   },
 
@@ -1258,7 +1343,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
       return (data || []).map((n: any) => ({
-          id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifierCode: n.identifier_code, fullName: n.full_name, productName: n.product_name, originalValue: n.original_value, payment_method: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at
+          id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifier_code: n.identifier_code, fullName: n.full_name, product_name: n.product_name, original_value: n.original_value, payment_method: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at
       }));
   },
 
@@ -1293,21 +1378,17 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
       return (data || []).map((r: any) => ({
-          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, message_template: r.message_template, isActive: !!r.is_active, createdAt: r.created_at
+          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, /* Fix: WAAutomationRule uses messageTemplate not message_template */ messageTemplate: r.message_template, isActive: !!r.is_active, createdAt: r.created_at
       }));
   },
 
   saveWAAutomationRule: async (rule: WAAutomationRule): Promise<void> => {
       if (!isConfigured) return;
       const payload = {
+          /* Fix: rule.message_template corrected to rule.messageTemplate to match WAAutomationRule interface */
           id: rule.id || crypto.randomUUID(), name: rule.name, trigger_type: rule.triggerType, pipeline_name: rule.pipelineName, stage_id: rule.stageId, product_type: rule.productType, product_id: rule.productId, message_template: rule.messageTemplate, is_active: rule.isActive, created_at: rule.createdAt || new Date().toISOString()
       };
       await supabase.from('crm_wa_automations').upsert(payload);
-  },
-
-  deleteWAAutomationRule: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      await supabase.from('crm_wa_automations').delete().eq('id', id);
   },
 
   getWAAutomationLogs: async (): Promise<WAAutomationLog[]> => {

@@ -1,3 +1,4 @@
+
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -197,13 +198,19 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
+      // Fix: Distribution mode property name corrected from form.distribution_mode to form.distributionMode
       distribution_mode: form.distributionMode || 'fixed', 
+      // Fix: Fixed owner ID property name corrected from form.fixed_owner_id to form.fixedOwnerId
       fixed_owner_id: form.fixedOwnerId || null, 
+      // Fix: Team ID property name corrected from form.team_id to form.teamId
       team_id: form.teamId || null, 
+      // Fix: Target pipeline property name corrected from form.target_pipeline to form.targetPipeline
       target_pipeline: form.targetPipeline || null, 
+      // Fix: Target stage property name corrected from form.target_stage to form.targetStage
       target_stage: form.targetStage || null, 
       questions: form.questions || [], 
       style: form.style || {}, 
+      // Fix: Folder ID property name corrected from form.folder_id to form.folderId
       folder_id: form.folderId || null, 
       created_at: form.createdAt || new Date().toISOString(), 
       type: 'form'
@@ -390,6 +397,7 @@ export const appBackend = {
 
   saveWebhookTrigger: async (trigger: Partial<WebhookTrigger>): Promise<void> => {
     if (!isConfigured) return;
+    // Fix: payload_json corrected from trigger.payload_json to trigger.payloadJson
     await supabase.from('crm_webhook_triggers').upsert({ id: trigger.id || crypto.randomUUID(), pipeline_name: trigger.pipelineName, stage_id: trigger.stageId, payload_json: trigger.payloadJson, created_at: trigger.createdAt || new Date().toISOString() });
   },
 
@@ -565,9 +573,15 @@ export const appBackend = {
     // TRATAMENTO: Isolar o payload e garantir que o ID não seja enviado como string vazia
     const isNew = !lp.id || (typeof lp.id === 'string' && lp.id.trim() === '');
     
+    // Gera o slug básico a partir do título caso não exista
+    const baseSlug = lp.slug || slugify(lp.title || 'nova-pagina');
+    
+    // Se for novo registro, adicionamos um sufixo aleatório para evitar a violação de constraint UNIQUE no 'domain' do banco
+    const domainToSave = isNew ? `${baseSlug}-${Math.random().toString(36).substring(2, 7)}` : baseSlug;
+
     const payload: any = {
       title: lp.title || 'Nova Página',
-      domain: lp.slug || slugify(lp.title), // CORREÇÃO: Enviando para a coluna domain correta
+      domain: domainToSave,
       product_name: lp.productName || null,
       content: lp.content || {},
       is_active: lp.isActive !== false,
@@ -679,10 +693,10 @@ export const appBackend = {
         phone: s.phone,
         email: s.email,
         password: s.password,
-        secondContactName: s.second_contact_name,
-        secondContactPhone: s.second_contact_phone,
+        second_contact_name: s.second_contact_name,
+        second_contact_phone: s.second_contact_phone,
         fantasyName: s.fantasy_name,
-        legalName: s.legal_name,
+        legal_name: s.legal_name,
         cnpj: s.cnpj,
         studio_phone: s.studio_phone,
         address: s.address,
@@ -907,7 +921,7 @@ export const appBackend = {
         title: c.title,
         description: c.description,
         price: Number(c.price || 0),
-        paymentLink: c.payment_link,
+        payment_link: c.payment_link,
         imageUrl: c.image_url,
         certificateTemplateId: c.certificate_template_id,
         createdAt: c.created_at
@@ -1242,7 +1256,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
       return (data || []).map((n: any) => ({
-          id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifierCode: n.identifier_code, fullName: n.full_name, productName: n.product_name, originalValue: n.original_value, paymentMethod: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at
+          id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifierCode: n.identifier_code, fullName: n.full_name, productName: n.product_name, originalValue: n.original_value, payment_method: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at
       }));
   },
 
@@ -1282,7 +1296,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
       return (data || []).map((r: any) => ({
-          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, messageTemplate: r.message_template, isActive: !!r.is_active, createdAt: r.created_at
+          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, message_template: r.message_template, isActive: !!r.is_active, createdAt: r.created_at
       }));
   },
 

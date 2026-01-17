@@ -89,6 +89,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const htmlEditorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchPages();
@@ -164,7 +165,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
               }
           });
           setHtmlRefineInstruction('');
-          alert("Código HTML atualizado pela IA com sucesso!");
       } catch (e: any) {
           console.error("Erro ao reescrever HTML:", e);
           alert("Erro na IA: " + e.message);
@@ -467,6 +467,13 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
   const handleSave = async () => {
     if (!editingPage) return;
+    
+    // Se estiver no modo HTML, precisamos sincronizar o conteúdo do canvas visual para o htmlCode antes de salvar
+    if (editingPage.content?.htmlCode && htmlEditorRef.current) {
+        const updatedHtml = htmlEditorRef.current.innerHTML;
+        editingPage.content.htmlCode = updatedHtml;
+    }
+
     setIsLoading(true);
     try {
       await appBackend.saveLandingPage(editingPage as LandingPage);
@@ -820,7 +827,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           <div className="flex items-center gap-4">
             <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
             <div className="h-6 w-px bg-slate-200"></div>
-            <h2 className="font-bold text-slate-800">{editingPage.title} {isHtmlMode && "(Modo HTML)"}</h2>
+            <h2 className="font-bold text-slate-800">{editingPage.title} {isHtmlMode && "(Modo HTML Visual)"}</h2>
           </div>
           <div className="flex items-center gap-3">
              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 rounded-full border border-indigo-100">
@@ -957,23 +964,27 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
             <div className="bg-white w-full max-w-[1200px] shadow-[0_10px_100px_rgba(0,0,0,0.1)] rounded-sm min-h-screen relative font-sans pb-[500px] animate-in fade-in zoom-in-95 duration-500">
                 
                 {isHtmlMode ? (
-                    <div className="p-10 space-y-6">
-                        <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                            <Code className="text-indigo-600" /> Editor de Código Direto
-                        </h3>
-                        <textarea 
-                            className="w-full h-[700px] p-8 bg-slate-900 text-teal-400 font-mono text-sm rounded-[2rem] border-none outline-none focus:ring-8 focus:ring-indigo-500/10 leading-relaxed shadow-2xl"
-                            value={content.htmlCode}
-                            onChange={e => {
+                    <div className="p-0 relative min-h-screen flex flex-col">
+                        <div className="bg-amber-50 p-3 flex items-center justify-center gap-2 border-b border-amber-100 text-[10px] font-black text-amber-700 uppercase tracking-widest">
+                           <MousePointerClick size={14} /> Modo Edição Visual Ativo: Clique nos textos para alterar
+                        </div>
+                        <div 
+                            ref={htmlEditorRef}
+                            contentEditable
+                            suppressContentEditableWarning
+                            className="w-full min-h-screen p-0 outline-none hover:[&_*]:ring-1 hover:[&_*]:ring-blue-400/50 transition-all cursor-text selection:bg-blue-100"
+                            dangerouslySetInnerHTML={{ __html: content.htmlCode || '' }}
+                            onBlur={(e) => {
                                 const newContent = {...content};
-                                newContent.htmlCode = e.target.value;
+                                newContent.htmlCode = e.currentTarget.innerHTML;
                                 setEditingPage({...editingPage, content: newContent});
                             }}
-                            placeholder="<!-- Cole seu código HTML aqui -->"
                         />
-                        <div className="bg-blue-50 border border-blue-100 p-5 rounded-[2rem] flex gap-4 text-sm text-blue-800 shadow-sm">
-                            <Info size={24} className="shrink-0 text-blue-600" />
-                            <p>No modo HTML, o editor visual de blocos é desativado para garantir a integridade do seu layout customizado. Use as tags <strong>{"{{form}}"}</strong> e <strong>{"{{cta_link}}"}</strong>.</p>
+                        <div className="p-10 bg-slate-50 border-t border-slate-200">
+                             <div className="max-w-xl mx-auto bg-blue-50 border border-blue-100 p-5 rounded-[2rem] flex gap-4 text-sm text-blue-800 shadow-sm">
+                                <Info size={24} className="shrink-0 text-blue-600" />
+                                <p>Você está editando o design gerado pela IA. Use o <strong>painel lateral</strong> para mudanças de layout por comando de voz/IA ou <strong>digite diretamente</strong> nos blocos para alterar o conteúdo.</p>
+                            </div>
                         </div>
                     </div>
                 ) : (
@@ -1049,7 +1060,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                             return (
                                                 <div key={key} className="space-y-6 pt-10 border-t border-slate-100">
                                                     <div className="flex items-center justify-between">
-                                                        <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-3">
+                                                        <h4 className="text-[10px] font-black text-blue-50 uppercase tracking-widest flex items-center gap-3">
                                                             <LayoutGrid size={16}/> Lista: {key.replace('_', ' ')}
                                                         </h4>
                                                         <button 

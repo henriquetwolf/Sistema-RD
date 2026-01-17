@@ -4,7 +4,7 @@ import { LandingPage, LandingPageSection, ElementStyles, LandingPageContent } fr
 import { 
   CheckCircle2, ArrowRight, MessageSquare, ChevronRight, 
   HelpCircle, ShieldCheck, CreditCard, Award, GraduationCap, Smartphone, AlertCircle, Info, CheckCircle, Zap, TrendingUp, UserCheck, Star, Users, ListChecks,
-  XCircle, PlayCircle, BookOpen, Quote, Shield, Check, X
+  XCircle, PlayCircle, BookOpen, Quote, Shield, Check, X, User, Layout, Target, MapPin
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { FormViewer } from './FormViewer';
@@ -154,8 +154,8 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
                 <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
                     <div className="space-y-6">
                         <div className="inline-block bg-indigo-50 text-indigo-700 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">O Diferencial</div>
-                        <h2 className="text-3xl md:text-5xl font-black tracking-tight text-slate-900">{c.headline?.value}</h2>
-                        <p className="text-lg text-slate-500 leading-relaxed">{c.description?.value}</p>
+                        <h2 className="text-3xl md:text-5xl font-black tracking-tight text-slate-900" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
+                        <p className="text-lg text-slate-500 leading-relaxed" style={getStyles(section, 'description')}>{c.description?.value}</p>
                         
                         {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
 
@@ -181,7 +181,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
         return (
           <section key={section.id} className="py-24 px-6 bg-slate-50">
               <div className="max-w-6xl mx-auto text-center">
-                  <h2 className="text-3xl md:text-5xl font-black mb-16 tracking-tight">{c.headline?.value}</h2>
+                  <h2 className="text-3xl md:text-5xl font-black mb-16 tracking-tight" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
                   
                   {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
 
@@ -200,11 +200,50 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
           </section>
         );
 
+      case 'target':
+        return (
+          <section key={section.id} className="py-24 px-6 bg-white">
+            <div className="max-w-5xl mx-auto text-center space-y-12">
+              <h2 className="text-3xl md:text-5xl font-black tracking-tight" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
+              {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {c.items?.map((item: any, idx: number) => (
+                  <div key={idx} className="flex gap-4 p-8 bg-slate-50 rounded-3xl text-left border border-slate-100">
+                    <UserCheck className="text-indigo-600 shrink-0" size={24}/>
+                    <div>
+                      <h4 className="font-bold text-slate-900 mb-2">{item.title?.value || item.title}</h4>
+                      <p className="text-sm text-slate-500 leading-relaxed">{item.description?.value || item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+
+      case 'learning':
+        return (
+          <section key={section.id} className="py-24 px-6 bg-slate-50">
+            <div className="max-w-5xl mx-auto space-y-12">
+              <h2 className="text-3xl md:text-5xl font-black tracking-tight text-center" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
+              {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {c.items?.map((item: any, idx: number) => (
+                  <div key={idx} className="flex items-center gap-4 bg-white p-6 rounded-2xl border border-slate-100">
+                    <CheckCircle2 className="text-teal-500" size={24}/>
+                    <span className="font-bold text-slate-800">{item.value || item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+
       case 'modules':
         return (
             <section key={section.id} className="py-24 px-6 bg-white">
                 <div className="max-w-5xl mx-auto text-center">
-                    <h2 className="text-3xl md:text-5xl font-black text-center mb-16 tracking-tight">{c.headline?.value}</h2>
+                    <h2 className="text-3xl md:text-5xl font-black text-center mb-16 tracking-tight" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
                     
                     {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
 
@@ -231,7 +270,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
                 <div className="max-w-6xl mx-auto">
                     <div className="text-center mb-16">
                         <div className="inline-block bg-orange-500 text-white px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-4">Presentes Exclusivos</div>
-                        <h2 className="text-3xl md:text-5xl font-black tracking-tight">{c.headline?.value}</h2>
+                        <h2 className="text-3xl md:text-5xl font-black tracking-tight" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
                         {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -252,7 +291,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
         return (
             <section key={section.id} className="py-24 px-6 bg-white">
                 <div className="max-w-6xl mx-auto text-center">
-                    <h2 className="text-3xl md:text-5xl font-black mb-16 tracking-tight">{c.headline?.value}</h2>
+                    <h2 className="text-3xl md:text-5xl font-black mb-16 tracking-tight" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
                     {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-12">
                         {c.items?.map((item: any, idx: number) => (
@@ -278,7 +317,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
           <section key={section.id} id="oferta" className="py-24 px-6 bg-slate-50 relative overflow-hidden">
               <div className="absolute top-0 right-0 -mt-24 -mr-24 w-[600px] h-[600px] bg-indigo-100 rounded-full blur-[120px]"></div>
               <div className="max-w-4xl mx-auto text-center relative z-10">
-                  <h2 className="text-3xl md:text-6xl font-black mb-12 tracking-tight text-slate-900">{c.headline?.value}</h2>
+                  <h2 className="text-3xl md:text-6xl font-black mb-12 tracking-tight text-slate-900" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
                   {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
                   <div className="bg-white rounded-[4rem] p-12 md:p-20 text-slate-900 shadow-[0_30px_100px_-20px_rgba(0,0,0,0.15)] border border-slate-100 mt-12">
                       <p className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Investimento com desconto:</p>
@@ -294,11 +333,11 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
                          ))}
                       </div>
                       <a 
-                          href={c.cta_url?.value || "#"}
+                          href={c.cta_url?.value || c.cta?.href || "#"}
                           className="block w-full py-7 rounded-[2rem] font-black text-xl uppercase tracking-[0.15em] shadow-2xl transition-all transform hover:scale-[1.02] active:scale-95 text-white text-center"
                           style={{ backgroundColor: primaryColor }}
                       >
-                        {c.cta_label?.value || 'GARANTIR MINHA VAGA'}
+                        {c.cta_label?.value || c.cta?.label?.value || 'GARANTIR MINHA VAGA'}
                       </a>
                       <div className="mt-8 flex items-center justify-center gap-8 opacity-30 grayscale">
                           <CreditCard size={32} />
@@ -318,8 +357,8 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
                         <Shield className="text-teal-500" size={80} />
                     </div>
                     <div className="text-center md:text-left space-y-4">
-                        <h2 className="text-3xl font-black text-slate-900">{c.headline?.value}</h2>
-                        <p className="text-lg text-slate-600 leading-relaxed">{c.description?.value}</p>
+                        <h2 className="text-3xl font-black text-slate-900" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
+                        <p className="text-lg text-slate-600 leading-relaxed" style={getStyles(section, 'description')}>{c.description?.value}</p>
                         {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
                     </div>
                 </div>
@@ -330,7 +369,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
         return (
           <section key={section.id} className="py-24 px-6 bg-slate-50">
             <div className="max-w-3xl mx-auto text-center">
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight text-center mb-16">Dúvidas Frequentes</h2>
+              <h2 className="text-3xl font-black text-slate-900 tracking-tight text-center mb-16" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
               {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
               <div className="space-y-4 mt-12">
                 {c.items?.map((item: any, idx: number) => (
@@ -345,6 +384,44 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
                   </details>
                 ))}
               </div>
+            </div>
+          </section>
+        );
+
+      case 'cta_final':
+        return (
+          <section key={section.id} className="py-24 px-6 bg-indigo-600 text-white text-center">
+            <div className="max-w-4xl mx-auto space-y-8">
+              <h2 className="text-3xl md:text-6xl font-black" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
+              <p className="text-xl opacity-90" style={getStyles(section, 'subheadline')}>{c.subheadline?.value}</p>
+              {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+              <a href={c.cta?.href || "#"} className="inline-block px-12 py-6 bg-white text-indigo-600 rounded-3xl font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl">{c.cta?.label?.value || 'ADQUIRIR AGORA'}</a>
+            </div>
+          </section>
+        );
+
+      case 'professor':
+        return (
+          <section key={section.id} className="py-24 px-6 bg-white">
+            <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center gap-12">
+              <div className="w-64 h-64 rounded-full overflow-hidden bg-slate-100 shrink-0 border-8 border-slate-50 shadow-xl">
+                <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop" className="w-full h-full object-cover" alt="Professor" />
+              </div>
+              <div className="text-left space-y-4">
+                <h2 className="text-3xl font-black text-slate-900" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
+                <p className="text-lg text-slate-500 leading-relaxed" style={getStyles(section, 'description')}>{c.description?.value}</p>
+                {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+              </div>
+            </div>
+          </section>
+        );
+
+      case 'image':
+      case 'form':
+        return (
+          <section key={section.id} className="py-12 px-6">
+            <div className="max-w-5xl mx-auto">
+              {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
             </div>
           </section>
         );
@@ -365,7 +442,14 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
         );
 
       default:
-        return null;
+        // Caso a seção seja de um tipo desconhecido, ainda renderiza os conteúdos dinâmicos adicionados pelo editor
+        return (
+          <section key={section.id} className="py-12 px-6">
+            <div className="max-w-5xl mx-auto">
+              {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+            </div>
+          </section>
+        );
     }
   };
 

@@ -119,10 +119,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      let basePrompt = `Você é um especialista em copywriting de alta conversão e design premium.
-      Sua tarefa é criar uma Landing Page completa com base nos dados fornecidos.
+      let basePrompt = `Você é um especialista sênior em design de conversão e copywriting.
+      Sua tarefa é criar uma Landing Page Premium em formato JSON.
       
-      DADOS DO PRODUTO:
+      DADOS DO NOVO PRODUTO:
       Nome: ${aiPrompt.productName}
       Marca: ${aiPrompt.brandName}
       Público: ${aiPrompt.targetAudience}
@@ -132,23 +132,22 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       Tom: ${aiPrompt.tone}`;
 
       if (creationMode === 'imitation') {
-        basePrompt += `\n\nREQUISITO OBRIGATÓRIO DE DESIGN (IMITE O LINK): A nova página deve ser UMA CÓPIA FIEL de layout, cores e imagens do seguinte link de referência: ${aiPrompt.referenceUrl}.
-        Use a ferramenta de busca para analisar o link e identificar:
-        1. O ESQUEMA DE CORES exato (HEX codes para cores primárias, secundárias, botões e fundos).
-        2. A ESTRUTURA E SEQUÊNCIA exata das seções (ex: se o link começa com depoimentos, a sua página também deve começar).
-        3. O ESTILO DAS IMAGENS e disposições visuais.
+        basePrompt += `\n\nREQUISITO OBRIGATÓRIO (IMITAÇÃO DE LINK): A nova página deve ser UMA CÓPIA ESTRUTURAL E VISUAL FIEL do seguinte link: ${aiPrompt.referenceUrl}.
+        Use a ferramenta de busca (Google Search) para navegar no link e identificar:
+        1. A SEQUÊNCIA EXATA das seções (ex: se o link começa com depoimentos, sua página DEVE começar assim).
+        2. O ESQUEMA DE CORES (extraia os códigos HEX para primary_color, bg_color e text_color).
+        3. O ESTILO DOS ELEMENTOS (se usa listas, cards, ou seções longas de texto).
+        4. O TOM DE VOZ aplicado.
         
-        Você deve gerar a estrutura JSON idêntica em estilo e layout ao link, apenas substituindo o texto pelas informações do produto "${aiPrompt.productName}" fornecido acima.`;
+        Você deve mapear a estrutura do link para o nosso formato JSON, substituindo o conteúdo original pelo conteúdo do produto "${aiPrompt.productName}".`;
       } else {
         basePrompt += `\n\nESTRUTURA SUGERIDA: Hero, Dor, Método, Benefícios, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
         if (aiPrompt.referenceTemplate) {
-          basePrompt += `\n\nBaseie o estilo no modelo de referência interno: ${aiPrompt.referenceTemplate}.`;
+          basePrompt += `\n\nBaseie o estilo visual no modelo: ${aiPrompt.referenceTemplate}.`;
         }
       }
 
-      basePrompt += `\n\nFORMATO DE RETORNO:
-      - Cada campo de texto deve ser um objeto: { "value": "Texto aqui", "ai": ["variations"] }.
-      - Retorne APENAS o JSON conforme o schema solicitado.`;
+      basePrompt += `\n\nRetorne APENAS o JSON.`;
 
       const fieldSchema = {
         type: SchemaType.OBJECT,
@@ -196,7 +195,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       tone: { type: SchemaType.STRING },
                       primary_color: { type: SchemaType.STRING },
                       secondary_color: { type: SchemaType.STRING },
-                      bg_color: { type: SchemaType.STRING }
+                      bg_color: { type: SchemaType.STRING },
+                      font_family: { type: SchemaType.STRING }
                   },
                   required: ["brand_name", "primary_color"]
               },

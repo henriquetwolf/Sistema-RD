@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, Search, Edit2, Trash2, ExternalLink, ArrowLeft, 
@@ -144,23 +143,79 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       if (creationMode === 'prompt') {
-          let htmlPrompt = `Você é um mestre em design de conversão e copywriting.
-          Sua missão é criar o CÓDIGO HTML COMPLETO de uma Landing Page de Alta Performance.
-          
-          REQUISITOS TÉCNICOS:
-          1. Use Tailwind CSS via CDN para estilização.
-          2. A página deve ser responsiva e moderna.
-          3. Use a tag {{form}} no local onde deve aparecer o formulário de captura.
-          4. Use a tag {{cta_link}} nos links dos botões de compra/CTA.
-          
-          REFERÊNCIAS:
-          - Site de Referência Visual: ${aiPrompt.referenceUrl || 'Nenhum informado. Use um estilo moderno e limpo.'}
-          - Link do CTA: ${aiPrompt.ctaLink || '#'}
-          
-          INSTRUÇÕES ADICIONAIS:
-          ${aiPrompt.customPrompt || 'Crie uma página persuasiva baseada no briefing anexado.'}
-          
-          Retorne APENAS o código HTML completo dentro de uma estrutura básica HTML5. Não inclua explicações fora do código.`;
+          let htmlPrompt = `Você é um especialista sênior em marketing digital, copywriting de alta conversão, lançamentos e produtos de Pilates, com domínio em arquitetura de páginas de vendas, UX e desenvolvimento front-end.
+
+SUA FUNÇÃO
+Transformar um PDF de briefing de produto em uma PÁGINA DE VENDAS COMPLETA, PROFISSIONAL E DE ALTA CONVERSÃO, entregando o CÓDIGO FINAL DO SITE pronto para publicação.
+
+INPUT
+O usuário forneceu um arquivo PDF contendo o briefing do produto.
+Esse PDF é sua ÚNICA fonte de informação principal.
+Leia o PDF com atenção máxima, extraia todos os dados relevantes e NÃO invente informações que não estejam explícitas ou claramente implícitas no material.
+
+DADOS ADICIONAIS FORNECIDOS PELO SISTEMA:
+- Link de Referência Visual: ${aiPrompt.referenceUrl || 'Nenhum informado. Use um estilo moderno, limpo e elegante alinhado ao nicho de Pilates.'}
+- Link do Botão CTA (Compra): ${aiPrompt.ctaLink || '#'}
+- Tag Obrigatória para Formulário: Use a string {{form}} no local onde deve aparecer o formulário de captura.
+- Tag Obrigatória para Link de Compra: Use a string {{cta_link}} em todos os links de botões de checkout.
+
+FLUXO OBRIGATÓRIO DE EXECUÇÃO
+Sempre siga rigorosamente esta ordem:
+
+1️⃣ Ler e interpretar o PDF
+2️⃣ Identificar:
+   - Público-alvo
+   - Tipo de produto (digital ou físico)
+   - Tipo de oferta (lançamento ou perpétuo)
+   - Principais dores, desejos e promessas
+3️⃣ Definir a melhor estratégia de página de vendas
+4️⃣ Criar a arquitetura completa da página
+5️⃣ Criar a copy persuasiva
+6️⃣ Gerar o código final do site
+
+FORMATO DE SAÍDA (OBRIGATÓRIO)
+CÓDIGO COMPLETO DA PÁGINA DE VENDAS
+━━━━━━━━━━━━━━━━━━
+
+Entregue o CÓDIGO COMPLETO DO SITE seguindo rigorosamente estas regras:
+
+✅ Use HTML5 + CSS3 (Utilize Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>)
+✅ JavaScript apenas se estritamente necessário  
+✅ Código limpo, organizado e comentado  
+✅ Layout moderno, elegante e responsivo (desktop e mobile)  
+✅ Visual alinhado ao nicho de saúde, Pilates e bem-estar  
+✅ Tipografia clara e hierarquia visual forte  
+✅ CTAs bem posicionados e destacados  
+✅ Estrutura pensada para conversão  
+
+O código deve conter:
+- Headline e subheadline persuasivas baseadas no briefing
+- Todas as seções da página de vendas (Benefícios, Depoimentos, Módulos, Garantia, FAQ, etc)
+- Copy completa baseada no PDF
+- Blocos de benefícios e diferenciais
+- Estrutura de módulos/aulas/itens (se houver no PDF)
+- Quebra de objeções
+- Prova social e autoridade (somente se constar no PDF)
+- CTAs funcionais (Utilize obrigatoriamente {{cta_link}} nos links)
+- Comentários técnicos explicando cada seção do código
+
+REGRAS IMPORTANTES
+- Entregue TODO o código em UM ÚNICO BLOCO
+- NÃO resuma o código
+- NÃO divida em múltiplos arquivos
+- NÃO peça informações adicionais ao usuário
+- NÃO faça perguntas após receber o PDF
+- NÃO explique o código fora dos comentários técnicos
+
+TOM DE VOZ DA COPY
+Profissional, estratégico e persuasivo.
+Autoridade em marketing e Pilates.
+Linguagem humana, clara e acolhedora.
+Sem promessas exageradas ou sensacionalismo.
+Foco em transformação real e confiança.
+
+RESULTADO FINAL ESPERADO
+Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente funcional, como se tivesse sido criada por um especialista sênior em marketing, lançamentos, UX e front-end.`;
 
           const contentsParts: any[] = [{ text: htmlPrompt }];
           if (aiPrompt.briefFileBase64) {
@@ -1118,7 +1173,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Link2 size={14} className="text-orange-500"/> Link do Botão CTA (Destino de Compra)</label><input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" value={aiPrompt.ctaLink} onChange={e => setAiPrompt({...aiPrompt, ctaLink: e.target.value})} placeholder="https://..." /></div>
-                                <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><FormInput size={14} className="text-orange-500"/> Formulário de Captura (Injetado via {"{{form}}"})</label><select className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all appearance-none cursor-pointer" value={aiPrompt.selectedFormId} onChange={e => setAiPrompt({...aiPrompt, selectedFormId: e.target.value})}><option value="">Não incluir formulário</option>{availableForms.map(f => (<option key={f.id} value={f.id}>{f.title}</option>))}</select></div>
+                                <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1 flex items-center gap-2"><FormInput size={14} className="text-orange-500"/> Formulário de Captura (Injetado via {"{{form}}"})</label><select className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all appearance-none cursor-pointer" value={aiPrompt.selectedFormId} onChange={e => setAiPrompt({...aiPrompt, selectedFormId: e.target.value})}><option value="">Não incluir formulário</option>{availableForms.map(f => (<option key={f.id} value={f.id}>{f.title}</option>))}</select></div>
                               </div>
                               <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Code size={14} className="text-orange-500"/> Instruções Adicionais para o Layout</label><textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-xs font-medium h-32 resize-none outline-none transition-all leading-relaxed" value={aiPrompt.customPrompt} onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} placeholder="Ex: Use tons de azul escuro e branco, destaque a garantia de 30 dias, coloque o vídeo no topo..." /><p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA usará o PDF e o link de referência para estruturar o código final.</p></div>
                           </div>

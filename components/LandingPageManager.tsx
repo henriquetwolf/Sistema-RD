@@ -124,6 +124,28 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       
       Retorne APENAS o JSON.`;
 
+      const fieldSchema = {
+        type: SchemaType.OBJECT,
+        properties: {
+          value: { type: SchemaType.STRING },
+          ai: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+        },
+        required: ["value", "ai"]
+      };
+
+      const listItemSchema = {
+        type: SchemaType.OBJECT,
+        properties: {
+          id: { type: SchemaType.STRING },
+          value: { type: SchemaType.STRING }, // Para itens simples como bullets ou consequências
+          title: fieldSchema,
+          description: fieldSchema,
+          question: fieldSchema,
+          answer: fieldSchema,
+          ai: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+        }
+      };
+
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: prompt,
@@ -137,7 +159,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   properties: {
                       title: { type: SchemaType.STRING },
                       status: { type: SchemaType.STRING }
-                  }
+                  },
+                  required: ["title"]
               },
               theme: {
                   type: SchemaType.OBJECT,
@@ -145,7 +168,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       brand_name: { type: SchemaType.STRING },
                       tone: { type: SchemaType.STRING },
                       primary_color: { type: SchemaType.STRING }
-                  }
+                  },
+                  required: ["brand_name", "primary_color"]
               },
               sections: {
                 type: SchemaType.ARRAY,
@@ -155,8 +179,32 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                     id: { type: SchemaType.STRING },
                     type: { type: SchemaType.STRING },
                     enabled: { type: SchemaType.BOOLEAN },
-                    content: { type: SchemaType.OBJECT }
-                  }
+                    content: { 
+                        type: SchemaType.OBJECT,
+                        properties: {
+                            headline: fieldSchema,
+                            subheadline: fieldSchema,
+                            description: fieldSchema,
+                            bullets: { type: SchemaType.ARRAY, items: fieldSchema },
+                            cta: {
+                                type: SchemaType.OBJECT,
+                                properties: {
+                                    label: fieldSchema,
+                                    href: { type: SchemaType.STRING },
+                                    microcopy: fieldSchema
+                                }
+                            },
+                            consequences: { type: SchemaType.ARRAY, items: fieldSchema },
+                            items: { type: SchemaType.ARRAY, items: listItemSchema },
+                            original_price: fieldSchema,
+                            price: fieldSchema,
+                            features: { type: SchemaType.ARRAY, items: fieldSchema },
+                            cta_label: fieldSchema,
+                            cta_url: fieldSchema
+                        }
+                    }
+                  },
+                  required: ["id", "type", "enabled", "content"]
                 }
               }
             },
@@ -564,7 +612,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl my-8 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
               <h3 className="text-2xl font-black text-slate-800 tracking-tight">Criar com Inteligência Artificial</h3>
               <button onClick={() => { setShowModal(false); setCurrentDraft(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>

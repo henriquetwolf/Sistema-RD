@@ -9,11 +9,11 @@ import {
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
   Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
   Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code, FileUp, Sparkle,
-  LayoutGrid, MoveDiagonal
+  LayoutGrid, MoveDiagonal, Type
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField, FormFolder } from '../types';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type as GenAiType } from "@google/genai";
 import clsx from 'clsx';
 
 interface LandingPageManagerProps {
@@ -268,19 +268,19 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       }
 
       const fieldSchema = {
-        type: Type.OBJECT,
+        type: GenAiType.OBJECT,
         properties: {
-          value: { type: Type.STRING },
-          ai: { type: Type.ARRAY, items: { type: Type.STRING } }
+          value: { type: GenAiType.STRING },
+          ai: { type: GenAiType.ARRAY, items: { type: GenAiType.STRING } }
         },
         required: ["value", "ai"]
       };
 
       const listItemSchema = {
-        type: Type.OBJECT,
+        type: GenAiType.OBJECT,
         properties: {
-          id: { type: Type.STRING },
-          value: { type: Type.STRING }, 
+          id: { type: GenAiType.STRING },
+          value: { type: GenAiType.STRING }, 
           title: fieldSchema,
           description: fieldSchema,
           question: fieldSchema,
@@ -288,7 +288,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           author: fieldSchema,
           role: fieldSchema,
           content: fieldSchema,
-          ai: { type: Type.ARRAY, items: { type: Type.STRING } }
+          ai: { type: GenAiType.ARRAY, items: { type: GenAiType.STRING } }
         }
       };
 
@@ -298,59 +298,59 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         config: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: Type.OBJECT,
+            type: GenAiType.OBJECT,
             properties: {
               meta: {
-                  type: Type.OBJECT,
+                  type: GenAiType.OBJECT,
                   properties: {
-                      title: { type: Type.STRING },
-                      status: { type: Type.STRING }
+                      title: { type: GenAiType.STRING },
+                      status: { type: GenAiType.STRING }
                   },
                   required: ["title"]
               },
               theme: {
-                  type: Type.OBJECT,
+                  type: GenAiType.OBJECT,
                   properties: {
-                      brand_name: { type: Type.STRING },
-                      tone: { type: Type.STRING },
-                      primary_color: { type: Type.STRING },
-                      secondary_color: { type: Type.STRING },
-                      bg_color: { type: Type.STRING },
-                      font_family: { type: Type.STRING }
+                      brand_name: { type: GenAiType.STRING },
+                      tone: { type: GenAiType.STRING },
+                      primary_color: { type: GenAiType.STRING },
+                      secondary_color: { type: GenAiType.STRING },
+                      bg_color: { type: GenAiType.STRING },
+                      font_family: { type: GenAiType.STRING }
                   },
                   required: ["brand_name", "primary_color"]
               },
               sections: {
-                type: Type.ARRAY,
+                type: GenAiType.ARRAY,
                 items: {
-                  type: Type.OBJECT,
+                  type: GenAiType.OBJECT,
                   properties: {
-                    id: { type: Type.STRING },
-                    type: { type: Type.STRING },
-                    enabled: { type: Type.BOOLEAN },
+                    id: { type: GenAiType.STRING },
+                    type: { type: GenAiType.STRING },
+                    enabled: { type: GenAiType.BOOLEAN },
                     content: { 
-                        type: Type.OBJECT,
+                        type: GenAiType.OBJECT,
                         properties: {
                             headline: fieldSchema,
                             subheadline: fieldSchema,
                             description: fieldSchema,
-                            bullets: { type: Type.ARRAY, items: fieldSchema },
+                            bullets: { type: GenAiType.ARRAY, items: fieldSchema },
                             cta: {
-                                type: Type.OBJECT,
+                                type: GenAiType.OBJECT,
                                 properties: {
                                     label: fieldSchema,
-                                    href: { type: Type.STRING },
+                                    href: { type: GenAiType.STRING },
                                     microcopy: fieldSchema
                                 }
                             },
-                            consequences: { type: Type.ARRAY, items: fieldSchema },
-                            items: { type: Type.ARRAY, items: listItemSchema },
+                            consequences: { type: GenAiType.ARRAY, items: fieldSchema },
+                            items: { type: GenAiType.ARRAY, items: listItemSchema },
                             original_price: fieldSchema,
                             price: fieldSchema,
-                            features: { type: Type.ARRAY, items: fieldSchema },
+                            features: { type: GenAiType.ARRAY, items: fieldSchema },
                             cta_label: fieldSchema,
                             cta_url: fieldSchema,
-                            value: { type: Type.STRING }
+                            value: { type: GenAiType.STRING }
                         }
                     }
                   },

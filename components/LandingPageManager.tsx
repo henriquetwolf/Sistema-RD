@@ -8,7 +8,7 @@ import {
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
   Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
-  Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code, FileUp
+  Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code, FileUp, Sparkle
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField } from '../types';
@@ -63,6 +63,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
   const [editingPage, setEditingPage] = useState<Partial<LandingPage> | null>(null);
   const [currentDraft, setCurrentDraft] = useState<Partial<LandingPage> | null>(null);
+  const [htmlRefineInstruction, setHtmlRefineInstruction] = useState('');
+  const [isRewritingHtml, setIsRewritingHtml] = useState(false);
   const [aiPrompt, setAiPrompt] = useState({
       productName: '',
       brandName: 'VOLL Pilates',
@@ -126,6 +128,48 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     }
   };
 
+  const handleRewriteHtml = async () => {
+      if (!htmlRefineInstruction.trim() || !editingPage?.content?.htmlCode) return;
+      setIsRewritingHtml(true);
+      try {
+          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const prompt = `Você é um desenvolvedor frontend expert em Tailwind CSS e Landing Pages.
+          Seu objetivo é REESCREVER o código HTML abaixo seguindo estas INSTRUÇÕES:
+          "${htmlRefineInstruction}"
+
+          CÓDIGO ATUAL:
+          ${editingPage.content.htmlCode}
+
+          REQUISITOS:
+          1. Mantenha as tags {{form}} e {{cta_link}} se elas já existirem no código.
+          2. Retorne APENAS o código HTML completo. Não inclua conversas ou markdown.
+          3. Garanta que a página continue responsiva e moderna.`;
+
+          const response = await ai.models.generateContent({
+              model: "gemini-3-pro-preview",
+              contents: prompt
+          });
+
+          const generatedHtml = response.text || "";
+          const cleanedHtml = generatedHtml.replace(/```html/gi, '').replace(/```/g, '').trim();
+
+          setEditingPage({
+              ...editingPage,
+              content: {
+                  ...editingPage.content,
+                  htmlCode: cleanedHtml
+              }
+          });
+          setHtmlRefineInstruction('');
+          alert("Código HTML atualizado pela IA com sucesso!");
+      } catch (e: any) {
+          console.error("Erro ao reescrever HTML:", e);
+          alert("Erro na IA: " + e.message);
+      } finally {
+          setIsRewritingHtml(false);
+      }
+  };
+
   const handleCreateWithAi = async () => {
     if (creationMode === 'standard' && !aiPrompt.productName) {
       alert("Informe o nome do produto.");
@@ -139,83 +183,26 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
     setIsGenerating(true);
     try {
-      // Create a new GoogleGenAI instance right before making an API call
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       if (creationMode === 'prompt') {
-          let htmlPrompt = `Você é um especialista sênior em marketing digital, copywriting de alta conversão, lançamentos e produtos de Pilates, com domínio em arquitetura de páginas de vendas, UX e desenvolvimento front-end.
-
-SUA FUNÇÃO
-Transformar um PDF de briefing de produto em uma PÁGINA DE VENDAS COMPLETA, PROFISSIONAL E DE ALTA CONVERSÃO, entregando o CÓDIGO FINAL DO SITE pronto para publicação.
-
-INPUT
-O usuário forneceu um arquivo PDF contendo o briefing do produto.
-Esse PDF é sua ÚNICA fonte de informação principal.
-Leia o PDF com atenção máxima, extraia todos os dados relevantes e NÃO invente informações que não estejam explícitas ou claramente implícitas no material.
-
-DADOS ADICIONAIS FORNECIDOS PELO SISTEMA:
-- Link de Referência Visual: ${aiPrompt.referenceUrl || 'Nenhum informado. Use um estilo moderno, limpo e elegante alinhado ao nicho de Pilates.'}
-- Link do Botão CTA (Compra): ${aiPrompt.ctaLink || '#'}
-- Tag Obrigatória para Formulário: Use a string {{form}} no local onde deve aparecer o formulário de captura.
-- Tag Obrigatória para Link de Compra: Use a string {{cta_link}} em todos os links de botões de checkout.
-
-FLUXO OBRIGATÓRIO DE EXECUÇÃO
-Sempre siga rigorosamente esta ordem:
-
-1️⃣ Ler e interpretar o PDF
-2️⃣ Identificar:
-   - Público-alvo
-   - Tipo de produto (digital ou físico)
-   - Tipo de oferta (lançamento ou perpétuo)
-   - Principais dores, desejos e promessas
-3️⃣ Definir a melhor estratégia de página de vendas
-4️⃣ Criar a arquitetura completa da página
-5️⃣ Criar a copy persuasiva
-6️⃣ Gerar o código final do site
-
-FORMATO DE SAÍDA (OBRIGATÓRIO)
-CÓDIGO COMPLETO DA PÁGINA DE VENDAS
-━━━━━━━━━━━━━━━━━━
-
-Entregue o CÓDIGO COMPLETO DO SITE seguindo rigorosamente estas regras:
-
-✅ Use HTML5 + CSS3 (Utilize Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>)
-✅ JavaScript apenas se estritamente necessário  
-✅ Código limpo, organizado e comentado  
-✅ Layout moderno, elegante e responsivo (desktop e mobile)  
-✅ Visual alinhado ao nicho de saúde, Pilates e bem-estar  
-✅ Tipografia clara e hierarquia visual forte  
-✅ CTAs bem posicionados e destacados  
-✅ Estrutura pensada para conversão  
-
-O código deve conter:
-- Headline e subheadline persuasivas baseadas no briefing
-- Todas as seções da página de vendas (Benefícios, Depoimentos, Módulos, Garantia, FAQ, etc)
-- Copy completa baseada no PDF
-- Blocos de benefícios e diferenciais
-- Estrutura de módulos/aulas/itens (se houver no PDF)
-- Quebra de objeções
-- Prova social e autoridade (somente se constar no PDF)
-- CTAs funcionais (Utilize obrigatoriamente {{cta_link}} nos links)
-- Comentários técnicos explicando cada seção do código
-
-REGRAS IMPORTANTES
-- Entregue TODO o código em UM ÚNICO BLOCO
-- NÃO resuma o código
-- NÃO divida em múltiplos arquivos
-- NÃO peça informações adicionais ao usuário
-- NÃO faça perguntas após receber o PDF
-- NÃO explique o código fora dos comentários técnicos
-
-TOM DE VOZ DA COPY
-Profissional, estratégico e persuasivo.
-Autoridade em marketing e Pilates.
-Linguagem humana, clara e acolhedora.
-Sem promessas exageradas ou sensacionalismo.
-Foco em transformação real e confiança.
-
-RESULTADO FINAL ESPERADO
-Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente funcional, como se tivesse sido criada por um especialista sênior em marketing, lançamentos, UX e front-end.`;
+          let htmlPrompt = `Você é um mestre em design de conversão e copywriting.
+          Sua missão é criar o CÓDIGO HTML COMPLETO de uma Landing Page de Alta Performance.
+          
+          REQUISITOS TÉCNICOS:
+          1. Use Tailwind CSS via CDN para estilização.
+          2. A página deve ser responsiva e moderna.
+          3. Use a tag {{form}} no local onde deve aparecer o formulário de captura.
+          4. Use a tag {{cta_link}} nos links dos botões de compra/CTA.
+          
+          REFERÊNCIAS:
+          - Site de Referência Visual: ${aiPrompt.referenceUrl || 'Nenhum informado. Use um estilo moderno e limpo.'}
+          - Link do CTA: ${aiPrompt.ctaLink || '#'}
+          
+          INSTRUÇÕES ADICIONAIS:
+          ${aiPrompt.customPrompt || 'Crie uma página persuasiva baseada no briefing anexado.'}
+          
+          Retorne APENAS o código HTML completo dentro de uma estrutura básica HTML5. Não inclua explicações fora do código.`;
 
           const contentsParts: any[] = [{ text: htmlPrompt }];
           if (aiPrompt.briefFileBase64) {
@@ -227,15 +214,12 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
               });
           }
 
-          // Use 'gemini-3-pro-preview' for complex text generation tasks
           const response = await ai.models.generateContent({
               model: "gemini-3-pro-preview",
               contents: { parts: contentsParts }
           });
 
-          // Access .text property directly as per guidelines
           const generatedHtml = response.text || "";
-          // Clean up potential markdown code blocks
           const cleanedHtml = generatedHtml.replace(/```html/gi, '').replace(/```/g, '').trim();
 
           const newPage: Partial<LandingPage> = {
@@ -261,7 +245,6 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
           return;
       }
 
-      // Standard Flow
       let basePrompt = `Você é um arquiteto sênior de design de conversão e expert em copywriting.
       Sua missão é criar uma Landing Page Premium em formato JSON.
       
@@ -306,7 +289,6 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
         }
       };
 
-      // Use 'gemini-3-pro-preview' for complex structured JSON generation
       const response = await ai.models.generateContent({
         model: "gemini-3-pro-preview",
         contents: basePrompt,
@@ -378,7 +360,6 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
         }
       });
 
-      // Access .text property directly as per guidelines
       const text = response.text;
       if (!text) throw new Error("A IA retornou um conteúdo vazio.");
       
@@ -422,19 +403,16 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
     setIsRefiningField(fieldIdentifier);
     
     try {
-      // Create a new GoogleGenAI instance right before making an API call
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `Aja como um Copywriter. Melhore o texto a seguir usando a técnica "${action}":
       Texto: "${currentVal}"
       Retorne apenas o texto final melhorado, sem aspas ou explicações.`;
 
-      // Use 'gemini-3-flash-preview' for basic refinement tasks
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: prompt
       });
 
-      // Access .text property directly
       const refinedText = (response.text || currentVal).trim();
 
       if (editingPage && editingPage.content) {
@@ -553,6 +531,7 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
     const percentY = (deltaY / rect.height) * 100;
 
     const newX = Math.max(0, Math.min(100, elementStartPosRef.current.x + percentX));
+    // Fix: Corrected typo 'elementStartPosPosRef' to 'elementStartPosRef'
     const newY = Math.max(0, Math.min(100, elementStartPosRef.current.y + percentY));
 
     updateSectionStyles(selectedSectionId, selectedElementKey, { x: newX, y: newY });
@@ -686,7 +665,6 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
                   <button onMouseDown={(e) => handleElementMouseDown(e, sectionId, fieldKey)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 cursor-move"><Move size={12}/></button>
                   <div className="h-3 w-px bg-slate-200 mx-0.5"></div>
                   
-                  {/* Sizing Controls */}
                   <button onClick={(e) => { e.stopPropagation(); updateSectionStyles(sectionId, fieldKey, { width: Math.max(10, (styles.width || 100) - 10) }); }} className="p-1.5 hover:bg-slate-100 rounded text-slate-400"><Minimize size={12}/></button>
                   <button onClick={(e) => { e.stopPropagation(); updateSectionStyles(sectionId, fieldKey, { width: Math.min(100, (styles.width || 100) + 10) }); }} className="p-1.5 hover:bg-slate-100 rounded text-slate-400"><Maximize size={12}/></button>
                   <div className="h-3 w-px bg-slate-200 mx-0.5"></div>
@@ -871,6 +849,28 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
                             </div>
                         </div>
                     </div>
+
+                    <div className="pt-6 border-t border-slate-100">
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Sparkle size={14} className="text-orange-500" /> Refinar com IA
+                        </h3>
+                        <div className="space-y-3">
+                            <textarea 
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium resize-none h-24 focus:bg-white focus:border-orange-500 outline-none transition-all"
+                                placeholder="Descreva aqui o que deseja mudar no código (ex: Mude a cor do botão para verde, adicione uma seção de depoimentos...)"
+                                value={htmlRefineInstruction}
+                                onChange={e => setHtmlRefineInstruction(e.target.value)}
+                            />
+                            <button 
+                                onClick={handleRewriteHtml}
+                                disabled={isRewritingHtml || !htmlRefineInstruction.trim()}
+                                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-md"
+                            >
+                                {isRewritingHtml ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16}/>}
+                                Reescrever Código com IA
+                            </button>
+                        </div>
+                    </div>
                  </div>
              ) : (
                  <>
@@ -947,7 +947,6 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
                     content.sections.map((section, sIdx) => (
                         <div key={section.id} id={`lp-section-${section.id}`} className="relative group/section border-b border-slate-100 hover:bg-slate-50/30 transition-all">
                             
-                            {/* Controles de Seção */}
                             <div className="absolute right-4 top-4 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity flex items-center gap-2 bg-white/90 backdrop-blur-md p-1.5 rounded-xl shadow-xl border border-indigo-100">
                                 <div className="flex flex-col gap-1 pr-2 mr-2 border-r border-slate-200 text-slate-400">
                                     <button onClick={() => handleMoveSection(sIdx, 'up')} disabled={sIdx === 0} className="p-1 hover:bg-indigo-50 hover:text-indigo-600"><ArrowUp size={14}/></button>
@@ -965,7 +964,6 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
                                 <button onClick={() => handleDeleteSection(sIdx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
                             </div>
 
-                            {/* Botão Adicionar Seção Acima */}
                             <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
                                 <div className="relative group/add">
                                     <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
@@ -978,13 +976,11 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
                                 </div>
                             </div>
 
-                            {/* Renderização do Conteúdo da Seção */}
                             <div className={clsx("relative p-8", !section.enabled && "opacity-50 grayscale")}>
                                 <div className="space-y-6">
                                     {Object.keys(section.content).map(key => {
                                         const field = section.content[key];
                                         
-                                        // Especial: Botão CTA
                                         if (key === 'cta') {
                                             return (
                                                 <div key={key} className="flex flex-col items-center gap-3 p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100">
@@ -1015,7 +1011,6 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
                                             );
                                         }
 
-                                        // Listas (Módulos, Benefícios, etc.)
                                         if (Array.isArray(field)) {
                                             return (
                                                 <div key={key} className="space-y-4 pt-6 border-t border-slate-100">
@@ -1058,7 +1053,6 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
                                             )
                                         }
 
-                                        // Campos Simples e Adicionados Manualmente
                                         if (field && (typeof field === 'object' || typeof field === 'string')) {
                                             return <div key={key} className="relative">{renderInteractableField(section.id, key, field, section.styles?.[key])}</div>
                                         }
@@ -1067,7 +1061,6 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
                                 </div>
                             </div>
 
-                            {/* Botão Adicionar Seção Abaixo */}
                             <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
                                 <div className="relative group/add">
                                     <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
@@ -1173,7 +1166,7 @@ Uma página de vendas completa, bonita, estruturada, persuasiva e tecnicamente f
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Link2 size={14} className="text-orange-500"/> Link do Botão CTA (Destino de Compra)</label><input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" value={aiPrompt.ctaLink} onChange={e => setAiPrompt({...aiPrompt, ctaLink: e.target.value})} placeholder="https://..." /></div>
-                                <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1 flex items-center gap-2"><FormInput size={14} className="text-orange-500"/> Formulário de Captura (Injetado via {"{{form}}"})</label><select className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all appearance-none cursor-pointer" value={aiPrompt.selectedFormId} onChange={e => setAiPrompt({...aiPrompt, selectedFormId: e.target.value})}><option value="">Não incluir formulário</option>{availableForms.map(f => (<option key={f.id} value={f.id}>{f.title}</option>))}</select></div>
+                                <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><FormInput size={14} className="text-orange-500"/> Formulário de Captura (Injetado via {"{{form}}"})</label><select className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all appearance-none cursor-pointer" value={aiPrompt.selectedFormId} onChange={e => setAiPrompt({...aiPrompt, selectedFormId: e.target.value})}><option value="">Não incluir formulário</option>{availableForms.map(f => (<option key={f.id} value={f.id}>{f.title}</option>))}</select></div>
                               </div>
                               <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Code size={14} className="text-orange-500"/> Instruções Adicionais para o Layout</label><textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-xs font-medium h-32 resize-none outline-none transition-all leading-relaxed" value={aiPrompt.customPrompt} onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} placeholder="Ex: Use tons de azul escuro e branco, destaque a garantia de 30 dias, coloque o vídeo no topo..." /><p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA usará o PDF e o link de referência para estruturar o código final.</p></div>
                           </div>

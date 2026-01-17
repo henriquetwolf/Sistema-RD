@@ -9,7 +9,7 @@ import {
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
   Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
   Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code, FileUp, Sparkle,
-  LayoutGrid, MoveDiagonal, Type, ExternalLink as LinkIcon, PlayCircle
+  LayoutGrid, MoveDiagonal, Type, ExternalLink as LinkIcon, PlayCircle, Bold, AlignJustify
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField, FormFolder } from '../types';
@@ -658,27 +658,30 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         return;
     }
 
-    // Identifica o elemento relevante (A, IMG, ou container de IFRAME)
-    let relevantEl = target.closest('a, img, iframe') as HTMLElement | null;
-    
-    // Se clicou em um texto dentro de algo, mas não é um dos acima, o contentEditable já cuida.
-    // Mas para botões e imagens, queremos a barra de ferramentas estilo Canva.
-    if (relevantEl) {
-        e.preventDefault();
-        e.stopPropagation();
-        setSelectedHtmlElement(relevantEl);
-        setHtmlElementRect(relevantEl.getBoundingClientRect());
-    } else {
-        setSelectedHtmlElement(null);
-        setHtmlElementRect(null);
-    }
+    // Identifica o elemento selecionado diretamente para edição estilo Canva
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedHtmlElement(target);
+    setHtmlElementRect(target.getBoundingClientRect());
+  };
+
+  const updateHtmlElementStyle = (property: string, value: string) => {
+      if (!selectedHtmlElement) return;
+      selectedHtmlElement.style.setProperty(property, value);
+      
+      // Sincroniza o estado do código HTML
+      if (htmlEditorRef.current && editingPage?.content) {
+          const newContent = { ...editingPage.content, htmlCode: htmlEditorRef.current.innerHTML };
+          setEditingPage({ ...editingPage, content: newContent });
+          // Atualiza o rect para o highlight refletir mudanças de tamanho
+          setHtmlElementRect(selectedHtmlElement.getBoundingClientRect());
+      }
   };
 
   const updateHtmlElementAttribute = (attr: string, value: string) => {
       if (!selectedHtmlElement) return;
       
       if (selectedHtmlElement.tagName === 'IFRAME') {
-          // Para iframes, geralmente alteramos o src
           selectedHtmlElement.setAttribute(attr, value);
       } else if (selectedHtmlElement.tagName === 'IMG') {
           selectedHtmlElement.setAttribute(attr, value);
@@ -686,13 +689,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           selectedHtmlElement.setAttribute(attr, value);
       }
       
-      // Força atualização do rect
-      setHtmlElementRect(selectedHtmlElement.getBoundingClientRect());
-      
       // Sincroniza o estado do código HTML
       if (htmlEditorRef.current && editingPage?.content) {
           const newContent = { ...editingPage.content, htmlCode: htmlEditorRef.current.innerHTML };
           setEditingPage({ ...editingPage, content: newContent });
+          setHtmlElementRect(selectedHtmlElement.getBoundingClientRect());
       }
   };
 
@@ -966,36 +967,106 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                 <Settings size={14} className="text-indigo-500" /> Propriedades do Objeto
                             </h3>
                             <div className="space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                {selectedHtmlElement.tagName === 'A' && (
-                                    <>
-                                        <div>
-                                            <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Link do Botão (URL)</label>
-                                            <div className="relative">
-                                                <LinkIcon size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
-                                                <input className="w-full pl-8 pr-3 py-2 border rounded-xl text-[10px] font-mono outline-none" value={selectedHtmlElement.getAttribute('href') || ''} onChange={e => updateHtmlElementAttribute('href', e.target.value)} />
+                                
+                                {/* TIPO DE ELEMENTO E BACKGROUND */}
+                                <div>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Imagem de Fundo (Container)</label>
+                                    <div className="relative">
+                                        <ImageIcon size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+                                        <input 
+                                            className="w-full pl-8 pr-3 py-2 border rounded-xl text-[10px] font-mono outline-none bg-white" 
+                                            placeholder="URL da imagem..."
+                                            onChange={e => updateHtmlElementStyle('background-image', e.target.value ? `url(${e.target.value})` : 'none')} 
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* CONTROLES DE TEXTO */}
+                                <div className="p-3 bg-white rounded-xl border border-slate-100 space-y-3">
+                                    <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Estilos de Texto</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="relative">
+                                            <input 
+                                                type="number" 
+                                                className="w-full px-2 py-1.5 border rounded text-[10px] outline-none" 
+                                                placeholder="Size px" 
+                                                onChange={e => updateHtmlElementStyle('font-size', `${e.target.value}px`)} 
+                                            />
+                                        </div>
+                                        <div className="relative">
+                                            <input 
+                                                type="color" 
+                                                className="w-full h-7 border rounded p-0.5 cursor-pointer" 
+                                                onChange={e => updateHtmlElementStyle('color', e.target.value)} 
+                                            />
+                                        </div>
+                                    </div>
+                                    <select 
+                                        className="w-full px-2 py-1.5 border rounded text-[10px] bg-slate-50 outline-none"
+                                        onChange={e => updateHtmlElementStyle('font-family', e.target.value)}
+                                    >
+                                        <option value="">Fonte Padrão</option>
+                                        <option value="serif">Serif</option>
+                                        <option value="sans-serif">Sans Serif</option>
+                                        <option value="monospace">Monospace</option>
+                                        <option value="'Inter', sans-serif">Inter</option>
+                                    </select>
+                                    <div className="flex bg-slate-50 rounded border p-1 gap-1">
+                                        <button onClick={() => updateHtmlElementStyle('text-align', 'left')} className="p-1 hover:bg-white rounded"><AlignLeft size={12}/></button>
+                                        <button onClick={() => updateHtmlElementStyle('text-align', 'center')} className="p-1 hover:bg-white rounded"><AlignCenter size={12}/></button>
+                                        <button onClick={() => updateHtmlElementStyle('text-align', 'right')} className="p-1 hover:bg-white rounded"><AlignRight size={12}/></button>
+                                        <button onClick={() => updateHtmlElementStyle('text-align', 'justify')} className="p-1 hover:bg-white rounded"><AlignJustify size={12}/></button>
+                                        <button onClick={() => updateHtmlElementStyle('font-weight', 'bold')} className="p-1 hover:bg-white rounded"><Bold size={12}/></button>
+                                    </div>
+                                </div>
+
+                                {/* CONTROLES DE DIMENSÕES (IMG / IFRAME) */}
+                                {(selectedHtmlElement.tagName === 'IMG' || selectedHtmlElement.tagName === 'IFRAME') && (
+                                    <div className="p-3 bg-white rounded-xl border border-slate-100 space-y-3 animate-in fade-in">
+                                        <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Dimensões & Link</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="space-y-1">
+                                                <label className="text-[8px] font-bold text-slate-400 uppercase">Largura</label>
+                                                <input className="w-full px-2 py-1 border rounded text-[10px]" placeholder="Ex: 100% ou 500px" onChange={e => updateHtmlElementStyle('width', e.target.value)} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[8px] font-bold text-slate-400 uppercase">Altura</label>
+                                                <input className="w-full px-2 py-1 border rounded text-[10px]" placeholder="Ex: auto ou 300px" onChange={e => updateHtmlElementStyle('height', e.target.value)} />
                                             </div>
                                         </div>
-                                        <p className="text-[8px] text-slate-400 leading-relaxed italic">Para editar o texto do botão, clique nele e digite diretamente no canvas.</p>
-                                    </>
-                                )}
-                                {selectedHtmlElement.tagName === 'IMG' && (
-                                    <div>
-                                        <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">URL da Imagem</label>
-                                        <div className="relative">
-                                            <ImageIcon size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
-                                            <input className="w-full pl-8 pr-3 py-2 border rounded-xl text-[10px] font-mono outline-none" value={selectedHtmlElement.getAttribute('src') || ''} onChange={e => updateHtmlElementAttribute('src', e.target.value)} />
-                                        </div>
+                                        {selectedHtmlElement.tagName === 'IFRAME' && (
+                                            <div>
+                                                <label className="text-[8px] font-bold text-slate-400 uppercase block mb-1">URL do Vídeo</label>
+                                                <div className="relative">
+                                                    <PlayCircle size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-300" />
+                                                    <input className="w-full pl-6 pr-2 py-1 border rounded text-[10px] font-mono" placeholder="URL do src..." value={selectedHtmlElement.getAttribute('src') || ''} onChange={e => updateHtmlElementAttribute('src', e.target.value)} />
+                                                </div>
+                                            </div>
+                                        )}
+                                        {selectedHtmlElement.tagName === 'IMG' && (
+                                            <div>
+                                                <label className="text-[8px] font-bold text-slate-400 uppercase block mb-1">Link da Imagem</label>
+                                                <input className="w-full px-2 py-1 border rounded text-[10px] font-mono" placeholder="URL do src..." value={selectedHtmlElement.getAttribute('src') || ''} onChange={e => updateHtmlElementAttribute('src', e.target.value)} />
+                                            </div>
+                                        )}
                                     </div>
                                 )}
-                                {selectedHtmlElement.tagName === 'IFRAME' && (
-                                    <div>
-                                        <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Fonte do Vídeo (src)</label>
-                                        <div className="relative">
-                                            <PlayCircle size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
-                                            <input className="w-full pl-8 pr-3 py-2 border rounded-xl text-[10px] font-mono outline-none" value={selectedHtmlElement.getAttribute('src') || ''} onChange={e => updateHtmlElementAttribute('src', e.target.value)} />
+
+                                {/* POSICIONAMENTO (MARGIN/PADDING) */}
+                                <div className="p-3 bg-white rounded-xl border border-slate-100 space-y-3">
+                                    <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Posicionamento (Margens)</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                            <label className="text-[8px] font-bold text-slate-400 uppercase">M. Top</label>
+                                            <input type="number" className="w-full px-2 py-1 border rounded text-[10px]" onChange={e => updateHtmlElementStyle('margin-top', `${e.target.value}px`)} />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[8px] font-bold text-slate-400 uppercase">M. Bottom</label>
+                                            <input type="number" className="w-full px-2 py-1 border rounded text-[10px]" onChange={e => updateHtmlElementStyle('margin-bottom', `${e.target.value}px`)} />
                                         </div>
                                     </div>
-                                )}
+                                </div>
+
                                 <button onClick={() => setSelectedHtmlElement(null)} className="w-full py-2 bg-white text-slate-400 hover:text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all">Desmarcar Objeto</button>
                             </div>
                         </div>
@@ -1060,7 +1131,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                 {isHtmlMode ? (
                     <div className="p-0 relative min-h-screen flex flex-col">
                         <div className="bg-amber-50 p-3 flex items-center justify-center gap-2 border-b border-amber-100 text-[10px] font-black text-amber-700 uppercase tracking-widest z-50">
-                           <MousePointerClick size={14} /> Modo Edição Visual Ativo: Clique nos textos, imagens ou botões para alterar
+                           <MousePointerClick size={14} /> Modo Edição Visual Ativo: Clique nos elementos para editar estilos e textos
                         </div>
                         
                         {/* Indicador de Seleção Estilo Canva */}
@@ -1088,16 +1159,18 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                             className="w-full min-h-screen p-0 outline-none hover:[&_*]:ring-1 hover:[&_*]:ring-blue-400/30 transition-all cursor-text selection:bg-blue-100"
                             dangerouslySetInnerHTML={{ __html: content.htmlCode || '' }}
                             onClick={handleHtmlCanvasClick}
-                            onBlur={(e) => {
-                                const newContent = {...content};
-                                newContent.htmlCode = e.currentTarget.innerHTML;
-                                setEditingPage({...editingPage, content: newContent});
+                            onInput={() => {
+                                // Sincroniza o estado ao digitar
+                                if (htmlEditorRef.current && editingPage?.content) {
+                                    const newContent = { ...editingPage.content, htmlCode: htmlEditorRef.current.innerHTML };
+                                    setEditingPage({ ...editingPage, content: newContent });
+                                }
                             }}
                         />
                         <div className="p-10 bg-slate-50 border-t border-slate-200">
                              <div className="max-w-xl mx-auto bg-blue-50 border border-blue-100 p-5 rounded-[2rem] flex gap-4 text-sm text-blue-800 shadow-sm">
                                 <Info size={24} className="shrink-0 text-blue-600" />
-                                <p>Você está editando o design gerado pela IA. Clique em <strong>textos</strong> para digitar, ou em <strong>imagens/botões</strong> para abrir as configurações no painel lateral.</p>
+                                <p>Clique em qualquer elemento para editar suas propriedades no painel lateral. Textos podem ser alterados digitando diretamente.</p>
                             </div>
                         </div>
                     </div>
@@ -1313,7 +1386,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                 <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Link2 size={14} className="text-orange-500"/> Link do Botão CTA (Destino de Compra)</label><input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" value={aiPrompt.ctaLink} onChange={e => setAiPrompt({...aiPrompt, ctaLink: e.target.value})} placeholder="https://..." /></div>
                                 <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><FormInput size={14} className="text-orange-500"/> Formulário de Captura (Injetado via {"{{form}}"})</label><select className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all appearance-none cursor-pointer" value={aiPrompt.selectedFormId} onChange={e => setAiPrompt({...aiPrompt, selectedFormId: e.target.value})}><option value="">Não incluir formulário</option>{availableForms.map(f => (<option key={f.id} value={f.id}>{f.title}</option>))}</select></div>
                               </div>
-                              <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Code size={14} className="text-orange-500"/> Instruções Adicionais para o Layout</label><textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-xs font-medium h-32 resize-none outline-none transition-all leading-relaxed" value={aiPrompt.customPrompt} onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} placeholder="Ex: Use tons de azul escuro e branco, destaque a garantia de 30 dias, coloque o vídeo no topo..." /><p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA usará o PDF e o link de referência para estruturar o código final.</p></div>
+                              <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1 flex items-center gap-2"><Code size={14} className="text-orange-500"/> Instruções Adicionais para o Layout</label><textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-xs font-medium h-32 resize-none outline-none transition-all leading-relaxed" value={aiPrompt.customPrompt} onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} placeholder="Ex: Use tons de azul escuro e branco, destaque a garantia de 30 dias, coloque o vídeo no topo..." /><p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA usará o PDF e o link de referência para estruturar o código final.</p></div>
                           </div>
                         ) : (
                           <>

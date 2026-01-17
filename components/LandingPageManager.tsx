@@ -8,7 +8,9 @@ import {
   ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check,
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
-  Eye
+  Eye, GripVertical, PlusSquare,
+  // Added List icon to imports
+  List
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField } from '../types';
@@ -18,6 +20,20 @@ import clsx from 'clsx';
 interface LandingPageManagerProps {
   onBack: () => void;
 }
+
+const SECTION_TYPES = [
+    { type: 'hero', label: 'Destaque (Hero)' },
+    { type: 'pain', label: 'Problema / Dor' },
+    { type: 'method', label: 'Método / Diferencial' },
+    { type: 'benefits', label: 'Benefícios' },
+    { type: 'modules', label: 'Módulos / Grade' },
+    { type: 'bonuses', label: 'Bônus' },
+    { type: 'testimonials', label: 'Depoimentos' },
+    { type: 'pricing', label: 'Oferta / Preço' },
+    { type: 'guarantee', label: 'Garantia' },
+    { type: 'faq', label: 'FAQ' },
+    { type: 'footer', label: 'Rodapé' }
+];
 
 const REFERENCE_TEMPLATES = [
     { id: 'alura', name: 'Alura', url: 'https://www.alura.com.br/', description: 'Cursos e formações tecnológicas', imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=400&auto=format&fit=crop' },
@@ -45,22 +61,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const dragStartRef = useRef<{ x: number, y: number } | null>(null);
   const elementStartPosRef = useRef<{ x: number, y: number } | null>(null);
 
-  const [editingPage, setEditingPage] = useState<Partial<LandingPage> | null>(null);
-  const [currentDraft, setCurrentDraft] = useState<Partial<LandingPage> | null>(null);
-  const [aiPrompt, setAiPrompt] = useState({
-      productName: '',
-      brandName: 'VOLL Pilates',
-      productDescription: '',
-      targetAudience: '',
-      mainBenefits: '',
-      price: '',
-      offerDetails: '',
-      guarantee: '7 dias',
-      scarcity: 'Vagas limitadas para este lote',
-      tone: 'Profissional e Persuasivo',
-      referenceTemplate: ''
-  });
-
   useEffect(() => {
     fetchPages();
     fetchForms();
@@ -85,6 +85,22 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           setAvailableForms(data || []);
       } catch (e) {}
   };
+
+  const [editingPage, setEditingPage] = useState<Partial<LandingPage> | null>(null);
+  const [currentDraft, setCurrentDraft] = useState<Partial<LandingPage> | null>(null);
+  const [aiPrompt, setAiPrompt] = useState({
+      productName: '',
+      brandName: 'VOLL Pilates',
+      productDescription: '',
+      targetAudience: '',
+      mainBenefits: '',
+      price: '',
+      offerDetails: '',
+      guarantee: '7 dias',
+      scarcity: 'Vagas limitadas para este lote',
+      tone: 'Profissional e Persuasivo',
+      referenceTemplate: ''
+  });
 
   const handleCreateWithAi = async () => {
     if (!aiPrompt.productName || !aiPrompt.targetAudience) {
@@ -380,7 +396,82 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const handleMouseUp = () => {
     setIsDragging(false);
     dragStartRef.current = null;
+    // Corrected typo: elementStartPosPosRef -> elementStartPosRef
     elementStartPosRef.current = null;
+  };
+
+  // --- Funções de Manipulação de Seções e Itens ---
+
+  const handleDeleteSection = (index: number) => {
+      if (!editingPage || !editingPage.content) return;
+      if (!window.confirm("Remover esta seção?")) return;
+      const newSections = [...editingPage.content.sections];
+      newSections.splice(index, 1);
+      setEditingPage({ ...editingPage, content: { ...editingPage.content, sections: newSections } });
+  };
+
+  const handleMoveSection = (index: number, direction: 'up' | 'down') => {
+      if (!editingPage || !editingPage.content) return;
+      const newSections = [...editingPage.content.sections];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= newSections.length) return;
+      
+      const temp = newSections[index];
+      newSections[index] = newSections[targetIndex];
+      newSections[targetIndex] = temp;
+      setEditingPage({ ...editingPage, content: { ...editingPage.content, sections: newSections } });
+  };
+
+  const handleAddSection = (index: number, type: string) => {
+      if (!editingPage || !editingPage.content) return;
+      const newSection: LandingPageSection = {
+          id: crypto.randomUUID(),
+          type: type as any,
+          enabled: true,
+          content: {
+              headline: { value: 'Título Novo', ai: ['persuasive'] },
+              subheadline: { value: 'Subtítulo Novo', ai: ['persuasive'] }
+          }
+      };
+      
+      // Ajuste de conteúdo padrão por tipo
+      if (['modules', 'benefits', 'bonuses', 'testimonials', 'pricing', 'faq'].includes(type)) {
+          newSection.content.items = [];
+      }
+      
+      const newSections = [...editingPage.content.sections];
+      newSections.splice(index + 1, 0, newSection);
+      setEditingPage({ ...editingPage, content: { ...editingPage.content, sections: newSections } });
+  };
+
+  const handleAddItemToList = (sectionId: string, listKey: string) => {
+      if (!editingPage || !editingPage.content) return;
+      const newSections = [...editingPage.content.sections];
+      const section = newSections.find(s => s.id === sectionId);
+      if (!section) return;
+      
+      if (!Array.isArray(section.content[listKey])) section.content[listKey] = [];
+      
+      const newItem = {
+          id: crypto.randomUUID(),
+          value: 'Novo Item',
+          title: { value: 'Novo Item', ai: ['persuasive'] },
+          description: { value: 'Descrição do item', ai: ['persuasive'] },
+          ai: ['persuasive']
+      };
+      
+      section.content[listKey].push(newItem);
+      setEditingPage({ ...editingPage, content: { ...editingPage.content, sections: newSections } });
+  };
+
+  const handleRemoveItemFromList = (sectionId: string, listKey: string, itemIdx: number) => {
+      if (!editingPage || !editingPage.content) return;
+      const newSections = [...editingPage.content.sections];
+      const section = newSections.find(s => s.id === sectionId);
+      if (section && Array.isArray(section.content[listKey])) {
+          section.content[listKey].splice(itemIdx, 1);
+          setEditingPage({ ...editingPage, content: { ...editingPage.content, sections: newSections } });
+      }
   };
 
   const renderInteractableField = (sectionId: string, fieldKey: string, field: LandingPageField, styles: ElementStyles = {}, isMultiline = false) => {
@@ -391,8 +482,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       return (
           <div 
               className={clsx(
-                  "relative group/field border-2 transition-all",
-                  isSelected ? "border-indigo-500 bg-indigo-50/20 shadow-lg z-50" : "border-transparent hover:border-indigo-200"
+                  "relative group/field transition-all border border-transparent hover:border-indigo-300 hover:bg-indigo-50/10 rounded-lg",
+                  isSelected ? "border-indigo-500 bg-indigo-50/20 shadow-sm z-30" : ""
               )}
               style={{
                   position: (styles.x !== undefined || styles.y !== undefined) ? 'absolute' : 'relative',
@@ -407,15 +498,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
               }}
               onClick={(e) => { e.stopPropagation(); setSelectedSectionId(sectionId); setSelectedElementKey(fieldKey); }}
           >
-              <div className="absolute -top-10 left-0 hidden group-hover/field:flex items-center gap-1 bg-white p-1 rounded-lg shadow-xl border border-indigo-100 z-[60]">
-                  <button onMouseDown={(e) => handleElementMouseDown(e, sectionId, fieldKey)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400"><Move size={14}/></button>
-                  <div className="h-4 w-px bg-slate-200 mx-1"></div>
+              <div className="absolute -top-9 left-0 hidden group-hover/field:flex items-center gap-1 bg-white p-1 rounded-lg shadow-xl border border-indigo-100 z-[60]">
+                  <button onMouseDown={(e) => handleElementMouseDown(e, sectionId, fieldKey)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 cursor-move"><Move size={12}/></button>
+                  <div className="h-3 w-px bg-slate-200 mx-0.5"></div>
                   {field.ai?.map(action => (
                       <button 
                           key={action}
                           disabled={isRefining}
                           onClick={() => handleAiAction(sectionId, fieldKey, action, field.value)}
-                          className="px-2 py-1 text-[9px] font-black uppercase tracking-tighter bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 disabled:opacity-50"
+                          className="px-2 py-1 text-[8px] font-black uppercase tracking-tighter bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 disabled:opacity-50"
                       >
                           {isRefining ? <Loader2 size={10} className="animate-spin"/> : action.replace('_', ' ')}
                       </button>
@@ -424,7 +515,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
               {isMultiline ? (
                   <textarea 
-                    className="w-full bg-transparent border-none focus:ring-0 p-2 resize-none outline-none overflow-hidden" 
+                    className="w-full bg-transparent border-none focus:ring-0 p-1 resize-none outline-none overflow-hidden" 
                     value={field.value}
                     rows={field.value.split('\n').length}
                     onChange={e => {
@@ -446,7 +537,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   />
               ) : (
                   <input 
-                    className="w-full bg-transparent border-none focus:ring-0 p-2 outline-none font-bold" 
+                    className="w-full bg-transparent border-none focus:ring-0 p-1 outline-none font-bold" 
                     value={field.value}
                     onChange={e => {
                         const content = { ...editingPage?.content };
@@ -483,7 +574,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           <div className="flex items-center gap-3">
              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 rounded-full border border-indigo-100">
                 <BrainCircuit size={16} className="text-indigo-600 animate-pulse" />
-                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">IA Conectada</span>
+                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">Editor Visual</span>
              </div>
             <button onClick={handleSave} className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-2 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95">
               {isLoading ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} Salvar Página
@@ -494,7 +585,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         <div className="flex-1 flex overflow-hidden">
           <aside className="w-80 bg-white border-r border-slate-200 p-6 space-y-8 overflow-y-auto custom-scrollbar shadow-lg z-40">
              <div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Design</h3>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Aparência Global</h3>
                 <div className="space-y-4">
                     <div>
                         <label className="text-[9px] font-bold text-slate-500 uppercase">Nome da Marca</label>
@@ -518,23 +609,18 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                 </div>
              </div>
 
-             <div className="space-y-4">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Estrutura</h3>
+             <div className="space-y-4 pt-4 border-t border-slate-100">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Navegação Estrutural</h3>
                 <div className="space-y-2">
                     {content.sections.map((s, idx) => (
-                        <div key={s.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                        <div key={s.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 group/nav">
                            <div className="flex items-center gap-3">
                                <span className="text-[10px] font-black text-slate-300">#{idx+1}</span>
-                               <span className="text-xs font-bold text-slate-700 uppercase tracking-tighter">{s.type}</span>
+                               <span className="text-xs font-bold text-slate-700 uppercase tracking-tighter truncate max-w-[100px]">{s.type}</span>
                            </div>
                            <div className="flex gap-1">
-                               <button onClick={() => {
-                                   const newSections = [...content.sections];
-                                   newSections[idx].enabled = !newSections[idx].enabled;
-                                   setEditingPage({...editingPage, content: {...content, sections: newSections}});
-                               }} className={clsx("p-1.5 rounded hover:bg-white", s.enabled ? "text-indigo-600" : "text-slate-300")}>
-                                   {s.enabled ? <Eye size={14}/> : <X size={14}/>}
-                               </button>
+                               <button onClick={() => handleMoveSection(idx, 'up')} disabled={idx === 0} className="p-1 text-slate-300 hover:text-indigo-600 disabled:opacity-0"><ArrowUp size={14}/></button>
+                               <button onClick={() => handleMoveSection(idx, 'down')} disabled={idx === content.sections.length -1} className="p-1 text-slate-300 hover:text-indigo-600 disabled:opacity-0"><ArrowDown size={14}/></button>
                            </div>
                         </div>
                     ))}
@@ -543,67 +629,131 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           </aside>
 
           <main className="flex-1 bg-slate-200 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
-            <div className="bg-white w-full max-w-5xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-[200px]">
-                {content.sections.filter(s => s.enabled).map((section) => (
-                    <div key={section.id} id={`lp-section-${section.id}`} className="relative border-b border-slate-100 p-4 min-h-[100px]">
-                        {section.type === 'hero' && (
-                            <section className="pt-24 pb-20 px-12 bg-gradient-to-br from-slate-50 to-white relative">
-                                <div className="max-w-4xl mx-auto text-center space-y-8">
-                                    {renderInteractableField(section.id, 'headline', section.content.headline, section.styles?.headline, true)}
-                                    {renderInteractableField(section.id, 'subheadline', section.content.subheadline, section.styles?.subheadline, true)}
-                                    <div className="flex justify-center gap-4">
-                                        <div className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl">
-                                            {section.content.cta?.label?.value || 'CTA'}
+            <div className="bg-white w-full max-w-5xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-[300px]">
+                
+                {content.sections.map((section, sIdx) => (
+                    <div key={section.id} id={`lp-section-${section.id}`} className="relative group/section border-b border-slate-100 hover:bg-slate-50/30 transition-all">
+                        
+                        {/* Controles de Seção (Flutuantes no Hover) */}
+                        <div className="absolute right-4 top-4 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity flex items-center gap-2 bg-white/90 backdrop-blur-md p-1.5 rounded-xl shadow-xl border border-indigo-100">
+                            <div className="flex flex-col gap-1 pr-2 mr-2 border-r border-slate-200">
+                                <button onClick={() => handleMoveSection(sIdx, 'up')} disabled={sIdx === 0} className="p-1 hover:bg-indigo-50 text-indigo-600 disabled:text-slate-200"><ArrowUp size={16}/></button>
+                                <button onClick={() => handleMoveSection(sIdx, 'down')} disabled={sIdx === content.sections.length - 1} className="p-1 hover:bg-indigo-50 text-indigo-600 disabled:text-slate-200"><ArrowDown size={16}/></button>
+                            </div>
+                            <div className="text-[10px] font-black text-slate-400 uppercase pr-3">{section.type}</div>
+                            <button onClick={() => handleDeleteSection(sIdx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Remover Seção"><Trash2 size={16}/></button>
+                        </div>
+
+                        {/* Botão Flutuante: Adicionar Seção Acima */}
+                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
+                            <div className="relative group/add">
+                                <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
+                                <div className="absolute top-10 left-1/2 -translate-x-1/2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 hidden group-hover/add:block animate-in zoom-in-95">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-1 border-b pb-1">Inserir Seção</p>
+                                    {SECTION_TYPES.map(st => (
+                                        <button key={st.type} onClick={() => handleAddSection(sIdx - 1, st.type)} className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">{st.label}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Renderização de Conteúdo Baseado no Tipo */}
+                        <div className={clsx("relative p-4", !section.enabled && "opacity-50 grayscale")}>
+                            {section.type === 'hero' && (
+                                <section className="pt-24 pb-20 px-12 bg-gradient-to-br from-slate-50 to-white relative text-center">
+                                    <div className="max-w-4xl mx-auto space-y-8">
+                                        {renderInteractableField(section.id, 'headline', section.content.headline, section.styles?.headline, true)}
+                                        {renderInteractableField(section.id, 'subheadline', section.content.subheadline, section.styles?.subheadline, true)}
+                                        <div className="flex justify-center">
+                                            <div className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl">
+                                                {section.content.cta?.label?.value || 'QUERO ME INSCREVER'}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </section>
-                        )}
-                        {!['hero'].includes(section.type) && (
-                            <section className="py-12 px-12 relative">
-                                <div className="absolute top-4 left-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Bloco: {section.type}</div>
-                                <div className="space-y-6">
-                                    {Object.keys(section.content).map(key => {
-                                        const field = section.content[key];
-                                        // Campos de texto padrão
-                                        if (field && typeof field === 'object' && field.value !== undefined) {
-                                            return <div key={key}>{renderInteractableField(section.id, key, field as LandingPageField, section.styles?.[key])}</div>
-                                        }
-                                        // Listas (ex: modules, items, consequences, features)
-                                        if (Array.isArray(field)) {
-                                            return (
-                                                <div key={key} className="space-y-4 pt-4">
-                                                    <div className="flex items-center gap-2 border-b border-slate-100 pb-1">
-                                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{key}</h4>
+                                </section>
+                            )}
+
+                            {!['hero'].includes(section.type) && (
+                                <section className="py-12 px-12 relative">
+                                    <div className="space-y-6">
+                                        {Object.keys(section.content).map(key => {
+                                            const field = section.content[key];
+                                            
+                                            // Campos de Texto Simples
+                                            if (field && typeof field === 'object' && field.value !== undefined && !Array.isArray(field)) {
+                                                return <div key={key}>{renderInteractableField(section.id, key, field as LandingPageField, section.styles?.[key])}</div>
+                                            }
+
+                                            // Listas (Módulos, Benefícios, etc.)
+                                            if (Array.isArray(field)) {
+                                                return (
+                                                    <div key={key} className="space-y-4 pt-6">
+                                                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                                            <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                                                                <List size={14}/> {key.replace('_', ' ')}
+                                                            </h4>
+                                                            <button 
+                                                                onClick={() => handleAddItemToList(section.id, key)}
+                                                                className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase hover:bg-indigo-100 transition-all"
+                                                            >
+                                                                <Plus size={12}/> Adicionar Item
+                                                            </button>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            {field.map((item, itemIdx) => (
+                                                                <div key={item.id || itemIdx} className="group/item relative p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100 hover:border-indigo-200 transition-all space-y-4">
+                                                                    <button 
+                                                                        onClick={() => handleRemoveItemFromList(section.id, key, itemIdx)}
+                                                                        className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-red-600 opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                                                    >
+                                                                        <X size={14}/>
+                                                                    </button>
+                                                                    {Object.keys(item).map(subKey => {
+                                                                        if (item[subKey] && typeof item[subKey] === 'object' && item[subKey].value !== undefined) {
+                                                                            return (
+                                                                                <div key={subKey}>
+                                                                                    <label className="text-[8px] font-black text-slate-300 uppercase ml-1">{subKey}</label>
+                                                                                    {renderInteractableField(section.id, `${key}.${itemIdx}.${subKey}`, item[subKey])}
+                                                                                </div>
+                                                                            )
+                                                                        }
+                                                                        return null;
+                                                                    })}
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                    <div className="grid grid-cols-1 gap-4">
-                                                        {field.map((item, itemIdx) => (
-                                                            <div key={item.id || itemIdx} className="p-5 bg-slate-50/50 rounded-[2rem] border border-slate-100 space-y-4">
-                                                                <div className="flex items-center gap-2 text-[8px] font-black text-indigo-400 uppercase tracking-widest">Item {itemIdx + 1}</div>
-                                                                {Object.keys(item).map(subKey => {
-                                                                    if (item[subKey] && typeof item[subKey] === 'object' && item[subKey].value !== undefined) {
-                                                                        return (
-                                                                            <div key={subKey} className="space-y-1">
-                                                                                <label className="text-[9px] font-bold text-slate-400 uppercase ml-2">{subKey}</label>
-                                                                                {renderInteractableField(section.id, `${key}.${itemIdx}.${subKey}`, item[subKey])}
-                                                                            </div>
-                                                                        )
-                                                                    }
-                                                                    return null;
-                                                                })}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )
-                                        }
-                                        return null;
-                                    })}
+                                                )
+                                            }
+                                            return null;
+                                        })}
+                                    </div>
+                                </section>
+                            )}
+                        </div>
+
+                        {/* Botão Flutuante: Adicionar Seção Abaixo */}
+                        <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
+                            <div className="relative group/add">
+                                <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
+                                <div className="absolute top-10 left-1/2 -translate-x-1/2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 hidden group-hover/add:block animate-in zoom-in-95">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-1 border-b pb-1">Inserir Seção</p>
+                                    {SECTION_TYPES.map(st => (
+                                        <button key={st.type} onClick={() => handleAddSection(sIdx, st.type)} className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">{st.label}</button>
+                                    ))}
                                 </div>
-                            </section>
-                        )}
+                            </div>
+                        </div>
+
                     </div>
                 ))}
+
+                {/* Bloco Vazio de Rodapé do Editor */}
+                <div className="p-20 text-center text-slate-300">
+                    <Sparkles size={40} className="mx-auto mb-4 opacity-20"/>
+                    <p className="text-sm font-medium">Fim da página. Use os botões flutuantes para adicionar mais seções.</p>
+                </div>
+
             </div>
           </main>
         </div>
@@ -737,3 +887,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     </div>
   );
 };
+
+// UseMemo Helper
+function useMemo<T>(factory: () => T, deps: any[]): T {
+    return React.useMemo(factory, deps);
+}

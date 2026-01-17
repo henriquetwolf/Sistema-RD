@@ -9,7 +9,7 @@ import {
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
   Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
-  Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit
+  Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField } from '../types';
@@ -107,13 +107,13 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   };
 
   const handleCreateWithAi = async () => {
-    if (!aiPrompt.productName) {
+    if (creationMode === 'standard' && !aiPrompt.productName) {
       alert("Informe o nome do produto.");
       return;
     }
 
     if (creationMode === 'prompt' && !aiPrompt.customPrompt) {
-      alert("Escreva o prompt com as instruções da página.");
+      alert("Cole o código HTML para continuar.");
       return;
     }
 
@@ -122,27 +122,32 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       let basePrompt = `Você é um arquiteto sênior de design de conversão e expert em copywriting.
-      Sua missão é criar uma Landing Page Premium em formato JSON que venda o produto: "${aiPrompt.productName}".
-      
-      INFORMAÇÕES DA NOVA OFERTA:
-      Nome: ${aiPrompt.productName}
-      Marca: ${aiPrompt.brandName}
-      Público: ${aiPrompt.targetAudience}
-      Descrição: ${aiPrompt.productDescription}
-      Preço: ${aiPrompt.price}
-      Garantia: ${aiPrompt.guarantee}
-      Tom de Voz: ${aiPrompt.tone}`;
+      Sua missão é criar uma Landing Page Premium em formato JSON.`;
 
       if (creationMode === 'prompt') {
-        basePrompt += `\n\nREQUISITO OBRIGATÓRIO (PROMPT PERSONALIZADO): 
-        Siga EXATAMENTE as seguintes instruções do usuário para criar a estrutura e o conteúdo:
+        basePrompt += `\n\nREQUISITO OBRIGATÓRIO (HTML): 
+        O usuário forneceu o seguinte código HTML de uma página existente. 
+        Sua tarefa é analisar este HTML e mapear seu conteúdo (textos, títulos, seções) para o nosso esquema JSON abaixo de forma EXATA.
+        Tente identificar quais partes do HTML correspondem a seções como 'hero', 'pain', 'method', 'benefits', etc.
+        
+        CÓDIGO HTML FORNECIDO:
         "${aiPrompt.customPrompt}"`;
         
         if (aiPrompt.selectedFormId) {
-            basePrompt += `\n\nATENÇÃO: Você DEVE incluir uma seção do tipo 'form' no JSON. No conteúdo dessa seção, o campo 'value' deve ser obrigatoriamente o ID: "${aiPrompt.selectedFormId}". Escolha o melhor lugar na página para inserir este formulário com base no prompt do usuário.`;
+            basePrompt += `\n\nINTEGRAÇÃO DE FORMULÁRIO: Você DEVE incluir uma seção do tipo 'form' no JSON. No conteúdo dessa seção, o campo 'value' deve ser obrigatoriamente o ID: "${aiPrompt.selectedFormId}". Escolha a posição mais lógica dentro da estrutura baseada no HTML fornecido.`;
         }
       } else {
-        basePrompt += `\n\nESTRUTURA SUGERIDA: Hero, Dor, Método, Benefícios, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
+        basePrompt += `\n\nINFORMAÇÕES DA NOVA OFERTA:
+        Nome: ${aiPrompt.productName}
+        Marca: ${aiPrompt.brandName}
+        Público: ${aiPrompt.targetAudience}
+        Descrição: ${aiPrompt.productDescription}
+        Preço: ${aiPrompt.price}
+        Garantia: ${aiPrompt.guarantee}
+        Tom de Voz: ${aiPrompt.tone}
+        
+        ESTRUTURA SUGERIDA: Hero, Dor, Método, Benefícios, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
+        
         if (aiPrompt.referenceTemplate) {
           basePrompt += `\n\nInspire-se no estilo visual do site: ${aiPrompt.referenceTemplate}.`;
         }
@@ -252,9 +257,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const generated = JSON.parse(text);
       
       const newPage: Partial<LandingPage> = {
-        title: generated.meta?.title || aiPrompt.productName,
-        productName: aiPrompt.productName,
-        slug: slugify(generated.meta?.title || aiPrompt.productName),
+        title: generated.meta?.title || aiPrompt.productName || "Página Gerada via HTML",
+        productName: aiPrompt.productName || generated.meta?.title || "Produto via HTML",
+        slug: slugify(generated.meta?.title || aiPrompt.productName || "pagina-html-" + Date.now()),
         content: generated,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -279,7 +284,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `Aja como um Copywriter. Melhore o texto a seguir usando a técnica "${action}":
       Texto: "${currentVal}"
-      Produto: "${aiPrompt.productName}"
       Retorne apenas o texto final melhorado, sem aspas ou explicações.`;
 
       const response = await ai.models.generateContent({
@@ -978,19 +982,19 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                      </div>
 
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {creationMode === 'prompt' && (
+                        {creationMode === 'prompt' ? (
                           <div className="md:col-span-2 space-y-6">
                               <div>
                                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2">
-                                    <MessageSquare size={14} className="text-orange-500"/> Instruções do Prompt (Como deve ser a página?)
+                                    <Code size={14} className="text-orange-500"/> Cole o Código HTML aqui
                                 </label>
                                 <textarea 
-                                    className="w-full px-6 py-4 border-2 border-orange-100 bg-orange-50/30 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-medium outline-none transition-all h-32 resize-none leading-relaxed" 
+                                    className="w-full px-6 py-4 border-2 border-orange-100 bg-orange-50/30 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-xs font-mono h-48 resize-none outline-none transition-all leading-relaxed" 
                                     value={aiPrompt.customPrompt} 
                                     onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} 
-                                    placeholder="Ex: Crie uma página com tema escuro, focada em depoimentos e que tenha um botão de CTA bem grande no final..." 
+                                    placeholder="<!-- Cole seu código HTML completo aqui -->" 
                                 />
-                                <p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA seguirá suas orientações para montar a estrutura visual e os textos.</p>
+                                <p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA converterá seu HTML para a estrutura editável do sistema.</p>
                               </div>
 
                               <div>
@@ -1009,50 +1013,50 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                 </select>
                               </div>
                           </div>
-                        )}
+                        ) : (
+                          <>
+                            <div className="md:col-span-2">
+                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Modelo de Referência Interno</label>
+                                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                                    {REFERENCE_TEMPLATES.map((tmpl) => (
+                                        <button
+                                            key={tmpl.id}
+                                            onClick={() => setAiPrompt({...aiPrompt, referenceTemplate: tmpl.url})}
+                                            className={clsx(
+                                                "flex flex-col rounded-2xl border-2 transition-all group overflow-hidden bg-white text-left",
+                                                aiPrompt.referenceTemplate === tmpl.url ? "border-indigo-600 ring-4 ring-indigo-50 shadow-lg scale-105" : "border-slate-100 hover:border-indigo-200"
+                                            )}
+                                        >
+                                            <div className="h-20 w-full overflow-hidden relative border-b border-slate-100">
+                                                <img src={tmpl.imageUrl} className="w-full h-full object-cover" alt={tmpl.name} />
+                                            </div>
+                                            <div className="p-2 text-center"><span className="text-[10px] font-black uppercase text-slate-800">{tmpl.name}</span></div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
 
-                        {creationMode === 'standard' && (
-                          <div className="md:col-span-2">
-                              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Modelo de Referência Interno</label>
-                              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                                  {REFERENCE_TEMPLATES.map((tmpl) => (
-                                      <button
-                                          key={tmpl.id}
-                                          onClick={() => setAiPrompt({...aiPrompt, referenceTemplate: tmpl.url})}
-                                          className={clsx(
-                                              "flex flex-col rounded-2xl border-2 transition-all group overflow-hidden bg-white text-left",
-                                              aiPrompt.referenceTemplate === tmpl.url ? "border-indigo-600 ring-4 ring-indigo-50 shadow-lg scale-105" : "border-slate-100 hover:border-indigo-200"
-                                          )}
-                                      >
-                                          <div className="h-20 w-full overflow-hidden relative border-b border-slate-100">
-                                              <img src={tmpl.imageUrl} className="w-full h-full object-cover" alt={tmpl.name} />
-                                          </div>
-                                          <div className="p-2 text-center"><span className="text-[10px] font-black uppercase text-slate-800">{tmpl.name}</span></div>
-                                      </button>
-                                  ))}
-                              </div>
-                          </div>
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
+                                <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Público-Alvo</label>
+                                <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto / Benefício Principal</label>
+                                <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="O que seu produto faz e qual a maior promessa?" />
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:col-span-2">
+                                <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço</label><input type="text" className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.price} onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} placeholder="R$ 1.997,00" /></div>
+                                <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Garantia</label><input type="text" className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.guarantee} onChange={e => setAiPrompt({...aiPrompt, guarantee: e.target.value})} placeholder="7 dias" /></div>
+                                <div className="md:col-span-2"><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Tom de Voz</label><select className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.tone} onChange={e => setAiPrompt({...aiPrompt, tone: e.target.value})}><option value="Profissional e Persuasivo">Profissional e Persuasivo</option><option value="Elegante e Premium">Elegante e Premium</option></select></div>
+                            </div>
+                          </>
                         )}
-
-                        <div>
-                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
-                            <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
-                        </div>
-                        <div>
-                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Público-Alvo</label>
-                            <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" />
-                        </div>
-                        <div className="md:col-span-2">
-                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto / Benefício Principal</label>
-                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="O que seu produto faz e qual a maior promessa?" />
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:col-span-2">
-                            <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço</label><input type="text" className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.price} onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} placeholder="R$ 1.997,00" /></div>
-                            <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Garantia</label><input type="text" className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.guarantee} onChange={e => setAiPrompt({...aiPrompt, guarantee: e.target.value})} placeholder="7 dias" /></div>
-                            <div className="md:col-span-2"><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Tom de Voz</label><select className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.tone} onChange={e => setAiPrompt({...aiPrompt, tone: e.target.value})}><option value="Profissional e Persuasivo">Profissional e Persuasivo</option><option value="Elegante e Premium">Elegante e Premium</option></select></div>
-                        </div>
                      </div>
-                     <button onClick={handleCreateWithAi} disabled={isGenerating || !aiPrompt.productName} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
+                     <button onClick={handleCreateWithAi} disabled={isGenerating || (creationMode === 'standard' && !aiPrompt.productName) || (creationMode === 'prompt' && !aiPrompt.customPrompt)} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
                         {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Zap size={24} />}
                         {isGenerating ? 'IA Consultora Gerando Estratégia...' : 'Gerar Estrutura Premium'}
                      </button>

@@ -120,7 +120,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       let basePrompt = `Você é um especialista em copywriting de alta conversão e design premium.
-      Crie uma Landing Page COMPLETA usando as estruturas AIDA (Atenção, Interesse, Desejo, Ação) e PAS (Problema, Agitação, Solução).
+      Sua tarefa é criar uma Landing Page completa com base nos dados fornecidos.
       
       DADOS DO PRODUTO:
       Nome: ${aiPrompt.productName}
@@ -129,16 +129,21 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       Descrição: ${aiPrompt.productDescription}
       Preço: ${aiPrompt.price}
       Garantia: ${aiPrompt.guarantee}
-      Tom: ${aiPrompt.tone}
-      
-      ESTRUTURA OBRIGATÓRIA:
-      Hero, Dor, Método, Benefícios, Para quem é, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
+      Tom: ${aiPrompt.tone}`;
 
       if (creationMode === 'imitation') {
-        basePrompt += `\n\nIMPORTANTE: A página deve IMITAR o estilo visual, a estrutura de blocos e o tom de voz do seguinte link: ${aiPrompt.referenceUrl}. 
-        Use a ferramenta de busca para analisar a estrutura desta página e replicar sua lógica de persuasão para o NOVO produto descrito acima.`;
-      } else if (aiPrompt.referenceTemplate) {
-        basePrompt += `\n\nIMPORTANTE: Baseie a estrutura e o tom de voz no modelo de referência: ${aiPrompt.referenceTemplate}.`;
+        basePrompt += `\n\nREQUISITO OBRIGATÓRIO DE DESIGN (IMITE O LINK): A nova página deve ser UMA CÓPIA FIEL de layout, cores e imagens do seguinte link de referência: ${aiPrompt.referenceUrl}.
+        Use a ferramenta de busca para analisar o link e identificar:
+        1. O ESQUEMA DE CORES exato (HEX codes para cores primárias, secundárias, botões e fundos).
+        2. A ESTRUTURA E SEQUÊNCIA exata das seções (ex: se o link começa com depoimentos, a sua página também deve começar).
+        3. O ESTILO DAS IMAGENS e disposições visuais.
+        
+        Você deve gerar a estrutura JSON idêntica em estilo e layout ao link, apenas substituindo o texto pelas informações do produto "${aiPrompt.productName}" fornecido acima.`;
+      } else {
+        basePrompt += `\n\nESTRUTURA SUGERIDA: Hero, Dor, Método, Benefícios, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
+        if (aiPrompt.referenceTemplate) {
+          basePrompt += `\n\nBaseie o estilo no modelo de referência interno: ${aiPrompt.referenceTemplate}.`;
+        }
       }
 
       basePrompt += `\n\nFORMATO DE RETORNO:
@@ -168,7 +173,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       };
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3-pro-preview",
         contents: basePrompt,
         config: {
           tools: creationMode === 'imitation' ? [{ googleSearch: {} }] : undefined,
@@ -189,7 +194,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   properties: {
                       brand_name: { type: SchemaType.STRING },
                       tone: { type: SchemaType.STRING },
-                      primary_color: { type: SchemaType.STRING }
+                      primary_color: { type: SchemaType.STRING },
+                      secondary_color: { type: SchemaType.STRING },
+                      bg_color: { type: SchemaType.STRING }
                   },
                   required: ["brand_name", "primary_color"]
               },

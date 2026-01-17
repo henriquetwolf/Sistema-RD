@@ -8,9 +8,8 @@ import {
   ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check,
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
-  Eye, GripVertical, PlusSquare,
-  // Added List icon to imports
-  List
+  Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
+  Maximize, Minimize, Anchor, CopySlash, MousePointerClick
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField } from '../types';
@@ -50,6 +49,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [creationStep, setCreationStep] = useState<'choice' | 'form'>('choice');
+  const [creationMode, setCreationMode] = useState<'standard' | 'imitation'>('standard');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRefiningField, setIsRefiningField] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -60,6 +61,23 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number, y: number } | null>(null);
   const elementStartPosRef = useRef<{ x: number, y: number } | null>(null);
+
+  const [editingPage, setEditingPage] = useState<Partial<LandingPage> | null>(null);
+  const [currentDraft, setCurrentDraft] = useState<Partial<LandingPage> | null>(null);
+  const [aiPrompt, setAiPrompt] = useState({
+      productName: '',
+      brandName: 'VOLL Pilates',
+      productDescription: '',
+      targetAudience: '',
+      mainBenefits: '',
+      price: '',
+      offerDetails: '',
+      guarantee: '7 dias',
+      scarcity: 'Vagas limitadas para este lote',
+      tone: 'Profissional e Persuasivo',
+      referenceTemplate: '',
+      referenceUrl: ''
+  });
 
   useEffect(() => {
     fetchPages();
@@ -86,25 +104,14 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       } catch (e) {}
   };
 
-  const [editingPage, setEditingPage] = useState<Partial<LandingPage> | null>(null);
-  const [currentDraft, setCurrentDraft] = useState<Partial<LandingPage> | null>(null);
-  const [aiPrompt, setAiPrompt] = useState({
-      productName: '',
-      brandName: 'VOLL Pilates',
-      productDescription: '',
-      targetAudience: '',
-      mainBenefits: '',
-      price: '',
-      offerDetails: '',
-      guarantee: '7 dias',
-      scarcity: 'Vagas limitadas para este lote',
-      tone: 'Profissional e Persuasivo',
-      referenceTemplate: ''
-  });
-
   const handleCreateWithAi = async () => {
     if (!aiPrompt.productName || !aiPrompt.targetAudience) {
       alert("Informe pelo menos o nome do produto e o público-alvo.");
+      return;
+    }
+
+    if (creationMode === 'imitation' && !aiPrompt.referenceUrl) {
+      alert("Informe o link da página que deseja imitar.");
       return;
     }
 
@@ -112,33 +119,31 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      const templateReference = aiPrompt.referenceTemplate 
-        ? `IMPORTANTE: Baseie a estrutura e o tom de voz no modelo: ${aiPrompt.referenceTemplate}.` 
-        : '';
-
-      const prompt = `Você é um especialista em copywriting de alta conversão e design premium.
+      let basePrompt = `Você é um especialista em copywriting de alta conversão e design premium.
       Crie uma Landing Page COMPLETA usando as estruturas AIDA (Atenção, Interesse, Desejo, Ação) e PAS (Problema, Agitação, Solução).
       
-      DADOS:
-      Curso: ${aiPrompt.productName}
+      DADOS DO PRODUTO:
+      Nome: ${aiPrompt.productName}
       Marca: ${aiPrompt.brandName}
       Público: ${aiPrompt.targetAudience}
       Descrição: ${aiPrompt.productDescription}
-      Promessa: ${aiPrompt.mainBenefits}
       Preço: ${aiPrompt.price}
       Garantia: ${aiPrompt.guarantee}
-      Escassez: ${aiPrompt.scarcity}
       Tom: ${aiPrompt.tone}
-      ${templateReference}
       
       ESTRUTURA OBRIGATÓRIA:
-      Hero, Dor, Método, Benefícios, Para quem é, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.
+      Hero, Dor, Método, Benefícios, Para quem é, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
 
-      IMPORTANTE:
-      - Cada campo de texto deve ser um objeto: { "value": "Texto persuasivo aqui", "ai": ["variations", "more_persuasive"] }.
-      - As listas devem ser arrays de objetos com "id", "value" (ou "title" e "description") e campo "ai".
-      
-      Retorne APENAS o JSON.`;
+      if (creationMode === 'imitation') {
+        basePrompt += `\n\nIMPORTANTE: A página deve IMITAR o estilo visual, a estrutura de blocos e o tom de voz do seguinte link: ${aiPrompt.referenceUrl}. 
+        Use a ferramenta de busca para analisar a estrutura desta página e replicar sua lógica de persuasão para o NOVO produto descrito acima.`;
+      } else if (aiPrompt.referenceTemplate) {
+        basePrompt += `\n\nIMPORTANTE: Baseie a estrutura e o tom de voz no modelo de referência: ${aiPrompt.referenceTemplate}.`;
+      }
+
+      basePrompt += `\n\nFORMATO DE RETORNO:
+      - Cada campo de texto deve ser um objeto: { "value": "Texto aqui", "ai": ["variations"] }.
+      - Retorne APENAS o JSON conforme o schema solicitado.`;
 
       const fieldSchema = {
         type: SchemaType.OBJECT,
@@ -164,8 +169,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: prompt,
+        contents: basePrompt,
         config: {
+          tools: creationMode === 'imitation' ? [{ googleSearch: {} }] : undefined,
           responseMimeType: "application/json",
           responseSchema: {
             type: SchemaType.OBJECT,
@@ -396,7 +402,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const handleMouseUp = () => {
     setIsDragging(false);
     dragStartRef.current = null;
-    // Corrected typo: elementStartPosPosRef -> elementStartPosRef
     elementStartPosRef.current = null;
   };
 
@@ -434,7 +439,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           }
       };
       
-      // Ajuste de conteúdo padrão por tipo
       if (['modules', 'benefits', 'bonuses', 'testimonials', 'pricing', 'faq'].includes(type)) {
           newSection.content.items = [];
       }
@@ -474,10 +478,33 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       }
   };
 
-  const renderInteractableField = (sectionId: string, fieldKey: string, field: LandingPageField, styles: ElementStyles = {}, isMultiline = false) => {
-      if (!field || typeof field.value !== 'string') return null;
+  const handleAddFieldToSection = (sectionId: string, type: 'text' | 'image' | 'video' | 'form') => {
+      if (!editingPage || !editingPage.content) return;
+      const newSections = [...editingPage.content.sections];
+      const section = newSections.find(s => s.id === sectionId);
+      if (!section) return;
+
+      const newKey = `${type}_${Date.now()}`;
+      if (type === 'text') {
+          section.content[newKey] = { value: 'Novo Texto', ai: ['persuasive'] };
+      } else if (type === 'image') {
+          section.content[newKey] = { value: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=1000&auto=format&fit=crop', type: 'image' };
+      } else if (type === 'video') {
+          section.content[newKey] = { value: '<iframe width="560" height="315" src="https://www.youtube.com/embed/dQw4w9WgXcQ" frameborder="0"></iframe>', type: 'video' };
+      } else if (type === 'form') {
+          section.content[newKey] = { value: availableForms[0]?.id || '', type: 'form' };
+      }
+
+      setEditingPage({ ...editingPage, content: { ...editingPage.content, sections: newSections } });
+  };
+
+  const renderInteractableField = (sectionId: string, fieldKey: string, field: any, styles: ElementStyles = {}, isMultiline = false) => {
+      if (!field) return null;
+      
       const isSelected = selectedSectionId === sectionId && selectedElementKey === fieldKey;
       const isRefining = isRefiningField === `${sectionId}-${fieldKey}`;
+      const isMedia = field.type === 'image' || field.type === 'video' || field.type === 'form';
+      const value = typeof field === 'object' ? field.value : field;
 
       return (
           <div 
@@ -498,26 +525,78 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
               }}
               onClick={(e) => { e.stopPropagation(); setSelectedSectionId(sectionId); setSelectedElementKey(fieldKey); }}
           >
-              <div className="absolute -top-9 left-0 hidden group-hover/field:flex items-center gap-1 bg-white p-1 rounded-lg shadow-xl border border-indigo-100 z-[60]">
+              <div className="absolute -top-11 left-0 hidden group-hover/field:flex items-center gap-1 bg-white p-1 rounded-lg shadow-xl border border-indigo-100 z-[60]">
                   <button onMouseDown={(e) => handleElementMouseDown(e, sectionId, fieldKey)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 cursor-move"><Move size={12}/></button>
                   <div className="h-3 w-px bg-slate-200 mx-0.5"></div>
-                  {field.ai?.map(action => (
+                  
+                  {/* Sizing Controls */}
+                  <button onClick={(e) => { e.stopPropagation(); updateSectionStyles(sectionId, fieldKey, { width: Math.max(10, (styles.width || 100) - 10) }); }} className="p-1.5 hover:bg-slate-100 rounded text-slate-400"><Minimize size={12}/></button>
+                  <button onClick={(e) => { e.stopPropagation(); updateSectionStyles(sectionId, fieldKey, { width: Math.min(100, (styles.width || 100) + 10) }); }} className="p-1.5 hover:bg-slate-100 rounded text-slate-400"><Maximize size={12}/></button>
+                  <div className="h-3 w-px bg-slate-200 mx-0.5"></div>
+
+                  {!isMedia && field.ai?.map((action: string) => (
                       <button 
                           key={action}
                           disabled={isRefining}
-                          onClick={() => handleAiAction(sectionId, fieldKey, action, field.value)}
+                          onClick={() => handleAiAction(sectionId, fieldKey, action, value)}
                           className="px-2 py-1 text-[8px] font-black uppercase tracking-tighter bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 disabled:opacity-50"
                       >
                           {isRefining ? <Loader2 size={10} className="animate-spin"/> : action.replace('_', ' ')}
                       </button>
                   ))}
+                  {fieldKey.includes('_') && (
+                      <button onClick={(e) => {
+                          e.stopPropagation();
+                          const newSections = [...editingPage!.content!.sections];
+                          const s = newSections.find(s => s.id === sectionId);
+                          delete s.content[fieldKey];
+                          setEditingPage({ ...editingPage!, content: { ...editingPage!.content!, sections: newSections } });
+                      }} className="p-1.5 hover:bg-red-50 text-red-400 rounded"><Trash2 size={12}/></button>
+                  )}
               </div>
 
-              {isMultiline ? (
+              {field.type === 'image' ? (
+                  <div className="space-y-2 p-2">
+                      <img src={value} className="max-w-full h-auto rounded-lg" alt="Preview" />
+                      <input className="w-full text-[10px] bg-white border border-slate-200 p-1 rounded" value={value} onChange={e => {
+                          const content = { ...editingPage?.content };
+                          const s = content.sections.find((s: any) => s.id === sectionId);
+                          s.content[fieldKey].value = e.target.value;
+                          setEditingPage({ ...editingPage!, content });
+                      }} placeholder="URL da Imagem" />
+                  </div>
+              ) : field.type === 'video' ? (
+                  <div className="space-y-2 p-2">
+                      <div className="aspect-video bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden" dangerouslySetInnerHTML={{ __html: value }}></div>
+                      <textarea className="w-full text-[10px] bg-white border border-slate-200 p-1 rounded font-mono" rows={3} value={value} onChange={e => {
+                          const content = { ...editingPage?.content };
+                          const s = content.sections.find((s: any) => s.id === sectionId);
+                          s.content[fieldKey].value = e.target.value;
+                          setEditingPage({ ...editingPage!, content });
+                      }} placeholder="Iframe do Vídeo" />
+                  </div>
+              ) : field.type === 'form' ? (
+                  <div className="p-4 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl text-center">
+                      <p className="text-xs font-bold text-slate-500 mb-2">Formulário Integrado</p>
+                      <select 
+                        className="w-full text-[10px] p-2 border rounded-xl bg-white font-bold"
+                        value={value}
+                        onChange={e => {
+                            const content = { ...editingPage?.content };
+                            const s = content.sections.find((s: any) => s.id === sectionId);
+                            s.content[fieldKey].value = e.target.value;
+                            setEditingPage({ ...editingPage!, content });
+                        }}
+                      >
+                          <option value="">Selecione um formulário...</option>
+                          {availableForms.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
+                      </select>
+                  </div>
+              ) : isMultiline ? (
                   <textarea 
                     className="w-full bg-transparent border-none focus:ring-0 p-1 resize-none outline-none overflow-hidden" 
-                    value={field.value}
-                    rows={field.value.split('\n').length}
+                    value={value}
+                    rows={value.split('\n').length}
                     onChange={e => {
                         const content = { ...editingPage?.content };
                         const sIdx = content.sections.findIndex((s: any) => s.id === sectionId);
@@ -530,7 +609,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                             newList[parseInt(itemIdx)][subKey].value = e.target.value;
                             section.content[listKey] = newList;
                         } else {
-                            section.content[fieldKey].value = e.target.value;
+                            if (typeof section.content[fieldKey] === 'object') {
+                                section.content[fieldKey].value = e.target.value;
+                            } else {
+                                section.content[fieldKey] = e.target.value;
+                            }
                         }
                         setEditingPage({ ...editingPage!, content });
                     }}
@@ -538,7 +621,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
               ) : (
                   <input 
                     className="w-full bg-transparent border-none focus:ring-0 p-1 outline-none font-bold" 
-                    value={field.value}
+                    value={value}
                     onChange={e => {
                         const content = { ...editingPage?.content };
                         const sIdx = content.sections.findIndex((s: any) => s.id === sectionId);
@@ -551,7 +634,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                             newList[parseInt(itemIdx)][subKey].value = e.target.value;
                             section.content[listKey] = newList;
                         } else {
-                            section.content[fieldKey].value = e.target.value;
+                            if (typeof section.content[fieldKey] === 'object') {
+                                section.content[fieldKey].value = e.target.value;
+                            } else {
+                                section.content[fieldKey] = e.target.value;
+                            }
                         }
                         setEditingPage({ ...editingPage!, content });
                     }}
@@ -574,10 +661,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           <div className="flex items-center gap-3">
              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 rounded-full border border-indigo-100">
                 <BrainCircuit size={16} className="text-indigo-600 animate-pulse" />
-                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">Editor Visual</span>
+                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">Editor de Alta Performance</span>
              </div>
             <button onClick={handleSave} className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-2 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95">
-              {isLoading ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} Salvar Página
+              {isLoading ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} Salvar Alterações
             </button>
           </div>
         </header>
@@ -629,22 +716,30 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           </aside>
 
           <main className="flex-1 bg-slate-200 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
-            <div className="bg-white w-full max-w-5xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-[300px]">
+            <div className="bg-white w-full max-w-5xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-[400px]">
                 
                 {content.sections.map((section, sIdx) => (
                     <div key={section.id} id={`lp-section-${section.id}`} className="relative group/section border-b border-slate-100 hover:bg-slate-50/30 transition-all">
                         
-                        {/* Controles de Seção (Flutuantes no Hover) */}
+                        {/* Controles de Seção */}
                         <div className="absolute right-4 top-4 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity flex items-center gap-2 bg-white/90 backdrop-blur-md p-1.5 rounded-xl shadow-xl border border-indigo-100">
-                            <div className="flex flex-col gap-1 pr-2 mr-2 border-r border-slate-200">
-                                <button onClick={() => handleMoveSection(sIdx, 'up')} disabled={sIdx === 0} className="p-1 hover:bg-indigo-50 text-indigo-600 disabled:text-slate-200"><ArrowUp size={16}/></button>
-                                <button onClick={() => handleMoveSection(sIdx, 'down')} disabled={sIdx === content.sections.length - 1} className="p-1 hover:bg-indigo-50 text-indigo-600 disabled:text-slate-200"><ArrowDown size={16}/></button>
+                            <div className="flex flex-col gap-1 pr-2 mr-2 border-r border-slate-200 text-slate-400">
+                                <button onClick={() => handleMoveSection(sIdx, 'up')} disabled={sIdx === 0} className="p-1 hover:bg-indigo-50 hover:text-indigo-600"><ArrowUp size={14}/></button>
+                                <button onClick={() => handleMoveSection(sIdx, 'down')} disabled={sIdx === content.sections.length - 1} className="p-1 hover:bg-indigo-50 hover:text-indigo-600"><ArrowDown size={14}/></button>
                             </div>
+                            
+                            <div className="flex flex-col pr-2 mr-2 border-r border-slate-200">
+                                <button onClick={() => handleAddFieldToSection(section.id, 'text')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Texto"><Type size={14}/></button>
+                                <button onClick={() => handleAddFieldToSection(section.id, 'image')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Imagem"><LucideImage size={14}/></button>
+                                <button onClick={() => handleAddFieldToSection(section.id, 'video')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Vídeo"><Video size={14}/></button>
+                                <button onClick={() => handleAddFieldToSection(section.id, 'form')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Formulário"><FormInput size={14}/></button>
+                            </div>
+
                             <div className="text-[10px] font-black text-slate-400 uppercase pr-3">{section.type}</div>
-                            <button onClick={() => handleDeleteSection(sIdx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Remover Seção"><Trash2 size={16}/></button>
+                            <button onClick={() => handleDeleteSection(sIdx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
                         </div>
 
-                        {/* Botão Flutuante: Adicionar Seção Acima */}
+                        {/* Botão Adicionar Seção Acima */}
                         <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
                             <div className="relative group/add">
                                 <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
@@ -657,82 +752,96 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                             </div>
                         </div>
 
-                        {/* Renderização de Conteúdo Baseado no Tipo */}
-                        <div className={clsx("relative p-4", !section.enabled && "opacity-50 grayscale")}>
-                            {section.type === 'hero' && (
-                                <section className="pt-24 pb-20 px-12 bg-gradient-to-br from-slate-50 to-white relative text-center">
-                                    <div className="max-w-4xl mx-auto space-y-8">
-                                        {renderInteractableField(section.id, 'headline', section.content.headline, section.styles?.headline, true)}
-                                        {renderInteractableField(section.id, 'subheadline', section.content.subheadline, section.styles?.subheadline, true)}
-                                        <div className="flex justify-center">
-                                            <div className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl">
-                                                {section.content.cta?.label?.value || 'QUERO ME INSCREVER'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </section>
-                            )}
-
-                            {!['hero'].includes(section.type) && (
-                                <section className="py-12 px-12 relative">
-                                    <div className="space-y-6">
-                                        {Object.keys(section.content).map(key => {
-                                            const field = section.content[key];
-                                            
-                                            // Campos de Texto Simples
-                                            if (field && typeof field === 'object' && field.value !== undefined && !Array.isArray(field)) {
-                                                return <div key={key}>{renderInteractableField(section.id, key, field as LandingPageField, section.styles?.[key])}</div>
-                                            }
-
-                                            // Listas (Módulos, Benefícios, etc.)
-                                            if (Array.isArray(field)) {
-                                                return (
-                                                    <div key={key} className="space-y-4 pt-6">
-                                                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                                            <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                                                                <List size={14}/> {key.replace('_', ' ')}
-                                                            </h4>
-                                                            <button 
-                                                                onClick={() => handleAddItemToList(section.id, key)}
-                                                                className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase hover:bg-indigo-100 transition-all"
-                                                            >
-                                                                <Plus size={12}/> Adicionar Item
-                                                            </button>
-                                                        </div>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                            {field.map((item, itemIdx) => (
-                                                                <div key={item.id || itemIdx} className="group/item relative p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100 hover:border-indigo-200 transition-all space-y-4">
-                                                                    <button 
-                                                                        onClick={() => handleRemoveItemFromList(section.id, key, itemIdx)}
-                                                                        className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-red-600 opacity-0 group-hover/item:opacity-100 transition-opacity"
-                                                                    >
-                                                                        <X size={14}/>
-                                                                    </button>
-                                                                    {Object.keys(item).map(subKey => {
-                                                                        if (item[subKey] && typeof item[subKey] === 'object' && item[subKey].value !== undefined) {
-                                                                            return (
-                                                                                <div key={subKey}>
-                                                                                    <label className="text-[8px] font-black text-slate-300 uppercase ml-1">{subKey}</label>
-                                                                                    {renderInteractableField(section.id, `${key}.${itemIdx}.${subKey}`, item[subKey])}
-                                                                                </div>
-                                                                            )
-                                                                        }
-                                                                        return null;
-                                                                    })}
-                                                                </div>
-                                                            ))}
+                        {/* Renderização do Conteúdo da Seção */}
+                        <div className={clsx("relative p-8", !section.enabled && "opacity-50 grayscale")}>
+                            <div className="space-y-6">
+                                {Object.keys(section.content).map(key => {
+                                    const field = section.content[key];
+                                    
+                                    // Especial: Botão CTA
+                                    if (key === 'cta') {
+                                        return (
+                                            <div key={key} className="flex flex-col items-center gap-3 p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100">
+                                                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Configuração do Botão CTA</div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                                                    <div>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Rótulo do Botão</label>
+                                                        {renderInteractableField(section.id, 'cta.label', field.label)}
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Link (URL de Redirecionamento)</label>
+                                                        <div className="relative group/link">
+                                                            <Anchor className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14}/>
+                                                            <input 
+                                                                className="w-full pl-9 pr-3 py-2 bg-white border-2 border-slate-100 rounded-xl text-xs font-mono outline-none focus:border-indigo-400" 
+                                                                value={field.href || '#'} 
+                                                                onChange={e => {
+                                                                    const content = { ...editingPage?.content };
+                                                                    const s = content.sections.find((s: any) => s.id === section.id);
+                                                                    s.content.cta.href = e.target.value;
+                                                                    setEditingPage({ ...editingPage!, content });
+                                                                }}
+                                                            />
                                                         </div>
                                                     </div>
-                                                )
-                                            }
-                                            return null;
-                                        })}
-                                    </div>
-                                </section>
-                            )}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
+                                    // Listas (Módulos, Benefícios, etc.)
+                                    if (Array.isArray(field)) {
+                                        return (
+                                            <div key={key} className="space-y-4 pt-6 border-t border-slate-100">
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                                                        <List size={14}/> {key.replace('_', ' ')}
+                                                    </h4>
+                                                    <button 
+                                                        onClick={() => handleAddItemToList(section.id, key)}
+                                                        className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase hover:bg-indigo-100 transition-all"
+                                                    >
+                                                        <Plus size={12}/> Adicionar Item Detalhado
+                                                    </button>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {field.map((item, itemIdx) => (
+                                                        <div key={item.id || itemIdx} className="group/item relative p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100 hover:border-indigo-200 transition-all space-y-4">
+                                                            <button 
+                                                                onClick={() => handleRemoveItemFromList(section.id, key, itemIdx)}
+                                                                className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-red-600 opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                                            >
+                                                                <Trash2 size={14}/>
+                                                            </button>
+                                                            <div className="text-[8px] font-black text-indigo-300 uppercase tracking-[0.2em]">Item {itemIdx + 1}</div>
+                                                            {Object.keys(item).map(subKey => {
+                                                                if (item[subKey] && (typeof item[subKey] === 'object' || typeof item[subKey] === 'string') && subKey !== 'id' && subKey !== 'ai') {
+                                                                    return (
+                                                                        <div key={subKey}>
+                                                                            <label className="text-[8px] font-black text-slate-300 uppercase ml-1">{subKey}</label>
+                                                                            {renderInteractableField(section.id, `${key}.${itemIdx}.${subKey}`, item[subKey])}
+                                                                        </div>
+                                                                    )
+                                                                }
+                                                                return null;
+                                                            })}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )
+                                    }
+
+                                    // Campos Simples e Adicionados Manualmente
+                                    if (field && (typeof field === 'object' || typeof field === 'string')) {
+                                        return <div key={key} className="relative">{renderInteractableField(section.id, key, field, section.styles?.[key])}</div>
+                                    }
+                                    return null;
+                                })}
+                            </div>
                         </div>
 
-                        {/* Botão Flutuante: Adicionar Seção Abaixo */}
+                        {/* Botão Adicionar Seção Abaixo */}
                         <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
                             <div className="relative group/add">
                                 <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
@@ -748,10 +857,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                     </div>
                 ))}
 
-                {/* Bloco Vazio de Rodapé do Editor */}
-                <div className="p-20 text-center text-slate-300">
-                    <Sparkles size={40} className="mx-auto mb-4 opacity-20"/>
-                    <p className="text-sm font-medium">Fim da página. Use os botões flutuantes para adicionar mais seções.</p>
+                <div className="p-24 text-center text-slate-300 flex flex-col items-center gap-4">
+                    <Sparkles size={48} className="opacity-10 animate-pulse"/>
+                    <p className="text-sm font-black uppercase tracking-[0.3em] opacity-40">Rodapé do Editor Visual</p>
+                    <p className="text-xs font-medium max-w-xs leading-relaxed">Você pode reorganizar qualquer bloco ou adicionar novos elementos arrastando e editando cada componente diretamente.</p>
                 </div>
 
             </div>
@@ -777,9 +886,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         </div>
         <button 
           onClick={() => {
-            setAiPrompt({ ...aiPrompt, productName: '', productDescription: '' });
+            setAiPrompt({ ...aiPrompt, productName: '', productDescription: '', referenceUrl: '', referenceTemplate: '' });
             setEditingPage(null);
             setCurrentDraft(null);
+            setCreationStep('choice');
             setShowModal(true);
           }}
           className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95"
@@ -821,29 +931,83 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
               <button onClick={() => { setShowModal(false); setCurrentDraft(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
             </div>
             <div className="p-10 overflow-y-auto custom-scrollbar flex-1">
-               {!currentDraft ? (
-                  <div className="space-y-8">
+               {creationStep === 'choice' ? (
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-10">
+                   <button 
+                    onClick={() => { setCreationMode('standard'); setCreationStep('form'); }}
+                    className="group bg-white p-10 rounded-[3rem] border-2 border-slate-100 hover:border-indigo-600 hover:shadow-2xl transition-all flex flex-col items-center text-center gap-6"
+                   >
+                     <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-[2rem] flex items-center justify-center group-hover:scale-110 transition-transform">
+                       <Sparkles size={40}/>
+                     </div>
+                     <div>
+                       <h4 className="text-xl font-black text-slate-800 mb-2">Formato Padrão</h4>
+                       <p className="text-sm text-slate-500 leading-relaxed">Cria uma página persuasiva do zero usando copywriting de alta conversão baseado na sua descrição.</p>
+                     </div>
+                     <div className="mt-4 px-6 py-2 bg-slate-100 rounded-full text-[10px] font-black uppercase text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">Selecionar</div>
+                   </button>
+
+                   <button 
+                    onClick={() => { setCreationMode('imitation'); setCreationStep('form'); }}
+                    className="group bg-white p-10 rounded-[3rem] border-2 border-slate-100 hover:border-indigo-600 hover:shadow-2xl transition-all flex flex-col items-center text-center gap-6"
+                   >
+                     <div className="w-20 h-20 bg-orange-50 text-orange-600 rounded-[2rem] flex items-center justify-center group-hover:scale-110 transition-transform">
+                       <CopySlash size={40}/>
+                     </div>
+                     <div>
+                       <h4 className="text-xl font-black text-slate-800 mb-2">Baseado em outra Página</h4>
+                       <p className="text-sm text-slate-500 leading-relaxed">Forneça um link de referência para a IA imitar a estrutura, estilo e tom de voz da página de destino.</p>
+                     </div>
+                     <div className="mt-4 px-6 py-2 bg-slate-100 rounded-full text-[10px] font-black uppercase text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">Selecionar</div>
+                   </button>
+                 </div>
+               ) : !currentDraft ? (
+                  <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
+                     <div className="flex items-center gap-4 mb-4">
+                        <button onClick={() => setCreationStep('choice')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={18}/></button>
+                        <h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest">{creationMode === 'standard' ? 'Criação Padrão' : 'Imitar Página via Link'}</h4>
+                     </div>
+
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="md:col-span-2">
-                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Modelo de Referência</label>
-                            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                                {REFERENCE_TEMPLATES.map((tmpl) => (
-                                    <button
-                                        key={tmpl.id}
-                                        onClick={() => setAiPrompt({...aiPrompt, referenceTemplate: tmpl.url})}
-                                        className={clsx(
-                                            "flex flex-col rounded-2xl border-2 transition-all group overflow-hidden bg-white text-left",
-                                            aiPrompt.referenceTemplate === tmpl.url ? "border-indigo-600 ring-4 ring-indigo-50 shadow-lg scale-105" : "border-slate-100 hover:border-indigo-200"
-                                        )}
-                                    >
-                                        <div className="h-20 w-full overflow-hidden relative border-b border-slate-100">
-                                            <img src={tmpl.imageUrl} className="w-full h-full object-cover" alt={tmpl.name} />
-                                        </div>
-                                        <div className="p-2 text-center"><span className="text-[10px] font-black uppercase text-slate-800">{tmpl.name}</span></div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                        {creationMode === 'imitation' && (
+                          <div className="md:col-span-2">
+                              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2">
+                                <Link2 size={14} className="text-orange-500"/> Link da Página de Referência (Imitar)
+                              </label>
+                              <input 
+                                type="url" 
+                                className="w-full px-6 py-4 border-2 border-orange-100 bg-orange-50/30 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-mono outline-none transition-all" 
+                                value={aiPrompt.referenceUrl} 
+                                onChange={e => setAiPrompt({...aiPrompt, referenceUrl: e.target.value})} 
+                                placeholder="https://exemplo.com.br/pagina-de-vendas" 
+                              />
+                              <p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA usará o Google Search para analisar este link e replicar sua estrutura.</p>
+                          </div>
+                        )}
+
+                        {creationMode === 'standard' && (
+                          <div className="md:col-span-2">
+                              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Modelo de Referência Interno</label>
+                              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                                  {REFERENCE_TEMPLATES.map((tmpl) => (
+                                      <button
+                                          key={tmpl.id}
+                                          onClick={() => setAiPrompt({...aiPrompt, referenceTemplate: tmpl.url})}
+                                          className={clsx(
+                                              "flex flex-col rounded-2xl border-2 transition-all group overflow-hidden bg-white text-left",
+                                              aiPrompt.referenceTemplate === tmpl.url ? "border-indigo-600 ring-4 ring-indigo-50 shadow-lg scale-105" : "border-slate-100 hover:border-indigo-200"
+                                          )}
+                                      >
+                                          <div className="h-20 w-full overflow-hidden relative border-b border-slate-100">
+                                              <img src={tmpl.imageUrl} className="w-full h-full object-cover" alt={tmpl.name} />
+                                          </div>
+                                          <div className="p-2 text-center"><span className="text-[10px] font-black uppercase text-slate-800">{tmpl.name}</span></div>
+                                      </button>
+                                  ))}
+                              </div>
+                          </div>
+                        )}
+
                         <div>
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
                             <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
@@ -853,8 +1017,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                             <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" />
                         </div>
                         <div className="md:col-span-2">
-                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Promessa / Dor Principal</label>
-                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Qual o problema principal que resolvemos?" />
+                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto / Benefício Principal</label>
+                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="O que seu produto faz e qual a maior promessa?" />
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:col-span-2">
                             <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço</label><input type="text" className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.price} onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} placeholder="R$ 1.997,00" /></div>
@@ -872,7 +1036,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       <div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden">
                           <div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={100}/></div>
                           <h4 className="text-xl font-black mb-2 uppercase tracking-tighter">Estrutura Pronta!</h4>
-                          <p className="text-indigo-100 font-medium leading-relaxed">A IA gerou uma estrutura persuasiva completa. Você poderá revisar e editar cada bloco no editor visual a seguir.</p>
+                          <p className="text-indigo-100 font-medium leading-relaxed">A IA gerou uma estrutura persuasiva completa baseada na sua referência. Você poderá revisar e editar cada bloco no editor visual a seguir.</p>
                       </div>
                       <div className="flex gap-4 pt-6 border-t">
                           <button onClick={() => setCurrentDraft(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Voltar</button>

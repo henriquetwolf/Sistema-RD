@@ -7,6 +7,7 @@ import {
   XCircle, PlayCircle, BookOpen, Quote, Shield, Check, X
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
+import { FormViewer } from './FormViewer';
 import clsx from 'clsx';
 
 interface LandingPagePublicViewerProps {
@@ -23,11 +24,16 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
     );
   }
 
-  // Garante que o conteúdo seja um objeto (Supabase pode retornar string ou objeto dependendo do driver)
-  const content = useMemo(() => {
+  const content = React.useMemo(() => {
     if (!landingPage.content) return null;
     return typeof landingPage.content === 'string' ? JSON.parse(landingPage.content) : landingPage.content;
   }, [landingPage.content]) as LandingPageContent;
+
+  const [availableForms, setAvailableForms] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+      appBackend.getForms().then(setAvailableForms);
+  }, []);
 
   if (!content || !content.sections) {
     return (
@@ -57,11 +63,36 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
       };
   };
 
+  const renderDynamicContent = (section: LandingPageSection, key: string, field: any) => {
+      if (!field) return null;
+      const value = typeof field === 'object' ? field.value : field;
+      const styles = getStyles(section, key);
+
+      if (field.type === 'image') {
+          return <img key={key} src={value} style={styles} className="rounded-2xl shadow-lg mx-auto" alt="Page element" />;
+      }
+      if (field.type === 'video') {
+          return <div key={key} style={styles} className="aspect-video rounded-3xl overflow-hidden shadow-2xl bg-black mx-auto" dangerouslySetInnerHTML={{ __html: value }}></div>;
+      }
+      if (field.type === 'form') {
+          const formData = availableForms.find(f => f.id === value);
+          if (!formData) return null;
+          return (
+              <div key={key} style={styles} className="mx-auto bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 p-8">
+                  <FormViewer form={formData} isPublic={true} />
+              </div>
+          );
+      }
+      return null;
+  };
+
   const renderSection = (section: LandingPageSection) => {
     const c = section.content;
     const primaryColor = content.theme.primary_color || '#4f46e5';
 
     if (!c) return null;
+
+    const dynamicKeys = Object.keys(c).filter(k => k.includes('_'));
 
     switch (section.type) {
       case 'hero':
@@ -76,11 +107,13 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
               <p style={getStyles(section, 'subheadline')} className="text-xl md:text-2xl text-slate-500 max-w-3xl mx-auto leading-relaxed font-medium mb-12">{c.subheadline?.value}</p>
               
               <div className="flex flex-col items-center gap-6">
-                  <a href="#oferta" className="w-full sm:w-auto px-16 py-6 rounded-3xl font-black text-lg uppercase tracking-widest shadow-2xl transition-all transform hover:scale-105 active:scale-95 text-center text-white" style={{ backgroundColor: primaryColor }}>{c.cta?.label?.value || 'QUERO ME INSCREVER'}</a>
+                  <a href={c.cta?.href || "#oferta"} className="w-full sm:w-auto px-16 py-6 rounded-3xl font-black text-lg uppercase tracking-widest shadow-2xl transition-all transform hover:scale-105 active:scale-95 text-center text-white" style={{ backgroundColor: primaryColor }}>{c.cta?.label?.value || 'QUERO ME INSCREVER'}</a>
                   <div className="flex items-center gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       <span className="flex items-center gap-1"><ShieldCheck size={14} className="text-teal-500"/> {c.cta?.microcopy?.value}</span>
                   </div>
               </div>
+
+              {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
 
               <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
                   {c.bullets?.map((b: any, idx: number) => (
@@ -100,6 +133,9 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
               <div className="max-w-4xl mx-auto text-center space-y-12">
                   <h2 className="text-3xl md:text-5xl font-black tracking-tight" style={getStyles(section, 'headline')}>{c.headline?.value}</h2>
                   <p className="text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed" style={getStyles(section, 'description')}>{c.description?.value}</p>
+                  
+                  {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {c.consequences?.map((item: any, idx: number) => (
                           <div key={idx} className="flex gap-4 p-6 bg-white/5 border border-white/10 rounded-[2rem] text-left hover:bg-white/10 transition-all">
@@ -120,6 +156,9 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
                         <div className="inline-block bg-indigo-50 text-indigo-700 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">O Diferencial</div>
                         <h2 className="text-3xl md:text-5xl font-black tracking-tight text-slate-900">{c.headline?.value}</h2>
                         <p className="text-lg text-slate-500 leading-relaxed">{c.description?.value}</p>
+                        
+                        {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+
                         <div className="space-y-4 pt-4">
                             {c.items?.map((item: any, idx: number) => (
                                 <div key={idx} className="flex items-center gap-3">
@@ -143,7 +182,10 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
           <section key={section.id} className="py-24 px-6 bg-slate-50">
               <div className="max-w-6xl mx-auto text-center">
                   <h2 className="text-3xl md:text-5xl font-black mb-16 tracking-tight">{c.headline?.value}</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  
+                  {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
                       {c.items?.map((item: any, idx: number) => (
                           <div key={idx} className="p-10 rounded-[3rem] bg-white border border-slate-100 flex flex-col items-center text-center group hover:shadow-2xl transition-all">
                               <div className="w-16 h-16 bg-indigo-50 rounded-3xl shadow-sm flex items-center justify-center mb-6 text-indigo-600 group-hover:scale-110 transition-transform">
@@ -161,9 +203,12 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
       case 'modules':
         return (
             <section key={section.id} className="py-24 px-6 bg-white">
-                <div className="max-w-5xl mx-auto">
+                <div className="max-w-5xl mx-auto text-center">
                     <h2 className="text-3xl md:text-5xl font-black text-center mb-16 tracking-tight">{c.headline?.value}</h2>
-                    <div className="space-y-4">
+                    
+                    {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+
+                    <div className="space-y-4 mt-12">
                         {c.items?.map((item: any, idx: number) => (
                             <div key={idx} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-sm flex gap-6 items-center hover:bg-white hover:shadow-md transition-all text-left">
                                 <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center font-black text-indigo-600 text-lg shrink-0">
@@ -187,6 +232,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
                     <div className="text-center mb-16">
                         <div className="inline-block bg-orange-500 text-white px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-4">Presentes Exclusivos</div>
                         <h2 className="text-3xl md:text-5xl font-black tracking-tight">{c.headline?.value}</h2>
+                        {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {c.items?.map((item: any, idx: number) => (
@@ -207,7 +253,8 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
             <section key={section.id} className="py-24 px-6 bg-white">
                 <div className="max-w-6xl mx-auto text-center">
                     <h2 className="text-3xl md:text-5xl font-black mb-16 tracking-tight">{c.headline?.value}</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-12">
                         {c.items?.map((item: any, idx: number) => (
                             <div key={idx} className="p-8 rounded-[2.5rem] bg-slate-50 border border-slate-100 flex flex-col items-start text-left">
                                 <Quote size={40} className="text-indigo-200 mb-6" />
@@ -232,7 +279,8 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
               <div className="absolute top-0 right-0 -mt-24 -mr-24 w-[600px] h-[600px] bg-indigo-100 rounded-full blur-[120px]"></div>
               <div className="max-w-4xl mx-auto text-center relative z-10">
                   <h2 className="text-3xl md:text-6xl font-black mb-12 tracking-tight text-slate-900">{c.headline?.value}</h2>
-                  <div className="bg-white rounded-[4rem] p-12 md:p-20 text-slate-900 shadow-[0_30px_100px_-20px_rgba(0,0,0,0.15)] border border-slate-100">
+                  {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+                  <div className="bg-white rounded-[4rem] p-12 md:p-20 text-slate-900 shadow-[0_30px_100px_-20px_rgba(0,0,0,0.15)] border border-slate-100 mt-12">
                       <p className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Investimento com desconto:</p>
                       <div className="mb-10 flex flex-col md:flex-row items-center justify-center gap-2">
                           {c.original_price?.value && <span className="text-2xl md:text-4xl font-bold text-slate-300 line-through">{c.original_price.value}</span>}
@@ -272,6 +320,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
                     <div className="text-center md:text-left space-y-4">
                         <h2 className="text-3xl font-black text-slate-900">{c.headline?.value}</h2>
                         <p className="text-lg text-slate-600 leading-relaxed">{c.description?.value}</p>
+                        {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
                     </div>
                 </div>
             </section>
@@ -280,9 +329,10 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
       case 'faq':
         return (
           <section key={section.id} className="py-24 px-6 bg-slate-50">
-            <div className="max-w-3xl mx-auto">
+            <div className="max-w-3xl mx-auto text-center">
               <h2 className="text-3xl font-black text-slate-900 tracking-tight text-center mb-16">Dúvidas Frequentes</h2>
-              <div className="space-y-4">
+              {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+              <div className="space-y-4 mt-12">
                 {c.items?.map((item: any, idx: number) => (
                   <details key={idx} className="bg-white rounded-[2rem] border border-slate-100 group transition-all text-left shadow-sm">
                     <summary className="p-8 cursor-pointer flex items-center justify-between outline-none list-none">
@@ -303,7 +353,8 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
         return (
             <footer key={section.id} className="py-16 px-6 bg-slate-900 text-center text-white">
                 <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="Logo" className="h-8 mx-auto mb-8 invert opacity-50" />
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">
+                {dynamicKeys.map(k => renderDynamicContent(section, k, c[k]))}
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mt-8">
                     &copy; {new Date().getFullYear()} {content.theme.brand_name} • Todos os Direitos Reservados
                 </p>
                 <div className="mt-8 flex justify-center gap-6 text-slate-500">
@@ -331,8 +382,3 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
     </div>
   );
 };
-
-// UseMemo Helper
-function useMemo<T>(factory: () => T, deps: any[]): T {
-    return React.useMemo(factory, deps);
-}

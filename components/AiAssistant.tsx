@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { X, Send, Bot, Sparkles, Loader2, ChevronRight, Key, AlertTriangle } from 'lucide-react';
@@ -17,6 +18,17 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
   const [isLoading, setIsLoading] = useState(false);
   const [needsKey, setNeedsKey] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Check if API key is already selected on mount
+  useEffect(() => {
+    const checkApiKey = async () => {
+      if (window.aistudio && window.aistudio.hasSelectedApiKey) {
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        setNeedsKey(!hasKey);
+      }
+    };
+    checkApiKey();
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -55,6 +67,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
   const handleSelectKey = async () => {
     if (window.aistudio && window.aistudio.openSelectKey) {
       await window.aistudio.openSelectKey();
+      // Assume success after triggering the selection dialog to avoid race conditions
       setNeedsKey(false);
       setMessages(prev => [...prev, { role: 'bot', text: "Chave atualizada. Pode tentar perguntar novamente!" }]);
     }
@@ -66,7 +79,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
 
     const userText = input.trim();
     
-    // Verifica se a chave foi injetada corretamente
+    // Check if API key exists in environment
     if (!process.env.API_KEY || process.env.API_KEY === 'undefined' || process.env.API_KEY === '') {
         setNeedsKey(true);
         return;
@@ -77,11 +90,10 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
     setIsLoading(true);
 
     try {
-      // Instância criada com a chave detectada no ambiente
-      // Always use new GoogleGenAI({apiKey: process.env.API_KEY});
+      // Create a new GoogleGenAI instance right before making an API call to ensure it always uses the most up-to-date API key
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      // Fix: Updated model to 'gemini-3-flash-preview' for text tasks as per guidelines
+      // Use 'gemini-3-flash-preview' for basic text tasks
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: userText,
@@ -91,7 +103,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
         }
       });
 
-      // Simple and direct way to get text output is accessing the .text property
+      // Simple and direct way to get text output is accessing the .text property on GenerateContentResponse
       const botText = response.text || "Desculpe, tive dificuldade em processar essa informação.";
       
       const tabMatch = botText.match(/\[TAB:(.*?)\]/);
@@ -101,11 +113,11 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
       setMessages(prev => [...prev, { role: 'bot', text: cleanText, tabSuggestion }]);
       setNeedsKey(false);
     } catch (error: any) {
-      console.error("Erro detalhado Gemini:", error);
+      console.error("Gemini API Error:", error);
       
       const errorStr = String(error?.message || "").toLowerCase();
       
-      // Captura erros de autenticação, faturamento ou permissão de modelo
+      // Handle authentication or permission errors by prompting key selection
       if (
           errorStr.includes("api key") || 
           errorStr.includes("403") || 
@@ -117,7 +129,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
         setNeedsKey(true);
         setMessages(prev => [...prev, { 
           role: 'bot', 
-          text: "Houve um problema com as credenciais da IA no servidor. Clique abaixo para configurar sua chave manualmente." 
+          text: "Houve um problema com as credenciais da IA. Clique abaixo para configurar sua chave manualmente." 
         }]);
       } else {
         setMessages(prev => [...prev, { 
@@ -142,8 +154,8 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
               <div>
                 <h4 className="text-sm font-black uppercase tracking-widest leading-none">Guia Inteligente</h4>
                 <div className="flex items-center gap-1.5 mt-1">
-                  {/* Fix: Removed reference to non-existent 'config' variable on line 142 */}
-                  <div className={clsx("w-1.5 h-1.5 rounded-full", (needsKey) ? "bg-amber-500" : "bg-green-500 animate-pulse")}></div>
+                  {/* Corrected: Removed invalid config reference, using only needsKey state */}
+                  <div className={clsx("w-1.5 h-1.5 rounded-full", needsKey ? "bg-amber-500" : "bg-green-500 animate-pulse")}></div>
                   <span className="text-[10px] font-bold opacity-60 uppercase tracking-tighter">
                     {needsKey ? "Verificar Chave" : "IA Conectada"}
                   </span>
@@ -179,16 +191,16 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
               <div className="p-5 bg-amber-50 border border-amber-200 rounded-2xl animate-in zoom-in-95 space-y-3">
                 <div className="flex items-center gap-2 text-amber-800 font-bold text-xs">
                   <AlertTriangle size={16} /> 
-                  Falha de Autenticação
+                  Ação Necessária
                 </div>
                 <p className="text-[11px] text-amber-700 leading-relaxed">
-                  Não foi possível validar sua chave de API automaticamente no Vercel. Selecione-a novamente para restaurar o serviço.
+                  Para utilizar o assistente inteligente, selecione sua chave de API do Gemini em um projeto com faturamento ativo.
                 </p>
                 <button 
                   onClick={handleSelectKey}
                   className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-amber-700 transition-all shadow-md active:scale-95"
                 >
-                  <Key size={14}/> Resolver Problema de Chave
+                  <Key size={14}/> Selecionar Chave Gemini
                 </button>
               </div>
             )}
@@ -205,7 +217,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
           <form onSubmit={handleSend} className="p-6 bg-white border-t border-slate-100 flex gap-3 shrink-0">
             <input 
               type="text" 
-              placeholder={needsKey ? "Corrija a chave acima..." : "Onde encontro..."} 
+              placeholder={needsKey ? "Selecione uma chave primeiro..." : "Onde encontro..."} 
               disabled={needsKey || isLoading}
               className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
               value={input}

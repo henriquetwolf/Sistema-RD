@@ -9,7 +9,7 @@ import {
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
   Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
-  Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code
+  Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code, FileUp
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField } from '../types';
@@ -79,8 +79,12 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       referenceUrl: '',
       customPrompt: '',
       selectedFormId: '',
-      ctaLink: ''
+      ctaLink: '',
+      briefFileBase64: '' as string | null,
+      briefFileName: '' as string | null
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchPages();
@@ -107,30 +111,88 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       } catch (e) {}
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.type !== 'application/pdf') {
+        alert("Por favor, selecione apenas arquivos PDF.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        setAiPrompt(prev => ({ ...prev, briefFileBase64: base64, briefFileName: file.name }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleCreateWithAi = async () => {
     if (creationMode === 'standard' && !aiPrompt.productName) {
       alert("Informe o nome do produto.");
       return;
     }
 
-    if (creationMode === 'prompt' && !aiPrompt.customPrompt) {
-      alert("Cole o código HTML para continuar.");
+    if (creationMode === 'prompt' && !aiPrompt.customPrompt && !aiPrompt.briefFileBase64) {
+      alert("Descreva a página ou anexe o briefing em PDF para continuar.");
       return;
     }
 
     setIsGenerating(true);
     try {
+      // Create a new GoogleGenAI instance right before making an API call
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      
       if (creationMode === 'prompt') {
+          let htmlPrompt = `Você é um mestre em design de conversão e copywriting.
+          Sua missão é criar o CÓDIGO HTML COMPLETO de uma Landing Page de Alta Performance.
+          
+          REQUISITOS TÉCNICOS:
+          1. Use Tailwind CSS via CDN para estilização.
+          2. A página deve ser responsiva e moderna.
+          3. Use a tag {{form}} no local onde deve aparecer o formulário de captura.
+          4. Use a tag {{cta_link}} nos links dos botões de compra/CTA.
+          
+          REFERÊNCIAS:
+          - Site de Referência Visual: ${aiPrompt.referenceUrl || 'Nenhum informado. Use um estilo moderno e limpo.'}
+          - Link do CTA: ${aiPrompt.ctaLink || '#'}
+          
+          INSTRUÇÕES ADICIONAIS:
+          ${aiPrompt.customPrompt || 'Crie uma página persuasiva baseada no briefing anexado.'}
+          
+          Retorne APENAS o código HTML completo dentro de uma estrutura básica HTML5. Não inclua explicações fora do código.`;
+
+          const contentsParts: any[] = [{ text: htmlPrompt }];
+          if (aiPrompt.briefFileBase64) {
+              contentsParts.push({
+                  inlineData: {
+                      mimeType: 'application/pdf',
+                      data: aiPrompt.briefFileBase64
+                  }
+              });
+          }
+
+          // Use 'gemini-3-pro-preview' for complex text generation tasks
+          const response = await ai.models.generateContent({
+              model: "gemini-3-pro-preview",
+              contents: { parts: contentsParts }
+          });
+
+          // Access .text property directly as per guidelines
+          const generatedHtml = response.text || "";
+          // Clean up potential markdown code blocks
+          const cleanedHtml = generatedHtml.replace(/```html/gi, '').replace(/```/g, '').trim();
+
           const newPage: Partial<LandingPage> = {
-            title: "Página via HTML - " + new Date().toLocaleDateString(),
-            productName: "Personalizado via HTML",
-            slug: slugify("pagina-html-" + Date.now()),
+            title: "Página Gerada via IA - " + new Date().toLocaleDateString(),
+            productName: aiPrompt.productName || "Produto Personalizado",
+            slug: slugify("pagina-ia-" + Date.now()),
             content: {
-                meta: { page_id: crypto.randomUUID(), title: "Página via HTML", status: "active", version: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                meta: { page_id: crypto.randomUUID(), title: "Página via IA", status: "active", version: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
                 theme: { brand_name: "VOLL", tone: "Custom", primary_color: "#000000", text_color: "#000000", bg_color: "#FFFFFF", font_family: "sans" },
                 ai_defaults: { enabled: false, max_suggestions: 0, rules: "" },
                 sections: [],
-                htmlCode: aiPrompt.customPrompt,
+                htmlCode: cleanedHtml,
                 selectedFormId: aiPrompt.selectedFormId,
                 ctaLink: aiPrompt.ctaLink
             },
@@ -144,7 +206,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           return;
       }
 
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Standard Flow
       let basePrompt = `Você é um arquiteto sênior de design de conversão e expert em copywriting.
       Sua missão é criar uma Landing Page Premium em formato JSON.
       
@@ -189,6 +251,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         }
       };
 
+      // Use 'gemini-3-pro-preview' for complex structured JSON generation
       const response = await ai.models.generateContent({
         model: "gemini-3-pro-preview",
         contents: basePrompt,
@@ -260,12 +323,12 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         }
       });
 
+      // Access .text property directly as per guidelines
       const text = response.text;
       if (!text) throw new Error("A IA retornou um conteúdo vazio.");
       
       const generated = JSON.parse(text);
       
-      // Se gerou com CTA da IA mas temos um ctaLink fixo, garantimos a sobreposição se apropriado
       if (aiPrompt.ctaLink && generated.sections) {
           generated.sections.forEach((s: any) => {
               if (s.content && s.content.cta) {
@@ -292,7 +355,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       };
       setCurrentDraft(newPage);
     } catch (e: any) {
-      console.error("Erro detalhado na geração:", e);
+      console.error("Gemini API Error in generation:", e);
       alert(`Houve uma falha na geração da página: ${e.message || 'Erro de comunicação com a IA'}. Por favor, tente novamente.`);
     } finally {
       setIsGenerating(false);
@@ -304,16 +367,19 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     setIsRefiningField(fieldIdentifier);
     
     try {
+      // Create a new GoogleGenAI instance right before making an API call
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `Aja como um Copywriter. Melhore o texto a seguir usando a técnica "${action}":
       Texto: "${currentVal}"
       Retorne apenas o texto final melhorado, sem aspas ou explicações.`;
 
+      // Use 'gemini-3-flash-preview' for basic refinement tasks
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: prompt
       });
 
+      // Access .text property directly
       const refinedText = (response.text || currentVal).trim();
 
       if (editingPage && editingPage.content) {
@@ -347,7 +413,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           }
       }
     } catch (e: any) {
-      console.error(e);
+      console.error("Gemini API Error in refinement:", e);
       alert("Erro na IA: " + e.message);
     } finally {
       setIsRefiningField(null);
@@ -598,7 +664,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                           const content = { ...editingPage?.content };
                           const s = content.sections.find((s: any) => s.id === sectionId);
                           s.content[fieldKey].value = e.target.value;
-                          setEditingPage({ ...editingPage!, content });
+                          setEditingPage({ ...editingPage!, content: content as LandingPageContent });
                       }} placeholder="URL da Imagem" />
                   </div>
               ) : field.type === 'video' ? (
@@ -608,7 +674,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                           const content = { ...editingPage?.content };
                           const s = content.sections.find((s: any) => s.id === sectionId);
                           s.content[fieldKey].value = e.target.value;
-                          setEditingPage({ ...editingPage!, content });
+                          setEditingPage({ ...editingPage!, content: content as LandingPageContent });
                       }} placeholder="Iframe do Vídeo" />
                   </div>
               ) : field.type === 'form' ? (
@@ -621,7 +687,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                             const content = { ...editingPage?.content };
                             const s = content.sections.find((s: any) => s.id === sectionId);
                             s.content[fieldKey].value = e.target.value;
-                            setEditingPage({ ...editingPage!, content });
+                            setEditingPage({ ...editingPage!, content: content as LandingPageContent });
                         }}
                       >
                           <option value="">Selecione um formulário...</option>
@@ -651,7 +717,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                 section.content[fieldKey] = e.target.value;
                             }
                         }
-                        setEditingPage({ ...editingPage!, content });
+                        setEditingPage({ ...editingPage!, content: content as LandingPageContent });
                     }}
                   />
               ) : (
@@ -676,7 +742,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                 section.content[fieldKey] = e.target.value;
                             }
                         }
-                        setEditingPage({ ...editingPage!, content });
+                        setEditingPage({ ...editingPage!, content: content as LandingPageContent });
                     }}
                   />
               )}
@@ -884,7 +950,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                                                         const content = { ...editingPage?.content };
                                                                         const s = content.sections.find((s: any) => s.id === section.id);
                                                                         s.content.cta.href = e.target.value;
-                                                                        setEditingPage({ ...editingPage!, content });
+                                                                        setEditingPage({ ...editingPage!, content: content as LandingPageContent });
                                                                     }}
                                                                 />
                                                             </div>
@@ -914,7 +980,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                                             <div key={item.id || itemIdx} className="group/item relative p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100 hover:border-indigo-200 transition-all space-y-4">
                                                                 <button 
                                                                     onClick={() => handleRemoveItemFromList(section.id, key, itemIdx)}
-                                                                    className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-red-600 opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                                                    className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity"
                                                                 >
                                                                     <Trash2 size={14}/>
                                                                 </button>
@@ -982,19 +1048,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
-            <ArrowLeft size={20} />
-          </button>
+          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20} /></button>
           <div>
-            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-              <MonitorPlay className="text-orange-600" /> Páginas de Venda
-            </h2>
+            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><MonitorPlay className="text-orange-600" /> Páginas de Venda</h2>
             <p className="text-slate-500 text-sm">IA Copywriter & Design Premium.</p>
           </div>
         </div>
         <button 
           onClick={() => {
-            setAiPrompt({ ...aiPrompt, productName: '', productDescription: '', referenceUrl: '', referenceTemplate: '', customPrompt: '', selectedFormId: '', ctaLink: '' });
+            setAiPrompt({ ...aiPrompt, productName: '', productDescription: '', referenceUrl: '', referenceTemplate: '', customPrompt: '', selectedFormId: '', ctaLink: '', briefFileBase64: null, briefFileName: null });
             setEditingPage(null);
             setCurrentDraft(null);
             setCreationStep('choice');
@@ -1041,131 +1103,32 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
             <div className="p-10 overflow-y-auto custom-scrollbar flex-1">
                {creationStep === 'choice' ? (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-10">
-                   <button 
-                    onClick={() => { setCreationMode('standard'); setCreationStep('form'); }}
-                    className="group bg-white p-10 rounded-[3rem] border-2 border-slate-100 hover:border-indigo-600 hover:shadow-2xl transition-all flex flex-col items-center text-center gap-6"
-                   >
-                     <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-[2rem] flex items-center justify-center group-hover:scale-110 transition-transform">
-                       <Sparkles size={40}/>
-                     </div>
-                     <div>
-                       <h4 className="text-xl font-black text-slate-800 mb-2">Formato Padrão</h4>
-                       <p className="text-sm text-slate-500 leading-relaxed">Cria uma página persuasiva do zero usando copywriting de alta conversão baseado na sua descrição.</p>
-                     </div>
-                     <div className="mt-4 px-6 py-2 bg-slate-100 rounded-full text-[10px] font-black uppercase text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">Selecionar</div>
-                   </button>
-
-                   <button 
-                    onClick={() => { setCreationMode('prompt'); setCreationStep('form'); }}
-                    className="group bg-white p-10 rounded-[3rem] border-2 border-slate-100 hover:border-indigo-600 hover:shadow-2xl transition-all flex flex-col items-center text-center gap-6"
-                   >
-                     <div className="w-20 h-20 bg-orange-50 text-orange-600 rounded-[2rem] flex items-center justify-center group-hover:scale-110 transition-transform">
-                       <FileEdit size={40}/>
-                     </div>
-                     <div>
-                       <h4 className="text-xl font-black text-slate-800 mb-2">Baseado em um Prompt</h4>
-                       <p className="text-sm text-slate-500 leading-relaxed">Forneça instruções detalhadas de como a página deve ser e a IA criará exatamente como solicitado.</p>
-                     </div>
-                     <div className="mt-4 px-6 py-2 bg-slate-100 rounded-full text-[10px] font-black uppercase text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">Selecionar</div>
-                   </button>
+                   <button onClick={() => { setCreationMode('standard'); setCreationStep('form'); }} className="group bg-white p-10 rounded-[3rem] border-2 border-slate-100 hover:border-indigo-600 hover:shadow-2xl transition-all flex flex-col items-center text-center gap-6"><div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-[2rem] flex items-center justify-center group-hover:scale-110 transition-transform"><Sparkles size={40}/></div><div><h4 className="text-xl font-black text-slate-800 mb-2">Formato Padrão</h4><p className="text-sm text-slate-500 leading-relaxed">Cria uma página persuasiva do zero usando copywriting de alta conversão baseado na sua descrição.</p></div><div className="mt-4 px-6 py-2 bg-slate-100 rounded-full text-[10px] font-black uppercase text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">Selecionar</div></button>
+                   <button onClick={() => { setCreationMode('prompt'); setCreationStep('form'); }} className="group bg-white p-10 rounded-[3rem] border-2 border-slate-100 hover:border-indigo-600 hover:shadow-2xl transition-all flex flex-col items-center text-center gap-6"><div className="w-20 h-20 bg-orange-50 text-orange-600 rounded-[2rem] flex items-center justify-center group-hover:scale-110 transition-transform"><FileEdit size={40}/></div><div><h4 className="text-xl font-black text-slate-800 mb-2">Gerar Código HTML (Avançado)</h4><p className="text-sm text-slate-500 leading-relaxed">Forneça site de referência e briefing do produto e a IA criará o código HTML completo da página.</p></div><div className="mt-4 px-6 py-2 bg-slate-100 rounded-full text-[10px] font-black uppercase text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">Selecionar</div></button>
                  </div>
                ) : !currentDraft ? (
                   <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
-                     <div className="flex items-center gap-4 mb-4">
-                        <button onClick={() => setCreationStep('choice')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={18}/></button>
-                        <h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest">{creationMode === 'standard' ? 'Criação Padrão' : 'Instruções Personalizadas (Prompt)'}</h4>
-                     </div>
-
+                     <div className="flex items-center gap-4 mb-4"><button onClick={() => setCreationStep('choice')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={18}/></button><h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest">{creationMode === 'standard' ? 'Criação Padrão' : 'Geração de Código HTML Personalizado'}</h4></div>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {creationMode === 'prompt' ? (
                           <div className="md:col-span-2 space-y-6">
-                              <div>
-                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2">
-                                    <Code size={14} className="text-orange-500"/> Cole o Código HTML aqui
-                                </label>
-                                <textarea 
-                                    className="w-full px-6 py-4 border-2 border-orange-100 bg-orange-50/30 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-xs font-mono h-48 resize-none outline-none transition-all leading-relaxed" 
-                                    value={aiPrompt.customPrompt} 
-                                    onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} 
-                                    placeholder="<!-- Cole seu código HTML completo aqui -->" 
-                                />
-                                <p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* O código será exibido exatamente como colado. Use {"{{form}}"} para injetar o formulário e {"{{cta_link}}"} para o link do botão.</p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Globe size={14} className="text-orange-500"/> Link do Site de Referência Visual</label><input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" value={aiPrompt.referenceUrl} onChange={e => setAiPrompt({...aiPrompt, referenceUrl: e.target.value})} placeholder="https://..." /></div>
+                                <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><FileUp size={14} className="text-orange-500"/> PDF do Briefing do Produto</label><div className="flex gap-2"><button type="button" onClick={() => fileInputRef.current?.click()} className={clsx("flex-1 px-6 py-4 border-2 border-dashed rounded-[1.5rem] text-xs font-bold transition-all flex items-center justify-center gap-3", aiPrompt.briefFileBase64 ? "bg-orange-50 border-orange-500 text-orange-700" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-white hover:border-orange-300")}>{aiPrompt.briefFileBase64 ? <><Check size={18}/> {aiPrompt.briefFileName}</> : <><FileText size={18}/> Selecionar PDF</>}</button>{aiPrompt.briefFileBase64 && (<button onClick={() => setAiPrompt({...aiPrompt, briefFileBase64: null, briefFileName: null})} className="p-4 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100"><X size={20}/></button>)}</div><input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" onChange={handleFileChange} /></div>
                               </div>
-
-                              <div>
-                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2">
-                                    <Link2 size={14} className="text-orange-500"/> Link do Botão CTA (Destino de Compra)
-                                </label>
-                                <input 
-                                    type="text"
-                                    className="w-full px-6 py-4 border-2 border-orange-100 bg-orange-50/30 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" 
-                                    value={aiPrompt.ctaLink} 
-                                    onChange={e => setAiPrompt({...aiPrompt, ctaLink: e.target.value})} 
-                                    placeholder="https://..." 
-                                />
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Link2 size={14} className="text-orange-500"/> Link do Botão CTA (Destino de Compra)</label><input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" value={aiPrompt.ctaLink} onChange={e => setAiPrompt({...aiPrompt, ctaLink: e.target.value})} placeholder="https://..." /></div>
+                                <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><FormInput size={14} className="text-orange-500"/> Formulário de Captura (Injetado via {"{{form}}"})</label><select className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all appearance-none cursor-pointer" value={aiPrompt.selectedFormId} onChange={e => setAiPrompt({...aiPrompt, selectedFormId: e.target.value})}><option value="">Não incluir formulário</option>{availableForms.map(f => (<option key={f.id} value={f.id}>{f.title}</option>))}</select></div>
                               </div>
-
-                              <div>
-                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2">
-                                    <FormInput size={14} className="text-orange-500"/> Selecionar Formulário para Incluir na Página
-                                </label>
-                                <select 
-                                    className="w-full px-6 py-4 border-2 border-orange-100 bg-orange-50/30 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all appearance-none cursor-pointer"
-                                    value={aiPrompt.selectedFormId}
-                                    onChange={e => setAiPrompt({...aiPrompt, selectedFormId: e.target.value})}
-                                >
-                                    <option value="">Não incluir formulário</option>
-                                    {availableForms.map(f => (
-                                        <option key={f.id} value={f.id}>{f.title}</option>
-                                    ))}
-                                </select>
-                              </div>
+                              <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Code size={14} className="text-orange-500"/> Instruções Adicionais para o Layout</label><textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-xs font-medium h-32 resize-none outline-none transition-all leading-relaxed" value={aiPrompt.customPrompt} onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} placeholder="Ex: Use tons de azul escuro e branco, destaque a garantia de 30 dias, coloque o vídeo no topo..." /><p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA usará o PDF e o link de referência para estruturar o código final.</p></div>
                           </div>
                         ) : (
                           <>
-                            <div className="md:col-span-2">
-                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Modelo de Referência Interno</label>
-                                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                                    {REFERENCE_TEMPLATES.map((tmpl) => (
-                                        <button
-                                            key={tmpl.id}
-                                            onClick={() => setAiPrompt({...aiPrompt, referenceTemplate: tmpl.url})}
-                                            className={clsx(
-                                                "flex flex-col rounded-2xl border-2 transition-all group overflow-hidden bg-white text-left",
-                                                aiPrompt.referenceTemplate === tmpl.url ? "border-indigo-600 ring-4 ring-indigo-50 shadow-lg scale-105" : "border-slate-100 hover:border-indigo-200"
-                                            )}
-                                        >
-                                            <div className="h-20 w-full overflow-hidden relative border-b border-slate-100">
-                                                <img src={tmpl.imageUrl} className="w-full h-full object-cover" alt={tmpl.name} />
-                                            </div>
-                                            <div className="p-2 text-center"><span className="text-[10px] font-black uppercase text-slate-800">{tmpl.name}</span></div>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
-                                <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Público-Alvo</label>
-                                <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" />
-                            </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Link do Botão CTA (Destino de Compra)</label>
-                                <input 
-                                    type="text"
-                                    className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" 
-                                    value={aiPrompt.ctaLink} 
-                                    onChange={e => setAiPrompt({...aiPrompt, ctaLink: e.target.value})} 
-                                    placeholder="https://..." 
-                                />
-                            </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto / Benefício Principal</label>
-                                <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="O que seu product faz e qual a maior promessa?" />
-                            </div>
+                            <div className="md:col-span-2"><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Modelo de Referência Interno</label><div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">{REFERENCE_TEMPLATES.map((tmpl) => (<button key={tmpl.id} onClick={() => setAiPrompt({...aiPrompt, referenceTemplate: tmpl.url})} className={clsx("flex flex-col rounded-2xl border-2 transition-all group overflow-hidden bg-white text-left", aiPrompt.referenceTemplate === tmpl.url ? "border-indigo-600 ring-4 ring-indigo-50 shadow-lg scale-105" : "border-slate-100 hover:border-indigo-200")}><div className="h-20 w-full overflow-hidden relative border-b border-slate-100"><img src={tmpl.imageUrl} className="w-full h-full object-cover" alt={tmpl.name} /></div><div className="p-2 text-center"><span className="text-[10px] font-black uppercase text-slate-800">{tmpl.name}</span></div></button>))}</div></div>
+                            <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Nome do Produto</label><input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" /></div>
+                            <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Público-Alvo</label><input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" /></div>
+                            <div className="md:col-span-2"><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Link do Botão CTA (Destino de Compra)</label><input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" value={aiPrompt.ctaLink} onChange={e => setAiPrompt({...aiPrompt, ctaLink: e.target.value})} placeholder="https://..." /></div>
+                            <div className="md:col-span-2"><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Descrição do Produto / Benefício Principal</label><textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="O que seu product faz e qual a maior promessa?" /></div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:col-span-2">
                                 <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço</label><input type="text" className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.price} onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} placeholder="R$ 1.997,00" /></div>
                                 <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Garantia</label><input type="text" className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.guarantee} onChange={e => setAiPrompt({...aiPrompt, guarantee: e.target.value})} placeholder="7 dias" /></div>
@@ -1174,23 +1137,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                           </>
                         )}
                      </div>
-                     <button onClick={handleCreateWithAi} disabled={isGenerating || (creationMode === 'standard' && !aiPrompt.productName) || (creationMode === 'prompt' && !aiPrompt.customPrompt)} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
-                        {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Zap size={24} />}
-                        {isGenerating ? 'Criando Estrutura...' : 'Finalizar Criação'}
-                     </button>
+                     <button onClick={handleCreateWithAi} disabled={isGenerating || (creationMode === 'standard' && !aiPrompt.productName) || (creationMode === 'prompt' && !aiPrompt.customPrompt && !aiPrompt.briefFileBase64)} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">{isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Zap size={24} />}{isGenerating ? 'Criando Código e Estrutura...' : 'Gerar Página com IA'}</button>
                   </div>
                ) : (
-                  <div className="space-y-8 animate-in slide-in-from-right-4">
-                      <div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden">
-                          <div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={100}/></div>
-                          <h4 className="text-xl font-black mb-2 uppercase tracking-tighter">Estrutura Pronta!</h4>
-                          <p className="text-indigo-100 font-medium leading-relaxed">Sua página foi gerada conforme as instruções fornecidas. Clique abaixo para salvar e revisar.</p>
-                      </div>
-                      <div className="flex gap-4 pt-6 border-t">
-                          <button onClick={() => setCurrentDraft(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Voltar</button>
-                          <button onClick={confirmDraft} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Revisar e Publicar</button>
-                      </div>
-                  </div>
+                  <div className="space-y-8 animate-in slide-in-from-right-4"><div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={100}/></div><h4 className="text-xl font-black mb-2 uppercase tracking-tighter">Estrutura Pronta!</h4><p className="text-indigo-100 font-medium leading-relaxed">Sua página foi gerada conforme as instruções fornecidas. Clique abaixo para salvar e revisar.</p></div><div className="flex gap-4 pt-6 border-t"><button onClick={() => setCurrentDraft(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Voltar</button><button onClick={confirmDraft} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Revisar e Publicar</button></div></div>
                )}
             </div>
           </div>

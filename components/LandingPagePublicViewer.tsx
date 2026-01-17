@@ -49,12 +49,15 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
   if (content.htmlCode) {
       const selectedForm = availableForms.find(f => f.id === content.selectedFormId);
       
+      // Substitui o link do CTA no código HTML se houver a tag correspondente
+      const processedHtml = content.htmlCode.split('{{cta_link}}').join(content.ctaLink || '#');
+      
       const renderWithForm = () => {
-          if (!selectedForm) return <div dangerouslySetInnerHTML={{ __html: content.htmlCode || '' }} />;
+          if (!selectedForm) return <div dangerouslySetInnerHTML={{ __html: processedHtml || '' }} />;
 
           const placeholder = "{{form}}";
-          if (content.htmlCode?.includes(placeholder)) {
-              const parts = content.htmlCode.split(placeholder);
+          if (processedHtml?.includes(placeholder)) {
+              const parts = processedHtml.split(placeholder);
               return (
                   <>
                     <div dangerouslySetInnerHTML={{ __html: parts[0] }} />
@@ -69,7 +72,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
           // Se não tiver placeholder, injeta no final
           return (
               <>
-                <div dangerouslySetInnerHTML={{ __html: content.htmlCode }} />
+                <div dangerouslySetInnerHTML={{ __html: processedHtml }} />
                 <div className="max-w-4xl mx-auto py-20 px-6">
                     <FormViewer form={selectedForm} isPublic={true} />
                 </div>

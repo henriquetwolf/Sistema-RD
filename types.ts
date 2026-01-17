@@ -653,4 +653,5 @@ export interface LandingPageContent {
   sections: LandingPageSection[];
   htmlCode?: string;
   selectedFormId?: string;
+  ctaLink?: string;
 }

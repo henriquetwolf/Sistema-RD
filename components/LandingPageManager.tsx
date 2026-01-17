@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, Search, Edit2, Trash2, ExternalLink, ArrowLeft, 
@@ -11,8 +12,7 @@ import {
   Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
-import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel } from '../types';
-import { FormViewer } from './FormViewer';
+import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField } from '../types';
 import { GoogleGenAI, Type } from "@google/genai";
 import clsx from 'clsx';
 
@@ -78,7 +78,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       referenceTemplate: '',
       referenceUrl: '',
       customPrompt: '',
-      selectedFormId: ''
+      selectedFormId: '',
+      ctaLink: ''
   });
 
   useEffect(() => {
@@ -130,7 +131,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                 ai_defaults: { enabled: false, max_suggestions: 0, rules: "" },
                 sections: [],
                 htmlCode: aiPrompt.customPrompt,
-                selectedFormId: aiPrompt.selectedFormId
+                selectedFormId: aiPrompt.selectedFormId,
+                ctaLink: aiPrompt.ctaLink
             },
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -142,7 +144,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           return;
       }
 
-      // Always use new GoogleGenAI({apiKey: process.env.API_KEY});
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       let basePrompt = `Você é um arquiteto sênior de design de conversão e expert em copywriting.
       Sua missão é criar uma Landing Page Premium em formato JSON.
@@ -155,6 +156,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       Preço: ${aiPrompt.price}
       Garantia: ${aiPrompt.guarantee}
       Tom de Voz: ${aiPrompt.tone}
+      Link de destino (CTA): ${aiPrompt.ctaLink}
       
       ESTRUTURA SUGERIDA: Hero, Dor, Método, Benefícios, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
 
@@ -187,7 +189,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         }
       };
 
-      // Fix: Use 'gemini-3-pro-preview' for complex text generation tasks
       const response = await ai.models.generateContent({
         model: "gemini-3-pro-preview",
         contents: basePrompt,
@@ -259,16 +260,31 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         }
       });
 
-      // Simple and direct way to get text output is accessing the .text property
       const text = response.text;
       if (!text) throw new Error("A IA retornou um conteúdo vazio.");
       
       const generated = JSON.parse(text);
+      
+      // Se gerou com CTA da IA mas temos um ctaLink fixo, garantimos a sobreposição se apropriado
+      if (aiPrompt.ctaLink && generated.sections) {
+          generated.sections.forEach((s: any) => {
+              if (s.content && s.content.cta) {
+                  s.content.cta.href = aiPrompt.ctaLink;
+              }
+              if (s.content && s.content.cta_url) {
+                  s.content.cta_url.value = aiPrompt.ctaLink;
+              }
+          });
+      }
+
       const newPage: Partial<LandingPage> = {
         title: generated.meta?.title || aiPrompt.productName,
         productName: aiPrompt.productName,
         slug: slugify(generated.meta?.title || aiPrompt.productName),
-        content: generated,
+        content: {
+            ...generated,
+            ctaLink: aiPrompt.ctaLink
+        },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isActive: true,
@@ -697,20 +713,42 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                  <div className="space-y-6">
                     <div>
                         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Configuração HTML</h3>
-                        <label className="text-[9px] font-bold text-slate-500 uppercase">Formulário Vinculado</label>
-                        <select 
-                            className="w-full text-[10px] p-2 border rounded-xl bg-white font-bold mt-1"
-                            value={content.selectedFormId || ''}
-                            onChange={e => {
-                                const newContent = {...content};
-                                newContent.selectedFormId = e.target.value;
-                                setEditingPage({...editingPage, content: newContent});
-                            }}
-                        >
-                            <option value="">Nenhum formulário</option>
-                            {availableForms.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
-                        </select>
-                        <p className="text-[9px] text-slate-400 mt-2">Use a tag <strong>{"{{form}}"}</strong> no seu HTML para indicar onde o formulário deve aparecer.</p>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[9px] font-bold text-slate-500 uppercase">Link Global do CTA</label>
+                                <div className="relative group/link mt-1">
+                                    <Anchor className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12}/>
+                                    <input 
+                                        className="w-full pl-9 pr-3 py-2 border rounded-xl text-[10px] font-mono outline-none focus:border-orange-500" 
+                                        value={content.ctaLink || ''} 
+                                        onChange={e => {
+                                            const newContent = {...content};
+                                            newContent.ctaLink = e.target.value;
+                                            setEditingPage({...editingPage, content: newContent});
+                                        }}
+                                        placeholder="https://..."
+                                    />
+                                </div>
+                                <p className="text-[8px] text-slate-400 mt-1 italic">Use a tag <strong>{"{{cta_link}}"}</strong> para injetar este link.</p>
+                            </div>
+
+                            <div>
+                                <label className="text-[9px] font-bold text-slate-500 uppercase">Formulário Vinculado</label>
+                                <select 
+                                    className="w-full text-[10px] p-2 border rounded-xl bg-white font-bold mt-1"
+                                    value={content.selectedFormId || ''}
+                                    onChange={e => {
+                                        const newContent = {...content};
+                                        newContent.selectedFormId = e.target.value;
+                                        setEditingPage({...editingPage, content: newContent});
+                                    }}
+                                >
+                                    <option value="">Nenhum formulário</option>
+                                    {availableForms.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
+                                </select>
+                                <p className="text-[8px] text-slate-400 mt-1 italic">Use a tag <strong>{"{{form}}"}</strong> para injetar o formulário.</p>
+                            </div>
+                        </div>
                     </div>
                  </div>
              ) : (
@@ -781,7 +819,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                         />
                         <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 text-xs text-blue-800">
                             <Info size={18} className="shrink-0 text-blue-600" />
-                            <p>No modo HTML direto, o editor visual de blocos é desativado para preservar a fidelidade do seu código. Lembre-se de usar a tag <strong>{"{{form}}"}</strong> caso deseje posicionar o formulário em um lugar específico.</p>
+                            <p>No modo HTML direto, o editor visual de blocos é desativado para preservar a fidelidade do seu código. Use as tags <strong>{"{{form}}"}</strong> para o formulário e <strong>{"{{cta_link}}"}</strong> para o link de venda.</p>
                         </div>
                     </div>
                 ) : (
@@ -956,7 +994,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         </div>
         <button 
           onClick={() => {
-            setAiPrompt({ ...aiPrompt, productName: '', productDescription: '', referenceUrl: '', referenceTemplate: '', customPrompt: '', selectedFormId: '' });
+            setAiPrompt({ ...aiPrompt, productName: '', productDescription: '', referenceUrl: '', referenceTemplate: '', customPrompt: '', selectedFormId: '', ctaLink: '' });
             setEditingPage(null);
             setCurrentDraft(null);
             setCreationStep('choice');
@@ -1051,7 +1089,20 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                     onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} 
                                     placeholder="<!-- Cole seu código HTML completo aqui -->" 
                                 />
-                                <p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* O código será exibido exatamente como colado. Use {"{{form}}"} para injetar o formulário.</p>
+                                <p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* O código será exibido exatamente como colado. Use {"{{form}}"} para injetar o formulário e {"{{cta_link}}"} para o link do botão.</p>
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2">
+                                    <Link2 size={14} className="text-orange-500"/> Link do Botão CTA (Destino de Compra)
+                                </label>
+                                <input 
+                                    type="text"
+                                    className="w-full px-6 py-4 border-2 border-orange-100 bg-orange-50/30 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" 
+                                    value={aiPrompt.ctaLink} 
+                                    onChange={e => setAiPrompt({...aiPrompt, ctaLink: e.target.value})} 
+                                    placeholder="https://..." 
+                                />
                               </div>
 
                               <div>
@@ -1100,6 +1151,16 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                             <div>
                                 <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Público-Alvo</label>
                                 <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Link do Botão CTA (Destino de Compra)</label>
+                                <input 
+                                    type="text"
+                                    className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" 
+                                    value={aiPrompt.ctaLink} 
+                                    onChange={e => setAiPrompt({...aiPrompt, ctaLink: e.target.value})} 
+                                    placeholder="https://..." 
+                                />
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto / Benefício Principal</label>

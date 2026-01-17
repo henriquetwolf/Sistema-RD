@@ -119,35 +119,35 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      let basePrompt = `Você é um especialista sênior em design de conversão e copywriting.
-      Sua tarefa é criar uma Landing Page Premium em formato JSON.
+      let basePrompt = `Você é um arquiteto sênior de design de conversão e expert em copywriting.
+      Sua missão é criar uma Landing Page Premium em formato JSON que venda o produto: "${aiPrompt.productName}".
       
-      DADOS DO NOVO PRODUTO:
+      INFORMAÇÕES DA NOVA OFERTA:
       Nome: ${aiPrompt.productName}
       Marca: ${aiPrompt.brandName}
       Público: ${aiPrompt.targetAudience}
       Descrição: ${aiPrompt.productDescription}
       Preço: ${aiPrompt.price}
       Garantia: ${aiPrompt.guarantee}
-      Tom: ${aiPrompt.tone}`;
+      Tom de Voz: ${aiPrompt.tone}`;
 
       if (creationMode === 'imitation') {
-        basePrompt += `\n\nREQUISITO OBRIGATÓRIO (IMITAÇÃO DE LINK): A nova página deve ser UMA CÓPIA ESTRUTURAL E VISUAL FIEL do seguinte link: ${aiPrompt.referenceUrl}.
-        Use a ferramenta de busca (Google Search) para navegar no link e identificar:
-        1. A SEQUÊNCIA EXATA das seções (ex: se o link começa com depoimentos, sua página DEVE começar assim).
-        2. O ESQUEMA DE CORES (extraia os códigos HEX para primary_color, bg_color e text_color).
-        3. O ESTILO DOS ELEMENTOS (se usa listas, cards, ou seções longas de texto).
-        4. O TOM DE VOZ aplicado.
+        basePrompt += `\n\nREQUISITO ABSOLUTO DE DESIGN (IMITAÇÃO): 
+        O layout, a sequência de seções, as cores (códigos HEX) e os tipos de componentes DEVEM SER UMA RÉPLICA FIEL do seguinte link: ${aiPrompt.referenceUrl}.
+        Ação obrigatória: Use o Google Search para analisar este link e identificar:
+        1. A HIERARQUIA VISUAL: Quais seções aparecem primeiro? (Ex: Testemunhos antes da Oferta? Hero com vídeo?). Mantenha exatamente esta ordem.
+        2. PALETA DE CORES: Extraia cores primárias, cores de fundo e cores de botões.
+        3. TIPOS DE BLOCOS: Se o link usa um carrossel de fotos, use uma seção 'image' com múltiplos itens. Se usa uma grade de benefícios, use 'benefits'.
         
-        Você deve mapear a estrutura do link para o nosso formato JSON, substituindo o conteúdo original pelo conteúdo do produto "${aiPrompt.productName}".`;
+        Você deve mapear a alma visual do link para o nosso esquema JSON abaixo, mudando apenas os textos para que falem sobre o produto "${aiPrompt.productName}".`;
       } else {
         basePrompt += `\n\nESTRUTURA SUGERIDA: Hero, Dor, Método, Benefícios, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
         if (aiPrompt.referenceTemplate) {
-          basePrompt += `\n\nBaseie o estilo visual no modelo: ${aiPrompt.referenceTemplate}.`;
+          basePrompt += `\n\nInspire-se no estilo visual do site: ${aiPrompt.referenceTemplate}.`;
         }
       }
 
-      basePrompt += `\n\nRetorne APENAS o JSON.`;
+      basePrompt += `\n\nRetorne APENAS o JSON rigorosamente conforme o schema.`;
 
       const fieldSchema = {
         type: SchemaType.OBJECT,
@@ -167,6 +167,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           description: fieldSchema,
           question: fieldSchema,
           answer: fieldSchema,
+          author: fieldSchema,
+          role: fieldSchema,
+          content: fieldSchema,
           ai: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
         }
       };
@@ -411,8 +414,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     dragStartRef.current = null;
     elementStartPosRef.current = null;
   };
-
-  // --- Funções de Manipulação de Seções e Itens ---
 
   const handleDeleteSection = (index: number) => {
       if (!editingPage || !editingPage.content) return;

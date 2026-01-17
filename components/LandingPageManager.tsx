@@ -9,7 +9,7 @@ import {
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
   Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
-  Maximize, Minimize, Anchor, CopySlash, MousePointerClick
+  Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField } from '../types';
@@ -50,7 +50,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [creationStep, setCreationStep] = useState<'choice' | 'form'>('choice');
-  const [creationMode, setCreationMode] = useState<'standard' | 'imitation'>('standard');
+  const [creationMode, setCreationMode] = useState<'standard' | 'prompt'>('standard');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRefiningField, setIsRefiningField] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -76,7 +76,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       scarcity: 'Vagas limitadas para este lote',
       tone: 'Profissional e Persuasivo',
       referenceTemplate: '',
-      referenceUrl: ''
+      referenceUrl: '',
+      customPrompt: '',
+      selectedFormId: ''
   });
 
   useEffect(() => {
@@ -105,13 +107,13 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   };
 
   const handleCreateWithAi = async () => {
-    if (!aiPrompt.productName || !aiPrompt.targetAudience) {
-      alert("Informe pelo menos o nome do produto e o público-alvo.");
+    if (!aiPrompt.productName) {
+      alert("Informe o nome do produto.");
       return;
     }
 
-    if (creationMode === 'imitation' && !aiPrompt.referenceUrl) {
-      alert("Informe o link da página que deseja imitar.");
+    if (creationMode === 'prompt' && !aiPrompt.customPrompt) {
+      alert("Escreva o prompt com as instruções da página.");
       return;
     }
 
@@ -131,15 +133,14 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       Garantia: ${aiPrompt.guarantee}
       Tom de Voz: ${aiPrompt.tone}`;
 
-      if (creationMode === 'imitation') {
-        basePrompt += `\n\nREQUISITO ABSOLUTO DE DESIGN (IMITAÇÃO): 
-        O layout, a sequência de seções, as cores (códigos HEX) e os tipos de componentes DEVEM SER UMA RÉPLICA FIEL do seguinte link: ${aiPrompt.referenceUrl}.
-        Ação obrigatória: Use o Google Search para analisar este link e identificar:
-        1. A HIERARQUIA VISUAL: Quais seções aparecem primeiro? (Ex: Testemunhos antes da Oferta? Hero com vídeo?). Mantenha exatamente esta ordem.
-        2. PALETA DE CORES: Extraia cores primárias, cores de fundo e cores de botões.
-        3. TIPOS DE BLOCOS: Se o link usa um carrossel de fotos, use uma seção 'image' com múltiplos itens. Se usa uma grade de benefícios, use 'benefits'.
+      if (creationMode === 'prompt') {
+        basePrompt += `\n\nREQUISITO OBRIGATÓRIO (PROMPT PERSONALIZADO): 
+        Siga EXATAMENTE as seguintes instruções do usuário para criar a estrutura e o conteúdo:
+        "${aiPrompt.customPrompt}"`;
         
-        Você deve mapear a alma visual do link para o nosso esquema JSON abaixo, mudando apenas os textos para que falem sobre o produto "${aiPrompt.productName}".`;
+        if (aiPrompt.selectedFormId) {
+            basePrompt += `\n\nATENÇÃO: Você DEVE incluir uma seção do tipo 'form' no JSON. No conteúdo dessa seção, o campo 'value' deve ser obrigatoriamente o ID: "${aiPrompt.selectedFormId}". Escolha o melhor lugar na página para inserir este formulário com base no prompt do usuário.`;
+        }
       } else {
         basePrompt += `\n\nESTRUTURA SUGERIDA: Hero, Dor, Método, Benefícios, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
         if (aiPrompt.referenceTemplate) {
@@ -178,7 +179,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         model: "gemini-3-pro-preview",
         contents: basePrompt,
         config: {
-          tools: creationMode === 'imitation' ? [{ googleSearch: {} }] : undefined,
           responseMimeType: "application/json",
           responseSchema: {
             type: SchemaType.OBJECT,
@@ -232,7 +232,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                             price: fieldSchema,
                             features: { type: SchemaType.ARRAY, items: fieldSchema },
                             cta_label: fieldSchema,
-                            cta_url: fieldSchema
+                            cta_url: fieldSchema,
+                            value: { type: SchemaType.STRING }
                         }
                     }
                   },
@@ -894,7 +895,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         </div>
         <button 
           onClick={() => {
-            setAiPrompt({ ...aiPrompt, productName: '', productDescription: '', referenceUrl: '', referenceTemplate: '' });
+            setAiPrompt({ ...aiPrompt, productName: '', productDescription: '', referenceUrl: '', referenceTemplate: '', customPrompt: '', selectedFormId: '' });
             setEditingPage(null);
             setCurrentDraft(null);
             setCreationStep('choice');
@@ -956,15 +957,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                    </button>
 
                    <button 
-                    onClick={() => { setCreationMode('imitation'); setCreationStep('form'); }}
+                    onClick={() => { setCreationMode('prompt'); setCreationStep('form'); }}
                     className="group bg-white p-10 rounded-[3rem] border-2 border-slate-100 hover:border-indigo-600 hover:shadow-2xl transition-all flex flex-col items-center text-center gap-6"
                    >
                      <div className="w-20 h-20 bg-orange-50 text-orange-600 rounded-[2rem] flex items-center justify-center group-hover:scale-110 transition-transform">
-                       <CopySlash size={40}/>
+                       <FileEdit size={40}/>
                      </div>
                      <div>
-                       <h4 className="text-xl font-black text-slate-800 mb-2">Baseado em outra Página</h4>
-                       <p className="text-sm text-slate-500 leading-relaxed">Forneça um link de referência para a IA imitar a estrutura, estilo e tom de voz da página de destino.</p>
+                       <h4 className="text-xl font-black text-slate-800 mb-2">Baseado em um Prompt</h4>
+                       <p className="text-sm text-slate-500 leading-relaxed">Forneça instruções detalhadas de como a página deve ser e a IA criará exatamente como solicitado.</p>
                      </div>
                      <div className="mt-4 px-6 py-2 bg-slate-100 rounded-full text-[10px] font-black uppercase text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">Selecionar</div>
                    </button>
@@ -973,23 +974,40 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
                      <div className="flex items-center gap-4 mb-4">
                         <button onClick={() => setCreationStep('choice')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={18}/></button>
-                        <h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest">{creationMode === 'standard' ? 'Criação Padrão' : 'Imitar Página via Link'}</h4>
+                        <h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest">{creationMode === 'standard' ? 'Criação Padrão' : 'Instruções Personalizadas (Prompt)'}</h4>
                      </div>
 
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {creationMode === 'imitation' && (
-                          <div className="md:col-span-2">
-                              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2">
-                                <Link2 size={14} className="text-orange-500"/> Link da Página de Referência (Imitar)
-                              </label>
-                              <input 
-                                type="url" 
-                                className="w-full px-6 py-4 border-2 border-orange-100 bg-orange-50/30 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-mono outline-none transition-all" 
-                                value={aiPrompt.referenceUrl} 
-                                onChange={e => setAiPrompt({...aiPrompt, referenceUrl: e.target.value})} 
-                                placeholder="https://exemplo.com.br/pagina-de-vendas" 
-                              />
-                              <p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA usará o Google Search para analisar este link e replicar sua estrutura.</p>
+                        {creationMode === 'prompt' && (
+                          <div className="md:col-span-2 space-y-6">
+                              <div>
+                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2">
+                                    <MessageSquare size={14} className="text-orange-500"/> Instruções do Prompt (Como deve ser a página?)
+                                </label>
+                                <textarea 
+                                    className="w-full px-6 py-4 border-2 border-orange-100 bg-orange-50/30 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-medium outline-none transition-all h-32 resize-none leading-relaxed" 
+                                    value={aiPrompt.customPrompt} 
+                                    onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} 
+                                    placeholder="Ex: Crie uma página com tema escuro, focada em depoimentos e que tenha um botão de CTA bem grande no final..." 
+                                />
+                                <p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA seguirá suas orientações para montar a estrutura visual e os textos.</p>
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2">
+                                    <FormInput size={14} className="text-orange-500"/> Selecionar Formulário para Incluir na Página
+                                </label>
+                                <select 
+                                    className="w-full px-6 py-4 border-2 border-orange-100 bg-orange-50/30 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all appearance-none cursor-pointer"
+                                    value={aiPrompt.selectedFormId}
+                                    onChange={e => setAiPrompt({...aiPrompt, selectedFormId: e.target.value})}
+                                >
+                                    <option value="">Não incluir formulário</option>
+                                    {availableForms.map(f => (
+                                        <option key={f.id} value={f.id}>{f.title}</option>
+                                    ))}
+                                </select>
+                              </div>
                           </div>
                         )}
 

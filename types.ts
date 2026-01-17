@@ -615,13 +615,40 @@ export interface ElementStyles {
     width?: number;
 }
 
+export interface LandingPageField {
+    value: string;
+    ai: string[];
+}
+
 export interface LandingPageSection {
   id: string;
-  type: 'hero' | 'text' | 'features' | 'pricing' | 'faq' | 'image' | 'socialProof' | 'form';
+  type: 'hero' | 'pain' | 'method' | 'benefits' | 'target' | 'learning' | 'modules' | 'bonuses' | 'testimonials' | 'pricing' | 'guarantee' | 'faq' | 'cta_final' | 'professor' | 'footer' | 'image' | 'form';
+  enabled: boolean;
   content: any;
   styles?: Record<string, ElementStyles>;
 }
 
 export interface LandingPageContent {
+  meta: {
+      page_id: string;
+      title: string;
+      status: string;
+      version: number;
+      created_at: string;
+      updated_at: string;
+  };
+  theme: {
+      brand_name: string;
+      tone: string;
+      primary_color: string;
+      text_color: string;
+      bg_color: string;
+      font_family: string;
+  };
+  ai_defaults: {
+      enabled: boolean;
+      max_suggestions: number;
+      rules: string;
+  };
   sections: LandingPageSection[];
 }

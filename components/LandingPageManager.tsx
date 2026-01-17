@@ -7,10 +7,12 @@ import {
   HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText,
   ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check,
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
-  Palette, FormInput, Building, Move, Maximize2
+  Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
+  // Fix: Added missing Eye icon import
+  Eye
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
-import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel } from '../types';
+import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField } from '../types';
 import { GoogleGenAI, Type as SchemaType } from "@google/genai";
 import clsx from 'clsx';
 
@@ -31,16 +33,7 @@ const REFERENCE_TEMPLATES = [
     { id: 'ebac', name: 'EBAC Online', url: 'https://ebaconline.com.br/', description: 'Design e Artes digitais', imageUrl: 'https://images.unsplash.com/photo-1558655146-d09347e92766?q=80&w=400&auto=format&fit=crop' },
     { id: 'descomplica', name: 'Descomplica', url: 'https://www.descomplica.com.br/', description: 'Educação universitária e pós', imageUrl: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=400&auto=format&fit=crop' },
     { id: 'conquer', name: 'Conquer', url: 'https://escolaconquer.com.br/', description: 'Soft skills e imersões', imageUrl: 'https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=400&auto=format&fit=crop' },
-    { id: 'g4', name: 'G4 Educação', url: 'https://g4educacao.com/', description: 'Liderança e gestão executiva', imageUrl: 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?q=80&w=400&auto=format&fit=crop' },
-    { id: 'dnc', name: 'DNC', url: 'https://www.escoladnc.com.br/', description: 'Foco em empregabilidade', imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=400&auto=format&fit=crop' },
-    { id: 'tera', name: 'Tera', url: 'https://somostera.com/', description: 'Habilidades da economia digital', imageUrl: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?q=80&w=400&auto=format&fit=crop' },
-    { id: 'k21', name: 'K21', url: 'https://k21.global/pt/cursos', description: 'Agilidade e transformação digital', imageUrl: 'https://images.unsplash.com/photo-1551434678-e076c223a692?q=80&w=400&auto=format&fit=crop' },
-    { id: 'insper', name: 'Insper', url: 'https://www.insper.edu.br/educacao-executiva/', description: 'Executiva de alto nível', imageUrl: 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=400&auto=format&fit=crop' },
-    { id: 'fgv', name: 'FGV', url: 'https://educacao-executiva.fgv.br/', description: 'Referência em gestão e economia', imageUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=400&auto=format&fit=crop' },
-    { id: 'rdsummit', name: 'RD Summit', url: 'https://rdsummit.com.br/', description: 'Grandes eventos de marketing', imageUrl: 'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?q=80&w=400&auto=format&fit=crop' },
-    { id: 'pipefy', name: 'Pipefy', url: 'https://www.pipefy.com/pt-br/', description: 'SaaS e produtividade corporativa', imageUrl: 'https://images.unsplash.com/photo-1551288049-bbbda536339a?q=80&w=400&auto=format&fit=crop' },
-    { id: 'nuvemshop', name: 'Nuvemshop', url: 'https://www.nuvemshop.com.br/', description: 'E-commerce e planos SaaS', imageUrl: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?q=80&w=400&auto=format&fit=crop' },
-    { id: 'novomercado', name: 'O Novo Mercado', url: 'https://onovomercado.com/assinatura-pv-10/', description: 'Vendas e marketing digital', imageUrl: 'https://images.unsplash.com/photo-1454165833767-0279c29c896d?q=80&w=400&auto=format&fit=crop' }
+    { id: 'g4', name: 'G4 Educação', url: 'https://g4educacao.com/', description: 'Liderança e gestão executiva', imageUrl: 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?q=80&w=400&auto=format&fit=crop' }
 ];
 
 export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }) => {
@@ -60,18 +53,21 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number, y: number } | null>(null);
   const elementStartPosRef = useRef<{ x: number, y: number } | null>(null);
-  const currentSectionRef = useRef<HTMLDivElement>(null);
 
   // Form State
   const [editingPage, setEditingPage] = useState<Partial<LandingPage> | null>(null);
   const [currentDraft, setCurrentDraft] = useState<Partial<LandingPage> | null>(null);
   const [aiPrompt, setAiPrompt] = useState({
       productName: '',
+      brandName: 'VOLL Pilates',
       productDescription: '',
       targetAudience: '',
       mainBenefits: '',
       price: '',
       offerDetails: '',
+      guarantee: '7 dias',
+      scarcity: 'Vagas limitadas para este lote',
+      tone: 'Profissional e Persuasivo',
       referenceTemplate: ''
   });
 
@@ -114,19 +110,29 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         ? `IMPORTANTE: Baseie a estrutura, ordem das seções e o tom de voz no modelo de página de referência: ${aiPrompt.referenceTemplate}.` 
         : '';
 
-      const prompt = `Crie uma página de vendas persuasiva para o produto "${aiPrompt.productName}".
-      Descrição do produto: ${aiPrompt.productDescription}
+      const prompt = `Você é um especialista em copywriting de alta conversão e design de landing pages premium.
+      Crie uma página completa, persuasiva e visualmente moderna para vender o curso "${aiPrompt.productName}".
+      Use as técnicas AIDA + PAS, quebra de objeções e escassez ética.
+      
+      DADOS DO PRODUTO:
+      Nome da marca: ${aiPrompt.brandName}
       Público-alvo: ${aiPrompt.targetAudience}
-      Benefícios principais: ${aiPrompt.mainBenefits}
-      Preço/Oferta: ${aiPrompt.price}
+      Descrição: ${aiPrompt.productDescription}
+      Promessa: ${aiPrompt.mainBenefits}
+      Preço: ${aiPrompt.price}
+      Garantia: ${aiPrompt.guarantee}
+      Escassez: ${aiPrompt.scarcity}
+      Tom: ${aiPrompt.tone}
       ${templateReference}
       
-      REGRAS OBRIGATÓRIAS:
-      1. Gere no MÍNIMO 3 benefícios na seção 'features'.
-      2. Gere no MÍNIMO 3 perguntas e respostas na seção 'faq'.
+      ESTRUTURA OBRIGATÓRIA:
+      Hero, Dor e consequências, Método/diferencial, Benefícios (cards), Para quem é/não é, O que vai aprender, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ, CTA final, Professor, Rodapé.
+
+      REGRAS DO JSON:
+      Cada campo de texto deve ser um objeto { "value": "string", "ai": ["variations", "more_persuasive", "shorter", "expand", "rewrite_clear", "more_specific"] }.
+      As listas (benefícios, módulos, FAQ) devem ser arrays de objetos com id, value/title/description e o campo ai.
       
-      Retorne um JSON estruturado seguindo o esquema solicitado. 
-      Responda EXCLUSIVAMENTE o JSON, sem markdown.`;
+      Retorne APENAS o JSON no formato solicitado.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -136,46 +142,35 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           responseSchema: {
             type: SchemaType.OBJECT,
             properties: {
-              title: { type: SchemaType.STRING, description: "Título interno da página" },
+              meta: {
+                  type: SchemaType.OBJECT,
+                  properties: {
+                      title: { type: SchemaType.STRING },
+                      status: { type: SchemaType.STRING }
+                  }
+              },
+              theme: {
+                  type: SchemaType.OBJECT,
+                  properties: {
+                      brand_name: { type: SchemaType.STRING },
+                      tone: { type: SchemaType.STRING },
+                      primary_color: { type: SchemaType.STRING },
+                      font_family: { type: SchemaType.STRING }
+                  }
+              },
               sections: {
                 type: SchemaType.ARRAY,
                 items: {
                   type: SchemaType.OBJECT,
                   properties: {
                     id: { type: SchemaType.STRING },
-                    type: { type: SchemaType.STRING, enum: ['hero', 'text', 'features', 'pricing', 'faq'] },
-                    content: { 
-                        type: SchemaType.OBJECT,
-                        properties: {
-                            headline: { type: SchemaType.STRING },
-                            subheadline: { type: SchemaType.STRING },
-                            ctaText: { type: SchemaType.STRING },
-                            ctaUrl: { type: SchemaType.STRING },
-                            title: { type: SchemaType.STRING },
-                            text: { type: SchemaType.STRING },
-                            mainTitle: { type: SchemaType.STRING },
-                            price: { type: SchemaType.STRING },
-                            installments: { type: SchemaType.STRING },
-                            items: {
-                                type: SchemaType.ARRAY,
-                                items: {
-                                    type: SchemaType.OBJECT,
-                                    properties: {
-                                        title: { type: SchemaType.STRING },
-                                        description: { type: SchemaType.STRING },
-                                        question: { type: SchemaType.STRING },
-                                        answer: { type: SchemaType.STRING }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                  },
-                  required: ["id", "type", "content"]
+                    type: { type: SchemaType.STRING },
+                    enabled: { type: SchemaType.BOOLEAN },
+                    content: { type: SchemaType.OBJECT }
+                  }
                 }
               }
-            },
-            required: ["title", "sections"]
+            }
           }
         }
       });
@@ -184,10 +179,10 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       const generated = JSON.parse(text);
       
       const newPage: Partial<LandingPage> = {
-        title: generated.title || aiPrompt.productName,
+        title: generated.meta?.title || aiPrompt.productName,
         productName: aiPrompt.productName,
-        slug: slugify(generated.title || aiPrompt.productName),
-        content: { sections: generated.sections || [] },
+        slug: slugify(generated.meta?.title || aiPrompt.productName),
+        content: generated,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isActive: true,
@@ -203,23 +198,16 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     }
   };
 
-  const handleRefineFieldWithAi = async (sectionId: string, fieldKey: string, currentVal: string) => {
-    if (!aiPrompt.productName) return;
-    
+  const handleAiAction = async (sectionId: string, fieldKey: string, action: string, currentVal: string) => {
     const fieldIdentifier = `${sectionId}-${fieldKey}`;
     setIsRefiningField(fieldIdentifier);
     
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      
-      const prompt = `Melhore e torne extremamente persuasivo o seguinte campo para uma página de vendas do produto "${aiPrompt.productName}":
-      Contexto do Produto: ${aiPrompt.productDescription}
-      Público-alvo: ${aiPrompt.targetAudience}
-      
-      Campo a ser otimizado: "${fieldKey}"
+      const prompt = `Como um expert em marketing, execute a ação "${action}" para o seguinte texto de uma landing page:
       Texto atual: "${currentVal}"
-      
-      Retorne APENAS o novo texto sugerido, sem aspas, focado em conversão e gatilhos mentais adequados para o campo "${fieldKey}".`;
+      Contexto: Venda do produto "${aiPrompt.productName}".
+      Retorne apenas o novo texto sugerido, altamente persuasivo e focado em conversão.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -228,10 +216,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
       const refinedText = (response.text || currentVal).trim();
 
-      if (currentDraft && currentDraft.content) {
-          const newSections = currentDraft.content.sections.map(s => {
+      if (editingPage && editingPage.content) {
+          const newSections = editingPage.content.sections.map((s: LandingPageSection) => {
               if (s.id === sectionId) {
                   const content = { ...s.content };
+                  // Se for campo aninhado (ex: items.0.title)
                   if (fieldKey.includes('.')) {
                       const parts = fieldKey.split('.');
                       if (parts.length === 3) {
@@ -239,22 +228,22 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                           const idx = parseInt(index);
                           const newList = [...(content[listKey] || [])];
                           if (newList[idx]) {
-                              newList[idx] = { ...newList[idx], [subKey]: refinedText };
+                              newList[idx][subKey].value = refinedText;
                               content[listKey] = newList;
                           }
                       }
                   } else {
-                      content[fieldKey] = refinedText;
+                      content[fieldKey].value = refinedText;
                   }
                   return { ...s, content };
               }
               return s;
           });
-          setCurrentDraft({ ...currentDraft, content: { sections: newSections } });
+          setEditingPage({ ...editingPage, content: { ...editingPage.content, sections: newSections } });
       }
     } catch (e: any) {
       console.error(e);
-      alert("Erro ao refinar com IA: " + e.message);
+      alert("Erro na IA: " + e.message);
     } finally {
       setIsRefiningField(null);
     }
@@ -295,107 +284,18 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     }
   };
 
-  const handleImageUploadForSection = (sectionId: string) => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.onchange = (e: any) => {
-          const file = e.target.files[0];
-          if (file) {
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                  const base64 = reader.result as string;
-                  updateSection(sectionId, { 
-                      ...(editingPage?.content?.sections.find(s => s.id === sectionId)?.content || {}),
-                      imageUrl: base64,
-                      url: base64
-                  });
-              };
-              reader.readAsDataURL(file);
-          }
-      };
-      input.click();
-  };
-
-  const addComponent = (type: LandingPageSection['type']) => {
-    if (!editingPage) return;
-    const newSection: LandingPageSection = {
-      id: crypto.randomUUID(),
-      type,
-      content: getInitialContentForType(type)
-    };
-    setEditingPage({
-      ...editingPage,
-      content: {
-        ...editingPage.content!,
-        sections: [...(editingPage.content?.sections || []), newSection]
-      }
-    });
-  };
-
-  const getInitialContentForType = (type: string) => {
-    switch(type) {
-      case 'hero': return { headline: 'Título Impactante', subheadline: 'Descrição curta persuasiva.', ctaText: 'Quero Garantir', ctaUrl: '', imageUrl: '' };
-      case 'text': return { title: 'Sobre o Produto', text: 'Escreva detalhes aqui...' };
-      case 'features': return { mainTitle: 'Por que escolher?', items: [{ title: 'Destaque 1', description: 'Explicação.' }, { title: 'Destaque 2', description: 'Explicação.' }, { title: 'Destaque 3', description: 'Explicação.' }] };
-      case 'pricing': return { price: 'R$ 997,00', installments: '12x R$ 97,00', ctaText: 'Comprar Agora', ctaUrl: '' };
-      case 'faq': return { items: [{ question: 'Como funciona?', answer: 'Explicação detalhada.' }, { question: 'Qual a garantia?', answer: '7 dias.' }, { question: 'O acesso é vitalício?', answer: 'Sim.' }] };
-      case 'image': return { url: '' };
-      case 'form': return { title: 'Inscreva-se', formId: '' };
-      default: return {};
-    }
-  };
-
-  const updateSection = (id: string, newContent: any) => {
-    if (!editingPage) return;
-    setEditingPage({
-      ...editingPage,
-      content: {
-        ...editingPage.content!,
-        sections: editingPage.content!.sections.map(s => s.id === id ? { ...s, content: newContent } : s)
-      }
-    });
-  };
-
   const updateSectionStyles = (sectionId: string, elementKey: string, newStyles: Partial<ElementStyles>) => {
       if (!editingPage) return;
-      setEditingPage({
-          ...editingPage,
-          content: {
-              ...editingPage.content!,
-              sections: editingPage.content!.sections.map(s => {
-                  if (s.id === sectionId) {
-                      const styles = { ...(s.styles || {}) };
-                      styles[elementKey] = { ...(styles[elementKey] || {}), ...newStyles };
-                      return { ...s, styles };
-                  }
-                  return s;
-              })
+      const content = { ...editingPage.content };
+      content.sections = content.sections.map((s: LandingPageSection) => {
+          if (s.id === sectionId) {
+              const styles = { ...(s.styles || {}) };
+              styles[elementKey] = { ...(styles[elementKey] || {}), ...newStyles };
+              return { ...s, styles };
           }
+          return s;
       });
-  };
-
-  const moveSection = (index: number, direction: 'up' | 'down') => {
-    if (!editingPage) return;
-    const newSections = [...(editingPage.content?.sections || [])];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newSections.length) return;
-    [newSections[index], newSections[targetIndex]] = [newSections[targetIndex], newSections[index]];
-    setEditingPage({
-      ...editingPage,
-      content: { ...editingPage.content!, sections: newSections }
-    });
-  };
-
-  const removeSection = (id: string) => {
-    if (!editingPage) return;
-    setEditingPage({
-      ...editingPage,
-      content: {
-        ...editingPage.content!,
-        sections: editingPage.content!.sections.filter(s => s.id !== id)
-      }
-    });
+      setEditingPage({ ...editingPage, content });
   };
 
   const handleElementMouseDown = (e: React.MouseEvent, sectionId: string, elementKey: string) => {
@@ -405,12 +305,12 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     setSelectedElementKey(elementKey);
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     
-    const section = editingPage?.content?.sections.find(s => s.id === sectionId);
+    const section = editingPage?.content?.sections.find((s: any) => s.id === sectionId);
     const styles = section?.styles?.[elementKey];
     
     elementStartPosRef.current = { 
-        x: styles?.x !== undefined ? styles.x : 0, 
-        y: styles?.y !== undefined ? styles.y : 0 
+        x: styles?.x !== undefined ? styles.x : 50, 
+        y: styles?.y !== undefined ? styles.y : 50 
     };
   };
 
@@ -439,87 +339,93 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     elementStartPosRef.current = null;
   };
 
-  const selectedSection = editingPage?.content?.sections.find(s => s.id === selectedSectionId);
+  const renderInteractableField = (sectionId: string, fieldKey: string, field: LandingPageField, styles: ElementStyles = {}, isMultiline = false) => {
+      const isSelected = selectedSectionId === sectionId && selectedElementKey === fieldKey;
+      const isRefining = isRefiningField === `${sectionId}-${fieldKey}`;
 
-  const renderInteractableText = (section: LandingPageSection, elementKey: string, defaultValue: string, type: 'input' | 'textarea' = 'input') => {
-    const isSelected = selectedElementKey === elementKey && selectedSectionId === section.id;
-    const styles = section.styles?.[elementKey] || {};
-    const value = section.content[elementKey] || defaultValue;
+      return (
+          <div 
+              className={clsx(
+                  "relative group/field border-2 transition-all",
+                  isSelected ? "border-indigo-500 bg-indigo-50/20 shadow-lg z-50" : "border-transparent hover:border-indigo-200"
+              )}
+              style={{
+                  position: (styles.x !== undefined || styles.y !== undefined) ? 'absolute' : 'relative',
+                  left: styles.x !== undefined ? `${styles.x}%` : undefined,
+                  top: styles.y !== undefined ? `${styles.y}%` : undefined,
+                  transform: (styles.x !== undefined || styles.y !== undefined) ? 'translate(-50%, -50%)' : undefined,
+                  width: styles.width ? `${styles.width}%` : '100%',
+                  fontSize: styles.fontSize,
+                  fontFamily: styles.fontFamily,
+                  textAlign: styles.textAlign,
+                  color: styles.color
+              }}
+              onClick={(e) => { e.stopPropagation(); setSelectedSectionId(sectionId); setSelectedElementKey(fieldKey); }}
+          >
+              {/* AI ACTIONS OVERLAY */}
+              <div className="absolute -top-10 left-0 hidden group-hover/field:flex items-center gap-1 bg-white p-1 rounded-lg shadow-xl border border-indigo-100 z-[60]">
+                  <button 
+                    onMouseDown={(e) => handleElementMouseDown(e, sectionId, fieldKey)}
+                    className="p-1.5 hover:bg-slate-100 rounded text-slate-400"
+                  >
+                      <Move size={14}/>
+                  </button>
+                  <div className="h-4 w-px bg-slate-200 mx-1"></div>
+                  {field.ai?.map(action => (
+                      <button 
+                          key={action}
+                          disabled={isRefining}
+                          onClick={() => handleAiAction(sectionId, fieldKey, action, field.value)}
+                          className="px-2 py-1 text-[9px] font-black uppercase tracking-tighter bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 disabled:opacity-50"
+                      >
+                          {isRefining ? <Loader2 size={10} className="animate-spin"/> : action.replace('_', ' ')}
+                      </button>
+                  ))}
+              </div>
 
-    const commonClasses = clsx(
-        "bg-transparent border-none focus:ring-0 p-0 transition-all outline-none resize-none cursor-text",
-        isSelected && "ring-2 ring-orange-500 bg-orange-50/20"
-    );
-
-    const inlineStyle: React.CSSProperties = {
-        fontSize: styles.fontSize || (elementKey === 'headline' ? '48px' : '16px'),
-        fontFamily: styles.fontFamily,
-        textAlign: styles.textAlign || 'left',
-        color: styles.color,
-        width: styles.width !== undefined ? `${styles.width}%` : '100%',
-        position: (styles.x !== undefined || styles.y !== undefined) ? 'absolute' : 'relative',
-        left: styles.x !== undefined ? `${styles.x}%` : undefined,
-        top: styles.y !== undefined ? `${styles.y}%` : undefined,
-        transform: (styles.x !== undefined || styles.y !== undefined) ? 'translate(-50%, -50%)' : undefined,
-        zIndex: isSelected ? 50 : 1
-    };
-
-    return (
-        <div 
-            className="group/el relative inline-block w-full"
-            style={styles.x !== undefined ? { position: 'static' } : {}}
-        >
-            <div 
-                className={clsx(
-                    "absolute -top-6 -left-2 flex items-center gap-1 opacity-0 group-hover/el:opacity-100 transition-opacity z-[60]",
-                    isSelected && "opacity-100"
-                )}
-            >
-                <div 
-                    onMouseDown={(e) => handleElementMouseDown(e, section.id, elementKey)}
-                    className="p-1 bg-orange-500 text-white rounded cursor-move shadow-md"
-                >
-                    <Move size={12}/>
-                </div>
-                <div 
-                    onClick={() => { setSelectedSectionId(section.id); setSelectedElementKey(elementKey); }}
-                    className="p-1 bg-indigo-600 text-white rounded cursor-pointer shadow-md"
-                >
-                    <Palette size={12}/>
-                </div>
-            </div>
-            
-            {type === 'input' ? (
-                <input 
-                    style={inlineStyle}
-                    className={commonClasses}
-                    value={value}
-                    onChange={e => updateSection(section.id, { ...section.content, [elementKey]: e.target.value })}
-                    onFocus={() => { setSelectedSectionId(section.id); setSelectedElementKey(elementKey); }}
-                />
-            ) : (
-                <textarea 
-                    style={inlineStyle}
-                    className={commonClasses}
-                    value={value}
-                    onChange={e => updateSection(section.id, { ...section.content, [elementKey]: e.target.value })}
-                    onFocus={() => { setSelectedSectionId(section.id); setSelectedElementKey(elementKey); }}
-                />
-            )}
-        </div>
-    );
+              {isMultiline ? (
+                  <textarea 
+                    className="w-full bg-transparent border-none focus:ring-0 p-2 resize-none outline-none overflow-hidden" 
+                    value={field.value}
+                    rows={field.value.split('\n').length}
+                    onChange={e => {
+                        const content = { ...editingPage?.content };
+                        const s = content.sections.find((s: any) => s.id === sectionId);
+                        s.content[fieldKey].value = e.target.value;
+                        setEditingPage({ ...editingPage!, content });
+                    }}
+                  />
+              ) : (
+                  <input 
+                    className="w-full bg-transparent border-none focus:ring-0 p-2 outline-none font-bold" 
+                    value={field.value}
+                    onChange={e => {
+                        const content = { ...editingPage?.content };
+                        const s = content.sections.find((s: any) => s.id === sectionId);
+                        s.content[fieldKey].value = e.target.value;
+                        setEditingPage({ ...editingPage!, content });
+                    }}
+                  />
+              )}
+          </div>
+      );
   };
 
   if (view === 'visual_editor' && editingPage) {
+    const content = editingPage.content as LandingPageContent;
     return (
       <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col animate-in fade-in" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
-        <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-sm">
+        <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-sm z-50">
           <div className="flex items-center gap-4">
             <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
             <div className="h-6 w-px bg-slate-200"></div>
-            <h2 className="font-bold text-slate-800">{editingPage.title} <span className="text-xs text-slate-400 font-normal ml-2 tracking-widest uppercase">Editor de Alta Fidelidade</span></h2>
+            <h2 className="font-bold text-slate-800">{editingPage.title}</h2>
           </div>
           <div className="flex items-center gap-3">
+             <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 rounded-full border border-indigo-100">
+                <BrainCircuit size={16} className="text-indigo-600 animate-pulse" />
+                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">Editor com IA Ativa</span>
+             </div>
             <button onClick={handleSave} className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-2 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95">
               {isLoading ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} Salvar Página
             </button>
@@ -527,292 +433,122 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Toolbar Lateral Esquerda */}
-          <aside className="w-72 bg-white border-r border-slate-200 p-6 space-y-8 overflow-y-auto custom-scrollbar shadow-lg z-20">
-            <div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Novo Componente</h3>
-                <div className="grid grid-cols-1 gap-2">
-                {[
-                    { type: 'hero', label: 'Hero (Topo)', icon: Layout },
-                    { type: 'text', label: 'Texto/Sobre', icon: Type },
-                    { type: 'features', label: 'Benefícios', icon: ListChecks },
-                    { type: 'pricing', label: 'Oferta/Preço', icon: CreditCard },
-                    { type: 'faq', label: 'FAQ', icon: HelpCircle },
-                    { type: 'image', label: 'Imagem', icon: ImageIcon },
-                    { type: 'form', label: 'Formulário', icon: FormInput }
-                ].map(comp => (
-                    <button 
-                    key={comp.type} 
-                    onClick={() => addComponent(comp.type as any)}
-                    className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-orange-200 hover:bg-orange-50 text-sm font-medium text-slate-700 transition-all text-left group"
-                    >
-                    <comp.icon size={16} className="text-orange-500 group-hover:scale-110 transition-transform" /> {comp.label}
-                    </button>
-                ))}
+          <aside className="w-80 bg-white border-r border-slate-200 p-6 space-y-8 overflow-y-auto custom-scrollbar shadow-lg z-40">
+             <div>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Design do Tema</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Nome da Marca</label>
+                        <input className="w-full text-xs p-2.5 border rounded-xl mt-1" value={content.theme.brand_name} onChange={e => {
+                            const newContent = {...content};
+                            newContent.theme.brand_name = e.target.value;
+                            setEditingPage({...editingPage, content: newContent});
+                        }} />
+                    </div>
+                    <div>
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Cor Primária</label>
+                        <div className="flex items-center gap-2 mt-1">
+                            <input type="color" className="w-10 h-10 rounded border p-1" value={content.theme.primary_color} onChange={e => {
+                                const newContent = {...content};
+                                newContent.theme.primary_color = e.target.value;
+                                setEditingPage({...editingPage, content: newContent});
+                            }} />
+                            <span className="text-xs font-mono font-bold text-slate-500">{content.theme.primary_color}</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            
-            <div className="space-y-4">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Propriedades da Página</h3>
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Título da Página</label>
-                <input className="w-full text-xs p-2.5 border rounded-xl mt-1 focus:ring-2 focus:ring-orange-500 outline-none" value={editingPage.title} onChange={e => setEditingPage({...editingPage, title: e.target.value})} />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Slug amigável</label>
-                <input className="w-full text-xs p-2.5 border rounded-xl mt-1 font-mono focus:ring-2 focus:ring-orange-500 outline-none" value={editingPage.slug} onChange={e => setEditingPage({...editingPage, slug: slugify(e.target.value)})} />
-              </div>
-            </div>
+             </div>
+
+             <div className="space-y-4">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Seções da Página</h3>
+                <div className="space-y-2">
+                    {content.sections.map((s, idx) => (
+                        <div key={s.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                           <div className="flex items-center gap-3">
+                               <span className="text-[10px] font-black text-slate-300">#{idx+1}</span>
+                               <span className="text-xs font-bold text-slate-700 uppercase tracking-tighter">{s.type}</span>
+                           </div>
+                           <div className="flex gap-1">
+                               <button onClick={() => {
+                                   const newSections = [...content.sections];
+                                   newSections[idx].enabled = !newSections[idx].enabled;
+                                   setEditingPage({...editingPage, content: {...content, sections: newSections}});
+                               }} className={clsx("p-1.5 rounded hover:bg-white", s.enabled ? "text-indigo-600" : "text-slate-300")}>
+                                   {s.enabled ? <Eye size={14}/> : <X size={14}/>}
+                               </button>
+                               <button onClick={() => {
+                                   const newSections = [...content.sections];
+                                   newSections.splice(idx, 1);
+                                   setEditingPage({...editingPage, content: {...content, sections: newSections}});
+                               }} className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500">
+                                   <Trash2 size={14}/>
+                               </button>
+                           </div>
+                        </div>
+                    ))}
+                </div>
+             </div>
           </aside>
 
-          {/* Área de Visualização/Edição de ALTA FIDELIDADE */}
-          <main className="flex-1 bg-slate-200 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center select-none">
-            <div className="bg-white w-full max-w-6xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-40">
-               <nav className="bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-40 rounded-t-[3rem]">
-                  <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-8 object-contain" />
-               </nav>
-
-               {editingPage.content?.sections?.map((section, idx) => {
-                 const isSelected = selectedSectionId === section.id;
-                 return (
-                 <div 
-                    key={section.id} 
-                    id={`lp-section-${section.id}`}
-                    onClick={(e) => { e.stopPropagation(); setSelectedSectionId(section.id); setSelectedElementKey(null); }}
-                    className={clsx(
-                        "relative group/section border-4 transition-all cursor-pointer",
-                        isSelected ? "border-orange-500/50" : "border-transparent hover:border-orange-200"
-                    )}
-                 >
-                    {/* Controles de Seção */}
-                    <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover/section:opacity-100 transition-opacity z-50">
-                       <div className="bg-white/90 backdrop-blur-md p-1 rounded-xl shadow-2xl border border-slate-100 flex gap-1">
-                            <button onClick={(e) => { e.stopPropagation(); moveSection(idx, 'up'); }} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 hover:text-orange-600 transition-all"><ArrowUp size={16}/></button>
-                            <button onClick={(e) => { e.stopPropagation(); moveSection(idx, 'down'); }} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 hover:text-orange-600 transition-all"><ArrowDown size={16}/></button>
-                            <div className="w-px h-4 bg-slate-200 self-center mx-1"></div>
-                            <button onClick={(e) => { e.stopPropagation(); removeSection(section.id); }} className="p-2 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 transition-all"><Trash2 size={16}/></button>
-                       </div>
-                    </div>
-
-                    <div className="relative min-h-[100px]">
-                      {section.type === 'hero' && (
-                        <header className="pt-24 pb-16 px-6 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative min-h-[600px]">
-                          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10">
-                            <div className="space-y-6 relative min-h-[300px]">
-                              {renderInteractableText(section, 'headline', 'Título Impactante', 'textarea')}
-                              {renderInteractableText(section, 'subheadline', 'Descrição curta persuasiva.', 'textarea')}
-                              
-                              <div className="flex flex-col sm:flex-row items-center gap-4">
-                                  <input 
-                                    className="bg-orange-600 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl hover:bg-orange-700 transition-all outline-none text-center" 
-                                    value={section.content.ctaText} 
-                                    onChange={e => updateSection(section.id, {...section.content, ctaText: e.target.value})}
-                                  />
-                              </div>
-                            </div>
-                            <div className="rounded-[3rem] overflow-hidden shadow-2xl border-8 border-white bg-slate-100 aspect-video flex items-center justify-center relative">
-                                {section.content.imageUrl && <img src={section.content.imageUrl} className="w-full h-full object-cover" alt="Hero" />}
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity" onClick={() => handleImageUploadForSection(section.id)}>
-                                    <Upload className="text-white" size={32}/>
+          <main className="flex-1 bg-slate-200 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
+            <div className="bg-white w-full max-w-5xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-40 overflow-hidden">
+                {content.sections.filter(s => s.enabled).map((section) => (
+                    <div 
+                        key={section.id} 
+                        id={`lp-section-${section.id}`}
+                        className="relative border-b border-slate-100"
+                    >
+                        {section.type === 'hero' && (
+                            <section className="pt-24 pb-20 px-12 bg-gradient-to-br from-slate-50 to-white relative">
+                                <div className="max-w-4xl mx-auto text-center space-y-8">
+                                    {renderInteractableField(section.id, 'headline', section.content.headline, section.styles?.headline, true)}
+                                    {renderInteractableField(section.id, 'subheadline', section.content.subheadline, section.styles?.subheadline, true)}
+                                    
+                                    <div className="flex justify-center gap-4">
+                                        <div className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl">
+                                            {section.content.cta.label.value}
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{section.content.cta.microcopy.value}</p>
                                 </div>
-                            </div>
-                          </div>
-                        </header>
-                      )}
+                            </section>
+                        )}
 
-                      {section.type === 'text' && (
-                        <section className="py-20 px-8 bg-slate-50 border-y border-slate-100 min-h-[400px]">
-                            <div className="max-w-4xl mx-auto space-y-6 relative h-full min-h-[300px]">
-                              {renderInteractableText(section, 'title', 'Sobre o Produto')}
-                              {renderInteractableText(section, 'text', 'Escreva detalhes aqui...', 'textarea')}
-                            </div>
-                        </section>
-                      )}
-
-                      {section.type === 'pricing' && (
-                        <section className="py-24 px-8 bg-slate-900 text-white overflow-hidden relative text-center min-h-[500px]">
-                          <div className="max-w-4xl mx-auto bg-white rounded-[3rem] p-10 text-slate-900 shadow-2xl min-h-[350px] relative">
-                              {renderInteractableText(section, 'price', 'R$ 0,00')}
-                              {renderInteractableText(section, 'installments', 'Ou em até 12x')}
-                              
-                              <div className="h-px bg-slate-100 my-8"></div>
-                              <input 
-                                className="w-full bg-orange-600 text-white py-6 rounded-2xl font-black text-xl uppercase tracking-widest shadow-2xl hover:bg-orange-700 outline-none text-center" 
-                                value={section.content.ctaText}
-                                onChange={e => updateSection(section.id, {...section.content, ctaText: e.target.value})}
-                              />
-                          </div>
-                        </section>
-                      )}
-
-                      {section.type === 'form' && (
-                          <section className="py-20 px-8 bg-white border-y border-slate-100">
-                               <div className="max-w-xl mx-auto p-10 bg-slate-50 rounded-[2.5rem] border border-slate-100 text-center space-y-6">
-                                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-teal-600 mx-auto">
-                                        <FormInput size={32}/>
+                        {section.type === 'pain' && (
+                            <section className="py-24 px-12 bg-slate-900 text-white relative">
+                                <div className="max-w-3xl mx-auto space-y-8">
+                                    {renderInteractableField(section.id, 'headline', section.content.headline, section.styles?.headline)}
+                                    {renderInteractableField(section.id, 'description', section.content.description, section.styles?.description, true)}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {section.content.consequences?.map((item: any, i: number) => (
+                                            <div key={item.id} className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                                                {renderInteractableField(section.id, `consequences.${i}.value`, item)}
+                                            </div>
+                                        ))}
                                     </div>
-                                    <h3 className="text-2xl font-black text-slate-800">{section.content.title || 'Formulário de Inscrição'}</h3>
-                                    <div className="py-8 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 font-bold uppercase text-xs tracking-widest">
-                                        Espaço Reservado para o Formulário: <br/> 
-                                        <span className="text-teal-600">{section.content.formId ? `Form: ${availableForms.find(f => f.id === section.content.formId)?.title}` : 'Selecione no painel lateral'}</span>
-                                    </div>
-                               </div>
-                          </section>
-                      )}
+                                </div>
+                            </section>
+                        )}
+
+                        {/* RENDERIZADOR SIMPLIFICADO PARA O EDITOR - TODAS AS SEÇÕES SEGUEM O MESMO PADRÃO DE EDIÇÃO POR CAMPO */}
+                        {!['hero', 'pain'].includes(section.type) && (
+                            <section className="py-20 px-12 relative border-b border-slate-100">
+                                <div className="absolute top-4 left-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Seção: {section.type}</div>
+                                <div className="space-y-6">
+                                    {Object.keys(section.content).map(key => {
+                                        const field = section.content[key];
+                                        if (field && typeof field === 'object' && field.value !== undefined) {
+                                            return <div key={key}>{renderInteractableField(section.id, key, field as LandingPageField, section.styles?.[key])}</div>
+                                        }
+                                        return null;
+                                    })}
+                                </div>
+                            </section>
+                        )}
                     </div>
-                 </div>
-               )})}
+                ))}
             </div>
           </main>
-
-          {/* Sidebar Lateral Direita: Edição do Bloco */}
-          <aside className="w-80 bg-white border-l border-slate-200 p-6 overflow-y-auto custom-scrollbar shadow-2xl z-30">
-              {selectedSection ? (
-                  <div className="space-y-8 animate-in slide-in-from-right-2">
-                      <div className="flex items-center justify-between">
-                          <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                              <Palette size={16} className="text-orange-500" /> Configurar {selectedSection.type}
-                          </h3>
-                          <button onClick={() => setSelectedSectionId(null)} className="p-1 hover:bg-slate-100 rounded text-slate-400"><X size={16}/></button>
-                      </div>
-
-                      {/* Links e IDs Técnicos */}
-                      {(selectedSection.type === 'hero' || selectedSection.type === 'pricing') && (
-                          <div className="space-y-4 pt-4 border-t border-slate-100">
-                               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Link do Botão (CTA)</h4>
-                               <div className="relative">
-                                    <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
-                                    <input 
-                                        type="text" 
-                                        className="w-full pl-9 pr-4 py-2 border rounded-xl text-xs font-mono"
-                                        placeholder="URL de redirecionamento..."
-                                        value={selectedSection.content.ctaUrl || ''}
-                                        onChange={e => updateSection(selectedSection.id, { ...selectedSection.content, ctaUrl: e.target.value })}
-                                    />
-                               </div>
-                          </div>
-                      )}
-
-                      {selectedSection.type === 'form' && (
-                          <div className="space-y-4 pt-4 border-t border-slate-100">
-                               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Integrar Formulário</h4>
-                               <select 
-                                    className="w-full p-2.5 border rounded-xl text-xs font-bold bg-slate-50"
-                                    value={selectedSection.content.formId || ''}
-                                    onChange={e => updateSection(selectedSection.id, { ...selectedSection.content, formId: e.target.value })}
-                               >
-                                   <option value="">-- Selecione um formulário --</option>
-                                   {availableForms.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
-                               </select>
-                          </div>
-                      )}
-
-                      {/* Estilização de Elementos do Bloco */}
-                      <div className="space-y-6 pt-6 border-t border-slate-100">
-                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estilos de Texto</h4>
-                          
-                          {/* Mapear elementos editáveis por tipo de seção */}
-                          {(['headline', 'subheadline', 'title', 'text', 'price', 'installments'] as const).filter(key => selectedSection.content[key] !== undefined).map(elKey => (
-                              <div 
-                                key={elKey} 
-                                className={clsx(
-                                    "space-y-3 p-4 rounded-2xl border transition-all",
-                                    selectedElementKey === elKey ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-100"
-                                )}
-                              >
-                                  <div className="flex justify-between items-center">
-                                      <p className="text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Estilo: {elKey}</p>
-                                      {selectedElementKey !== elKey && (
-                                          <button onClick={() => setSelectedElementKey(elKey)} className="text-[9px] font-black uppercase text-slate-400 hover:text-indigo-600 transition-colors">Editar</button>
-                                      )}
-                                  </div>
-                                  
-                                  <div>
-                                      <label className="text-[9px] font-bold text-slate-400 uppercase">Família da Fonte</label>
-                                      <select 
-                                          className="w-full mt-1 p-2 border rounded-lg text-[11px] bg-white"
-                                          value={selectedSection.styles?.[elKey]?.fontFamily || ''}
-                                          onChange={e => updateSectionStyles(selectedSection.id, elKey, { fontFamily: e.target.value })}
-                                      >
-                                          <option value="">Padrão</option>
-                                          {FONT_FAMILIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                                      </select>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-3">
-                                      <div>
-                                          <label className="text-[9px] font-bold text-slate-400 uppercase">Tamanho (px)</label>
-                                          <input 
-                                              type="text" 
-                                              className="w-full mt-1 p-2 border rounded-lg text-[11px]" 
-                                              placeholder="Ex: 48px"
-                                              value={selectedSection.styles?.[elKey]?.fontSize || ''}
-                                              onChange={e => updateSectionStyles(selectedSection.id, elKey, { fontSize: e.target.value })}
-                                          />
-                                      </div>
-                                      <div>
-                                          <label className="text-[9px] font-bold text-slate-400 uppercase">Alinhamento</label>
-                                          <div className="flex bg-white border rounded-lg mt-1 overflow-hidden">
-                                              <button onClick={() => updateSectionStyles(selectedSection.id, elKey, { textAlign: 'left' })} className={clsx("flex-1 p-2 flex justify-center", selectedSection.styles?.[elKey]?.textAlign === 'left' ? "bg-indigo-100 text-indigo-600" : "text-slate-400")}><AlignLeft size={14}/></button>
-                                              <button onClick={() => updateSectionStyles(selectedSection.id, elKey, { textAlign: 'center' })} className={clsx("flex-1 p-2 flex justify-center", selectedSection.styles?.[elKey]?.textAlign === 'center' ? "bg-indigo-100 text-indigo-600" : "text-slate-400")}><AlignCenter size={14}/></button>
-                                              <button onClick={() => updateSectionStyles(selectedSection.id, elKey, { textAlign: 'right' })} className={clsx("flex-1 p-2 flex justify-center", selectedSection.styles?.[elKey]?.textAlign === 'right' ? "bg-indigo-100 text-indigo-600" : "text-slate-400")}><AlignRight size={14}/></button>
-                                          </div>
-                                      </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-3">
-                                      <div>
-                                          <label className="text-[9px] font-bold text-slate-400 uppercase">Cor do Texto</label>
-                                          <div className="flex items-center gap-2 mt-1">
-                                              <input 
-                                                  type="color" 
-                                                  className="w-8 h-8 rounded border p-0.5" 
-                                                  value={selectedSection.styles?.[elKey]?.color || '#1e293b'} 
-                                                  onChange={e => updateSectionStyles(selectedSection.id, elKey, { color: e.target.value })} 
-                                              />
-                                              <span className="text-[9px] font-mono uppercase text-slate-400">{selectedSection.styles?.[elKey]?.color || '#1e293b'}</span>
-                                          </div>
-                                      </div>
-                                      <div>
-                                          <label className="text-[9px] font-bold text-slate-400 uppercase">Largura (%)</label>
-                                          <input 
-                                              type="range" 
-                                              min="10" 
-                                              max="100" 
-                                              className="w-full mt-2 accent-orange-500" 
-                                              value={selectedSection.styles?.[elKey]?.width || 100}
-                                              onChange={e => updateSectionStyles(selectedSection.id, elKey, { width: parseInt(e.target.value) })}
-                                          />
-                                      </div>
-                                  </div>
-
-                                  <div className="flex items-center gap-2 pt-2">
-                                      <button 
-                                        onClick={() => updateSectionStyles(selectedSection.id, elKey, { x: 50, y: 50, width: 50 })}
-                                        className="flex-1 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase flex items-center justify-center gap-1.5 hover:bg-indigo-100 transition-all"
-                                      >
-                                          <Move size={10}/> Ativar Modo Drag
-                                      </button>
-                                      {selectedSection.styles?.[elKey]?.x !== undefined && (
-                                          <button 
-                                            onClick={() => updateSectionStyles(selectedSection.id, elKey, { x: undefined, y: undefined, width: undefined })}
-                                            className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all"
-                                          >
-                                              <X size={10}/>
-                                          </button>
-                                      )}
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-              ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center text-slate-300 space-y-4">
-                      <MousePointer2 size={48} className="opacity-10" />
-                      <p className="text-sm font-bold uppercase tracking-widest">Selecione um bloco<br/>para editar</p>
-                  </div>
-              )}
-          </aside>
         </div>
       </div>
     );
@@ -829,34 +565,20 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
               <MonitorPlay className="text-orange-600" /> Páginas de Venda
             </h2>
-            <p className="text-slate-500 text-sm">Crie landing pages persuasivas com inteligência artificial.</p>
+            <p className="text-slate-500 text-sm">Design estratégico e copywriting de alta conversão.</p>
           </div>
         </div>
         <button 
           onClick={() => {
-            setAiPrompt({ productName: '', productDescription: '', targetAudience: '', mainBenefits: '', price: '', offerDetails: '', referenceTemplate: '' });
+            setAiPrompt({ ...aiPrompt, productName: '', productDescription: '' });
             setEditingPage(null);
             setCurrentDraft(null);
             setShowModal(true);
           }}
-          className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95"
         >
-          <Sparkles size={18} /> Gerar com IA
+          <Sparkles size={18} /> Gerar com Expert Copywriter
         </button>
-      </div>
-
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Buscar páginas..." 
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
-          />
-        </div>
-        <button onClick={fetchPages} className="p-2 text-slate-400 hover:text-orange-600 transition-all"><RefreshCw size={20} className={isLoading ? "animate-spin" : ""} /></button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -869,25 +591,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           </div>
         ) : (
           pages.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase())).map(page => (
-            <div key={page.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
-              <div className="h-32 bg-gradient-to-br from-orange-500 to-indigo-600 p-6 flex items-end relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10"><Globe size={80}/></div>
-                <h3 className="text-white font-black text-lg line-clamp-1">{page.title}</h3>
-              </div>
+            <div key={page.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all overflow-hidden flex flex-col group border-t-8 border-t-indigo-600">
               <div className="p-6 flex-1 flex flex-col">
-                <p className="text-xs text-slate-500 font-medium mb-1">Produto: <span className="font-bold text-slate-700">{page.productName}</span></p>
-                <div className="flex items-center gap-1 mb-4">
-                    <Globe size={10} className="text-teal-500" />
-                    <span className="text-[10px] font-mono text-slate-400">/{page.slug}</span>
-                </div>
+                <h3 className="font-black text-slate-800 text-lg mb-1">{page.title}</h3>
+                <p className="text-xs text-slate-400 mb-4 font-bold uppercase tracking-widest">{page.productName}</p>
                 
-                <div className="flex gap-2 mt-auto">
+                <div className="flex gap-2 mt-auto pt-4 border-t border-slate-100">
                   <button 
-                    onClick={() => {
-                      setEditingPage(page);
-                      setView('visual_editor');
-                    }}
-                    className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-slate-200 transition-all"
+                    onClick={() => { setEditingPage(page); setView('visual_editor'); }}
+                    className="flex-1 py-2 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border border-slate-200"
                   >
                     <Edit2 size={14}/> Editar Visual
                   </button>
@@ -899,13 +611,13 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       setTimeout(() => setCopiedId(null), 2000);
                     }}
                     className={clsx(
-                      "flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all border",
-                      copiedId === page.id ? "bg-green-50 border-green-200 text-green-600" : "bg-orange-50 border-orange-100 text-orange-600 hover:bg-orange-100"
+                      "flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border",
+                      copiedId === page.id ? "bg-green-50 border-green-200 text-green-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                     )}
                   >
                     {copiedId === page.id ? <CheckCircle size={14}/> : <ExternalLink size={14}/>} {copiedId === page.id ? 'Copiado!' : 'Link'}
                   </button>
-                  <button onClick={() => handleDelete(page.id)} className="p-2 text-slate-300 hover:text-red-600 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                  <button onClick={() => handleDelete(page.id)} className="p-2 text-slate-300 hover:text-red-600 rounded-xl transition-colors"><Trash2 size={16}/></button>
                 </div>
               </div>
             </div>
@@ -917,43 +629,30 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl my-8 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="px-10 py-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
-              <h3 className="text-2xl font-black text-slate-800 tracking-tight">Criar com Inteligência Artificial</h3>
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight">Expert AI Landing Page Builder</h3>
               <button onClick={() => { setShowModal(false); setCurrentDraft(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
             </div>
             
             <div className="p-10 overflow-y-auto custom-scrollbar flex-1">
                {!currentDraft ? (
                   <div className="space-y-8">
-                     <div className="grid grid-cols-1 gap-6">
-                        <div>
-                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Selecione um Modelo de Referência (Opcional)</label>
-                            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="md:col-span-2">
+                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Modelo de Referência</label>
+                            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
                                 {REFERENCE_TEMPLATES.map((tmpl) => (
                                     <button
                                         key={tmpl.id}
-                                        type="button"
                                         onClick={() => setAiPrompt({...aiPrompt, referenceTemplate: tmpl.url})}
                                         className={clsx(
                                             "flex flex-col rounded-2xl border-2 transition-all group overflow-hidden bg-white text-left",
-                                            aiPrompt.referenceTemplate === tmpl.url 
-                                                ? "border-orange-500 ring-4 ring-orange-50 shadow-lg scale-[1.02]" 
-                                                : "border-slate-100 hover:border-orange-200"
+                                            aiPrompt.referenceTemplate === tmpl.url ? "border-indigo-600 ring-4 ring-indigo-50 shadow-lg scale-105" : "border-slate-100 hover:border-indigo-200"
                                         )}
                                     >
-                                        <div className="h-24 w-full overflow-hidden relative border-b border-slate-100">
-                                            <img src={tmpl.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={tmpl.name} />
-                                            {aiPrompt.referenceTemplate === tmpl.url && (
-                                              <div className="absolute inset-0 bg-orange-600/20 flex items-center justify-center">
-                                                <div className="bg-orange-600 text-white p-1 rounded-full"><Check size={12}/></div>
-                                              </div>
-                                            )}
+                                        <div className="h-20 w-full overflow-hidden relative border-b border-slate-100">
+                                            <img src={tmpl.imageUrl} className="w-full h-full object-cover" alt={tmpl.name} />
                                         </div>
-                                        <div className="p-3">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className={clsx("text-[10px] font-black uppercase tracking-tight", aiPrompt.referenceTemplate === tmpl.url ? "text-orange-700" : "text-slate-800")}>{tmpl.name}</span>
-                                            </div>
-                                            <p className="text-[9px] text-slate-400 font-medium leading-tight line-clamp-2">{tmpl.description}</p>
-                                        </div>
+                                        <div className="p-2"><span className="text-[10px] font-black uppercase text-slate-800">{tmpl.name}</span></div>
                                     </button>
                                 ))}
                             </div>
@@ -961,256 +660,56 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
                         <div>
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nome do Produto</label>
-                            <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
+                            <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Master" />
                         </div>
                         <div>
-                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto</label>
-                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Fale sobre os benefícios e o que o aluno aprende..." />
+                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Público-Alvo</label>
+                            <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas iniciantes" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="md:col-span-2">
+                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Promessa / Dor Principal</label>
+                            <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="Qual o grande benefício e que problema resolvemos?" />
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:col-span-2">
                             <div>
-                                <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Público-Alvo</label>
-                                <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" />
+                                <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço</label>
+                                <input className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.price} onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} placeholder="R$ 1.997,00" />
                             </div>
                             <div>
-                                <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço / Oferta</label>
-                                <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.price} onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} placeholder="Ex: R$ 1.997,00" />
+                                <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Garantia</label>
+                                <input className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.guarantee} onChange={e => setAiPrompt({...aiPrompt, guarantee: e.target.value})} placeholder="7 dias" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Tom de Voz</label>
+                                <select className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.tone} onChange={e => setAiPrompt({...aiPrompt, tone: e.target.value})}>
+                                    <option value="Profissional e Persuasivo">Profissional e Persuasivo</option>
+                                    <option value="Acolhedor e Inspirador">Acolhedor e Inspirador</option>
+                                    <option value="Agressivo e Direto">Agressivo e Direto</option>
+                                    <option value="Elegante e Premium">Elegante e Premium</option>
+                                </select>
                             </div>
                         </div>
                      </div>
                      <button 
                         onClick={handleCreateWithAi}
                         disabled={isGenerating || !aiPrompt.productName}
-                        className="w-full py-5 bg-orange-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+                        className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
                      >
-                        {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Sparkles size={24} />}
-                        {isGenerating ? 'Criando Estrutura Persuasiva...' : 'Gerar Estrutura e Textos'}
+                        {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Zap size={24} />}
+                        {isGenerating ? 'IA Consultora Gerando Estratégia Profissional...' : 'Gerar Estrutura Premium de Vendas'}
                      </button>
                   </div>
                ) : (
                   <div className="space-y-8 animate-in slide-in-from-right-4">
-                      <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 flex items-center gap-4 mb-4">
-                          <div className="p-3 bg-indigo-600 text-white rounded-2xl"><Sparkles size={24}/></div>
-                          <div>
-                              <h4 className="font-black text-indigo-900 uppercase text-xs tracking-widest">Rascunho Gerado!</h4>
-                              <p className="text-sm text-indigo-700 font-medium">Revise e ajuste os textos principais abaixo antes de criar a página visual.</p>
-                          </div>
-                      </div>
-
-                      <div className="space-y-6">
-                          <div>
-                              <label className="block text-[11px] font-black text-slate-400 uppercase mb-1.5 ml-1">Título da Página</label>
-                              <input className="w-full px-5 py-3 border rounded-2xl font-bold" value={currentDraft.title} onChange={e => setCurrentDraft({...currentDraft, title: e.target.value})} />
-                          </div>
-
-                          <div className="space-y-4">
-                              {currentDraft.content?.sections.map((section, sIdx) => (
-                                  <div key={section.id} className="p-6 bg-slate-50 border rounded-3xl space-y-4">
-                                      <div className="flex items-center gap-2 mb-2">
-                                          <span className="px-2 py-0.5 bg-slate-200 text-slate-600 text-[9px] font-black uppercase rounded">{section.type}</span>
-                                      </div>
-                                      
-                                      {section.type === 'hero' && (
-                                          <div className="space-y-4">
-                                              <div className="relative group">
-                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Headline Principal</label>
-                                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold pr-10" value={section.content.headline} onChange={e => {
-                                                      const newSections = [...currentDraft.content!.sections];
-                                                      newSections[sIdx].content.headline = e.target.value;
-                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                  }} placeholder="Headline" />
-                                                  <button 
-                                                    onClick={() => handleRefineFieldWithAi(section.id, 'headline', section.content.headline)}
-                                                    disabled={isRefiningField === `${section.id}-headline`}
-                                                    className="absolute right-2 top-[22px] p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all"
-                                                    title="Melhorar com IA"
-                                                  >
-                                                      {isRefiningField === `${section.id}-headline` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
-                                                  </button>
-                                              </div>
-                                              <div className="relative group">
-                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Subheadline de Apoio</label>
-                                                  <textarea className="w-full px-4 py-2 border rounded-xl text-xs h-20 resize-none pr-10" value={section.content.subheadline} onChange={e => {
-                                                      const newSections = [...currentDraft.content!.sections];
-                                                      newSections[sIdx].content.subheadline = e.target.value;
-                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                  }} placeholder="Subheadline" />
-                                                  <button 
-                                                    onClick={() => handleRefineFieldWithAi(section.id, 'subheadline', section.content.subheadline)}
-                                                    disabled={isRefiningField === `${section.id}-subheadline`}
-                                                    className="absolute right-2 top-[22px] p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all"
-                                                    title="Melhorar com IA"
-                                                  >
-                                                      {isRefiningField === `${section.id}-subheadline` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
-                                                  </button>
-                                              </div>
-                                          </div>
-                                      )}
-
-                                      {section.type === 'text' && (
-                                          <div className="space-y-4">
-                                              <div className="relative group">
-                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Título do Bloco</label>
-                                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold pr-10" value={section.content.title} onChange={e => {
-                                                      const newSections = [...currentDraft.content!.sections];
-                                                      newSections[sIdx].content.title = e.target.value;
-                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                  }} placeholder="Título do Bloco" />
-                                                  <button 
-                                                    onClick={() => handleRefineFieldWithAi(section.id, 'title', section.content.title)}
-                                                    disabled={isRefiningField === `${section.id}-title`}
-                                                    className="absolute right-2 top-[22px] p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all"
-                                                    title="Melhorar com IA"
-                                                  >
-                                                      {isRefiningField === `${section.id}-title` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
-                                                  </button>
-                                              </div>
-                                              <div className="relative group">
-                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Texto de Conteúdo</label>
-                                                  <textarea className="w-full px-4 py-2 border rounded-xl text-xs h-32 resize-none pr-10 leading-relaxed" value={section.content.text} onChange={e => {
-                                                      const newSections = [...currentDraft.content!.sections];
-                                                      newSections[sIdx].content.text = e.target.value;
-                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                  }} placeholder="Conteúdo" />
-                                                  <button 
-                                                    onClick={() => handleRefineFieldWithAi(section.id, 'text', section.content.text)}
-                                                    disabled={isRefiningField === `${section.id}-text`}
-                                                    className="absolute right-2 top-[22px] p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all"
-                                                    title="Melhorar com IA"
-                                                  >
-                                                      {isRefiningField === `${section.id}-text` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
-                                                  </button>
-                                              </div>
-                                          </div>
-                                      )}
-
-                                      {section.type === 'features' && (
-                                          <div className="space-y-6">
-                                              <div className="relative group">
-                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Título da Seção de Benefícios</label>
-                                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold pr-10" value={section.content.mainTitle} onChange={e => {
-                                                      const newSections = [...currentDraft.content!.sections];
-                                                      newSections[sIdx].content.mainTitle = e.target.value;
-                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                  }} placeholder="Ex: Por que escolher este treinamento?" />
-                                                  <button 
-                                                    onClick={() => handleRefineFieldWithAi(section.id, 'mainTitle', section.content.mainTitle)}
-                                                    disabled={isRefiningField === `${section.id}-mainTitle`}
-                                                    className="absolute right-2 top-[22px] p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition-all"
-                                                    title="Melhorar com IA"
-                                                  >
-                                                      {isRefiningField === `${section.id}-mainTitle` ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12}/>}
-                                                  </button>
-                                              </div>
-                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                  {section.content.items?.map((item: any, iIdx: number) => (
-                                                      <div key={iIdx} className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm">
-                                                          <div className="relative group">
-                                                              <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">Título Benefício {iIdx + 1}</label>
-                                                              <input className="w-full px-3 py-1.5 border rounded-lg text-xs font-bold pr-8" value={item.title} onChange={e => {
-                                                                  const newSections = [...currentDraft.content!.sections];
-                                                                  newSections[sIdx].content.items[iIdx].title = e.target.value;
-                                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                              }} placeholder="Título" />
-                                                              <button 
-                                                                onClick={() => handleRefineFieldWithAi(section.id, `items.${iIdx}.title`, item.title)}
-                                                                disabled={isRefiningField === `${section.id}-items.${iIdx}.title`}
-                                                                className="absolute right-1 top-[18px] p-1 text-indigo-600 hover:text-indigo-800 transition-all"
-                                                              >
-                                                                  {isRefiningField === `${section.id}-items.${iIdx}.title` ? <Loader2 size={10} className="animate-spin"/> : <Wand2 size={10}/>}
-                                                              </button>
-                                                          </div>
-                                                          <div className="relative group">
-                                                              <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">Descrição {iIdx + 1}</label>
-                                                              <textarea className="w-full px-3 py-1.5 border rounded-lg text-[10px] h-16 resize-none pr-8 leading-tight" value={item.description} onChange={e => {
-                                                                  const newSections = [...currentDraft.content!.sections];
-                                                                  newSections[sIdx].content.items[iIdx].description = e.target.value;
-                                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                              }} placeholder="Descrição" />
-                                                              <button 
-                                                                onClick={() => handleRefineFieldWithAi(section.id, `items.${iIdx}.description`, item.description)}
-                                                                disabled={isRefiningField === `${section.id}-items.${iIdx}.description`}
-                                                                className="absolute right-1 top-[18px] p-1 text-indigo-600 hover:text-indigo-800 transition-all"
-                                                                >
-                                                                    {isRefiningField === `${section.id}-items.${iIdx}.description` ? <Loader2 size={10} className="animate-spin"/> : <Wand2 size={10}/>}
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                      {section.type === 'pricing' && (
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                              <div>
-                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Preço Principal</label>
-                                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.price} onChange={e => {
-                                                      const newSections = [...currentDraft.content!.sections];
-                                                      newSections[sIdx].content.price = e.target.value;
-                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                  }} placeholder="Preço" />
-                                              </div>
-                                              <div>
-                                                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Texto de Parcelas</label>
-                                                  <input className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={section.content.installments} onChange={e => {
-                                                      const newSections = [...currentDraft.content!.sections];
-                                                      newSections[sIdx].content.installments = e.target.value;
-                                                      setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                  }} placeholder="Parcelas" />
-                                              </div>
-                                          </div>
-                                      )}
-
-                                      {section.type === 'faq' && (
-                                          <div className="space-y-4">
-                                              <label className="block text-[9px] font-black text-slate-400 uppercase mb-1 ml-1">Perguntas Frequentes (FAQ)</label>
-                                              <div className="grid grid-cols-1 gap-4">
-                                                  {section.content.items?.map((item: any, iIdx: number) => (
-                                                      <div key={iIdx} className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm">
-                                                          <div className="relative group">
-                                                              <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">Pergunta {iIdx + 1}</label>
-                                                              <input className="w-full px-3 py-1.5 border rounded-lg text-xs font-bold pr-8" value={item.question} onChange={e => {
-                                                                  const newSections = [...currentDraft.content!.sections];
-                                                                  newSections[sIdx].content.items[iIdx].question = e.target.value;
-                                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                              }} placeholder="Pergunta" />
-                                                              <button 
-                                                                onClick={() => handleRefineFieldWithAi(section.id, `items.${iIdx}.question`, item.question)}
-                                                                disabled={isRefiningField === `${section.id}-items.${iIdx}.question`}
-                                                                className="absolute right-1 top-[18px] p-1 text-indigo-600 hover:text-indigo-800 transition-all"
-                                                              >
-                                                                  {isRefiningField === `${section.id}-items.${iIdx}.question` ? <Loader2 size={10} className="animate-spin"/> : <Wand2 size={10}/>}
-                                                              </button>
-                                                          </div>
-                                                          <div className="relative group">
-                                                              <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">Resposta {iIdx + 1}</label>
-                                                              <textarea className="w-full px-3 py-1.5 border rounded-lg text-[10px] h-16 resize-none pr-8 leading-tight" value={item.answer} onChange={e => {
-                                                                  const newSections = [...currentDraft.content!.sections];
-                                                                  newSections[sIdx].content.items[iIdx].answer = e.target.value;
-                                                                  setCurrentDraft({...currentDraft, content: { sections: newSections }});
-                                                              }} placeholder="Resposta" />
-                                                              <button 
-                                                                onClick={() => handleRefineFieldWithAi(section.id, `items.${iIdx}.answer`, item.answer)}
-                                                                disabled={isRefiningField === `${section.id}-items.${iIdx}.answer`}
-                                                                className="absolute right-1 top-[18px] p-1 text-indigo-600 hover:text-indigo-800 transition-all"
-                                                                >
-                                                                    {isRefiningField === `${section.id}-items.${iIdx}.answer` ? <Loader2 size={10} className="animate-spin"/> : <Wand2 size={10}/>}
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                  </div>
-                              ))}
-                          </div>
+                      <div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-xl shadow-indigo-600/20 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={100}/></div>
+                          <h4 className="text-xl font-black mb-2 uppercase tracking-tighter">Estratégia Gerada com Sucesso!</h4>
+                          <p className="text-indigo-100 font-medium leading-relaxed">Sua página foi estruturada em JSON pronto para edição visual. Agora você pode revisar no editor de alta fidelidade e ajustar cada elemento com suporte de IA individual.</p>
                       </div>
 
                       <div className="flex gap-4 pt-6 border-t">
                           <button onClick={() => setCurrentDraft(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Voltar</button>
-                          <button onClick={confirmDraft} className="flex-[2] py-4 bg-orange-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-orange-600/20 hover:bg-orange-700 transition-all active:scale-95">Criar Página e Abrir Editor</button>
+                          <button onClick={confirmDraft} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Abrir Editor Visual e IA</button>
                       </div>
                   </div>
                )}

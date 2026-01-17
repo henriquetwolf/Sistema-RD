@@ -137,10 +137,16 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   };
 
   const handleSaveFlow = async (flow: AutomationFlow) => {
-      await appBackend.saveAutomationFlow(flow);
-      await loadFlows();
-      setView('list');
-      setCurrentFlow(null);
+      try {
+          await appBackend.saveAutomationFlow(flow);
+          await loadFlows();
+          setView('list');
+          setCurrentFlow(null);
+          alert("Fluxo de automação salvo com sucesso!");
+      } catch (e: any) {
+          console.error("Erro ao salvar fluxo:", e);
+          alert(`Falha ao salvar o fluxo no banco de dados: ${e.message || 'Erro desconhecido'}. Certifique-se de que a tabela crm_automation_flows foi criada.`);
+      }
   };
 
   const handleSaveForm = async () => { 
@@ -563,7 +569,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-sm p-6">
                   <h3 className="font-bold text-slate-800 mb-4">Nova Pasta</h3>
-                  <input type="text" className="w-full px-3 py-2 border rounded-lg mb-4 outline-none focus:ring-2 focus:ring-teal-500" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Nome..." />
+                  <input type="text" className="w-full px-3 py-2 border rounded-lg mb-4 outline-none focus:ring-2 focus:ring-teal-50" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Nome..." />
                   <div className="flex justify-end gap-2">
                       <button onClick={() => setShowFolderModal(false)} className="px-3 py-1.5 text-sm text-slate-600">Cancelar</button>
                       <button onClick={handleCreateFolder} className="px-3 py-1.5 bg-teal-600 text-white rounded text-sm font-bold">Criar</button>

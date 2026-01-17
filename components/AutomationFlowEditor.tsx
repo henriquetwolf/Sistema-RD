@@ -176,6 +176,15 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
     );
   };
 
+  const handleSaveInternal = async () => {
+    setIsSaving(true);
+    try {
+        await onSave(flow);
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col bg-slate-100 overflow-hidden animate-in fade-in">
         {/* Toolbar Superior */}
@@ -208,8 +217,9 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
                     {flow.isActive ? "Ativado" : "Pausado"}
                 </button>
                 <button 
-                    onClick={() => { setIsSaving(true); onSave(flow); }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl flex items-center gap-2 transition-all active:scale-95"
+                    onClick={handleSaveInternal}
+                    disabled={isSaving}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
                 >
                     {isSaving ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} Salvar Fluxo
                 </button>

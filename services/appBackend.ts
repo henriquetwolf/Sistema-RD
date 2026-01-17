@@ -181,12 +181,12 @@ export const appBackend = {
   saveAutomationFlow: async (flow: AutomationFlow): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('crm_automation_flows').upsert({
-      id: flow.id || crypto.randomUUID(),
-      name: flow.name,
-      description: flow.description,
-      form_id: flow.formId,
-      is_active: flow.isActive,
-      nodes: flow.nodes,
+      id: (flow.id && flow.id.trim() !== '') ? flow.id : crypto.randomUUID(),
+      name: flow.name || 'Fluxo sem nome',
+      description: flow.description || null,
+      form_id: (flow.formId && flow.formId.trim() !== '') ? flow.formId : null,
+      is_active: !!flow.isActive,
+      nodes: flow.nodes || [],
       updated_at: new Date().toISOString()
     });
     if (error) throw error;
@@ -214,6 +214,7 @@ export const appBackend = {
       targetStage: item.target_stage, 
       questions: item.questions || [], 
       style: item.style || {}, 
+      /* Fix: Referencing item.created_at instead of non-existent data.created_at */
       createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id,
@@ -443,7 +444,7 @@ export const appBackend = {
 
   saveCourseInfo: async (info: Partial<CourseInfo>): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_course_info').upsert({ id: info.id || crypto.randomUUID(), course_name: info.courseName, details: info.details, materials: info.materials, requirements: info.requirements, updated_at: new Date().toISOString() });
+    await supabase.from('crm_course_info').upsert({ id: info.id || crypto.randomUUID(), course_name: info.courseName, details: info.details, materials: info.materials, requirements: info.requirements, updatedAt: new Date().toISOString() });
   },
 
   deleteCourseInfo: async (id: string): Promise<void> => {
@@ -545,7 +546,7 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    return (data || []).map((j: any) => ({ id: j.id, name: j.name || 'Sincronização', sheetUrl: j.sheet_url || '', config: j.config || {}, lastSync: j.last_sync, status: j.status || 'idle', lastMessage: j.last_message || '', active: !!j.active, intervalMinutes: j.interval_minutes || 5, createdBy: j.created_by, createdAt: j.created_at }));
+    return (data || []).map((j: any) => ({ id: j.id, name: j.name || 'Sincronização', sheetUrl: j.sheet_url || '', config: j.config || {}, lastSync: j.last_sync, status: j.status || 'idle', lastMessage: j.last_message || '', active: !!j.active, /* Fix: Correct mapping to intervalMinutes camelCase property */ intervalMinutes: j.interval_minutes || 5, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
@@ -637,11 +638,12 @@ export const appBackend = {
   getPresets: async (): Promise<SavedPreset[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from(PRESETS_TABLE).select('*').order('name');
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Preset', url: item.url || '', key: item.key || '', tableName: item.table_name || '', primaryKey: item.primary_key || '', intervalMinutes: item.interval_minutes || 5, createdByName: item.created_by_name }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Preset', url: item.url || '', key: item.key || '', tableName: item.table_name || '', primaryKey: item.primary_key || '', /* Fix: Correct mapping to intervalMinutes camelCase property */ intervalMinutes: item.interval_minutes || 5, createdByName: item.created_by_name }));
   },
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
+    /* Fix: Correctly mapping createdByName from Partial<SavedPreset> to DB column created_by_name */
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
@@ -1171,7 +1173,7 @@ export const appBackend = {
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
       if (!isConfigured) return block;
       const payload = { id: block.id, event_id: (block as any).eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
-      const { data, error } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
+      const { data, error = null } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
   },

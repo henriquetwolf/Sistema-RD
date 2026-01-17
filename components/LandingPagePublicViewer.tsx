@@ -35,7 +35,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
       appBackend.getForms().then(setAvailableForms);
   }, []);
 
-  if (!content || !content.sections) {
+  if (!content) {
     return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
           <AlertCircle className="text-amber-500 mb-4" size={48} />
@@ -45,7 +45,47 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
     );
   }
 
-  const sections = content.sections.filter(s => s.enabled);
+  // --- MODO HTML BRUTO ---
+  if (content.htmlCode) {
+      const selectedForm = availableForms.find(f => f.id === content.selectedFormId);
+      
+      const renderWithForm = () => {
+          if (!selectedForm) return <div dangerouslySetInnerHTML={{ __html: content.htmlCode || '' }} />;
+
+          const placeholder = "{{form}}";
+          if (content.htmlCode?.includes(placeholder)) {
+              const parts = content.htmlCode.split(placeholder);
+              return (
+                  <>
+                    <div dangerouslySetInnerHTML={{ __html: parts[0] }} />
+                    <div className="max-w-4xl mx-auto py-12 px-6">
+                        <FormViewer form={selectedForm} isPublic={true} />
+                    </div>
+                    <div dangerouslySetInnerHTML={{ __html: parts[1] }} />
+                  </>
+              );
+          }
+
+          // Se não tiver placeholder, injeta no final
+          return (
+              <>
+                <div dangerouslySetInnerHTML={{ __html: content.htmlCode }} />
+                <div className="max-w-4xl mx-auto py-20 px-6">
+                    <FormViewer form={selectedForm} isPublic={true} />
+                </div>
+              </>
+          );
+      };
+
+      return (
+          <div className="min-h-screen bg-white overflow-x-hidden">
+              {renderWithForm()}
+          </div>
+      );
+  }
+
+  // --- MODO SEÇÕES (EDITOR VISUAL) ---
+  const sections = content.sections?.filter(s => s.enabled) || [];
 
   const getStyles = (section: LandingPageSection, key: string): React.CSSProperties => {
       const s = section.styles?.[key] || {};
@@ -107,18 +147,12 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
 
     if (!c) return null;
 
-    // Captura todas as chaves que não são padrão (headlines, etc) para renderizar como componentes livres
-    const dynamicKeys = Object.keys(c).filter(k => k.includes('_') || ['image', 'video', 'form'].includes(c[k]?.type));
-
     const renderInnerContent = () => (
         <>
             {Object.keys(c).map(key => {
                 const field = c[key];
-                
-                // Pular chaves fixas que já são renderizadas no layout padrão do switch
                 const reservedKeys = ['headline', 'subheadline', 'description', 'bullets', 'cta', 'consequences', 'items', 'original_price', 'price', 'features', 'cta_label', 'cta_url'];
                 if (reservedKeys.includes(key) && section.type !== 'image' && section.type !== 'form') return null;
-
                 return renderDynamicContent(section, key, field);
             })}
         </>
@@ -374,7 +408,6 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
         );
 
       default:
-        // Caso a seção seja genérica ou de um tipo não listado acima (ex: image, form, professor)
         return (
           <section key={section.id} id={section.id} className="py-12 px-6">
             <div className="max-w-5xl mx-auto text-center">
@@ -387,11 +420,11 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900 overflow-x-hidden selection:bg-indigo-100 selection:text-indigo-900" style={{ backgroundColor: content.theme.bg_color }}>
+    <div className="min-h-screen bg-white font-sans text-slate-900 overflow-x-hidden selection:bg-indigo-100 selection:text-indigo-900" style={{ backgroundColor: content.theme?.bg_color }}>
       <nav className="fixed top-0 left-0 right-0 z-[100] bg-white/80 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex justify-between items-center shadow-sm">
           <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-6 object-contain" />
           <div className="flex gap-4">
-             {content.sections.map(s => (
+             {sections.map(s => (
                 <a key={s.id} href={`#${s.id}`} className="hidden lg:block text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors">{s.type}</a>
              ))}
              <a href="#oferta" className="bg-slate-900 text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-lg active:scale-95">Quero Começar</a>

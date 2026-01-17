@@ -78,18 +78,20 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ onNavigate, isOpen, se
 
     try {
       // Instância criada com a chave detectada no ambiente
+      // Always use new GoogleGenAI({apiKey: process.env.API_KEY});
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       // Fix: Updated model to 'gemini-3-flash-preview' for text tasks as per guidelines
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: [{ role: 'user', parts: [{ text: userText }] }],
+        contents: userText,
         config: {
           systemInstruction: systemPrompt,
           temperature: 0.5,
         }
       });
 
+      // Simple and direct way to get text output is accessing the .text property
       const botText = response.text || "Desculpe, tive dificuldade em processar essa informação.";
       
       const tabMatch = botText.match(/\[TAB:(.*?)\]/);

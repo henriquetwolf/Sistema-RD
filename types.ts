@@ -651,4 +651,6 @@ export interface LandingPageContent {
       rules: string;
   };
   sections: LandingPageSection[];
+  htmlCode?: string;
+  selectedFormId?: string;
 }

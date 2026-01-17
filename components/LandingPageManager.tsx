@@ -1,19 +1,19 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, Search, Edit2, Trash2, ExternalLink, ArrowLeft, 
   Save, X, Loader2, Sparkles, MonitorPlay, Copy, CheckCircle, 
   RefreshCw, Layout, Globe, Smartphone, CreditCard, MessageSquare, 
   HelpCircle, ListChecks, Target, Info, Link2, Upload, ImageIcon, FileText,
-  ArrowUp, ArrowDown, Type, MousePointer2, Settings, PlusCircle, Check,
+  ArrowUp, ArrowDown, Type as TypeIcon, MousePointer2, Settings, PlusCircle, Check,
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
   Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
   Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
-import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField } from '../types';
-import { GoogleGenAI, Type as SchemaType } from "@google/genai";
+import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel } from '../types';
+import { FormViewer } from './FormViewer';
+import { GoogleGenAI, Type } from "@google/genai";
 import clsx from 'clsx';
 
 interface LandingPageManagerProps {
@@ -119,56 +119,63 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      
-      let basePrompt = `Você é um arquiteto sênior de design de conversão e expert em copywriting.
-      Sua missão é criar uma Landing Page Premium em formato JSON.`;
-
       if (creationMode === 'prompt') {
-        basePrompt += `\n\nREQUISITO OBRIGATÓRIO (HTML): 
-        O usuário forneceu o seguinte código HTML de uma página existente. 
-        Sua tarefa é analisar este HTML e mapear seu conteúdo (textos, títulos, seções) para o nosso esquema JSON abaixo de forma EXATA.
-        Tente identificar quais partes do HTML correspondem a seções como 'hero', 'pain', 'method', 'benefits', etc.
-        
-        CÓDIGO HTML FORNECIDO:
-        "${aiPrompt.customPrompt}"`;
-        
-        if (aiPrompt.selectedFormId) {
-            basePrompt += `\n\nINTEGRAÇÃO DE FORMULÁRIO: Você DEVE incluir uma seção do tipo 'form' no JSON. No conteúdo dessa seção, o campo 'value' deve ser obrigatoriamente o ID: "${aiPrompt.selectedFormId}". Escolha a posição mais lógica dentro da estrutura baseada no HTML fornecido.`;
-        }
-      } else {
-        basePrompt += `\n\nINFORMAÇÕES DA NOVA OFERTA:
-        Nome: ${aiPrompt.productName}
-        Marca: ${aiPrompt.brandName}
-        Público: ${aiPrompt.targetAudience}
-        Descrição: ${aiPrompt.productDescription}
-        Preço: ${aiPrompt.price}
-        Garantia: ${aiPrompt.guarantee}
-        Tom de Voz: ${aiPrompt.tone}
-        
-        ESTRUTURA SUGERIDA: Hero, Dor, Método, Benefícios, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
-        
-        if (aiPrompt.referenceTemplate) {
-          basePrompt += `\n\nInspire-se no estilo visual do site: ${aiPrompt.referenceTemplate}.`;
-        }
+          const newPage: Partial<LandingPage> = {
+            title: "Página via HTML - " + new Date().toLocaleDateString(),
+            productName: "Personalizado via HTML",
+            slug: slugify("pagina-html-" + Date.now()),
+            content: {
+                meta: { page_id: crypto.randomUUID(), title: "Página via HTML", status: "active", version: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                theme: { brand_name: "VOLL", tone: "Custom", primary_color: "#000000", text_color: "#000000", bg_color: "#FFFFFF", font_family: "sans" },
+                ai_defaults: { enabled: false, max_suggestions: 0, rules: "" },
+                sections: [],
+                htmlCode: aiPrompt.customPrompt,
+                selectedFormId: aiPrompt.selectedFormId
+            },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            isActive: true,
+            theme: 'modern'
+          };
+          setCurrentDraft(newPage);
+          setIsGenerating(false);
+          return;
       }
 
-      basePrompt += `\n\nRetorne APENAS o JSON rigorosamente conforme o schema.`;
+      // Always use new GoogleGenAI({apiKey: process.env.API_KEY});
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      let basePrompt = `Você é um arquiteto sênior de design de conversão e expert em copywriting.
+      Sua missão é criar uma Landing Page Premium em formato JSON.
+      
+      INFORMAÇÕES DA NOVA OFERTA:
+      Nome: ${aiPrompt.productName}
+      Marca: ${aiPrompt.brandName}
+      Público: ${aiPrompt.targetAudience}
+      Descrição: ${aiPrompt.productDescription}
+      Preço: ${aiPrompt.price}
+      Garantia: ${aiPrompt.guarantee}
+      Tom de Voz: ${aiPrompt.tone}
+      
+      ESTRUTURA SUGERIDA: Hero, Dor, Método, Benefícios, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
+
+      if (aiPrompt.referenceTemplate) {
+          basePrompt += `\n\nInspire-se no estilo visual do site: ${aiPrompt.referenceTemplate}.`;
+      }
 
       const fieldSchema = {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          value: { type: SchemaType.STRING },
-          ai: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+          value: { type: Type.STRING },
+          ai: { type: Type.ARRAY, items: { type: Type.STRING } }
         },
         required: ["value", "ai"]
       };
 
       const listItemSchema = {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          id: { type: SchemaType.STRING },
-          value: { type: SchemaType.STRING }, 
+          id: { type: Type.STRING },
+          value: { type: Type.STRING }, 
           title: fieldSchema,
           description: fieldSchema,
           question: fieldSchema,
@@ -176,69 +183,70 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           author: fieldSchema,
           role: fieldSchema,
           content: fieldSchema,
-          ai: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+          ai: { type: Type.ARRAY, items: { type: Type.STRING } }
         }
       };
 
+      // Fix: Use 'gemini-3-pro-preview' for complex text generation tasks
       const response = await ai.models.generateContent({
         model: "gemini-3-pro-preview",
         contents: basePrompt,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
               meta: {
-                  type: SchemaType.OBJECT,
+                  type: Type.OBJECT,
                   properties: {
-                      title: { type: SchemaType.STRING },
-                      status: { type: SchemaType.STRING }
+                      title: { type: Type.STRING },
+                      status: { type: Type.STRING }
                   },
                   required: ["title"]
               },
               theme: {
-                  type: SchemaType.OBJECT,
+                  type: Type.OBJECT,
                   properties: {
-                      brand_name: { type: SchemaType.STRING },
-                      tone: { type: SchemaType.STRING },
-                      primary_color: { type: SchemaType.STRING },
-                      secondary_color: { type: SchemaType.STRING },
-                      bg_color: { type: SchemaType.STRING },
-                      font_family: { type: SchemaType.STRING }
+                      brand_name: { type: Type.STRING },
+                      tone: { type: Type.STRING },
+                      primary_color: { type: Type.STRING },
+                      secondary_color: { type: Type.STRING },
+                      bg_color: { type: Type.STRING },
+                      font_family: { type: Type.STRING }
                   },
                   required: ["brand_name", "primary_color"]
               },
               sections: {
-                type: SchemaType.ARRAY,
+                type: Type.ARRAY,
                 items: {
-                  type: SchemaType.OBJECT,
+                  type: Type.OBJECT,
                   properties: {
-                    id: { type: SchemaType.STRING },
-                    type: { type: SchemaType.STRING },
-                    enabled: { type: SchemaType.BOOLEAN },
+                    id: { type: Type.STRING },
+                    type: { type: Type.STRING },
+                    enabled: { type: Type.BOOLEAN },
                     content: { 
-                        type: SchemaType.OBJECT,
+                        type: Type.OBJECT,
                         properties: {
                             headline: fieldSchema,
                             subheadline: fieldSchema,
                             description: fieldSchema,
-                            bullets: { type: SchemaType.ARRAY, items: fieldSchema },
+                            bullets: { type: Type.ARRAY, items: fieldSchema },
                             cta: {
-                                type: SchemaType.OBJECT,
+                                type: Type.OBJECT,
                                 properties: {
                                     label: fieldSchema,
-                                    href: { type: SchemaType.STRING },
+                                    href: { type: Type.STRING },
                                     microcopy: fieldSchema
                                 }
                             },
-                            consequences: { type: SchemaType.ARRAY, items: fieldSchema },
-                            items: { type: SchemaType.ARRAY, items: listItemSchema },
+                            consequences: { type: Type.ARRAY, items: fieldSchema },
+                            items: { type: Type.ARRAY, items: listItemSchema },
                             original_price: fieldSchema,
                             price: fieldSchema,
-                            features: { type: SchemaType.ARRAY, items: fieldSchema },
+                            features: { type: Type.ARRAY, items: fieldSchema },
                             cta_label: fieldSchema,
                             cta_url: fieldSchema,
-                            value: { type: SchemaType.STRING }
+                            value: { type: Type.STRING }
                         }
                     }
                   },
@@ -251,22 +259,21 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
         }
       });
 
+      // Simple and direct way to get text output is accessing the .text property
       const text = response.text;
       if (!text) throw new Error("A IA retornou um conteúdo vazio.");
       
       const generated = JSON.parse(text);
-      
       const newPage: Partial<LandingPage> = {
-        title: generated.meta?.title || aiPrompt.productName || "Página Gerada via HTML",
-        productName: aiPrompt.productName || generated.meta?.title || "Produto via HTML",
-        slug: slugify(generated.meta?.title || aiPrompt.productName || "pagina-html-" + Date.now()),
+        title: generated.meta?.title || aiPrompt.productName,
+        productName: aiPrompt.productName,
+        slug: slugify(generated.meta?.title || aiPrompt.productName),
         content: generated,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isActive: true,
         theme: 'modern'
       };
-
       setCurrentDraft(newPage);
     } catch (e: any) {
       console.error("Erro detalhado na geração:", e);
@@ -663,13 +670,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
   if (view === 'visual_editor' && editingPage) {
     const content = editingPage.content as LandingPageContent;
+    const isHtmlMode = !!content.htmlCode;
+
     return (
       <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col animate-in fade-in h-screen overflow-hidden" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
         <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 z-50 shadow-sm">
           <div className="flex items-center gap-4">
             <button onClick={() => setView('list')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ArrowLeft size={20}/></button>
             <div className="h-6 w-px bg-slate-200"></div>
-            <h2 className="font-bold text-slate-800">{editingPage.title}</h2>
+            <h2 className="font-bold text-slate-800">{editingPage.title} {isHtmlMode && "(Modo HTML)"}</h2>
           </div>
           <div className="flex items-center gap-3">
              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 rounded-full border border-indigo-100">
@@ -684,197 +693,245 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
         <div className="flex-1 flex overflow-hidden">
           <aside className="w-80 bg-white border-r border-slate-200 p-6 space-y-8 overflow-y-auto custom-scrollbar shadow-lg z-40">
-             <div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Aparência Global</h3>
-                <div className="space-y-4">
+             {isHtmlMode ? (
+                 <div className="space-y-6">
                     <div>
-                        <label className="text-[9px] font-bold text-slate-500 uppercase">Nome da Marca</label>
-                        <input className="w-full text-xs p-2.5 border rounded-xl mt-1" value={content.theme.brand_name} onChange={e => {
-                            const newContent = {...content};
-                            newContent.theme.brand_name = e.target.value;
-                            setEditingPage({...editingPage, content: newContent});
-                        }} />
-                    </div>
-                    <div>
-                        <label className="text-[9px] font-bold text-slate-500 uppercase">Cor Primária</label>
-                        <div className="flex items-center gap-2 mt-1">
-                            <input type="color" className="w-10 h-10 rounded border p-1" value={content.theme.primary_color} onChange={e => {
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Configuração HTML</h3>
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Formulário Vinculado</label>
+                        <select 
+                            className="w-full text-[10px] p-2 border rounded-xl bg-white font-bold mt-1"
+                            value={content.selectedFormId || ''}
+                            onChange={e => {
                                 const newContent = {...content};
-                                newContent.theme.primary_color = e.target.value;
+                                newContent.selectedFormId = e.target.value;
                                 setEditingPage({...editingPage, content: newContent});
-                            }} />
-                            <span className="text-xs font-mono font-bold text-slate-500 uppercase">{content.theme.primary_color}</span>
+                            }}
+                        >
+                            <option value="">Nenhum formulário</option>
+                            {availableForms.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
+                        </select>
+                        <p className="text-[9px] text-slate-400 mt-2">Use a tag <strong>{"{{form}}"}</strong> no seu HTML para indicar onde o formulário deve aparecer.</p>
+                    </div>
+                 </div>
+             ) : (
+                 <>
+                    <div>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Aparência Global</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[9px] font-bold text-slate-500 uppercase">Nome da Marca</label>
+                                <input className="w-full text-xs p-2.5 border rounded-xl mt-1" value={content.theme.brand_name} onChange={e => {
+                                    const newContent = {...content};
+                                    newContent.theme.brand_name = e.target.value;
+                                    setEditingPage({...editingPage, content: newContent});
+                                }} />
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-bold text-slate-500 uppercase">Cor Primária</label>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <input type="color" className="w-10 h-10 rounded border p-1" value={content.theme.primary_color} onChange={e => {
+                                        const newContent = {...content};
+                                        newContent.theme.primary_color = e.target.value;
+                                        setEditingPage({...editingPage, content: newContent});
+                                    }} />
+                                    <span className="text-xs font-mono font-bold text-slate-500 uppercase">{content.theme.primary_color}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-             </div>
 
-             <div className="space-y-4 pt-4 border-t border-slate-100">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Navegação Estrutural</h3>
-                <div className="space-y-2">
-                    {content.sections.map((s, idx) => (
-                        <div key={s.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 group/nav">
-                           <div className="flex items-center gap-3">
-                               <span className="text-[10px] font-black text-slate-300">#{idx+1}</span>
-                               <span className="text-xs font-bold text-slate-700 uppercase tracking-tighter truncate max-w-[100px]">{s.type}</span>
-                           </div>
-                           <div className="flex gap-1">
-                               <button onClick={() => handleMoveSection(idx, 'up')} disabled={idx === 0} className="p-1 text-slate-300 hover:text-indigo-600 disabled:opacity-0"><ArrowUp size={14}/></button>
-                               <button onClick={() => handleMoveSection(idx, 'down')} disabled={idx === content.sections.length -1} className="p-1 text-slate-300 hover:text-indigo-600 disabled:opacity-0"><ArrowDown size={14}/></button>
-                           </div>
+                    <div className="space-y-4 pt-4 border-t border-slate-100">
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Navegação Estrutural</h3>
+                        <div className="space-y-2">
+                            {content.sections.map((s, idx) => (
+                                <div key={s.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 group/nav">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[10px] font-black text-slate-300">#{idx+1}</span>
+                                    <span className="text-xs font-bold text-slate-700 uppercase tracking-tighter truncate max-w-[100px]">{s.type}</span>
+                                </div>
+                                <div className="flex gap-1">
+                                    <button onClick={() => handleMoveSection(idx, 'up')} disabled={idx === 0} className="p-1 text-slate-300 hover:text-indigo-600 disabled:opacity-0"><ArrowUp size={14}/></button>
+                                    <button onClick={() => handleMoveSection(idx, 'down')} disabled={idx === content.sections.length -1} className="p-1 text-slate-300 hover:text-indigo-600 disabled:opacity-0"><ArrowDown size={14}/></button>
+                                </div>
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                </div>
-             </div>
+                    </div>
+                </>
+             )}
           </aside>
 
           <main className="flex-1 bg-slate-200 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
             <div className="bg-white w-full max-w-5xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-[400px]">
                 
-                {content.sections.map((section, sIdx) => (
-                    <div key={section.id} id={`lp-section-${section.id}`} className="relative group/section border-b border-slate-100 hover:bg-slate-50/30 transition-all">
-                        
-                        {/* Controles de Seção */}
-                        <div className="absolute right-4 top-4 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity flex items-center gap-2 bg-white/90 backdrop-blur-md p-1.5 rounded-xl shadow-xl border border-indigo-100">
-                            <div className="flex flex-col gap-1 pr-2 mr-2 border-r border-slate-200 text-slate-400">
-                                <button onClick={() => handleMoveSection(sIdx, 'up')} disabled={sIdx === 0} className="p-1 hover:bg-indigo-50 hover:text-indigo-600"><ArrowUp size={14}/></button>
-                                <button onClick={() => handleMoveSection(sIdx, 'down')} disabled={sIdx === content.sections.length - 1} className="p-1 hover:bg-indigo-50 hover:text-indigo-600"><ArrowDown size={14}/></button>
-                            </div>
-                            
-                            <div className="flex flex-col pr-2 mr-2 border-r border-slate-200">
-                                <button onClick={() => handleAddFieldToSection(section.id, 'text')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Texto"><Type size={14}/></button>
-                                <button onClick={() => handleAddFieldToSection(section.id, 'image')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Imagem"><LucideImage size={14}/></button>
-                                <button onClick={() => handleAddFieldToSection(section.id, 'video')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Vídeo"><Video size={14}/></button>
-                                <button onClick={() => handleAddFieldToSection(section.id, 'form')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Formulário"><FormInput size={14}/></button>
-                            </div>
-
-                            <div className="text-[10px] font-black text-slate-400 uppercase pr-3">{section.type}</div>
-                            <button onClick={() => handleDeleteSection(sIdx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
+                {isHtmlMode ? (
+                    <div className="p-10 space-y-6">
+                        <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                            <Code className="text-indigo-600" /> Editar Código HTML
+                        </h3>
+                        <textarea 
+                            className="w-full h-[600px] p-6 bg-slate-900 text-teal-400 font-mono text-xs rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/20 leading-relaxed"
+                            value={content.htmlCode}
+                            onChange={e => {
+                                const newContent = {...content};
+                                newContent.htmlCode = e.target.value;
+                                setEditingPage({...editingPage, content: newContent});
+                            }}
+                            placeholder="<!-- Cole seu código HTML completo aqui -->"
+                        />
+                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 text-xs text-blue-800">
+                            <Info size={18} className="shrink-0 text-blue-600" />
+                            <p>No modo HTML direto, o editor visual de blocos é desativado para preservar a fidelidade do seu código. Lembre-se de usar a tag <strong>{"{{form}}"}</strong> caso deseje posicionar o formulário em um lugar específico.</p>
                         </div>
-
-                        {/* Botão Adicionar Seção Acima */}
-                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
-                            <div className="relative group/add">
-                                <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
-                                <div className="absolute top-10 left-1/2 -translate-x-1/2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 hidden group-hover/add:block animate-in zoom-in-95">
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-1 border-b pb-1">Inserir Seção</p>
-                                    {SECTION_TYPES.map(st => (
-                                        <button key={st.type} onClick={() => handleAddSection(sIdx - 1, st.type)} className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">{st.label}</button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Renderização do Conteúdo da Seção */}
-                        <div className={clsx("relative p-8", !section.enabled && "opacity-50 grayscale")}>
-                            <div className="space-y-6">
-                                {Object.keys(section.content).map(key => {
-                                    const field = section.content[key];
-                                    
-                                    // Especial: Botão CTA
-                                    if (key === 'cta') {
-                                        return (
-                                            <div key={key} className="flex flex-col items-center gap-3 p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100">
-                                                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Configuração do Botão CTA</div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-                                                    <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Rótulo do Botão</label>
-                                                        {renderInteractableField(section.id, 'cta.label', field.label)}
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Link (URL de Redirecionamento)</label>
-                                                        <div className="relative group/link">
-                                                            <Anchor className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14}/>
-                                                            <input 
-                                                                className="w-full pl-9 pr-3 py-2 bg-white border-2 border-slate-100 rounded-xl text-xs font-mono outline-none focus:border-indigo-400" 
-                                                                value={field.href || '#'} 
-                                                                onChange={e => {
-                                                                    const content = { ...editingPage?.content };
-                                                                    const s = content.sections.find((s: any) => s.id === section.id);
-                                                                    s.content.cta.href = e.target.value;
-                                                                    setEditingPage({ ...editingPage!, content });
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-
-                                    // Listas (Módulos, Benefícios, etc.)
-                                    if (Array.isArray(field)) {
-                                        return (
-                                            <div key={key} className="space-y-4 pt-6 border-t border-slate-100">
-                                                <div className="flex items-center justify-between">
-                                                    <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                                                        <List size={14}/> {key.replace('_', ' ')}
-                                                    </h4>
-                                                    <button 
-                                                        onClick={() => handleAddItemToList(section.id, key)}
-                                                        className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase hover:bg-indigo-100 transition-all"
-                                                    >
-                                                        <Plus size={12}/> Adicionar Item Detalhado
-                                                    </button>
-                                                </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    {field.map((item, itemIdx) => (
-                                                        <div key={item.id || itemIdx} className="group/item relative p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100 hover:border-indigo-200 transition-all space-y-4">
-                                                            <button 
-                                                                onClick={() => handleRemoveItemFromList(section.id, key, itemIdx)}
-                                                                className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-red-600 opacity-0 group-hover/item:opacity-100 transition-opacity"
-                                                            >
-                                                                <Trash2 size={14}/>
-                                                            </button>
-                                                            <div className="text-[8px] font-black text-indigo-300 uppercase tracking-[0.2em]">Item {itemIdx + 1}</div>
-                                                            {Object.keys(item).map(subKey => {
-                                                                if (item[subKey] && (typeof item[subKey] === 'object' || typeof item[subKey] === 'string') && subKey !== 'id' && subKey !== 'ai') {
-                                                                    return (
-                                                                        <div key={subKey}>
-                                                                            <label className="text-[8px] font-black text-slate-300 uppercase ml-1">{subKey}</label>
-                                                                            {renderInteractableField(section.id, `${key}.${itemIdx}.${subKey}`, item[subKey])}
-                                                                        </div>
-                                                                    )
-                                                                }
-                                                                return null;
-                                                            })}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )
-                                    }
-
-                                    // Campos Simples e Adicionados Manualmente
-                                    if (field && (typeof field === 'object' || typeof field === 'string')) {
-                                        return <div key={key} className="relative">{renderInteractableField(section.id, key, field, section.styles?.[key])}</div>
-                                    }
-                                    return null;
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Botão Adicionar Seção Abaixo */}
-                        <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
-                            <div className="relative group/add">
-                                <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
-                                <div className="absolute top-10 left-1/2 -translate-x-1/2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 hidden group-hover/add:block animate-in zoom-in-95">
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-1 border-b pb-1">Inserir Seção</p>
-                                    {SECTION_TYPES.map(st => (
-                                        <button key={st.type} onClick={() => handleAddSection(sIdx, st.type)} className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">{st.label}</button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
                     </div>
-                ))}
+                ) : (
+                    content.sections.map((section, sIdx) => (
+                        <div key={section.id} id={`lp-section-${section.id}`} className="relative group/section border-b border-slate-100 hover:bg-slate-50/30 transition-all">
+                            
+                            {/* Controles de Seção */}
+                            <div className="absolute right-4 top-4 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity flex items-center gap-2 bg-white/90 backdrop-blur-md p-1.5 rounded-xl shadow-xl border border-indigo-100">
+                                <div className="flex flex-col gap-1 pr-2 mr-2 border-r border-slate-200 text-slate-400">
+                                    <button onClick={() => handleMoveSection(sIdx, 'up')} disabled={sIdx === 0} className="p-1 hover:bg-indigo-50 hover:text-indigo-600"><ArrowUp size={14}/></button>
+                                    <button onClick={() => handleMoveSection(sIdx, 'down')} disabled={sIdx === content.sections.length - 1} className="p-1 hover:bg-indigo-50 hover:text-indigo-600"><ArrowDown size={14}/></button>
+                                </div>
+                                
+                                <div className="flex flex-col pr-2 mr-2 border-r border-slate-200">
+                                    <button onClick={() => handleAddFieldToSection(section.id, 'text')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Texto"><TypeIcon size={14}/></button>
+                                    <button onClick={() => handleAddFieldToSection(section.id, 'image')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Imagem"><LucideImage size={14}/></button>
+                                    <button onClick={() => handleAddFieldToSection(section.id, 'video')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Vídeo"><Video size={14}/></button>
+                                    <button onClick={() => handleAddFieldToSection(section.id, 'form')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Formulário"><FormInput size={14}/></button>
+                                </div>
 
-                <div className="p-24 text-center text-slate-300 flex flex-col items-center gap-4">
-                    <Sparkles size={48} className="opacity-10 animate-pulse"/>
-                    <p className="text-sm font-black uppercase tracking-[0.3em] opacity-40">Rodapé do Editor Visual</p>
-                    <p className="text-xs font-medium max-w-xs leading-relaxed">Você pode reorganizar qualquer bloco ou adicionar novos elementos arrastando e editando cada componente diretamente.</p>
-                </div>
+                                <div className="text-[10px] font-black text-slate-400 uppercase pr-3">{section.type}</div>
+                                <button onClick={() => handleDeleteSection(sIdx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
+                            </div>
+
+                            {/* Botão Adicionar Seção Acima */}
+                            <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
+                                <div className="relative group/add">
+                                    <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
+                                    <div className="absolute top-10 left-1/2 -translate-x-1/2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 hidden group-hover/add:block animate-in zoom-in-95">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-1 border-b pb-1">Inserir Seção</p>
+                                        {SECTION_TYPES.map(st => (
+                                            <button key={st.type} onClick={() => handleAddSection(sIdx - 1, st.type)} className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">{st.label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Renderização do Conteúdo da Seção */}
+                            <div className={clsx("relative p-8", !section.enabled && "opacity-50 grayscale")}>
+                                <div className="space-y-6">
+                                    {Object.keys(section.content).map(key => {
+                                        const field = section.content[key];
+                                        
+                                        // Especial: Botão CTA
+                                        if (key === 'cta') {
+                                            return (
+                                                <div key={key} className="flex flex-col items-center gap-3 p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100">
+                                                    <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Configuração do Botão CTA</div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                                                        <div>
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Rótulo do Botão</label>
+                                                            {renderInteractableField(section.id, 'cta.label', field.label)}
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Link (URL de Redirecionamento)</label>
+                                                            <div className="relative group/link">
+                                                                <Anchor className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14}/>
+                                                                <input 
+                                                                    className="w-full pl-9 pr-3 py-2 bg-white border-2 border-slate-100 rounded-xl text-xs font-mono outline-none focus:border-indigo-400" 
+                                                                    value={field.href || '#'} 
+                                                                    onChange={e => {
+                                                                        const content = { ...editingPage?.content };
+                                                                        const s = content.sections.find((s: any) => s.id === section.id);
+                                                                        s.content.cta.href = e.target.value;
+                                                                        setEditingPage({ ...editingPage!, content });
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+
+                                        // Listas (Módulos, Benefícios, etc.)
+                                        if (Array.isArray(field)) {
+                                            return (
+                                                <div key={key} className="space-y-4 pt-6 border-t border-slate-100">
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                                                            <List size={14}/> {key.replace('_', ' ')}
+                                                        </h4>
+                                                        <button 
+                                                            onClick={() => handleAddItemToList(section.id, key)}
+                                                            className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase hover:bg-indigo-100 transition-all"
+                                                        >
+                                                            <Plus size={12}/> Adicionar Item Detalhado
+                                                        </button>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        {field.map((item, itemIdx) => (
+                                                            <div key={item.id || itemIdx} className="group/item relative p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100 hover:border-indigo-200 transition-all space-y-4">
+                                                                <button 
+                                                                    onClick={() => handleRemoveItemFromList(section.id, key, itemIdx)}
+                                                                    className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-red-600 opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                                                >
+                                                                    <Trash2 size={14}/>
+                                                                </button>
+                                                                <div className="text-[8px] font-black text-indigo-300 uppercase tracking-[0.2em]">Item {itemIdx + 1}</div>
+                                                                {Object.keys(item).map(subKey => {
+                                                                    if (item[subKey] && (typeof item[subKey] === 'object' || typeof item[subKey] === 'string') && subKey !== 'id' && subKey !== 'ai') {
+                                                                        return (
+                                                                            <div key={subKey}>
+                                                                                <label className="text-[8px] font-black text-slate-300 uppercase ml-1">{subKey}</label>
+                                                                                {renderInteractableField(section.id, `${key}.${itemIdx}.${subKey}`, item[subKey])}
+                                                                            </div>
+                                                                        )
+                                                                    }
+                                                                    return null;
+                                                                })}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )
+                                        }
+
+                                        // Campos Simples e Adicionados Manualmente
+                                        if (field && (typeof field === 'object' || typeof field === 'string')) {
+                                            return <div key={key} className="relative">{renderInteractableField(section.id, key, field, section.styles?.[key])}</div>
+                                        }
+                                        return null;
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Botão Adicionar Seção Abaixo */}
+                            <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
+                                <div className="relative group/add">
+                                    <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
+                                    <div className="absolute top-10 left-1/2 -translate-x-1/2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 hidden group-hover/add:block animate-in zoom-in-95">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-1 border-b pb-1">Inserir Seção</p>
+                                        {SECTION_TYPES.map(st => (
+                                            <button key={st.type} onClick={() => handleAddSection(sIdx, st.type)} className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">{st.label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    ))
+                )}
+
+                {!isHtmlMode && (
+                    <div className="p-24 text-center text-slate-300 flex flex-col items-center gap-4">
+                        <Sparkles size={48} className="opacity-10 animate-pulse"/>
+                        <p className="text-sm font-black uppercase tracking-[0.3em] opacity-40">Rodapé do Editor Visual</p>
+                        <p className="text-xs font-medium max-w-xs leading-relaxed">Você pode reorganizar qualquer bloco ou adicionar novos elementos arrastando e editando cada componente diretamente.</p>
+                    </div>
+                )}
 
             </div>
           </main>
@@ -994,7 +1051,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                     onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} 
                                     placeholder="<!-- Cole seu código HTML completo aqui -->" 
                                 />
-                                <p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA converterá seu HTML para a estrutura editável do sistema.</p>
+                                <p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* O código será exibido exatamente como colado. Use {"{{form}}"} para injetar o formulário.</p>
                               </div>
 
                               <div>
@@ -1041,12 +1098,12 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                 <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-[1.5rem] text-base font-bold outline-none transition-all" value={aiPrompt.productName} onChange={e => setAiPrompt({...aiPrompt, productName: e.target.value})} placeholder="Ex: Formação Pilates Completa" />
                             </div>
                             <div>
-                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Público-Alvo</label>
+                                <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Público-Alvo</label>
                                 <input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold" value={aiPrompt.targetAudience} onChange={e => setAiPrompt({...aiPrompt, targetAudience: e.target.value})} placeholder="Ex: Fisioterapeutas" />
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Descrição do Produto / Benefício Principal</label>
-                                <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="O que seu produto faz e qual a maior promessa?" />
+                                <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-24 resize-none outline-none transition-all" value={aiPrompt.productDescription} onChange={e => setAiPrompt({...aiPrompt, productDescription: e.target.value})} placeholder="O que seu product faz e qual a maior promessa?" />
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:col-span-2">
                                 <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Preço</label><input type="text" className="w-full px-4 py-3 border-2 border-slate-100 bg-slate-50 rounded-2xl text-xs font-bold" value={aiPrompt.price} onChange={e => setAiPrompt({...aiPrompt, price: e.target.value})} placeholder="R$ 1.997,00" /></div>
@@ -1058,7 +1115,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                      </div>
                      <button onClick={handleCreateWithAi} disabled={isGenerating || (creationMode === 'standard' && !aiPrompt.productName) || (creationMode === 'prompt' && !aiPrompt.customPrompt)} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
                         {isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Zap size={24} />}
-                        {isGenerating ? 'IA Consultora Gerando Estratégia...' : 'Gerar Estrutura Premium'}
+                        {isGenerating ? 'Criando Estrutura...' : 'Finalizar Criação'}
                      </button>
                   </div>
                ) : (
@@ -1066,11 +1123,11 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                       <div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden">
                           <div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={100}/></div>
                           <h4 className="text-xl font-black mb-2 uppercase tracking-tighter">Estrutura Pronta!</h4>
-                          <p className="text-indigo-100 font-medium leading-relaxed">A IA gerou uma estrutura persuasiva completa baseada na sua referência. Você poderá revisar e editar cada bloco no editor visual a seguir.</p>
+                          <p className="text-indigo-100 font-medium leading-relaxed">Sua página foi gerada conforme as instruções fornecidas. Clique abaixo para salvar e revisar.</p>
                       </div>
                       <div className="flex gap-4 pt-6 border-t">
                           <button onClick={() => setCurrentDraft(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Voltar</button>
-                          <button onClick={confirmDraft} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Abrir Editor Visual</button>
+                          <button onClick={confirmDraft} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Revisar e Publicar</button>
                       </div>
                   </div>
                )}
@@ -1081,8 +1138,3 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     </div>
   );
 };
-
-// UseMemo Helper
-function useMemo<T>(factory: () => T, deps: any[]): T {
-    return React.useMemo(factory, deps);
-}

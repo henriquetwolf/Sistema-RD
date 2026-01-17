@@ -9,12 +9,10 @@ import {
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
   Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
   Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code, FileUp, Sparkle,
-  // Fix: Replaced redundant 'Type' with missing 'LayoutGrid' import from lucide-react
   LayoutGrid, MoveDiagonal
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
 import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField, FormFolder } from '../types';
-// Fix: Replaced deprecated SchemaType alias with the correct Type import from @google/genai
 import { GoogleGenAI, Type } from "@google/genai";
 import clsx from 'clsx';
 
@@ -48,11 +46,11 @@ const REFERENCE_TEMPLATES = [
 export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }) => {
   const [pages, setPages] = useState<LandingPage[]>([]);
   const [availableForms, setAvailableForms] = useState<FormModel[]>([]);
-  // Fix: Added missing folders state to prevent runtime errors when mapping folders
   const [folders, setFolders] = useState<FormFolder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState<LandingPage | null>(null);
   const [creationStep, setCreationStep] = useState<'choice' | 'form'>('choice');
   const [creationMode, setCreationMode] = useState<'standard' | 'prompt'>('standard');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -656,7 +654,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   position: (styles.x !== undefined || styles.y !== undefined) ? 'absolute' : 'relative',
                   left: styles.x !== undefined ? `${styles.x}%` : undefined,
                   top: styles.y !== undefined ? `${styles.y}%` : undefined,
-                  transform: (s.x !== undefined || s.y !== undefined) ? 'translate(-50%, -50%)' : undefined,
+                  transform: (styles.x !== undefined || styles.y !== undefined) ? 'translate(-50%, -50%)' : undefined,
                   width: styles.width ? `${styles.width}%` : '100%',
                   fontSize: styles.fontSize,
                   fontFamily: styles.fontFamily,
@@ -1051,7 +1049,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                             return (
                                                 <div key={key} className="space-y-6 pt-10 border-t border-slate-100">
                                                     <div className="flex items-center justify-between">
-                                                        <h4 className="text-[10px] font-black text-blue-50 uppercase tracking-widest flex items-center gap-3">
+                                                        <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-3">
                                                             <LayoutGrid size={16}/> Lista: {key.replace('_', ' ')}
                                                         </h4>
                                                         <button 
@@ -1227,7 +1225,6 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                           <button 
                               onClick={() => {
                                 if (editingPage) {
-                                  // Fix: Added missing logic for move page with LayoutGrid icon support
                                   setEditingPage({ ...editingPage, id: showMoveModal.id });
                                 }
                                 setShowMoveModal(null);

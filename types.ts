@@ -1,83 +1,36 @@
 
-export type QuestionType = 'text' | 'paragraph' | 'select' | 'checkbox' | 'email' | 'phone' | 'number' | 'date';
 
-export interface FormQuestion {
+export type NodeType = 'trigger' | 'wait' | 'email' | 'condition' | 'crm_action' | 'exit';
+
+export interface AutomationNode {
   id: string;
+  type: NodeType;
   title: string;
-  type: QuestionType;
-  required: boolean;
-  placeholder?: string;
-  options?: string[];
-  crmMapping?: string;
-  systemMapping?: string;
+  config: any;
+  nextId?: string; // Para caminhos lineares
+  yesId?: string;  // Para ramificação SIM
+  noId?: string;   // Para ramificação NÃO
 }
 
-export interface TextStyle {
-  x: number;
-  y: number;
-  fontSize: number;
-  fontFamily: string;
-  color: string;
-  fontWeight: string;
-  textAlign: 'left' | 'center' | 'right';
-  width: number;
-}
-
-export interface CertificateLayout {
-  body: TextStyle;
-  name: TextStyle;
-  footer: TextStyle;
-}
-
-export interface FormStyle {
-  backgroundType: 'color' | 'image' | 'texture';
-  backgroundColor?: string;
-  backgroundImage?: string;
-  backgroundTexture?: 'dots' | 'grid' | 'diagonal';
-  cardTransparent?: boolean;
-  primaryColor: string;
-  textColor: string;
-  fontFamily: 'sans' | 'serif' | 'modern';
-  titleAlignment: 'left' | 'center';
-  borderRadius: 'none' | 'small' | 'medium' | 'large' | 'full';
-  buttonText: string;
-  shadowIntensity: 'none' | 'soft' | 'strong';
-  successTitle: string;
-  successMessage: string;
-  successButtonText: string;
-  logoUrl?: string;
-}
-
-export interface FormModel {
+export interface AutomationFlow {
   id: string;
-  title: string;
+  name: string;
   description: string;
-  campaign: string;
-  isLeadCapture: boolean;
-  questions: FormQuestion[];
-  style: FormStyle;
+  formId: string; // Formulário que inicia o fluxo
+  isActive: boolean;
+  nodes: AutomationNode[];
   createdAt: string;
-  submissionsCount: number;
-  folderId: string | null;
-  distributionMode: 'fixed' | 'round-robin';
-  fixedOwnerId?: string;
-  teamId?: string;
-  targetPipeline?: string;
-  targetStage?: string;
+  updatedAt: string;
 }
 
-export interface SurveyModel extends FormModel {
-    targetAudience: 'all' | 'student' | 'instructor' | 'studio';
-    targetType: 'all' | 'product_type' | 'specific_product';
-    targetProductType?: string;
-    targetProductName?: string;
-    onlyIfFinished: boolean;
-    isActive: boolean;
+export enum AppStep {
+  UPLOAD,
+  CONFIG,
+  PREVIEW,
+  DASHBOARD
 }
 
-export interface CsvRow {
-  [key: string]: any;
-}
+export type UploadStatus = 'idle' | 'parsing' | 'uploading' | 'error' | 'success';
 
 export interface FileData {
   fileName: string;
@@ -86,11 +39,8 @@ export interface FileData {
   headers: string[];
 }
 
-export enum AppStep {
-  UPLOAD = 0,
-  CONFIG = 1,
-  PREVIEW = 2,
-  DASHBOARD = 3
+export interface CsvRow {
+  [key: string]: any;
 }
 
 export interface SupabaseConfig {
@@ -101,23 +51,13 @@ export interface SupabaseConfig {
   intervalMinutes: number;
 }
 
-export interface SavedPreset extends SupabaseConfig {
-  id: string;
-  name: string;
-  createdByName?: string;
-}
-
-export type EntityImportType = 'generic' | 'collaborators' | 'instructors' | 'students' | 'franchises' | 'studios';
-
-export type UploadStatus = 'idle' | 'parsing' | 'uploading' | 'error';
-
 export interface SyncJob {
   id: string;
   name: string;
   sheetUrl: string;
   config: SupabaseConfig;
   active: boolean;
-  status: string;
+  status: 'idle' | 'syncing' | 'success' | 'error';
   lastSync: string | null;
   lastMessage: string;
   intervalMinutes: number;
@@ -125,10 +65,75 @@ export interface SyncJob {
   createdAt: string;
 }
 
+export interface FormModel {
+  id: string;
+  title: string;
+  description: string;
+  campaign: string;
+  isLeadCapture: boolean;
+  questions: FormQuestion[];
+  createdAt: string;
+  submissionsCount: number;
+  style: FormStyle;
+  distributionMode: 'fixed' | 'random';
+  targetPipeline: string;
+  targetStage: string;
+  folderId: string | null;
+}
+
+export interface FormQuestion {
+  id: string;
+  title: string;
+  type: QuestionType;
+  required: boolean;
+  options?: string[];
+  placeholder?: string;
+  systemMapping?: string;
+}
+
+export type QuestionType = 'text' | 'paragraph' | 'select' | 'checkbox' | 'number' | 'email' | 'phone' | 'date';
+
+export interface FormStyle {
+  backgroundType: 'color' | 'image' | 'texture';
+  backgroundColor: string;
+  backgroundImage?: string;
+  backgroundTexture?: 'dots' | 'grid' | 'diagonal';
+  cardTransparent: boolean;
+  primaryColor: string;
+  textColor: string;
+  fontFamily: 'sans' | 'serif' | 'modern';
+  titleAlignment: 'left' | 'center' | 'right';
+  borderRadius: 'none' | 'small' | 'medium' | 'large' | 'full';
+  buttonText: string;
+  shadowIntensity: 'none' | 'soft' | 'strong';
+  successTitle: string;
+  successMessage: string;
+  successButtonText: string;
+  logoUrl?: string;
+}
+
 export interface FormAnswer {
   questionId: string;
   questionTitle: string;
   value: string;
+}
+
+export interface FormFolder {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface Contract {
+  id: string;
+  title: string;
+  content: string;
+  city: string;
+  contractDate: string;
+  status: 'sent' | 'signed';
+  signers: ContractSigner[];
+  folderId: string | null;
+  createdAt: string;
 }
 
 export interface ContractSigner {
@@ -140,18 +145,6 @@ export interface ContractSigner {
   signedAt?: string;
 }
 
-export interface Contract {
-  id: string;
-  createdAt: string;
-  status: 'sent' | 'signed';
-  title: string;
-  content: string;
-  city: string;
-  contractDate: string;
-  signers: ContractSigner[];
-  folderId: string | null;
-}
-
 export interface ContractFolder {
   id: string;
   name: string;
@@ -159,24 +152,22 @@ export interface ContractFolder {
 }
 
 export interface StudentSession {
-    email: string;
-    name: string;
-    cpf: string;
-    deals: any[];
-}
-
-export interface Role {
-  id: string;
+  email: string;
+  cpf: string;
   name: string;
-  permissions: Record<string, boolean>;
+  deals: any[];
 }
 
 export interface CollaboratorSession {
   id: string;
   name: string;
   email: string;
-  photoUrl: string;
-  role: Role;
+  photoUrl?: string;
+  role: {
+    id: string;
+    name: string;
+    permissions: Record<string, boolean>;
+  };
 }
 
 export interface PartnerStudioSession {
@@ -187,38 +178,170 @@ export interface PartnerStudioSession {
   cnpj: string;
 }
 
+export type EntityImportType = 'generic' | 'collaborators' | 'instructors' | 'students' | 'franchises' | 'studios';
+
+export interface LandingPage {
+  id: string;
+  title: string;
+  productName: string;
+  slug: string;
+  content: LandingPageContent;
+  isActive: boolean;
+  theme: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LandingPageContent {
+  meta: any;
+  theme: any;
+  sections: LandingPageSection[];
+  htmlCode?: string;
+  selectedFormId?: string;
+  ctaLink?: string;
+  // Fix: added missing ai_defaults property to LandingPageContent
+  ai_defaults?: {
+    enabled: boolean;
+    max_suggestions: number;
+    rules: string;
+  };
+}
+
+export interface LandingPageSection {
+  id: string;
+  type: string;
+  enabled: boolean;
+  content: any;
+  styles?: Record<string, ElementStyles>;
+}
+
+export interface ElementStyles {
+  x?: number;
+  y?: number;
+  width?: number;
+  fontSize?: number;
+  fontFamily?: string;
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  color?: string;
+}
+
+export interface SavedPreset extends SupabaseConfig {
+  id: string;
+  name: string;
+  createdByName: string;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  permissions: Record<string, boolean>;
+}
+
+export interface TeacherNews {
+  id: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  createdAt: string;
+}
+
+export interface InstructorLevel {
+  id: string;
+  name: string;
+  honorarium: number;
+  observations?: string;
+}
+
+export interface Banner {
+  id: string;
+  title: string;
+  imageUrl: string;
+  linkUrl: string;
+  targetAudience: 'student' | 'instructor';
+  active: boolean;
+}
+
+export interface ActivityLog {
+  id: string;
+  userName: string;
+  action: 'create' | 'update' | 'delete';
+  module: string;
+  details: string;
+  createdAt: string;
+}
+
+export interface CourseInfo {
+  id: string;
+  courseName: string;
+  details: string;
+  materials: string;
+  requirements: string;
+}
+
+export interface SupportTag {
+  id: string;
+  name: string;
+  role: 'all' | 'student' | 'instructor' | 'studio' | 'admin';
+}
+
+export interface StudentCertificateStatus {
+  hash: string;
+  issuedAt: string;
+}
+
 export interface CertificateModel {
   id: string;
   title: string;
   backgroundData: string;
-  backBackgroundData: string;
+  backBackgroundData?: string;
   linkedProductId: string;
   bodyText: string;
   layoutConfig: CertificateLayout;
   createdAt: string;
 }
 
-export interface StudentCertificate {
-  id: string;
-  student_deal_id: string;
-  certificate_template_id: string;
-  hash: string;
-  issued_at: string;
+export interface CertificateLayout {
+  body: TextStyle;
+  name: TextStyle;
+  footer: TextStyle;
 }
 
-export interface ExternalCertificate {
-  id: string;
-  student_id: string;
-  course_name: string;
-  completion_date: string;
-  file_url: string;
-  file_name: string;
-  created_at: string;
+export interface TextStyle {
+  x: number;
+  y: number;
+  fontSize: number;
+  fontFamily: string;
+  color: string;
+  fontWeight: string;
+  textAlign: string;
+  width: number;
 }
 
-export interface StudentCertificateStatus {
-  hash: string;
-  issuedAt: string;
+export interface OnlineCourse {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  paymentLink: string;
+  imageUrl?: string;
+  certificateTemplateId?: string;
+}
+
+export interface CourseModule {
+  id: string;
+  courseId: string;
+  title: string;
+  orderIndex: number;
+}
+
+export interface CourseLesson {
+  id: string;
+  moduleId: string;
+  title: string;
+  description?: string;
+  videoUrl?: string;
+  orderIndex: number;
+  materials?: { name: string, url: string }[];
 }
 
 export interface EventModel {
@@ -229,14 +352,6 @@ export interface EventModel {
   dates: string[];
   createdAt: string;
   registrationOpen: boolean;
-}
-
-export interface EventBlock {
-  id: string;
-  eventId: string;
-  date: string;
-  title: string;
-  maxSelections: number;
 }
 
 export interface Workshop {
@@ -262,19 +377,57 @@ export interface EventRegistration {
   locked?: boolean;
 }
 
-export interface Banner {
+export interface EventBlock {
   id: string;
+  eventId: string;
+  date: string;
   title: string;
-  imageUrl: string;
-  linkUrl: string;
-  targetAudience: 'student' | 'instructor';
-  active: boolean;
+  maxSelections: number;
+}
+
+export interface ExternalCertificate {
+  id: string;
+  student_id: string;
+  course_name: string;
+  completion_date: string;
+  file_url: string;
+  file_name: string;
+}
+
+export interface SurveyModel extends FormModel {
+  targetAudience: 'all' | 'student' | 'instructor' | 'studio';
+  targetType: 'all' | 'product_type' | 'specific_product';
+  targetProductType?: string;
+  targetProductName?: string;
+  onlyIfFinished: boolean;
+  isActive: boolean;
+}
+
+export interface AttendanceTag {
+  id: string;
+  name: string;
+  color: string;
   createdAt: string;
+}
+
+export interface InventoryRecord {
+  id: string;
+  type: 'entry' | 'exit';
+  itemApostilaNova: number;
+  itemApostilaClassico: number;
+  itemSacochila: number;
+  itemLapis: number;
+  registrationDate: string;
+  studioId: string;
+  trackingCode: string;
+  observations: string;
+  conferenceDate: string;
+  attachments: string;
 }
 
 export interface PartnerStudio {
   id: string;
-  status: 'active' | 'inactive';
+  status: string;
   responsibleName: string;
   cpf: string;
   phone: string;
@@ -315,84 +468,32 @@ export interface PartnerStudio {
   attachments: string;
 }
 
-export interface InstructorLevel {
-  id: string;
-  name: string;
-  honorarium: number;
-  observations?: string;
-}
-
-export interface InventoryRecord {
-  id: string;
-  type: 'entry' | 'exit';
-  itemApostilaNova: number;
-  itemApostilaClassico: number;
-  itemSacochila: number;
-  itemLapis: number;
-  registrationDate: string;
-  studioId?: string;
-  trackingCode: string;
-  observations: string;
-  conferenceDate?: string;
-  attachments?: string;
-  createdAt?: string;
-}
-
-export interface ActivityLog {
-  id: string;
-  userName: string;
-  action: 'create' | 'update' | 'delete' | 'login';
-  module: string;
-  details: string;
-  recordId?: string;
-  createdAt: string;
+export interface BillingRecord {
+  id: number;
 }
 
 export interface BillingNegotiation {
   id: string;
-  openInstallments: number;
+  fullName: string;
+  identifierCode: string;
+  productName: string;
+  originalValue: number;
   totalNegotiatedValue: number;
   totalInstallments: number;
-  dueDate?: string;
-  responsibleAgent?: string;
-  identifierCode?: string;
-  fullName?: string;
-  productName?: string;
-  originalValue?: number;
-  paymentMethod?: string;
-  observations?: string;
+  openInstallments: number;
+  paymentMethod: string;
+  dueDate: string;
   status: string;
-  team?: string;
-  voucherLink1?: string;
-  testDate?: string;
-  voucherLink2?: string;
-  voucherLink3?: string;
-  boletosLink?: string;
-  negotiationReference?: string;
-  attachments?: string;
-  createdAt?: string;
-}
-
-export interface FormFolder {
-  id: string;
-  name: string;
-  createdAt: string;
-}
-
-export interface CourseInfo {
-  id: string;
-  courseName: string;
-  details: string;
-  materials: string;
-  requirements: string;
-  updatedAt: string;
-}
-
-export interface TeacherNews {
-  id: string;
-  title: string;
-  content: string;
-  imageUrl?: string;
+  team: string;
+  responsibleAgent: string;
+  negotiationReference: string;
+  observations: string;
+  voucherLink1: string;
+  voucherLink2: string;
+  voucherLink3: string;
+  boletosLink: string;
+  testDate: string;
+  attachments: string;
   createdAt: string;
 }
 
@@ -405,12 +506,11 @@ export interface SupportTicket {
   targetId?: string;
   targetName?: string;
   targetEmail?: string;
-  targetRole?: 'student' | 'instructor' | 'studio' | 'admin';
+  targetRole?: string;
   subject: string;
   message: string;
   tag: string;
   status: 'open' | 'pending' | 'closed' | 'waiting';
-  response?: string;
   assignedId?: string;
   assignedName?: string;
   createdAt: string;
@@ -429,156 +529,14 @@ export interface SupportMessage {
   createdAt: string;
 }
 
-export interface CompanySetting {
-  id: string;
-  legalName: string;
-  cnpj: string;
-  webhookUrl: string;
-  productTypes: string[];
-  productIds: string[];
-}
-
-export type PipelineStage = { id: string; title: string; color?: string; };
-
-export interface Pipeline {
-  id: string;
-  name: string;
-  stages: PipelineStage[];
-}
-
-export interface WebhookTrigger {
-  id: string;
-  pipelineName: string;
-  stageId: string;
-  payloadJson?: string;
-  createdAt?: string;
-}
-
-export interface SupportTag {
-  id: string;
-  name: string;
-  role: 'student' | 'instructor' | 'studio' | 'admin' | 'all';
-  createdAt: string;
-}
-
-export interface OnlineCourse {
-  id: string;
-  title: string;
-  description: string;
-  price: number;
-  paymentLink: string;
-  imageUrl?: string;
-  certificateTemplateId?: string;
-  createdAt: string;
-}
-
-export interface CourseModule {
-  id: string;
-  courseId: string;
-  title: string;
-  orderIndex: number;
-}
-
-export interface CourseLesson {
-  id: string;
-  moduleId: string;
-  title: string;
-  description: string;
-  videoUrl: string;
-  materials: { name: string; url: string; }[];
-  orderIndex: number;
-}
-
-export interface StudentCourseAccess {
-  id: string;
-  studentDealId: string;
-  courseId: string;
-  unlockedAt: string;
-}
-
-export interface StudentLessonProgress {
-  id: string;
-  studentDealId: string;
-  lessonId: string;
-  completedAt: string;
-}
-
-export interface Product {
-  id: string;
-  name: string;
-  category: string;
-  platform: string;
-  price: number;
-  url: string;
-  status: 'active' | 'inactive';
-  description: string;
-  certificateTemplateId: string;
-  createdAt: string;
-  imageUrl?: string;
-  targetAreas?: string[];
-}
-
-export interface AttendanceTag {
-  id: string;
-  name: string;
-  color: string;
-  createdAt: string;
-}
-
-export interface BillingRecord {
-  id: string;
-  nome_cliente: string;
-  vencimento: string;
-  valor_original: number;
-  valor_recebido: number;
-  status: string;
-}
-
-export interface Franchise {
-    id: string;
-    saleNumber: string;
-    contractStartDate: string;
-    inaugurationDate: string;
-    salesConsultant: string;
-    franchiseeName: string;
-    cpf: string;
-    companyName: string;
-    cnpj: string;
-    phone: string;
-    email: string;
-    residentialAddress: string;
-    commercialState: string;
-    commercialCity: string;
-    commercialAddress: string;
-    commercialNeighborhood: string;
-    latitude: string;
-    longitude: string;
-    exclusivityRadiusKm?: string;
-    kmStreetPoint: string;
-    kmCommercialBuilding: string;
-    studioStatus: string;
-    studioSizeM2: string;
-    equipmentList: string;
-    royaltiesValue: string;
-    bankAccountInfo: string;
-    hasSignedContract: boolean;
-    contractEndDate: string;
-    isRepresentative: boolean;
-    partner1Name: string;
-    partner2Name: string;
-    franchiseeFolderLink: string;
-    pathInfo: string;
-    observations: string;
-}
-
 export interface WAAutomationRule {
   id: string;
   name: string;
   triggerType: 'crm_stage_reached';
   pipelineName: string;
   stageId: string;
-  productType?: 'Digital' | 'Presencial' | 'Evento' | '';
-  productId: string; 
+  productType: string;
+  productId: string;
   messageTemplate: string;
   isActive: boolean;
   createdAt: string;
@@ -593,65 +551,75 @@ export interface WAAutomationLog {
   createdAt: string;
 }
 
-export interface LandingPage {
+export interface Product {
+    id: string;
+    name: string;
+    category: string;
+    platform: string;
+    price: number;
+    url: string;
+    status: string;
+    description: string;
+    certificateTemplateId?: string;
+    createdAt: string;
+    imageUrl?: string;
+    targetAreas: string[];
+}
+
+// Fix: added missing Franchise interface
+export interface Franchise {
   id: string;
-  title: string;
-  productName: string;
-  slug?: string;
-  content: LandingPageContent;
-  createdAt: string;
-  updatedAt: string;
-  isActive: boolean;
-  theme: 'modern' | 'clean' | 'dark' | 'corporate';
+  saleNumber: string;
+  contractStartDate: string;
+  inaugurationDate: string;
+  salesConsultant: string;
+  franchiseeName: string;
+  cpf: string;
+  companyName: string;
+  cnpj: string;
+  phone: string;
+  email: string;
+  residentialAddress: string;
+  commercialState: string;
+  commercialCity: string;
+  commercialAddress: string;
+  commercialNeighborhood: string;
+  latitude: string;
+  longitude: string;
+  exclusivityRadiusKm?: string;
+  kmStreetPoint?: string;
+  kmCommercialBuilding?: string;
+  studioStatus: string;
+  studioSizeM2: string;
+  equipmentList: string;
+  royaltiesValue: string;
+  bankAccountInfo: string;
+  hasSignedContract: boolean;
+  contractEndDate: string;
+  isRepresentative: boolean;
+  partner1Name: string;
+  partner2Name: string;
+  franchiseeFolderLink: string;
+  pathInfo: string;
+  observations: string;
 }
 
-export interface ElementStyles {
-    fontSize?: string;
-    fontFamily?: string;
-    textAlign?: 'left' | 'center' | 'right';
-    color?: string;
-    x?: number;
-    y?: number;
-    width?: number;
+// Fix: added missing StudentCourseAccess interface
+export interface StudentCourseAccess {
+  student_deal_id: string;
+  course_id: string;
 }
 
+// Fix: added missing StudentLessonProgress interface
+export interface StudentLessonProgress {
+  student_deal_id: string;
+  lesson_id: string;
+  completed: boolean;
+}
+
+// Fix: added missing LandingPageField interface
 export interface LandingPageField {
-    value: string;
-    ai: string[];
-}
-
-export interface LandingPageSection {
-  id: string;
-  type: 'hero' | 'pain' | 'method' | 'benefits' | 'target' | 'learning' | 'modules' | 'bonuses' | 'testimonials' | 'pricing' | 'guarantee' | 'faq' | 'cta_final' | 'professor' | 'footer' | 'image' | 'form';
-  enabled: boolean;
-  content: any;
-  styles?: Record<string, ElementStyles>;
-}
-
-export interface LandingPageContent {
-  meta: {
-      page_id: string;
-      title: string;
-      status: string;
-      version: number;
-      created_at: string;
-      updated_at: string;
-  };
-  theme: {
-      brand_name: string;
-      tone: string;
-      primary_color: string;
-      text_color: string;
-      bg_color: string;
-      font_family: string;
-  };
-  ai_defaults: {
-      enabled: boolean;
-      max_suggestions: number;
-      rules: string;
-  };
-  sections: LandingPageSection[];
-  htmlCode?: string;
-  selectedFormId?: string;
-  ctaLink?: string;
+  value: string;
+  ai?: string[];
+  type?: 'image' | 'video' | 'form';
 }

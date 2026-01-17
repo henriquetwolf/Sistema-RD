@@ -33,6 +33,9 @@ const INITIAL_SURVEY: SurveyModel = {
   isActive: true,
   folderId: null,
   distributionMode: 'fixed',
+  // Fix: added missing targetPipeline and targetStage to INITIAL_SURVEY
+  targetPipeline: 'Padrão',
+  targetStage: 'new',
   style: {
       backgroundType: 'color', backgroundColor: '#fff7ed', cardTransparent: false, primaryColor: '#f59e0b', textColor: '#451a03', fontFamily: 'sans', titleAlignment: 'left', borderRadius: 'medium', buttonText: 'Enviar Pesquisa', shadowIntensity: 'soft', successTitle: 'Obrigado!', successMessage: 'Sua opinião é fundamental.', successButtonText: 'Fechar'
   }

@@ -185,6 +185,8 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
     }
   };
 
+  const currentForm = availableForms.find(f => f.id === flow.formId);
+
   return (
     <div className="h-full flex flex-col bg-slate-100 overflow-hidden animate-in fade-in">
         {/* Toolbar Superior */}
@@ -318,11 +320,27 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
                             <div className="space-y-6">
                                 <div className="p-5 bg-emerald-50 border border-emerald-100 rounded-3xl flex gap-4 text-xs text-emerald-800">
                                     <MessageCircle size={24} className="shrink-0 text-emerald-500" />
-                                    <p>Esta mensagem será enviada via API para o número cadastrado no formulário.</p>
+                                    <p>Esta mensagem será enviada via API para o número identificado no campo do formulário escolhido abaixo.</p>
                                 </div>
+
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Conteúdo da Mensagem (WhatsApp)</label>
-                                    <textarea className="w-full px-5 py-3.5 border-2 border-slate-100 rounded-2xl text-sm h-64 resize-none bg-slate-50 focus:bg-white focus:border-emerald-500 outline-none leading-relaxed transition-all" value={selectedNode.config.message || ''} onChange={e => updateNodeConfig(selectedNode.id, { message: e.target.value })} placeholder="Olá {{nome_cliente}}, obrigado pelo interesse! ..." />
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Campo do Telefone</label>
+                                    <select 
+                                        className="w-full px-5 py-4 border-2 border-slate-100 bg-white rounded-2xl text-sm font-black appearance-none cursor-pointer focus:border-emerald-500 outline-none"
+                                        value={selectedNode.config.phoneFieldId || ''}
+                                        onChange={e => updateNodeConfig(selectedNode.id, { phoneFieldId: e.target.value })}
+                                    >
+                                        <option value="">Selecione o campo do formulário...</option>
+                                        {currentForm?.questions.map(q => (
+                                            <option key={q.id} value={q.id}>{q.title}</option>
+                                        ))}
+                                    </select>
+                                    {!currentForm && <p className="text-[9px] text-red-500 mt-1 ml-1 font-bold">Selecione o Formulário de Entrada no nó de Gatilho.</p>}
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Conteúdo da Mensagem (WhatsApp)</label>
+                                    <textarea className="w-full px-5 py-3.5 border-2 border-slate-100 rounded-2xl text-sm h-48 resize-none bg-slate-50 focus:bg-white focus:border-emerald-500 outline-none leading-relaxed transition-all" value={selectedNode.config.message || ''} onChange={e => updateNodeConfig(selectedNode.id, { message: e.target.value })} placeholder="Olá {{nome_cliente}}, obrigado pelo interesse! ..." />
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">Tags:</span>
                                         <code className="text-[9px] font-bold text-slate-500">{"{{nome_cliente}}"}</code>

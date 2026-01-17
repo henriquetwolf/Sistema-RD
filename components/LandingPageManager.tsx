@@ -8,10 +8,13 @@ import {
   Award, ShieldCheck, CheckCircle2, ChevronRight, Wand2, AlignLeft, AlignCenter, AlignRight,
   Palette, FormInput, Building, Move, Maximize2, Zap, BrainCircuit,
   Eye, GripVertical, PlusSquare, List, Video, Image as LucideImage,
-  Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code, FileUp, Sparkle
+  Maximize, Minimize, Anchor, CopySlash, MousePointerClick, FileEdit, Code, FileUp, Sparkle,
+  // Fix: Replaced redundant 'Type' with missing 'LayoutGrid' import from lucide-react
+  LayoutGrid, MoveDiagonal
 } from 'lucide-react';
 import { appBackend, slugify } from '../services/appBackend';
-import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField } from '../types';
+import { LandingPage, LandingPageContent, LandingPageSection, ElementStyles, FormModel, LandingPageField, FormFolder } from '../types';
+// Fix: Replaced deprecated SchemaType alias with the correct Type import from @google/genai
 import { GoogleGenAI, Type } from "@google/genai";
 import clsx from 'clsx';
 
@@ -45,6 +48,8 @@ const REFERENCE_TEMPLATES = [
 export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }) => {
   const [pages, setPages] = useState<LandingPage[]>([]);
   const [availableForms, setAvailableForms] = useState<FormModel[]>([]);
+  // Fix: Added missing folders state to prevent runtime errors when mapping folders
+  const [folders, setFolders] = useState<FormFolder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -59,7 +64,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number, y: number } | null>(null);
-  const elementStartPosRef = useRef<{ x: number, y: number } | null>(null);
+  const elementStartRef = useRef<{ x: number, y: number } | null>(null);
 
   const [editingPage, setEditingPage] = useState<Partial<LandingPage> | null>(null);
   const [currentDraft, setCurrentDraft] = useState<Partial<LandingPage> | null>(null);
@@ -511,14 +516,14 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     const section = editingPage?.content?.sections.find((s: any) => s.id === sectionId);
     const styles = section?.styles?.[elementKey];
     
-    elementStartPosRef.current = { 
+    elementStartRef.current = { 
         x: styles?.x !== undefined ? styles.x : 50, 
         y: styles?.y !== undefined ? styles.y : 50 
     };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !selectedSectionId || !selectedElementKey || !dragStartRef.current || !elementStartPosRef.current) return;
+    if (!isDragging || !selectedSectionId || !selectedElementKey || !dragStartRef.current || !elementStartRef.current) return;
     
     const targetSectionEl = document.getElementById(`lp-section-${selectedSectionId}`);
     if (!targetSectionEl) return;
@@ -530,9 +535,8 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     const percentX = (deltaX / rect.width) * 100;
     const percentY = (deltaY / rect.height) * 100;
 
-    const newX = Math.max(0, Math.min(100, elementStartPosRef.current.x + percentX));
-    // Fix: Corrected typo 'elementStartPosPosRef' to 'elementStartPosRef'
-    const newY = Math.max(0, Math.min(100, elementStartPosRef.current.y + percentY));
+    const newX = Math.max(0, Math.min(100, elementStartRef.current.x + percentX));
+    const newY = Math.max(0, Math.min(100, elementStartRef.current.y + percentY));
 
     updateSectionStyles(selectedSectionId, selectedElementKey, { x: newX, y: newY });
   };
@@ -540,7 +544,7 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
   const handleMouseUp = () => {
     setIsDragging(false);
     dragStartRef.current = null;
-    elementStartPosRef.current = null;
+    elementStartRef.current = null;
   };
 
   const handleDeleteSection = (index: number) => {
@@ -645,14 +649,14 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       return (
           <div 
               className={clsx(
-                  "relative group/field transition-all border border-transparent hover:border-indigo-300 hover:bg-indigo-50/10 rounded-lg",
-                  isSelected ? "border-indigo-500 bg-indigo-50/20 shadow-sm z-30" : ""
+                  "relative group/field transition-all rounded-sm",
+                  isSelected ? "ring-2 ring-blue-500 ring-offset-2 z-30" : "hover:ring-1 hover:ring-blue-300 ring-offset-1"
               )}
               style={{
                   position: (styles.x !== undefined || styles.y !== undefined) ? 'absolute' : 'relative',
                   left: styles.x !== undefined ? `${styles.x}%` : undefined,
                   top: styles.y !== undefined ? `${styles.y}%` : undefined,
-                  transform: (styles.x !== undefined || styles.y !== undefined) ? 'translate(-50%, -50%)' : undefined,
+                  transform: (s.x !== undefined || s.y !== undefined) ? 'translate(-50%, -50%)' : undefined,
                   width: styles.width ? `${styles.width}%` : '100%',
                   fontSize: styles.fontSize,
                   fontFamily: styles.fontFamily,
@@ -661,60 +665,84 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
               }}
               onClick={(e) => { e.stopPropagation(); setSelectedSectionId(sectionId); setSelectedElementKey(fieldKey); }}
           >
-              <div className="absolute -top-11 left-0 hidden group-hover/field:flex items-center gap-1 bg-white p-1 rounded-lg shadow-xl border border-indigo-100 z-[60]">
-                  <button onMouseDown={(e) => handleElementMouseDown(e, sectionId, fieldKey)} className="p-1.5 hover:bg-slate-100 rounded text-slate-400 cursor-move"><Move size={12}/></button>
-                  <div className="h-3 w-px bg-slate-200 mx-0.5"></div>
-                  
-                  <button onClick={(e) => { e.stopPropagation(); updateSectionStyles(sectionId, fieldKey, { width: Math.max(10, (styles.width || 100) - 10) }); }} className="p-1.5 hover:bg-slate-100 rounded text-slate-400"><Minimize size={12}/></button>
-                  <button onClick={(e) => { e.stopPropagation(); updateSectionStyles(sectionId, fieldKey, { width: Math.min(100, (styles.width || 100) + 10) }); }} className="p-1.5 hover:bg-slate-100 rounded text-slate-400"><Maximize size={12}/></button>
-                  <div className="h-3 w-px bg-slate-200 mx-0.5"></div>
+              {/* Canva-style resize handles */}
+              {isSelected && (
+                  <>
+                    <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-white border-2 border-blue-500 rounded-full z-40"></div>
+                    <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white border-2 border-blue-500 rounded-full z-40"></div>
+                    <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-white border-2 border-blue-500 rounded-full z-40"></div>
+                    <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-white border-2 border-blue-500 rounded-full z-40"></div>
+                  </>
+              )}
 
-                  {!isMedia && field.ai?.map((action: string) => (
-                      <button 
-                          key={action}
-                          disabled={isRefining}
-                          onClick={() => handleAiAction(sectionId, fieldKey, action, value)}
-                          className="px-2 py-1 text-[8px] font-black uppercase tracking-tighter bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 disabled:opacity-50"
-                      >
-                          {isRefining ? <Loader2 size={10} className="animate-spin"/> : action.replace('_', ' ')}
-                      </button>
-                  ))}
-                  {fieldKey.includes('_') && (
-                      <button onClick={(e) => {
-                          e.stopPropagation();
-                          const newSections = [...editingPage!.content!.sections];
-                          const s = newSections.find(s => s.id === sectionId);
-                          delete s.content[fieldKey];
-                          setEditingPage({ ...editingPage!, content: { ...editingPage!.content!, sections: newSections } });
-                      }} className="p-1.5 hover:bg-red-50 text-red-400 rounded"><Trash2 size={12}/></button>
-                  )}
-              </div>
+              {/* Floating Toolbar (Canva Style) */}
+              {isSelected && (
+                  <div className="absolute -top-14 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-900 text-white p-1 rounded-xl shadow-2xl z-[60] animate-in fade-in zoom-in-95 duration-200">
+                    <button onMouseDown={(e) => handleElementMouseDown(e, sectionId, fieldKey)} className="p-2 hover:bg-white/10 rounded-lg transition-colors cursor-move"><Move size={16}/></button>
+                    <div className="w-px h-4 bg-white/20 mx-1"></div>
+                    
+                    <button onClick={(e) => { e.stopPropagation(); updateSectionStyles(sectionId, fieldKey, { width: Math.max(10, (styles.width || 100) - 5) }); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors"><Minimize size={16}/></button>
+                    <button onClick={(e) => { e.stopPropagation(); updateSectionStyles(sectionId, fieldKey, { width: Math.min(100, (styles.width || 100) + 5) }); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors"><Maximize size={16}/></button>
+                    <div className="w-px h-4 bg-white/20 mx-1"></div>
+
+                    {!isMedia && field.ai?.map((action: string) => (
+                        <button 
+                            key={action}
+                            disabled={isRefining}
+                            onClick={() => handleAiAction(sectionId, fieldKey, action, value)}
+                            className="px-3 py-1 text-[9px] font-black uppercase tracking-tighter hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                            {isRefining ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>}
+                            {action.replace('_', ' ')}
+                        </button>
+                    ))}
+                    <div className="w-px h-4 bg-white/20 mx-1"></div>
+                    <button onClick={(e) => {
+                        e.stopPropagation();
+                        const newSections = [...editingPage!.content!.sections];
+                        const s = newSections.find(s => s.id === sectionId);
+                        delete s.content[fieldKey];
+                        setEditingPage({ ...editingPage!, content: { ...editingPage!.content!, sections: newSections } });
+                    }} className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                  </div>
+              )}
 
               {field.type === 'image' ? (
                   <div className="space-y-2 p-2">
-                      <img src={value} className="max-w-full h-auto rounded-lg" alt="Preview" />
-                      <input className="w-full text-[10px] bg-white border border-slate-200 p-1 rounded" value={value} onChange={e => {
-                          const content = { ...editingPage?.content };
-                          const s = content.sections.find((s: any) => s.id === sectionId);
-                          s.content[fieldKey].value = e.target.value;
-                          setEditingPage({ ...editingPage!, content: content as LandingPageContent });
-                      }} placeholder="URL da Imagem" />
+                      <img src={value} className="max-w-full h-auto rounded-lg shadow-sm" alt="Preview" />
+                      {isSelected && (
+                          <div className="bg-white/90 backdrop-blur-md p-2 rounded-xl border border-slate-200 shadow-xl mt-2 animate-in slide-in-from-top-2">
+                            <label className="block text-[8px] font-black text-slate-400 uppercase mb-1 ml-1">URL da Imagem</label>
+                            <input className="w-full text-[10px] bg-slate-50 border-none p-2 rounded-lg focus:ring-2 focus:ring-blue-500" value={value} onChange={e => {
+                                const content = { ...editingPage?.content };
+                                const s = content.sections.find((s: any) => s.id === sectionId);
+                                s.content[fieldKey].value = e.target.value;
+                                setEditingPage({ ...editingPage!, content: content as LandingPageContent });
+                            }} placeholder="https://..." />
+                          </div>
+                      )}
                   </div>
               ) : field.type === 'video' ? (
                   <div className="space-y-2 p-2">
                       <div className="aspect-video bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden" dangerouslySetInnerHTML={{ __html: value }}></div>
-                      <textarea className="w-full text-[10px] bg-white border border-slate-200 p-1 rounded font-mono" rows={3} value={value} onChange={e => {
-                          const content = { ...editingPage?.content };
-                          const s = content.sections.find((s: any) => s.id === sectionId);
-                          s.content[fieldKey].value = e.target.value;
-                          setEditingPage({ ...editingPage!, content: content as LandingPageContent });
-                      }} placeholder="Iframe do Vídeo" />
+                      {isSelected && (
+                          <div className="bg-white/90 backdrop-blur-md p-2 rounded-xl border border-slate-200 shadow-xl mt-2">
+                            <label className="block text-[8px] font-black text-slate-400 uppercase mb-1 ml-1">Código Embed</label>
+                            <textarea className="w-full text-[10px] bg-slate-50 border-none p-2 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono" rows={3} value={value} onChange={e => {
+                                const content = { ...editingPage?.content };
+                                const s = content.sections.find((s: any) => s.id === sectionId);
+                                s.content[fieldKey].value = e.target.value;
+                                setEditingPage({ ...editingPage!, content: content as LandingPageContent });
+                            }} placeholder="Iframe..." />
+                          </div>
+                      )}
                   </div>
               ) : field.type === 'form' ? (
-                  <div className="p-4 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl text-center">
-                      <p className="text-xs font-bold text-slate-500 mb-2">Formulário Integrado</p>
+                  <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] text-center">
+                      <FormInput className="mx-auto mb-2 text-slate-300" size={32} />
+                      <p className="text-xs font-bold text-slate-500 mb-4">Formulário Integrado</p>
                       <select 
-                        className="w-full text-[10px] p-2 border rounded-xl bg-white font-bold"
+                        className="w-full text-[11px] p-3 border-none bg-white rounded-2xl font-bold shadow-sm focus:ring-2 focus:ring-blue-500"
                         value={value}
                         onChange={e => {
                             const content = { ...editingPage?.content };
@@ -729,9 +757,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   </div>
               ) : isMultiline ? (
                   <textarea 
-                    className="w-full bg-transparent border-none focus:ring-0 p-1 resize-none outline-none overflow-hidden" 
+                    className="w-full bg-transparent border-none focus:ring-0 p-1 resize-none outline-none overflow-hidden placeholder-slate-300" 
                     value={value}
-                    rows={value.split('\n').length}
+                    rows={value.split('\n').length || 1}
                     onChange={e => {
                         const content = { ...editingPage?.content };
                         const sIdx = content.sections.findIndex((s: any) => s.id === sectionId);
@@ -755,8 +783,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                   />
               ) : (
                   <input 
-                    className="w-full bg-transparent border-none focus:ring-0 p-1 outline-none font-bold" 
+                    className="w-full bg-transparent border-none focus:ring-0 p-1 outline-none font-inherit placeholder-slate-300" 
                     value={value}
+                    style={{ fontWeight: 'inherit', fontSize: 'inherit', color: 'inherit', textAlign: 'inherit' }}
                     onChange={e => {
                         const content = { ...editingPage?.content };
                         const sIdx = content.sections.findIndex((s: any) => s.id === sectionId);
@@ -798,15 +827,16 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           <div className="flex items-center gap-3">
              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 rounded-full border border-indigo-100">
                 <BrainCircuit size={16} className="text-indigo-600 animate-pulse" />
-                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">Editor de Alta Performance</span>
+                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">Canvas de Alta Performance</span>
              </div>
-            <button onClick={handleSave} className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-2 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95">
+            <button onClick={handleSave} className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-2.5 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95">
               {isLoading ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} Salvar Alterações
             </button>
           </div>
         </header>
 
         <div className="flex-1 flex overflow-hidden">
+          {/* Sidebar Left - Tools & Structure */}
           <aside className="w-80 bg-white border-r border-slate-200 p-6 space-y-8 overflow-y-auto custom-scrollbar shadow-lg z-40">
              {isHtmlMode ? (
                  <div className="space-y-6">
@@ -875,127 +905,133 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
              ) : (
                  <>
                     <div>
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Aparência Global</h3>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Design Global</h3>
                         <div className="space-y-4">
                             <div>
                                 <label className="text-[9px] font-bold text-slate-500 uppercase">Nome da Marca</label>
-                                <input className="w-full text-xs p-2.5 border rounded-xl mt-1" value={content.theme.brand_name} onChange={e => {
+                                <input className="w-full text-xs p-3 bg-slate-50 border-none rounded-xl mt-1 focus:ring-2 focus:ring-blue-500" value={content.theme.brand_name} onChange={e => {
                                     const newContent = {...content};
                                     newContent.theme.brand_name = e.target.value;
                                     setEditingPage({...editingPage, content: newContent});
                                 }} />
                             </div>
                             <div>
-                                <label className="text-[9px] font-bold text-slate-500 uppercase">Cor Primária</label>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <input type="color" className="w-10 h-10 rounded border p-1" value={content.theme.primary_color} onChange={e => {
+                                <label className="text-[9px] font-bold text-slate-500 uppercase">Cor Identidade</label>
+                                <div className="flex items-center gap-3 mt-1">
+                                    <input type="color" className="w-12 h-12 rounded-xl border-none p-1 bg-white shadow-sm cursor-pointer" value={content.theme.primary_color} onChange={e => {
                                         const newContent = {...content};
                                         newContent.theme.primary_color = e.target.value;
                                         setEditingPage({...editingPage, content: newContent});
                                     }} />
-                                    <span className="text-xs font-mono font-bold text-slate-500 uppercase">{content.theme.primary_color}</span>
+                                    <span className="text-xs font-mono font-bold text-slate-400 uppercase">{content.theme.primary_color}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div className="space-y-4 pt-4 border-t border-slate-100">
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Navegação Estrutural</h3>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Camadas da Página</h3>
                         <div className="space-y-2">
                             {content.sections.map((s, idx) => (
-                                <div key={s.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 group/nav">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-[10px] font-black text-slate-300">#{idx+1}</span>
-                                    <span className="text-xs font-bold text-slate-700 uppercase tracking-tighter truncate max-w-[100px]">{s.type}</span>
-                                </div>
-                                <div className="flex gap-1">
-                                    <button onClick={() => handleMoveSection(idx, 'up')} disabled={idx === 0} className="p-1 text-slate-300 hover:text-indigo-600 disabled:opacity-0"><ArrowUp size={14}/></button>
-                                    <button onClick={() => handleMoveSection(idx, 'down')} disabled={idx === content.sections.length -1} className="p-1 text-slate-300 hover:text-indigo-600 disabled:opacity-0"><ArrowDown size={14}/></button>
-                                </div>
+                                <div key={s.id} onClick={() => setSelectedSectionId(s.id)} className={clsx("flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer", selectedSectionId === s.id ? "bg-blue-50 border-blue-200 text-blue-700 shadow-sm" : "bg-white border-slate-100 text-slate-600 hover:bg-slate-50")}>
+                                    <div className="flex items-center gap-3">
+                                        <GripVertical size={14} className="text-slate-300"/>
+                                        <span className="text-xs font-bold uppercase tracking-tighter truncate max-w-[120px]">{s.type}</span>
+                                    </div>
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                                        <button onClick={(e) => { e.stopPropagation(); handleMoveSection(idx, 'up'); }} disabled={idx === 0} className="p-1 hover:text-blue-600 disabled:opacity-0"><ArrowUp size={12}/></button>
+                                        <button onClick={(e) => { e.stopPropagation(); handleMoveSection(idx, 'down'); }} disabled={idx === content.sections.length -1} className="p-1 hover:text-blue-600 disabled:opacity-0"><ArrowDown size={12}/></button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
                     </div>
+
+                    <button onClick={() => setView('preview')} className="w-full py-4 border-2 border-dashed border-slate-200 text-slate-400 hover:border-blue-500 hover:text-blue-500 rounded-3xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all">
+                        <Eye size={18}/> Abrir Modo Preview
+                    </button>
                 </>
              )}
           </aside>
 
-          <main className="flex-1 bg-slate-200 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
-            <div className="bg-white w-full max-w-5xl shadow-2xl rounded-[3rem] min-h-screen relative font-sans pb-[400px]">
+          {/* Canvas Main - "Canva Workspace" */}
+          <main className="flex-1 bg-slate-100 p-12 overflow-y-auto custom-scrollbar flex flex-col items-center">
+            <div className="bg-white w-full max-w-[1200px] shadow-[0_10px_100px_rgba(0,0,0,0.1)] rounded-sm min-h-screen relative font-sans pb-[500px] animate-in fade-in zoom-in-95 duration-500">
                 
                 {isHtmlMode ? (
                     <div className="p-10 space-y-6">
                         <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                            <Code className="text-indigo-600" /> Editar Código HTML
+                            <Code className="text-indigo-600" /> Editor de Código Direto
                         </h3>
                         <textarea 
-                            className="w-full h-[600px] p-6 bg-slate-900 text-teal-400 font-mono text-xs rounded-2xl border-none outline-none focus:ring-4 focus:ring-indigo-500/20 leading-relaxed"
+                            className="w-full h-[700px] p-8 bg-slate-900 text-teal-400 font-mono text-sm rounded-[2rem] border-none outline-none focus:ring-8 focus:ring-indigo-500/10 leading-relaxed shadow-2xl"
                             value={content.htmlCode}
                             onChange={e => {
                                 const newContent = {...content};
                                 newContent.htmlCode = e.target.value;
                                 setEditingPage({...editingPage, content: newContent});
                             }}
-                            placeholder="<!-- Cole seu código HTML completo aqui -->"
+                            placeholder="<!-- Cole seu código HTML aqui -->"
                         />
-                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 text-xs text-blue-800">
-                            <Info size={18} className="shrink-0 text-blue-600" />
-                            <p>No modo HTML direto, o editor visual de blocos é desativado para preservar a fidelidade do seu código. Use as tags <strong>{"{{form}}"}</strong> para o formulário e <strong>{"{{cta_link}}"}</strong> para o link de venda.</p>
+                        <div className="bg-blue-50 border border-blue-100 p-5 rounded-[2rem] flex gap-4 text-sm text-blue-800 shadow-sm">
+                            <Info size={24} className="shrink-0 text-blue-600" />
+                            <p>No modo HTML, o editor visual de blocos é desativado para garantir a integridade do seu layout customizado. Use as tags <strong>{"{{form}}"}</strong> e <strong>{"{{cta_link}}"}</strong>.</p>
                         </div>
                     </div>
                 ) : (
                     content.sections.map((section, sIdx) => (
-                        <div key={section.id} id={`lp-section-${section.id}`} className="relative group/section border-b border-slate-100 hover:bg-slate-50/30 transition-all">
+                        <div key={section.id} id={`lp-section-${section.id}`} className={clsx("relative group/section transition-all", selectedSectionId === section.id ? "ring-2 ring-blue-500 ring-inset" : "hover:bg-slate-50/30")}>
                             
-                            <div className="absolute right-4 top-4 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity flex items-center gap-2 bg-white/90 backdrop-blur-md p-1.5 rounded-xl shadow-xl border border-indigo-100">
-                                <div className="flex flex-col gap-1 pr-2 mr-2 border-r border-slate-200 text-slate-400">
-                                    <button onClick={() => handleMoveSection(sIdx, 'up')} disabled={sIdx === 0} className="p-1 hover:bg-indigo-50 hover:text-indigo-600"><ArrowUp size={14}/></button>
-                                    <button onClick={() => handleMoveSection(sIdx, 'down')} disabled={sIdx === content.sections.length - 1} className="p-1 hover:bg-indigo-50 hover:text-indigo-600"><ArrowDown size={14}/></button>
-                                </div>
-                                
-                                <div className="flex flex-col pr-2 mr-2 border-r border-slate-200">
-                                    <button onClick={() => handleAddFieldToSection(section.id, 'text')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Texto"><TypeIcon size={14}/></button>
-                                    <button onClick={() => handleAddFieldToSection(section.id, 'image')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Imagem"><LucideImage size={14}/></button>
-                                    <button onClick={() => handleAddFieldToSection(section.id, 'video')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Vídeo"><Video size={14}/></button>
-                                    <button onClick={() => handleAddFieldToSection(section.id, 'form')} className="p-1 text-slate-400 hover:text-indigo-600" title="Add Formulário"><FormInput size={14}/></button>
-                                </div>
-
-                                <div className="text-[10px] font-black text-slate-400 uppercase pr-3">{section.type}</div>
-                                <button onClick={() => handleDeleteSection(sIdx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
+                            {/* Section Controls (Always Visible when Hover/Select) */}
+                            <div className="absolute right-[-60px] top-4 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity flex flex-col gap-2">
+                                <button onClick={() => handleDeleteSection(sIdx)} className="bg-white text-red-500 p-2.5 rounded-xl shadow-xl border border-red-100 hover:bg-red-50 transition-all"><Trash2 size={18}/></button>
+                                <button onClick={() => handleMoveSection(sIdx, 'up')} disabled={sIdx === 0} className="bg-white text-slate-600 p-2.5 rounded-xl shadow-xl border border-slate-100 hover:bg-slate-50 disabled:opacity-30"><ArrowUp size={18}/></button>
+                                <button onClick={() => handleMoveSection(sIdx, 'down')} disabled={sIdx === content.sections.length - 1} className="bg-white text-slate-600 p-2.5 rounded-xl shadow-xl border border-slate-100 hover:bg-slate-50 disabled:opacity-30"><ArrowDown size={18}/></button>
                             </div>
 
+                            <div className="absolute left-[-60px] top-4 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity flex flex-col gap-2">
+                                <button onClick={() => handleAddFieldToSection(section.id, 'text')} className="bg-white text-blue-600 p-2.5 rounded-xl shadow-xl border border-blue-100 hover:bg-blue-50" title="Add Texto"><TypeIcon size={18}/></button>
+                                <button onClick={() => handleAddFieldToSection(section.id, 'image')} className="bg-white text-blue-600 p-2.5 rounded-xl shadow-xl border border-blue-100 hover:bg-blue-50" title="Add Imagem"><LucideImage size={18}/></button>
+                                <button onClick={() => handleAddFieldToSection(section.id, 'video')} className="bg-white text-blue-600 p-2.5 rounded-xl shadow-xl border border-blue-100 hover:bg-blue-50" title="Add Vídeo"><Video size={18}/></button>
+                                <button onClick={() => handleAddFieldToSection(section.id, 'form')} className="bg-white text-blue-600 p-2.5 rounded-xl shadow-xl border border-blue-100 hover:bg-blue-50" title="Add Formulário"><FormInput size={18}/></button>
+                            </div>
+
+                            {/* Section Inserter */}
                             <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
                                 <div className="relative group/add">
-                                    <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
-                                    <div className="absolute top-10 left-1/2 -translate-x-1/2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 hidden group-hover/add:block animate-in zoom-in-95">
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-1 border-b pb-1">Inserir Seção</p>
+                                    <button className="bg-blue-600 text-white p-2.5 rounded-full shadow-2xl hover:scale-110 transition-transform active:scale-95 flex items-center justify-center"><Plus size={20}/></button>
+                                    <div className="absolute top-12 left-1/2 -translate-x-1/2 w-56 bg-slate-900 text-white rounded-3xl shadow-2xl py-3 hidden group-hover/add:grid grid-cols-1 gap-1 animate-in zoom-in-95 p-2">
+                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center mb-2 border-b border-white/10 pb-2">Inserir Seção</p>
                                         {SECTION_TYPES.map(st => (
-                                            <button key={st.type} onClick={() => handleAddSection(sIdx - 1, st.type)} className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">{st.label}</button>
+                                            <button key={st.type} onClick={() => handleAddSection(sIdx - 1, st.type)} className="w-full text-left px-4 py-2 text-[11px] font-bold hover:bg-white/10 rounded-xl transition-colors flex items-center justify-between group/item">
+                                                {st.label}
+                                                <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 transition-opacity" />
+                                            </button>
                                         ))}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className={clsx("relative p-8", !section.enabled && "opacity-50 grayscale")}>
-                                <div className="space-y-6">
+                            <div className={clsx("relative p-12 transition-all", !section.enabled && "opacity-30 grayscale")}>
+                                <div className="space-y-10">
                                     {Object.keys(section.content).map(key => {
                                         const field = section.content[key];
                                         
                                         if (key === 'cta') {
                                             return (
-                                                <div key={key} className="flex flex-col items-center gap-3 p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100">
-                                                    <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Configuração do Botão CTA</div>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                                                <div key={key} className="flex flex-col items-center gap-6 p-10 bg-slate-50/50 rounded-[3rem] border border-slate-100 hover:bg-white transition-all group/cta">
+                                                    <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Botão de Chamada para Ação (CTA)</div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
                                                         <div>
-                                                            <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Rótulo do Botão</label>
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase ml-4 mb-2 block">Texto do Botão</label>
                                                             {renderInteractableField(section.id, 'cta.label', field.label)}
                                                         </div>
                                                         <div>
-                                                            <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Link (URL de Redirecionamento)</label>
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase ml-4 mb-2 block">Link de Destino</label>
                                                             <div className="relative group/link">
-                                                                <Anchor className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14}/>
+                                                                <Anchor className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
                                                                 <input 
-                                                                    className="w-full pl-9 pr-3 py-2 bg-white border-2 border-slate-100 rounded-xl text-xs font-mono outline-none focus:border-indigo-400" 
+                                                                    className="w-full pl-12 pr-4 py-3 bg-white border-2 border-slate-100 rounded-2xl text-xs font-mono outline-none focus:border-blue-400 shadow-sm" 
                                                                     value={field.href || '#'} 
                                                                     onChange={e => {
                                                                         const content = { ...editingPage?.content };
@@ -1013,33 +1049,33 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
 
                                         if (Array.isArray(field)) {
                                             return (
-                                                <div key={key} className="space-y-4 pt-6 border-t border-slate-100">
+                                                <div key={key} className="space-y-6 pt-10 border-t border-slate-100">
                                                     <div className="flex items-center justify-between">
-                                                        <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                                                            <List size={14}/> {key.replace('_', ' ')}
+                                                        <h4 className="text-[10px] font-black text-blue-50 uppercase tracking-widest flex items-center gap-3">
+                                                            <LayoutGrid size={16}/> Lista: {key.replace('_', ' ')}
                                                         </h4>
                                                         <button 
                                                             onClick={() => handleAddItemToList(section.id, key)}
-                                                            className="flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase hover:bg-indigo-100 transition-all"
+                                                            className="flex items-center gap-2 px-5 py-2 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all shadow-sm"
                                                         >
-                                                            <Plus size={12}/> Adicionar Item Detalhado
+                                                            <Plus size={14}/> Novo Item da Lista
                                                         </button>
                                                     </div>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                         {field.map((item, itemIdx) => (
-                                                            <div key={item.id || itemIdx} className="group/item relative p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100 hover:border-indigo-200 transition-all space-y-4">
+                                                            <div key={item.id || itemIdx} className="group/item relative p-8 bg-white rounded-[3rem] border border-slate-100 hover:border-blue-500 hover:shadow-2xl transition-all space-y-4">
                                                                 <button 
                                                                     onClick={() => handleRemoveItemFromList(section.id, key, itemIdx)}
-                                                                    className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                                                    className="absolute top-6 right-6 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity"
                                                                 >
-                                                                    <Trash2 size={14}/>
+                                                                    <Trash2 size={16}/>
                                                                 </button>
-                                                                <div className="text-[8px] font-black text-indigo-300 uppercase tracking-[0.2em]">Item {itemIdx + 1}</div>
+                                                                <div className="text-[9px] font-black text-blue-300 uppercase tracking-[0.2em] mb-4">Elemento {itemIdx + 1}</div>
                                                                 {Object.keys(item).map(subKey => {
                                                                     if (item[subKey] && (typeof item[subKey] === 'object' || typeof item[subKey] === 'string') && subKey !== 'id' && subKey !== 'ai') {
                                                                         return (
                                                                             <div key={subKey}>
-                                                                                <label className="text-[8px] font-black text-slate-300 uppercase ml-1">{subKey}</label>
+                                                                                <label className="text-[9px] font-black text-slate-300 uppercase ml-1 mb-1 block">{subKey}</label>
                                                                                 {renderInteractableField(section.id, `${key}.${itemIdx}.${subKey}`, item[subKey])}
                                                                             </div>
                                                                         )
@@ -1061,29 +1097,15 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                                 </div>
                             </div>
 
-                            <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-40 opacity-0 group-hover/section:opacity-100 transition-opacity">
-                                <div className="relative group/add">
-                                    <button className="bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform active:scale-95"><Plus size={16}/></button>
-                                    <div className="absolute top-10 left-1/2 -translate-x-1/2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 hidden group-hover/add:block animate-in zoom-in-95">
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center mb-1 border-b pb-1">Inserir Seção</p>
-                                        {SECTION_TYPES.map(st => (
-                                            <button key={st.type} onClick={() => handleAddSection(sIdx, st.type)} className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">{st.label}</button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
                         </div>
                     ))
                 )}
 
-                {!isHtmlMode && (
-                    <div className="p-24 text-center text-slate-300 flex flex-col items-center gap-4">
-                        <Sparkles size={48} className="opacity-10 animate-pulse"/>
-                        <p className="text-sm font-black uppercase tracking-[0.3em] opacity-40">Rodapé do Editor Visual</p>
-                        <p className="text-xs font-medium max-w-xs leading-relaxed">Você pode reorganizar qualquer bloco ou adicionar novos elementos arrastando e editando cada componente diretamente.</p>
-                    </div>
-                )}
+                <div className="p-32 text-center text-slate-300 flex flex-col items-center gap-6">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center"><MonitorPlay size={40} className="opacity-10"/></div>
+                    <p className="text-sm font-black uppercase tracking-[0.4em] opacity-30">Fim do Canvas</p>
+                    <p className="text-xs font-medium max-w-sm leading-relaxed opacity-40">Arraste novos elements ou use a IA para expandir seu conteúdo a qualquer momento.</p>
+                </div>
 
             </div>
           </main>
@@ -1188,12 +1210,58 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                      <button onClick={handleCreateWithAi} disabled={isGenerating || (creationMode === 'standard' && !aiPrompt.productName) || (creationMode === 'prompt' && !aiPrompt.customPrompt && !aiPrompt.briefFileBase64)} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">{isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Zap size={24} />}{isGenerating ? 'Criando Código e Estrutura...' : 'Gerar Página com IA'}</button>
                   </div>
                ) : (
-                  <div className="space-y-8 animate-in slide-in-from-right-4"><div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={100}/></div><h4 className="text-xl font-black mb-2 uppercase tracking-tighter">Estrutura Pronta!</h4><p className="text-indigo-100 font-medium leading-relaxed">Sua página foi gerada conforme as instruções fornecidas. Clique abaixo para salvar e revisar.</p></div><div className="flex gap-4 pt-6 border-t"><button onClick={() => setCurrentDraft(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Voltar</button><button onClick={confirmDraft} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Revisar e Publicar</button></div></div>
+                  <div className="space-y-8 animate-in slide-in-from-right-4 duration-300"><div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={100}/></div><h4 className="text-xl font-black mb-2 uppercase tracking-tighter">Estrutura Pronta!</h4><p className="text-indigo-100 font-medium leading-relaxed">Sua página foi gerada conforme as instruções fornecidas. Clique abaixo para salvar e revisar.</p></div><div className="flex gap-4 pt-6 border-t"><button onClick={() => setCurrentDraft(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Voltar</button><button onClick={confirmDraft} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Revisar e Publicar</button></div></div>
                )}
             </div>
           </div>
         </div>
       )}
+
+      {showMoveModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
+                  <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 text-xs font-black uppercase tracking-widest text-slate-500">Mover Página</div>
+                  <div className="p-6">
+                      <p className="text-sm text-slate-700 mb-4 font-bold">Mover para:</p>
+                      <div className="space-y-1">
+                          <button 
+                              onClick={() => {
+                                if (editingPage) {
+                                  // Fix: Added missing logic for move page with LayoutGrid icon support
+                                  setEditingPage({ ...editingPage, id: showMoveModal.id });
+                                }
+                                setShowMoveModal(null);
+                              }}
+                              className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition-colors", !showMoveModal.id ? "bg-indigo-50 text-indigo-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                          >
+                              <LayoutGrid size={16} /> Sem Pasta (Raiz)
+                          </button>
+                          {folders.map(f => (
+                              <button 
+                                  key={f.id}
+                                  onClick={() => setShowMoveModal(null)}
+                                  className={clsx("w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition-colors", showMoveModal.id === f.id ? "bg-indigo-50 text-indigo-700 font-bold" : "text-slate-600 hover:bg-slate-50")}
+                              >
+                                  <LayoutGrid size={16} /> {f.name}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };
+
+const XCircleIcon = () => (
+    <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+        <X size={24} />
+    </div>
+);
+
+const CheckCircleIcon = () => (
+    <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+        <Check size={24} />
+    </div>
+);

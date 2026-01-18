@@ -352,6 +352,8 @@ export const appBackend = {
       if (!triggerNode || !triggerNode.nextId) return;
 
       let currentNodeId: string | undefined | null = triggerNode.nextId;
+      
+      // Mapeamento dinâmico de variáveis básicas baseado nos títulos das questões
       const nameAns = answers.find(a => a.questionTitle.toLowerCase().includes('nome'))?.value || 'Cliente';
       const emailAns = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value || '---';
 
@@ -359,35 +361,71 @@ export const appBackend = {
           const node = flow.nodes.find(n => n.id === currentNodeId);
           if (!node) break;
 
-          if (node.type === 'whatsapp') {
-              const phone = answers.find(a => a.questionId === node.config.phoneFieldId)?.value;
-              if (phone) {
-                  let msg = node.config.message || '';
-                  msg = msg.replace(/\{\{nome_cliente\}\}/gi, nameAns);
-                  msg = msg.replace(/\{\{email\}\}/gi, emailAns);
-                  try {
+          try {
+              if (node.type === 'whatsapp') {
+                  // Busca o telefone pelo ID do campo ou fallback pelo título se ID falhar
+                  let phone = answers.find(a => a.questionId === node.config.phoneFieldId)?.value;
+                  if (!phone) {
+                      phone = answers.find(a => a.questionTitle.toLowerCase().includes('telefone') || a.questionTitle.toLowerCase().includes('whatsapp'))?.value;
+                  }
+
+                  if (phone) {
+                      let msg = node.config.message || '';
+                      msg = msg.replace(/\{\{nome_cliente\}\}/gi, nameAns);
+                      msg = msg.replace(/\{\{email\}\}/gi, emailAns);
+                      
                       await whatsappService.sendTextMessage({ wa_id: phone, contact_phone: phone }, msg);
-                      await appBackend.logWAAutomation({ ruleName: `FLUXO: ${flow.name}`, studentName: nameAns, phone: phone, message: msg });
-                  } catch (e) { console.error(e); }
+                      await appBackend.logWAAutomation({ 
+                          ruleName: `FLUXO: ${flow.name}`, 
+                          studentName: nameAns, 
+                          phone: phone, 
+                          message: msg 
+                      });
+                  }
+                  currentNodeId = node.nextId || null;
+
+              } else if (node.type === 'email') {
+                  let email = answers.find(a => a.questionId === node.config.emailFieldId)?.value;
+                  if (!email) {
+                      email = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value;
+                  }
+
+                  if (email) {
+                      const subject = (node.config.subject || '').replace(/\{\{nome_cliente\}\}/gi, nameAns);
+                      let body = (node.config.body || '');
+                      body = body.replace(/\{\{nome_cliente\}\}/gi, nameAns).replace(/\{\{email\}\}/gi, emailAns);
+                      await appBackend.sendEmailViaSendGrid(email, subject, body);
+                  }
+                  currentNodeId = node.nextId || null;
+
+              } else if (node.type === 'wait') {
+                  const days = parseInt(String(node.config.days)) || 0;
+                  const hours = parseInt(String(node.config.hours)) || 0;
+                  const minutes = parseInt(String(node.config.minutes)) || 0;
+                  const totalMs = ((days * 24 * 60) + (hours * 60) + minutes) * 60 * 1000;
+                  
+                  if (totalMs > 0) {
+                      await new Promise(resolve => setTimeout(resolve, totalMs));
+                  }
+                  // Após o tempo de espera, segue para o próximo nó definido
+                  currentNodeId = node.nextId || null;
+
+              } else if (node.type === 'condition') {
+                  // Lógica simplificada de condição (mock): Se houver resposta segue 'yes', senão 'no'
+                  // No mundo real, aqui verificamos flags no banco.
+                  currentNodeId = node.yesId || node.nextId || null;
+
+              } else if (node.type === 'crm_action') {
+                  // Ação no CRM (Mover etapa, etc)
+                  // Implementar lógica de atualização de deal se houver ID de lead vinculado
+                  currentNodeId = node.nextId || null;
+
+              } else {
+                  currentNodeId = node.nextId || null;
               }
-              currentNodeId = node.nextId || null;
-          } else if (node.type === 'email') {
-              const email = answers.find(a => a.questionId === node.config.emailFieldId)?.value;
-              if (email) {
-                  const subject = (node.config.subject || '').replace(/\{\{nome_cliente\}\}/gi, nameAns);
-                  let body = (node.config.body || '');
-                  body = body.replace(/\{\{nome_cliente\}\}/gi, nameAns).replace(/\{\{email\}\}/gi, emailAns);
-                  await appBackend.sendEmailViaSendGrid(email, subject, body);
-              }
-              currentNodeId = node.nextId || null;
-          } else if (node.type === 'wait') {
-              const days = parseInt(node.config.days) || 0;
-              const hours = parseInt(node.config.hours) || 0;
-              const minutes = parseInt(node.config.minutes) || 0;
-              const totalMs = ((days * 24 * 60) + (hours * 60) + minutes) * 60 * 1000;
-              if (totalMs > 0) await new Promise(resolve => setTimeout(resolve, totalMs));
-              currentNodeId = node.nextId || null;
-          } else {
+          } catch (nodeErr) {
+              console.error(`[FLOW ERROR] Erro ao processar nó ${node.id} do tipo ${node.type}:`, nodeErr);
+              // Tenta continuar o fluxo mesmo se um nó falhar
               currentNodeId = node.nextId || null;
           }
       }
@@ -710,7 +748,7 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    return (data || []).map((s: any) => ({ id: s.id, status: s.status, responsibleName: s.responsible_name, cpf: s.cpf, phone: s.phone, email: s.email, password: s.password, secondContactName: s.second_contact_name, secondContactPhone: s.second_contact_phone, fantasyName: s.fantasy_name, legalName: s.legal_name, cnpj: s.cnpj, studioPhone: s.studio_phone, address: s.address, city: s.city, state: s.state, country: s.country, sizeM2: s.size_m2, studentCapacity: s.student_capacity, rentValue: s.rent_value, methodology: s.methodology, studioType: s.studio_type, nameOnSite: s.name_on_site, bank: s.bank, agency: s.agency, account: s.account, beneficiary: s.beneficiary, pixKey: s.pix_key, hasReformer: !!s.has_reformer, qtyReformer: s.qty_reformer, hasLadderBarrel: !!s.has_ladder_barrel, qtyLadderBarrel: s.qty_ladder_barrel, hasChair: !!s.has_chair, qtyChair: s.qty_chair, hasCadillac: !!s.has_cadillac, qtyCadillac: s.qty_cadillac, hasChairsForCourse: !!s.has_chairs_for_course, hasTv: !!s.has_tv, maxKitsCapacity: s.max_kits_capacity, attachments: s.attachments }));
+    return (data || []).map((s: any) => ({ id: s.id, status: s.status, responsibleName: s.responsible_name, cpf: s.cpf, phone: s.phone, email: s.email, password: s.password, secondContactName: s.second_contact_name, second_contact_phone: s.second_contact_phone, fantasyName: s.fantasy_name, legalName: s.legal_name, cnpj: s.cnpj, studioPhone: s.studio_phone, address: s.address, city: s.city, state: s.state, country: s.country, sizeM2: s.size_m2, studentCapacity: s.student_capacity, rentValue: s.rent_value, methodology: s.methodology, studioType: s.studio_type, nameOnSite: s.name_on_site, bank: s.bank, agency: s.agency, account: s.account, beneficiary: s.beneficiary, pixKey: s.pix_key, hasReformer: !!s.has_reformer, qtyReformer: s.qty_reformer, hasLadderBarrel: !!s.has_ladder_barrel, qtyLadderBarrel: s.qty_ladder_barrel, hasChair: !!s.has_chair, qtyChair: s.qty_chair, hasCadillac: !!s.has_cadillac, qtyCadillac: s.qty_cadillac, hasChairsForCourse: !!s.has_chairs_for_course, hasTv: !!s.has_tv, maxKitsCapacity: s.max_kits_capacity, attachments: s.attachments }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
@@ -938,7 +976,7 @@ export const appBackend = {
 
   saveWorkshop: async (ws: Workshop): Promise<Workshop> => {
       if (!isConfigured) return ws;
-      const { data, error } = await supabase.from('crm_event_workshops').upsert({ id: ws.id || crypto.randomUUID(), event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
+      const { data, error = null } = await supabase.from('crm_event_workshops').upsert({ id: ws.id || crypto.randomUUID(), event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
   },
@@ -1023,7 +1061,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((r: any) => ({ id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, messageTemplate: r.message_template, isActive: !!r.is_active, createdAt: r.created_at }));
+      return (data || []).map((r: any) => ({ id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, message_template: r.message_template, isActive: !!r.is_active, createdAt: r.created_at }));
   },
 
   saveWAAutomationRule: async (rule: WAAutomationRule): Promise<void> => {

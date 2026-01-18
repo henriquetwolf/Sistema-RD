@@ -134,9 +134,11 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
   const fetchHistoryLogs = async () => {
     setIsLoading(true);
     try {
+      // Filtramos mensagens onde o texto NÃO começa com "*Atendente" para excluir respostas humanas
       const { data, error } = await appBackend.client
         .from('crm_whatsapp_messages')
         .select('*, crm_whatsapp_chats(contact_name, contact_phone)')
+        .not('text', 'ilike', '*Atendente%')
         .order('created_at', { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -932,7 +934,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-3"><Database size={24} className="text-indigo-600"/> {editingItem?.id ? 'Editar Bloco' : 'Novo Bloco de Dados'}</h3>
                     <button onClick={() => setShowItemModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                 </div>
-                <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
+                <div className="p-8 overflow-y-auto custom-scrollbar">
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Título do Bloco (Resumo)</label>
                         <input 

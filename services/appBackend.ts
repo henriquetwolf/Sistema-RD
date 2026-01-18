@@ -212,7 +212,8 @@ export const appBackend = {
       fixedOwnerId: item.fixed_owner_id, 
       teamId: item.team_id, 
       targetPipeline: item.target_pipeline, 
-      targetStage: data.target_stage, 
+      // Fix: item.target_stage instead of data.target_stage
+      targetStage: item.target_stage, 
       questions: item.questions || [], 
       style: item.style || {}, 
       /* Fix: Referencing item.created_at instead of non-existent data.created_at */
@@ -236,6 +237,7 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
+      // Fix: use camelCase from FormModel interface for distributionMode and fixedOwnerId
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
       /* Fix: form.team_id does not exist on FormModel, corrected to form.teamId */
@@ -479,7 +481,7 @@ export const appBackend = {
   },
 
   getFormSubmissions: async (formId: string): Promise<any[]> => {
-    if (!isConfigured) return [];
+    if (!isConfigured) return;
     const { data, error } = await supabase.from('crm_form_submissions').select('*').eq('form_id', formId).order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
@@ -704,7 +706,7 @@ export const appBackend = {
 
   updateJobStatus: async (id: string, status: string, lastSync: string | null, lastMessage: string): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_sync_jobs').update({ status, last_sync: last_sync, last_message: lastMessage }).eq('id', id);
+    await supabase.from('crm_sync_jobs').update({ status, last_sync: lastSync, last_message: lastMessage }).eq('id', id);
   },
 
   deleteSyncJob: async (id: string): Promise<void> => {
@@ -813,7 +815,7 @@ export const appBackend = {
       title: data.title || '',
       content: data.content || '',
       city: data.city || '',
-      contractDate: data.contract_date || '',
+      contract_date: data.contract_date || '',
       status: data.status as any,
       folderId: data.folder_id,
       signers: data.signers || [],
@@ -1447,21 +1449,20 @@ export const appBackend = {
       const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((r: any) => ({
-          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, message_template: r.message_template, isActive: !!r.is_active, createdAt: r.created_at
+          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, 
+          // Fix: Mapping from r.message_template to camelCase messageTemplate
+          messageTemplate: r.message_template, 
+          isActive: !!r.is_active, createdAt: r.created_at
       }));
   },
 
   saveWAAutomationRule: async (rule: WAAutomationRule): Promise<void> => {
       if (!isConfigured) return;
       const payload = {
+          // Fix: Map from camelCase triggerType and messageTemplate to snake_case trigger_type and message_template
           id: rule.id || crypto.randomUUID(), name: rule.name, trigger_type: rule.triggerType, pipeline_name: rule.pipelineName, stage_id: rule.stageId, product_type: rule.productType, product_id: rule.productId, message_template: rule.messageTemplate, is_active: rule.isActive, created_at: rule.createdAt || new Date().toISOString()
       };
       await supabase.from('crm_wa_automations').upsert(payload);
-  },
-
-  deleteWAAutomationRule: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      await supabase.from('crm_wa_automations').delete().eq('id', id);
   },
 
   getWAAutomationLogs: async (): Promise<WAAutomationLog[]> => {
@@ -1474,6 +1475,10 @@ export const appBackend = {
   },
 
   getEmailConfig: async (): Promise<EmailConfig | null> => {
+    const local = localStorage.getItem('crm_email_config');
+    if (local) {
+      try { return JSON.parse(local); } catch (e) { return null; }
+    }
     if (!isConfigured) return null;
     try {
         const { data } = await supabase.from('crm_settings').select('value').eq('key', 'email_config').maybeSingle();
@@ -1485,6 +1490,7 @@ export const appBackend = {
   },
 
   saveEmailConfig: async (config: EmailConfig): Promise<void> => {
+    localStorage.setItem('crm_email_config', JSON.stringify(config));
     if (!isConfigured) return;
     await supabase.from('crm_settings').upsert({ key: 'email_config', value: JSON.stringify(config) }, { onConflict: 'key' });
   }

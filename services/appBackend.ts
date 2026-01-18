@@ -1,3 +1,4 @@
+
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -7,7 +8,7 @@ import {
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
-  WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow, EmailConfig
+  WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow, EmailConfig, AiConfig, AiKnowledgeItem
 } from '../types';
 import { whatsappService } from './whatsappService';
 
@@ -156,7 +157,7 @@ export const appBackend = {
       targetStage: item.target_stage, 
       questions: item.questions || [], 
       style: item.style || {}, 
-      createdAt: data.created_at, 
+      createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id
     }));
@@ -213,7 +214,7 @@ export const appBackend = {
       targetStage: item.target_stage, 
       questions: item.questions || [], 
       style: item.style || {}, 
-      createdAt: data.created_at, 
+      createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id,
       targetAudience: item.target_audience || 'all', 
@@ -340,10 +341,6 @@ export const appBackend = {
       }
   },
 
-  /**
-   * Executa a lógica de automação de fluxo associada a uma submissão.
-   * Otimizado para suportar esperas assíncronas e progressão contínua de nós.
-   */
   runFlowInstance: async (flow: AutomationFlow, answers: FormAnswer[]) => {
       const triggerNode = flow.nodes.find(n => n.type === 'trigger');
       if (!triggerNode || !triggerNode.nextId) {
@@ -351,7 +348,6 @@ export const appBackend = {
           return;
       }
 
-      // Variáveis para interpolação (fallback mais robusto para nomes compostos)
       const nameAns = answers.find(a => {
           const t = a.questionTitle.toLowerCase();
           return t === 'nome' || t === 'nome completo' || t.includes('nome');
@@ -364,7 +360,6 @@ export const appBackend = {
 
       const replaceVars = (str: string) => {
           if (!str) return '';
-          // Uso de função como segundo parâmetro do replace previne problemas com caracteres especiais ($&) no nome
           return str
               .replace(/\{\{nome_cliente\}\}/gi, () => nameAns)
               .replace(/\{\{email\}\}/gi, () => emailAns);
@@ -378,7 +373,6 @@ export const appBackend = {
           const node = flow.nodes.find(n => n.id === currentId);
           if (!node) break;
 
-          // Próximo passo padrão (atualizado ao final do ciclo)
           let nextIdToSet: string | null = node.nextId || null;
 
           try {
@@ -426,19 +420,16 @@ export const appBackend = {
                       break;
 
                   case 'condition':
-                      // Lógica de ramificação (mock simplificado)
                       nextIdToSet = answers.length > 0 ? (node.yesId || null) : (node.noId || null);
                       break;
 
                   case 'crm_action':
-                      // Ações futuras de CRM
                       break;
               }
           } catch (err) {
               console.error(`[AUTOMATION ERROR] Falha no nó ${node.id} (${node.type}):`, err);
           }
 
-          // Atualiza o cursor para a próxima iteração
           currentId = nextIdToSet;
       }
       console.log(`[AUTOMATION] Fluxo ${flow.name} finalizado.`);
@@ -473,13 +464,11 @@ export const appBackend = {
         } catch (crmErr) { console.error(crmErr); }
     }
 
-    // Disparo Assíncrono de Fluxos de Automação
     try {
         const { data: activeFlows } = await supabase.from('crm_automation_flows').select('*').eq('form_id', formId).eq('is_active', true);
         if (activeFlows && activeFlows.length > 0) {
             for (const flowData of activeFlows) {
                 const flow: AutomationFlow = { id: flowData.id, name: flowData.name, description: flowData.description, formId: flowData.form_id, isActive: flowData.is_active, nodes: flowData.nodes || [], createdAt: flowData.created_at, updatedAt: flowData.updated_at };
-                // Executa o fluxo em background
                 appBackend.runFlowInstance(flow, answers);
             }
         }
@@ -815,7 +804,6 @@ export const appBackend = {
 
   saveContract: async (contract: Contract): Promise<void> => {
     if (!isConfigured) return;
-    // FIX: Changed contract.contract_date to contract.contractDate to match Contract type
     await supabase.from('crm_contracts').upsert({ id: contract.id || crypto.randomUUID(), title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contractDate, status: contract.status, folder_id: contract.folderId, signers: contract.signers, created_at: contract.createdAt || new Date().toISOString() });
   },
 
@@ -1029,7 +1017,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
       if (error) throw error;
-      return (data || []).map((i: any) => ({ id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studio_id: i.studio_id, tracking_code: i.tracking_code, observations: i.observations, conference_date: i.conference_date || null, attachments: i.attachments, createdAt: i.created_at }));
+      return (data || []).map((i: any) => ({ id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studioId: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conferenceDate: i.conference_date || null, attachments: i.attachments, createdAt: i.created_at }));
   },
 
   saveInventoryRecord: async (rec: InventoryRecord): Promise<void> => {
@@ -1046,7 +1034,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((n: any) => ({ id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsible_agent: n.responsible_agent, identifier_code: n.identifier_code, full_name: n.full_name, product_name: n.product_name, original_value: n.original_value, payment_method: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at }));
+      return (data || []).map((n: any) => ({ id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifierCode: n.identifier_code, fullName: n.full_name, productName: n.product_name, originalValue: n.original_value, paymentMethod: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucherLink1: n.voucher_link_1, testDate: n.test_date, voucherLink2: n.voucher_link_2, voucherLink3: n.voucher_link_3, boletosLink: n.boletos_link, negotiationReference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at }));
   },
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
@@ -1081,7 +1069,6 @@ export const appBackend = {
 
   saveWAAutomationRule: async (rule: WAAutomationRule): Promise<void> => {
       if (!isConfigured) return;
-      // FIX: Changed rule.message_template to rule.messageTemplate to match WAAutomationRule type
       await supabase.from('crm_wa_automations').upsert({ id: rule.id || crypto.randomUUID(), name: rule.name, trigger_type: rule.triggerType, pipeline_name: rule.pipelineName, stage_id: rule.stageId, product_type: rule.productType, product_id: rule.productId, message_template: rule.messageTemplate, is_active: rule.isActive, created_at: rule.createdAt || new Date().toISOString() });
   },
 
@@ -1112,5 +1099,46 @@ export const appBackend = {
     localStorage.setItem('crm_email_config', JSON.stringify(config));
     if (!isConfigured) return;
     await supabase.from('crm_settings').upsert({ key: 'email_config', value: JSON.stringify(config) }, { onConflict: 'key' });
+  },
+
+  getAiConfig: async (): Promise<AiConfig> => {
+      if (!isConfigured) return { id: 'default', systemPrompt: '', isActive: false, temperature: 0.7, updatedAt: '' };
+      const { data } = await supabase.from('crm_ai_config').select('*').limit(1).maybeSingle();
+      if (data) return { id: data.id, systemPrompt: data.system_prompt, isActive: !!data.is_active, temperature: data.temperature, updatedAt: data.updated_at };
+      return { id: 'default', systemPrompt: 'Você é um assistente virtual da VOLL Pilates.', isActive: false, temperature: 0.7, updatedAt: '' };
+  },
+
+  saveAiConfig: async (config: Partial<AiConfig>): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_ai_config').upsert({
+          id: config.id || 'default',
+          system_prompt: config.systemPrompt,
+          is_active: config.isActive,
+          temperature: config.temperature,
+          updated_at: new Date().toISOString()
+      });
+  },
+
+  getAiKnowledgeItems: async (): Promise<AiKnowledgeItem[]> => {
+      if (!isConfigured) return [];
+      const { data } = await supabase.from('crm_ai_knowledge').select('*').order('created_at', { ascending: false });
+      return (data || []).map((i: any) => ({
+          id: i.id, title: i.title, content: i.content, createdAt: i.created_at
+      }));
+  },
+
+  saveAiKnowledgeItem: async (item: AiKnowledgeItem): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_ai_knowledge').upsert({
+          id: item.id || crypto.randomUUID(),
+          title: item.title,
+          content: item.content,
+          created_at: item.createdAt || new Date().toISOString()
+      });
+  },
+
+  deleteAiKnowledgeItem: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_ai_knowledge').delete().eq('id', id);
   }
 };

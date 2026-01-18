@@ -264,7 +264,6 @@ export interface EventBlock {
 }
 
 export interface Workshop {
-  /* Added id property to match Workshop usage in services/appBackend.ts */
   id: string;
   eventId: string;
   blockId: string;
@@ -685,4 +684,19 @@ export interface EmailConfig {
   apiKey: string;
   senderEmail: string;
   senderName: string;
+}
+
+export interface AiKnowledgeItem {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface AiConfig {
+  id: string;
+  systemPrompt: string;
+  isActive: boolean;
+  temperature: number;
+  updatedAt: string;
 }

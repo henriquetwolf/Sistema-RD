@@ -255,7 +255,7 @@ export const appBackend = {
       description: survey.description || null, 
       campaign: survey.campaign || null, 
       is_lead_capture: !!survey.isLeadCapture, 
-      distribution_mode: survey.distributionMode || 'fixed', 
+      distribution_mode: survey.distribution_mode || 'fixed', 
       fixed_owner_id: survey.fixedOwnerId || null, 
       team_id: survey.teamId || null, 
       target_pipeline: survey.targetPipeline || null, 
@@ -340,92 +340,93 @@ export const appBackend = {
       }
   },
 
+  /**
+   * Executa a lógica de automação de fluxo associada a uma submissão.
+   * Otimizado para suportar esperas assíncronas e progressão contínua de nós.
+   */
   runFlowInstance: async (flow: AutomationFlow, answers: FormAnswer[]) => {
       const triggerNode = flow.nodes.find(n => n.type === 'trigger');
       if (!triggerNode || !triggerNode.nextId) {
-          console.debug("[FLOW] Gatilho sem conexão de saída.");
+          console.debug("[FLOW] Gatilho sem conexão ou fim prematuro.");
           return;
       }
 
-      let currentNodeId: string | undefined | null = triggerNode.nextId;
-      
+      // Variáveis para interpolação (fallback)
       const nameAns = answers.find(a => a.questionTitle.toLowerCase().includes('nome'))?.value || 'Cliente';
       const emailAns = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value || '---';
 
-      console.debug(`[FLOW] Iniciando fluxo: ${flow.name}`);
+      console.log(`[AUTOMATION] Iniciando fluxo: ${flow.name}`);
 
-      while (currentNodeId) {
-          const node = flow.nodes.find(n => n.id === currentNodeId);
+      let currentId: string | null = triggerNode.nextId;
+
+      while (currentId) {
+          const node = flow.nodes.find(n => n.id === currentId);
           if (!node) break;
 
+          // Próximo passo padrão
+          let nextIdToSet: string | null = node.nextId || null;
+
           try {
-              if (node.type === 'whatsapp') {
-                  let phone = answers.find(a => a.questionId === node.config.phoneFieldId)?.value;
-                  if (!phone) {
-                      phone = answers.find(a => a.questionTitle.toLowerCase().includes('telefone') || a.questionTitle.toLowerCase().includes('whatsapp'))?.value;
-                  }
+              switch (node.type) {
+                  case 'whatsapp':
+                      let waPhone = answers.find(a => a.questionId === node.config?.phoneFieldId)?.value;
+                      if (!waPhone) {
+                          waPhone = answers.find(a => a.questionTitle.toLowerCase().includes('telefone') || a.questionTitle.toLowerCase().includes('whatsapp'))?.value;
+                      }
 
-                  if (phone) {
-                      const cleanPhone = String(phone).replace(/\D/g, '');
-                      let msg = node.config.message || '';
-                      msg = msg.replace(/\{\{nome_cliente\}\}/gi, nameAns);
-                      msg = msg.replace(/\{\{email\}\}/gi, emailAns);
+                      if (waPhone) {
+                          const cleanDigits = String(waPhone).replace(/\D/g, '');
+                          let text = (node.config?.message || '').replace(/\{\{nome_cliente\}\}/gi, nameAns).replace(/\{\{email\}\}/gi, emailAns);
+                          
+                          console.log(`[AUTOMATION] Disparando WhatsApp p/ ${cleanDigits}`);
+                          await whatsappService.sendTextMessage({ wa_id: cleanDigits, contact_phone: cleanDigits }, text);
+                          await appBackend.logWAAutomation({ ruleName: `FLUXO: ${flow.name}`, studentName: nameAns, phone: cleanDigits, message: text });
+                      }
+                      break;
+
+                  case 'email':
+                      let targetEmail = answers.find(a => a.questionId === node.config?.emailFieldId)?.value;
+                      if (!targetEmail) {
+                          targetEmail = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value;
+                      }
                       
-                      console.debug(`[FLOW] Disparando WhatsApp para: ${cleanPhone}`);
-                      await whatsappService.sendTextMessage({ wa_id: cleanPhone, contact_phone: cleanPhone }, msg);
-                      await appBackend.logWAAutomation({ 
-                          ruleName: `FLUXO: ${flow.name}`, 
-                          studentName: nameAns, 
-                          phone: cleanPhone, 
-                          message: msg 
-                      });
-                  }
-                  currentNodeId = node.nextId || null;
+                      if (targetEmail) {
+                          const subject = (node.config?.subject || '').replace(/\{\{nome_cliente\}\}/gi, nameAns);
+                          let body = (node.config?.body || '').replace(/\{\{nome_cliente\}\}/gi, nameAns).replace(/\{\{email\}\}/gi, emailAns);
+                          await appBackend.sendEmailViaSendGrid(targetEmail, subject, body);
+                      }
+                      break;
 
-              } else if (node.type === 'email') {
-                  let email = answers.find(a => a.questionId === node.config.emailFieldId)?.value;
-                  if (!email) {
-                      email = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value;
-                  }
+                  case 'wait':
+                      const d = parseInt(node.config?.days) || 0;
+                      const h = parseInt(node.config?.hours) || 0;
+                      const m = parseInt(node.config?.minutes) || 0;
+                      const ms = ((d * 1440) + (h * 60) + m) * 60000;
+                      
+                      if (ms > 0) {
+                          console.log(`[AUTOMATION] Aguardando ${ms}ms (${m} min)...`);
+                          await new Promise(resolve => setTimeout(resolve, ms));
+                          console.log(`[AUTOMATION] Retomando fluxo após espera.`);
+                      }
+                      break;
 
-                  if (email) {
-                      const subject = (node.config.subject || '').replace(/\{\{nome_cliente\}\}/gi, nameAns);
-                      let body = (node.config.body || '');
-                      body = body.replace(/\{\{nome_cliente\}\}/gi, nameAns).replace(/\{\{email\}\}/gi, emailAns);
-                      await appBackend.sendEmailViaSendGrid(email, subject, body);
-                  }
-                  currentNodeId = node.nextId || null;
+                  case 'condition':
+                      // Lógica de ramificação
+                      nextIdToSet = answers.length > 0 ? (node.yesId || null) : (node.noId || null);
+                      break;
 
-              } else if (node.type === 'wait') {
-                  const days = parseInt(String(node.config.days)) || 0;
-                  const hours = parseInt(String(node.config.hours)) || 0;
-                  const minutes = parseInt(String(node.config.minutes)) || 0;
-                  const totalMs = ((days * 24 * 60) + (hours * 60) + minutes) * 60 * 1000;
-                  
-                  if (totalMs > 0) {
-                      console.debug(`[FLOW] Aguardando ${totalMs}ms...`);
-                      await new Promise(resolve => setTimeout(resolve, totalMs));
-                  }
-                  
-                  // Crucial: Re-buscar o nó após o await para garantir que pegamos o nextId correto e continuar
-                  const sameNode = flow.nodes.find(n => n.id === currentNodeId);
-                  currentNodeId = sameNode?.nextId || null;
-
-              } else if (node.type === 'condition') {
-                  currentNodeId = node.yesId || node.nextId || null;
-
-              } else if (node.type === 'crm_action') {
-                  currentNodeId = node.nextId || null;
-
-              } else {
-                  currentNodeId = node.nextId || null;
+                  case 'crm_action':
+                      // Placeholder para ações futuras no CRM
+                      break;
               }
-          } catch (nodeErr) {
-              console.error(`[FLOW ERROR] Erro no nó ${node.id}:`, nodeErr);
-              currentNodeId = node.nextId || null;
+          } catch (err) {
+              console.error(`[AUTOMATION ERROR] Falha no nó ${node.id} (${node.type}):`, err);
           }
+
+          // Atualiza o cursor para a próxima iteração
+          currentId = nextIdToSet;
       }
-      console.debug(`[FLOW] Fluxo ${flow.name} finalizado.`);
+      console.log(`[AUTOMATION] Fluxo ${flow.name} finalizado.`);
   },
 
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
@@ -457,11 +458,13 @@ export const appBackend = {
         } catch (crmErr) { console.error(crmErr); }
     }
 
+    // Disparo Assíncrono de Fluxos de Automação
     try {
         const { data: activeFlows } = await supabase.from('crm_automation_flows').select('*').eq('form_id', formId).eq('is_active', true);
         if (activeFlows && activeFlows.length > 0) {
             for (const flowData of activeFlows) {
                 const flow: AutomationFlow = { id: flowData.id, name: flowData.name, description: flowData.description, formId: flowData.form_id, isActive: flowData.is_active, nodes: flowData.nodes || [], createdAt: flowData.created_at, updatedAt: flowData.updated_at };
+                // Chama sem await para não bloquear a resposta visual do formulário (rodando em "background")
                 appBackend.runFlowInstance(flow, answers);
             }
         }
@@ -712,9 +715,11 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
+    // FIX: Mapping camelCase properties from Partial<SavedPreset> to snake_case for Supabase payload
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
+    // FIX: Mapping snake_case properties from Supabase result back to camelCase for SavedPreset interface
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
   },
 
@@ -797,7 +802,7 @@ export const appBackend = {
 
   saveContract: async (contract: Contract): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_contracts').upsert({ id: contract.id || crypto.randomUUID(), title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contractDate, status: contract.status, folder_id: contract.folderId, signers: contract.signers, created_at: contract.createdAt || new Date().toISOString() });
+    await supabase.from('crm_contracts').upsert({ id: contract.id || crypto.randomUUID(), title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contract_date, status: contract.status, folder_id: contract.folderId, signers: contract.signers, created_at: contract.createdAt || new Date().toISOString() });
   },
 
   sendContractEmailSimulation: async (email: string, name: string, title: string): Promise<void> => {
@@ -846,7 +851,7 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_certificates').upsert({ id: cert.id || crypto.randomUUID(), title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt || new Date().toISOString() });
+    await supabase.from('crm_certificates').upsert({ id: cert.id || crypto.randomUUID(), title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.body_text, layout_config: cert.layoutConfig, created_at: cert.createdAt || new Date().toISOString() });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -902,7 +907,7 @@ export const appBackend = {
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-      return (data || []).map((m: any) => ({ id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role, content: m.content, attachmentUrl: m.attachment_url, attachmentName: m.attachment_name, createdAt: m.created_at }));
+      return (data || []).map((m: any) => ({ id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role, content: m.content, attachment_url: m.attachment_url, attachment_name: m.attachment_name, createdAt: m.created_at }));
   },
 
   addSupportMessage: async (msg: Partial<SupportMessage>): Promise<void> => {
@@ -914,7 +919,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data: cert } = await supabase.from('crm_student_certificates').select('*, crm_deals(company_name, contact_name, course_city), crm_certificates(*)').eq('hash', hash).maybeSingle();
       if (!cert) return null;
-      return { studentName: cert.crm_deals?.company_name || cert.crm_deals?.contact_name || 'Aluno', studentCity: cert.crm_deals?.course_city || 'Brasil', template: { id: cert.crm_certificates.id, title: cert.crm_certificates.title, background_data: cert.crm_certificates.background_data, back_background_data: cert.crm_certificates.back_background_data, linked_product_id: cert.crm_certificates.linked_product_id, body_text: cert.crm_certificates.body_text, layout_config: cert.crm_certificates.layout_config, createdAt: cert.crm_certificates.created_at }, issuedAt: cert.issued_at };
+      return { studentName: cert.crm_deals?.company_name || cert.crm_deals?.contact_name || 'Aluno', studentCity: cert.crm_deals?.course_city || 'Brasil', template: { id: cert.crm_certificates.id, title: cert.crm_certificates.title, background_data: cert.crm_certificates.background_data, back_background_data: cert.crm_certificates.back_background_data, linked_product_id: cert.crm_certificates.linked_product_id, body_text: cert.crm_certificates.body_text, layout_config: cert.layout_config, createdAt: cert.crm_certificates.created_at }, issuedAt: cert.issued_at };
   },
 
   getExternalCertificates: async (studentId: string): Promise<ExternalCertificate[]> => {
@@ -954,7 +959,7 @@ export const appBackend = {
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
       if (!isConfigured) return block;
-      const { data, error } = await supabase.from('crm_event_blocks').upsert({ id: block.id || crypto.randomUUID(), event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections }).select().single();
+      const { data, error = null } = await supabase.from('crm_event_blocks').upsert({ id: block.id || crypto.randomUUID(), event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections }).select().single();
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
   },
@@ -1010,7 +1015,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
       if (error) throw error;
-      return (data || []).map((i: any) => ({ id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studioId: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conferenceDate: i.conference_date || null, attachments: i.attachments, createdAt: i.created_at }));
+      return (data || []).map((i: any) => ({ id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studio_id: i.studio_id, tracking_code: i.tracking_code, observations: i.observations, conference_date: i.conference_date || null, attachments: i.attachments, createdAt: i.created_at }));
   },
 
   saveInventoryRecord: async (rec: InventoryRecord): Promise<void> => {

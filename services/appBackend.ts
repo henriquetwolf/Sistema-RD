@@ -1,4 +1,5 @@
 
+
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -8,7 +9,7 @@ import {
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
-  WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow
+  WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow, EmailConfig
 } from '../types';
 import { whatsappService } from './whatsappService';
 
@@ -215,7 +216,6 @@ export const appBackend = {
       targetStage: item.target_stage, 
       questions: item.questions || [], 
       style: item.style || {}, 
-      /* Fix: Referencing item.created_at instead of non-existent data.created_at */
       createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id,
@@ -238,7 +238,6 @@ export const appBackend = {
       is_lead_capture: !!form.isLeadCapture, 
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
-      /* Fix: form.team_id does not exist on FormModel, corrected to form.teamId */
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
@@ -393,7 +392,6 @@ export const appBackend = {
         const { data: activeFlows } = await supabase
             .from('crm_automation_flows')
             .select('*')
-            /* Fix: Changed flowId to formId as flowId was not defined */
             .eq('form_id', formId)
             .eq('is_active', true);
 
@@ -632,7 +630,7 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    return (data || []).map((j: any) => ({ id: j.id, name: j.name || 'Sincronização', sheet_url: j.sheet_url || '', config: j.config || {}, lastSync: j.last_sync, status: j.status || 'idle', lastMessage: j.last_message || '', active: !!j.active, /* Fix: Correct mapping to intervalMinutes camelCase property */ intervalMinutes: j.interval_minutes || 5, createdBy: j.created_by, createdAt: j.created_at }));
+    return (data || []).map((j: any) => ({ id: j.id, name: j.name || 'Sincronização', sheet_url: j.sheet_url || '', config: j.config || {}, lastSync: j.last_sync, status: j.status || 'idle', lastMessage: j.last_message || '', active: !!j.active, intervalMinutes: j.interval_minutes || 5, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
@@ -724,12 +722,11 @@ export const appBackend = {
   getPresets: async (): Promise<SavedPreset[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from(PRESETS_TABLE).select('*').order('name');
-    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Preset', url: item.url || '', key: item.key || '', tableName: item.table_name || '', primaryKey: item.primary_key || '', /* Fix: Correct mapping to intervalMinutes camelCase property */ intervalMinutes: item.interval_minutes || 5, createdByName: item.created_by_name }));
+    return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Preset', url: item.url || '', key: item.key || '', tableName: item.table_name || '', primaryKey: item.primary_key || '', intervalMinutes: item.interval_minutes || 5, createdByName: item.created_by_name }));
   },
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    /* Fix: Correctly mapping createdByName from Partial<SavedPreset> to DB column created_by_name */
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
@@ -805,38 +802,37 @@ export const appBackend = {
         phone: s.phone,
         email: s.email,
         password: s.password,
-        second_contact_name: s.second_contact_name,
-        second_contact_phone: s.second_contact_phone,
+        secondContactName: s.second_contact_name,
+        secondContactPhone: s.second_contact_phone,
         fantasyName: s.fantasy_name,
-        legal_name: s.legal_name,
-        cnpj: s.cnpj,
-        studio_phone: s.studio_phone,
+        legalName: s.legal_name,
+        studioPhone: s.studio_phone,
         address: s.address,
         city: s.city,
         state: s.state,
         country: s.country,
-        size_m2: s.size_m2,
-        student_capacity: s.student_capacity,
-        rent_value: s.rent_value,
+        sizeM2: s.size_m2,
+        studentCapacity: s.student_capacity,
+        rentValue: s.rent_value,
         methodology: s.methodology,
-        studio_type: s.studio_type,
-        name_on_site: s.name_on_site,
+        studioType: s.studio_type,
+        nameOnSite: s.name_on_site,
         bank: s.bank,
         agency: s.agency,
         account: s.account,
         beneficiary: s.beneficiary,
-        pix_key: s.pix_key,
-        has_reformer: !!s.has_reformer,
-        qty_reformer: s.qty_reformer,
-        has_ladder_barrel: !!s.has_ladder_barrel,
-        qty_ladder_barrel: s.qty_ladder_barrel,
-        has_chair: !!s.has_chair,
-        qty_chair: s.qty_chair,
-        has_cadillac: !!s.has_cadillac,
-        qty_cadillac: s.qty_cadillac,
-        has_chairs_for_course: !!s.has_chairs_for_course,
-        has_tv: !!s.has_tv,
-        max_kits_capacity: s.max_kits_capacity,
+        pixKey: s.pix_key,
+        hasReformer: !!s.has_reformer,
+        qtyReformer: s.qty_reformer,
+        hasLadderBarrel: !!s.has_ladder_barrel,
+        qtyLadderBarrel: s.qty_ladder_barrel,
+        hasChair: !!s.has_chair,
+        qtyChair: s.qty_chair,
+        hasCadillac: !!s.has_cadillac,
+        qtyCadillac: s.qty_cadillac,
+        hasChairsForCourse: !!s.has_chairs_for_course,
+        hasTv: !!s.has_tv,
+        maxKitsCapacity: s.max_kits_capacity,
         attachments: s.attachments
     }));
   },
@@ -1176,7 +1172,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
       return (data || []).map((m: any) => ({
-          id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role, content: m.content, attachmentUrl: m.attachment_url, attachmentName: m.attachment_name, createdAt: m.created_at
+          id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role, content: m.content, attachment_url: m.attachment_url, attachment_name: m.attachment_name, createdAt: m.created_at
       }));
   },
 
@@ -1282,7 +1278,6 @@ export const appBackend = {
       const payload = { id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots };
       const { data, error } = await supabase.from('crm_event_workshops').upsert(payload).select().single();
       if (error) throw error;
-      /* Fix: Changed property name block_id to blockId in return object to match Workshop interface */
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
   },
 
@@ -1324,7 +1319,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
       return (data || []).map((i: any) => ({
-          id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studioId: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conference_date: i.conference_date, attachments: i.attachments, createdAt: i.created_at
+          id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registration_date: i.registration_date, studio_id: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conference_date: i.conference_date, attachments: i.attachments, createdAt: i.created_at
       }));
   },
 
@@ -1364,7 +1359,8 @@ export const appBackend = {
 
   getSupportTickets: async (): Promise<SupportTicket[]> => {
       if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_support_tickets').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('crm_support_tickets').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
       return (data || []).map((t: any) => ({
           id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role, targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role, subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, assignedId: t.assigned_id, assignedName: t.assigned_name, createdAt: t.created_at, updatedAt: t.updated_at
       }));
@@ -1378,22 +1374,21 @@ export const appBackend = {
 
   getWAAutomationRules: async (): Promise<WAAutomationRule[]> => {
       if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
       return (data || []).map((r: any) => ({
-          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, /* Fix: WAAutomationRule uses messageTemplate not message_template */ messageTemplate: r.message_template, isActive: !!r.is_active, createdAt: r.created_at
+          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, messageTemplate: r.message_template, isActive: !!r.is_active, createdAt: r.created_at
       }));
   },
 
   saveWAAutomationRule: async (rule: WAAutomationRule): Promise<void> => {
       if (!isConfigured) return;
       const payload = {
-          /* Fix: rule.message_template corrected to rule.messageTemplate to match WAAutomationRule interface */
           id: rule.id || crypto.randomUUID(), name: rule.name, trigger_type: rule.triggerType, pipeline_name: rule.pipelineName, stage_id: rule.stageId, product_type: rule.productType, product_id: rule.productId, message_template: rule.messageTemplate, is_active: rule.isActive, created_at: rule.createdAt || new Date().toISOString()
       };
       await supabase.from('crm_wa_automations').upsert(payload);
   },
 
-  /* Added deleteWAAutomationRule method to fix error in components/WhatsAppAutomation.tsx */
   deleteWAAutomationRule: async (id: string): Promise<void> => {
       if (!isConfigured) return;
       await supabase.from('crm_wa_automations').delete().eq('id', id);
@@ -1401,9 +1396,26 @@ export const appBackend = {
 
   getWAAutomationLogs: async (): Promise<WAAutomationLog[]> => {
       if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
+      const { data, error = null } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
       return (data || []).map((l: any) => ({
           id: l.id, ruleName: l.rule_name, studentName: l.student_name, phone: l.phone, message: l.message, createdAt: l.created_at
       }));
+  },
+
+  getEmailConfig: async (): Promise<EmailConfig | null> => {
+    if (!isConfigured) return null;
+    try {
+        const { data } = await supabase.from('crm_settings').select('value').eq('key', 'email_config').maybeSingle();
+        if (data?.value) {
+          return JSON.parse(data.value);
+        }
+    } catch (e) { return null; }
+    return null;
+  },
+
+  saveEmailConfig: async (config: EmailConfig): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_settings').upsert({ key: 'email_config', value: JSON.stringify(config) }, { onConflict: 'key' });
   }
 };

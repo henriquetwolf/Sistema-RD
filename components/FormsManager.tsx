@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer, FormFolder, AutomationFlow, WAAutomationLog } from '../types';
+import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer, FormFolder, AutomationFlow, WAAutomationLog, EmailConfig } from '../types';
 import { FormViewer } from './FormViewer';
 import { AutomationFlowEditor } from './AutomationFlowEditor';
 import { 
@@ -110,6 +110,15 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       isConnected: false
   });
 
+  // Email Config States
+  const [showEmailConfig, setShowEmailConfig] = useState(false);
+  const [isSavingEmailConfig, setIsSavingEmailConfig] = useState(false);
+  const [emailConfig, setEmailConfig] = useState<EmailConfig>({
+    apiKey: '',
+    senderEmail: '',
+    senderName: 'VOLL Pilates'
+  });
+
   const webhookUrlDisplay = "https://wfrzsnwisypmgsbeccfj.supabase.co/functions/v1/rapid-service";
 
   useEffect(() => { 
@@ -118,6 +127,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
     loadFolders(); 
     loadMetadata(); 
     loadWAConfig(); 
+    loadEmailConfig();
   }, []);
 
   useEffect(() => {
@@ -143,6 +153,13 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
     if (c) {
         setWaConfig(prev => ({ ...prev, ...c }));
         checkWARealStatus(c);
+    }
+  };
+
+  const loadEmailConfig = async () => {
+    const c = await appBackend.getEmailConfig();
+    if (c) {
+      setEmailConfig(c);
     }
   };
 
@@ -180,6 +197,19 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
         alert("Configurações do WhatsApp salvas!");
         checkWARealStatus(sanitizedConfig);
     } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsSavingWAConfig(false); }
+  };
+
+  const handleSaveEmailConfig = async () => {
+    setIsSavingEmailConfig(true);
+    try {
+      await appBackend.saveEmailConfig(emailConfig);
+      setShowEmailConfig(false);
+      alert("Configurações de E-mail salvas!");
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
+    } finally {
+      setIsSavingEmailConfig(false);
+    }
   };
 
   const handleConnectWAEvolution = async () => {
@@ -678,6 +708,12 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                     >
                         <Settings size={16} /> Configurar WhatsApp
                     </button>
+                    <button 
+                        onClick={() => setShowEmailConfig(true)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
+                    >
+                        <Mail size={16} /> Configurar E-mail
+                    </button>
                     <div className={clsx("p-3 rounded-xl border flex items-center justify-between transition-all", waConfig.isConnected ? "bg-teal-50 border-teal-100" : "bg-red-50 border-red-100")}>
                         <div className="flex items-center gap-2">
                             <div className={clsx("w-1.5 h-1.5 rounded-full", waConfig.isConnected ? "bg-teal-500 animate-pulse" : "bg-red-500")}></div>
@@ -806,7 +842,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       )}
 
       {showMoveModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
                   <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                       <h3 className="font-bold text-slate-800">Mover Formulário</h3>
@@ -870,7 +906,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
           </div>
       )}
 
-      {/* WHATSAPP CONFIG MODAL (Copy from Atendimento) */}
+      {/* WHATSAPP CONFIG MODAL */}
       {showWAConfig && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
@@ -903,6 +939,62 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                       </div>
                   </div>
                   <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-[2rem]"><button onClick={handleSaveWAConfig} disabled={isSavingWAConfig} className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl active:scale-95 transition-all flex items-center gap-2">{isSavingWAConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Configurações</button></div>
+              </div>
+          </div>
+      )}
+
+      {/* EMAIL CONFIG MODAL */}
+      {showEmailConfig && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
+                  <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 shrink-0 flex justify-between items-center">
+                      <div className="flex items-center gap-3"><Mail className="text-indigo-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Configuração SendGrid API</h3></div>
+                      <button onClick={() => setShowEmailConfig(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
+                  </div>
+                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 flex-1">
+                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex gap-3 text-xs text-blue-800 mb-2">
+                        <Info size={16} className="shrink-0" />
+                        <p>Configure sua chave do SendGrid para disparar e-mails automáticos nos fluxos.</p>
+                      </div>
+                      <div className="space-y-4">
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">SendGrid API Key</label>
+                            <input 
+                              type="password" 
+                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold" 
+                              value={emailConfig.apiKey} 
+                              onChange={e => setEmailConfig({...emailConfig, apiKey: e.target.value})} 
+                              placeholder="SG.xxxxxxxxxxxxxx" 
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">E-mail do Remetente (Verified Sender)</label>
+                            <input 
+                              type="email" 
+                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold" 
+                              value={emailConfig.senderEmail} 
+                              onChange={e => setEmailConfig({...emailConfig, senderEmail: e.target.value})} 
+                              placeholder="contato@seudominio.com" 
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nome de Exibição</label>
+                            <input 
+                              type="text" 
+                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold" 
+                              value={emailConfig.senderName} 
+                              onChange={e => setEmailConfig({...emailConfig, senderName: e.target.value})} 
+                              placeholder="VOLL Pilates Group" 
+                            />
+                          </div>
+                      </div>
+                  </div>
+                  <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-[2rem]">
+                    <button onClick={() => setShowEmailConfig(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm transition-all">Cancelar</button>
+                    <button onClick={handleSaveEmailConfig} disabled={isSavingEmailConfig} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl active:scale-95 disabled:opacity-50 flex items-center gap-2">
+                      {isSavingEmailConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Configurações
+                    </button>
+                  </div>
               </div>
           </div>
       )}

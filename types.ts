@@ -680,3 +680,9 @@ export interface LandingPageContent {
   selectedFormId?: string;
   ctaLink?: string;
 }
+
+export interface EmailConfig {
+  apiKey: string;
+  senderEmail: string;
+  senderName: string;
+}

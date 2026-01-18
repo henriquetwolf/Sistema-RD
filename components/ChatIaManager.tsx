@@ -6,7 +6,7 @@ import {
   Database, Layout, Kanban, Sliders, Globe, RefreshCw,
   CheckCircle2, Smartphone, Wifi, WifiOff, Link2, Copy,
   MessageCircle, GraduationCap, Target, Users, UserCheck, ArrowRightLeft,
-  Check
+  Check, History, Clock
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { appBackend, Pipeline } from '../services/appBackend';
@@ -28,7 +28,7 @@ interface WAConfig {
 }
 
 export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
-  const [activeTab, setActiveTab] = useState<'config' | 'knowledge' | 'simulator' | 'whatsapp' | 'agent'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'knowledge' | 'simulator' | 'whatsapp' | 'agent' | 'history'>('config');
   const [config, setConfig] = useState<AiConfig>({ 
     id: 'default', 
     systemPrompt: '', 
@@ -47,6 +47,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [collaborators, setCollaborators] = useState<any[]>([]);
+  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -85,6 +86,12 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
   }, []);
 
   useEffect(() => {
+    if (activeTab === 'history') {
+      fetchHistoryLogs();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [simMessages]);
 
@@ -117,6 +124,23 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
       setPipelines(pipesRes || []);
       setTeams(teamsRes.data || []);
       setCollaborators(collabRes.data || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchHistoryLogs = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await appBackend.client
+        .from('crm_whatsapp_messages')
+        .select('*, crm_whatsapp_chats(contact_name, contact_phone)')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      setHistoryLogs(data || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -162,7 +186,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
   };
 
   const handleSaveWAConfig = async () => {
-    setIsSavingWAConfig(true);
+    setIsLoading(true);
     try {
         const sanitizedConfig = {
             ...waConfig,
@@ -171,15 +195,12 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
             apiKey: waConfig.apiKey.trim(),
             pairingNumber: waConfig.pairingNumber.trim()
         };
-        // Salva as credenciais do WhatsApp
         await appBackend.saveWhatsAppConfig(sanitizedConfig);
-        // Garante que o status da IA também seja persistido para que a Edge Function saiba que deve responder
         await appBackend.saveAiConfig(config);
-        
         setWaConfig(sanitizedConfig);
         alert("Configurações salvas com sucesso!");
         checkRealStatus(sanitizedConfig);
-    } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsSavingWAConfig(false); }
+    } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsLoading(false); }
   };
 
   const handleConnectWAEvolution = async () => {
@@ -370,6 +391,9 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
           </button>
           <button onClick={() => setActiveTab('whatsapp')} className={clsx("px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'whatsapp' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>
             <MessageCircle size={14}/> Config. WhatsApp
+          </button>
+          <button onClick={() => setActiveTab('history')} className={clsx("px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'history' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>
+            <History size={14}/> Histórico
           </button>
           <button onClick={() => setActiveTab('simulator')} className={clsx("px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'simulator' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>
             <Zap size={14}/> Simulador
@@ -697,10 +721,10 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
 
                             <button 
                                 onClick={handleSaveWAConfig} 
-                                disabled={isSavingWAConfig}
+                                disabled={isLoading}
                                 className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
                             >
-                                {isSavingWAConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Credenciais
+                                {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Credenciais
                             </button>
                         </div>
 
@@ -753,6 +777,68 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                     </div>
                 </div>
             </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-6 animate-in slide-in-from-right-4">
+             <div className="flex items-center justify-between border-b pb-6">
+                <div>
+                    <h3 className="text-lg font-black text-slate-800">Histórico de Atendimento IA</h3>
+                    <p className="text-xs text-slate-500 font-medium">Últimas interações processadas pelo robô e enviadas ao WhatsApp.</p>
+                </div>
+                <button onClick={fetchHistoryLogs} className="p-2 text-slate-400 hover:text-indigo-600 transition-all rounded-xl hover:bg-slate-100">
+                    <RefreshCw size={20} className={isLoading ? "animate-spin" : ""} />
+                </button>
+             </div>
+
+             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm border-collapse">
+                        <thead className="bg-slate-50">
+                            <tr className="border-b border-slate-100">
+                                <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Data/Hora</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Remetente</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Contato / Telefone</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Mensagem Enviada</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {isLoading && historyLogs.length === 0 ? (
+                                <tr><td colSpan={4} className="py-20 text-center"><Loader2 className="animate-spin text-indigo-600 mx-auto" /></td></tr>
+                            ) : historyLogs.length === 0 ? (
+                                <tr><td colSpan={4} className="py-20 text-center text-slate-300 italic font-medium">Nenhum log de atendimento encontrado.</td></tr>
+                            ) : historyLogs.map((log) => (
+                                <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex flex-col">
+                                            <span className="text-[11px] font-bold text-slate-600">{new Date(log.created_at).toLocaleDateString()}</span>
+                                            <span className="text-[9px] text-slate-400 font-black uppercase">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className={clsx(
+                                            "text-[9px] font-black px-2 py-0.5 rounded border uppercase tracking-widest",
+                                            log.sender_type === 'agent' ? "bg-indigo-50 text-indigo-700 border-indigo-100" : "bg-slate-50 text-slate-600 border-slate-200"
+                                        )}>
+                                            {log.sender_type === 'agent' ? 'Robô IA' : log.sender_type}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-slate-800 text-xs">{log.crm_whatsapp_chats?.contact_name || 'Desconhecido'}</span>
+                                            <span className="text-[10px] text-slate-400 font-mono tracking-tighter">{log.crm_whatsapp_chats?.contact_phone || '--'}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 max-w-md">
+                                        <p className="text-xs text-slate-500 truncate" title={log.text}>{log.text}</p>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+             </div>
+          </div>
         )}
 
         {activeTab === 'simulator' && (

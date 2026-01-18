@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer, FormFolder, AutomationFlow } from '../types';
+import { FormModel, FormQuestion, QuestionType, FormStyle, FormAnswer, FormFolder, AutomationFlow, WAAutomationLog } from '../types';
 import { FormViewer } from './FormViewer';
 import { AutomationFlowEditor } from './AutomationFlowEditor';
 import { 
@@ -9,7 +9,7 @@ import {
   Layout, Folder, FolderPlus, MoveRight, LayoutGrid, X, Type, AlignLeft, 
   Mail, Phone, Calendar, Hash, Palette, Sparkles, Image as ImageIcon,
   AlignCenter, Filter, Tag, ArrowRightLeft, User, Users, Info, FileSpreadsheet, RefreshCw, Megaphone,
-  Zap, GitBranch, Settings, Smartphone, Wifi, WifiOff, Link2
+  Zap, GitBranch, Settings, Smartphone, Wifi, WifiOff, Link2, History
 } from 'lucide-react';
 import { appBackend, Pipeline } from '../services/appBackend';
 import clsx from 'clsx';
@@ -71,10 +71,12 @@ const QUESTION_TYPES: { id: QuestionType; label: string; icon: any }[] = [
 
 export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState<'forms' | 'flows'>('forms');
+  const [flowSubTab, setFlowSubTab] = useState<'list' | 'logs'>('list');
   const [view, setView] = useState<'list' | 'editor' | 'responses' | 'preview' | 'flow_editor'>('list');
   const [editorStep, setEditorStep] = useState<'editor' | 'design' | 'settings'>('editor');
   const [forms, setForms] = useState<FormModel[]>([]);
   const [flows, setFlows] = useState<AutomationFlow[]>([]);
+  const [logs, setLogs] = useState<WAAutomationLog[]>([]);
   const [folders, setFolders] = useState<FormFolder[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [currentForm, setCurrentForm] = useState<FormModel>(INITIAL_FORM);
@@ -110,7 +112,31 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
 
   const webhookUrlDisplay = "https://wfrzsnwisypmgsbeccfj.supabase.co/functions/v1/rapid-service";
 
-  useEffect(() => { loadForms(); loadFlows(); loadFolders(); loadMetadata(); loadWAConfig(); }, []);
+  useEffect(() => { 
+    loadForms(); 
+    loadFlows(); 
+    loadFolders(); 
+    loadMetadata(); 
+    loadWAConfig(); 
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'flows' && flowSubTab === 'logs') {
+      loadLogs();
+    }
+  }, [activeTab, flowSubTab]);
+
+  const loadLogs = async () => {
+    setLoading(true);
+    try {
+      const data = await appBackend.getWAAutomationLogs();
+      setLogs(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadWAConfig = async () => {
     const c = await appBackend.getWhatsAppConfig();
@@ -238,6 +264,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
       };
       setCurrentFlow(newFlow);
       setView('flow_editor');
+      setFlowSubTab('list');
   };
 
   const handleEditFlow = (flow: AutomationFlow) => {
@@ -613,7 +640,7 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
         <div className="bg-white rounded-2xl border border-slate-200 p-1.5 shadow-sm">
             <div className="flex bg-slate-100 p-1 rounded-xl mb-2">
                 <button onClick={() => setActiveTab('forms')} className={clsx("flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all", activeTab === 'forms' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500")}><LayoutGrid size={14}/> Listas</button>
-                <button onClick={() => setActiveTab('flows')} className={clsx("flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all", activeTab === 'flows' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500")}><GitBranch size={14}/> Fluxos</button>
+                <button onClick={() => { setActiveTab('flows'); setFlowSubTab('list'); }} className={clsx("flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all", activeTab === 'flows' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500")}><GitBranch size={14}/> Fluxos</button>
             </div>
 
             {activeTab === 'forms' && (
@@ -626,6 +653,25 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
 
             {activeTab === 'flows' && (
                 <div className="animate-in slide-in-from-left-2 duration-300 p-2 space-y-2">
+                    <button 
+                        onClick={() => setFlowSubTab('list')}
+                        className={clsx(
+                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border",
+                            flowSubTab === 'list' ? "bg-white border-indigo-100 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 border-transparent"
+                        )}
+                    >
+                        <LayoutGrid size={16} /> Meus Fluxos
+                    </button>
+                    <button 
+                        onClick={() => setFlowSubTab('logs')}
+                        className={clsx(
+                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border",
+                            flowSubTab === 'logs' ? "bg-white border-indigo-100 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 border-transparent"
+                        )}
+                    >
+                        <History size={16} /> Histórico
+                    </button>
+                    <div className="h-px bg-slate-100 my-1 mx-2"></div>
                     <button 
                         onClick={() => setShowWAConfig(true)}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
@@ -664,6 +710,53 @@ export const FormsManager: React.FC<FormsManagerProps> = ({ onBack }) => {
                         </div>
                     </div>
                 ))}
+              </div>
+          ) : flowSubTab === 'logs' ? (
+              <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
+                  <div className="px-8 py-6 border-b bg-slate-50 flex items-center justify-between">
+                      <div>
+                          <h3 className="text-lg font-black text-slate-800">Histórico de Disparos</h3>
+                          <p className="text-xs text-slate-500 font-medium">Logs de mensagens automáticas enviadas pelos fluxos.</p>
+                      </div>
+                      <button onClick={loadLogs} className="p-2 text-slate-400 hover:text-indigo-600">
+                          <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+                      </button>
+                  </div>
+                  <div className="overflow-x-auto custom-scrollbar">
+                      <table className="w-full text-left text-sm border-collapse">
+                          <thead className="bg-slate-50">
+                              <tr className="border-b border-slate-100">
+                                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Data/Hora</th>
+                                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Fluxo</th>
+                                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Contato</th>
+                                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Número</th>
+                                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Mensagem</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                              {loading && logs.length === 0 ? (
+                                  <tr><td colSpan={5} className="py-20 text-center"><Loader2 className="animate-spin text-indigo-600 mx-auto" /></td></tr>
+                              ) : logs.length === 0 ? (
+                                  <tr><td colSpan={5} className="py-20 text-center text-slate-300 italic">Nenhum disparo registrado ainda.</td></tr>
+                              ) : logs.map(log => (
+                                  <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                          <div className="flex flex-col">
+                                              <span className="text-[11px] font-bold text-slate-600">{new Date(log.createdAt).toLocaleDateString()}</span>
+                                              <span className="text-[9px] text-slate-400 font-black">{new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                          </div>
+                                      </td>
+                                      <td className="px-6 py-4">
+                                          <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{log.ruleName}</span>
+                                      </td>
+                                      <td className="px-6 py-4 font-bold text-slate-700">{log.studentName}</td>
+                                      <td className="px-6 py-4 font-mono text-[11px] text-slate-500">{log.phone}</td>
+                                      <td className="px-6 py-4 max-w-xs"><p className="text-[11px] text-slate-400 truncate" title={log.message}>{log.message}</p></td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                  </div>
               </div>
           ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in">

@@ -76,14 +76,14 @@ export const appBackend = {
       if (!isConfigured) { window.location.reload(); return; }
       await supabase.auth.signOut();
     },
+    onAuthStateChange: (callback: (session: Session | null) => void) => {
+      if (!isConfigured) { callback(MOCK_SESSION as unknown as Session); return { data: { subscription: { unsubscribe: () => {} } } }; }
+      return supabase.auth.onAuthStateChange((_event, session) => callback(session));
+    },
     getSession: async () => {
       if (!isConfigured) return MOCK_SESSION as unknown as Session;
       const { data } = await supabase.auth.getSession();
       return data.session;
-    },
-    onAuthStateChange: (callback: (session: Session | null) => void) => {
-      if (!isConfigured) { callback(MOCK_SESSION as unknown as Session); return { data: { subscription: { unsubscribe: () => {} } } }; }
-      return supabase.auth.onAuthStateChange((_event, session) => callback(session));
     }
   },
 
@@ -393,7 +393,8 @@ export const appBackend = {
         const { data: activeFlows } = await supabase
             .from('crm_automation_flows')
             .select('*')
-            .eq('form_id', flowId)
+            /* Fix: Changed flowId to formId as flowId was not defined */
+            .eq('form_id', formId)
             .eq('is_active', true);
 
         if (activeFlows && activeFlows.length > 0) {
@@ -631,7 +632,7 @@ export const appBackend = {
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
-    return (data || []).map((j: any) => ({ id: j.id, name: j.name || 'Sincronização', sheetUrl: j.sheet_url || '', config: j.config || {}, lastSync: j.last_sync, status: j.status || 'idle', lastMessage: j.last_message || '', active: !!j.active, /* Fix: Correct mapping to intervalMinutes camelCase property */ intervalMinutes: j.interval_minutes || 5, createdBy: j.created_by, createdAt: j.created_at }));
+    return (data || []).map((j: any) => ({ id: j.id, name: j.name || 'Sincronização', sheet_url: j.sheet_url || '', config: j.config || {}, lastSync: j.last_sync, status: j.status || 'idle', lastMessage: j.last_message || '', active: !!j.active, /* Fix: Correct mapping to intervalMinutes camelCase property */ intervalMinutes: j.interval_minutes || 5, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
   saveSyncJob: async (job: SyncJob): Promise<void> => {
@@ -1281,7 +1282,7 @@ export const appBackend = {
       const payload = { id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots };
       const { data, error } = await supabase.from('crm_event_workshops').upsert(payload).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
+      return { id: data.id, eventId: data.event_id, block_id: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
   },
 
   deleteWorkshop: async (id: string): Promise<void> => {
@@ -1389,6 +1390,12 @@ export const appBackend = {
           id: rule.id || crypto.randomUUID(), name: rule.name, trigger_type: rule.triggerType, pipeline_name: rule.pipelineName, stage_id: rule.stageId, product_type: rule.productType, product_id: rule.productId, message_template: rule.messageTemplate, is_active: rule.isActive, created_at: rule.createdAt || new Date().toISOString()
       };
       await supabase.from('crm_wa_automations').upsert(payload);
+  },
+
+  /* Added deleteWAAutomationRule method to fix error in components/WhatsAppAutomation.tsx */
+  deleteWAAutomationRule: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_wa_automations').delete().eq('id', id);
   },
 
   getWAAutomationLogs: async (): Promise<WAAutomationLog[]> => {

@@ -160,9 +160,13 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
             instanceName: waConfig.instanceName.trim(),
             apiKey: waConfig.apiKey.trim()
         };
+        // Salva as credenciais do WhatsApp
         await appBackend.saveWhatsAppConfig(sanitizedConfig);
+        // CRÍTICO: Também salva o status de ativação da IA para garantir que a Edge Function responda
+        await appBackend.saveAiConfig(config);
+        
         setWaConfig(sanitizedConfig);
-        alert("Configurações do WhatsApp salvas!");
+        alert("Configurações salvas com sucesso!");
         checkWARealStatus(sanitizedConfig);
     } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsSavingWAConfig(false); }
   };
@@ -343,7 +347,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
           </div>
         </div>
 
-        <div className="flex bg-slate-100 p-1 rounded-2xl shadow-inner shrink-0 overflow-x-auto max-w-full no-scrollbar">
+        <div className="flex bg-slate-100 p-1 rounded-2xl shadow-inner shrink-0 overflow-x-auto max-w-full">
           <button onClick={() => setActiveTab('config')} className={clsx("px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'config' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>
             <Sliders size={14}/> Configuração
           </button>

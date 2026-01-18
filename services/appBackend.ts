@@ -255,7 +255,7 @@ export const appBackend = {
       description: survey.description || null, 
       campaign: survey.campaign || null, 
       is_lead_capture: !!survey.isLeadCapture, 
-      distribution_mode: survey.distribution_mode || 'fixed', 
+      distribution_mode: survey.distributionMode || 'fixed', 
       fixed_owner_id: survey.fixedOwnerId || null, 
       team_id: survey.teamId || null, 
       target_pipeline: survey.targetPipeline || null, 
@@ -351,9 +351,24 @@ export const appBackend = {
           return;
       }
 
-      // Variáveis para interpolação (fallback)
-      const nameAns = answers.find(a => a.questionTitle.toLowerCase().includes('nome'))?.value || 'Cliente';
-      const emailAns = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value || '---';
+      // Variáveis para interpolação (fallback mais robusto para nomes compostos)
+      const nameAns = answers.find(a => {
+          const t = a.questionTitle.toLowerCase();
+          return t === 'nome' || t === 'nome completo' || t.includes('nome');
+      })?.value || 'Cliente';
+      
+      const emailAns = answers.find(a => {
+          const t = a.questionTitle.toLowerCase();
+          return t === 'email' || t === 'e-mail' || t.includes('email');
+      })?.value || '---';
+
+      const replaceVars = (str: string) => {
+          if (!str) return '';
+          // Uso de função como segundo parâmetro do replace previne problemas com caracteres especiais ($&) no nome
+          return str
+              .replace(/\{\{nome_cliente\}\}/gi, () => nameAns)
+              .replace(/\{\{email\}\}/gi, () => emailAns);
+      };
 
       console.log(`[AUTOMATION] Iniciando fluxo: ${flow.name}`);
 
@@ -363,7 +378,7 @@ export const appBackend = {
           const node = flow.nodes.find(n => n.id === currentId);
           if (!node) break;
 
-          // Próximo passo padrão
+          // Próximo passo padrão (atualizado ao final do ciclo)
           let nextIdToSet: string | null = node.nextId || null;
 
           try {
@@ -376,7 +391,7 @@ export const appBackend = {
 
                       if (waPhone) {
                           const cleanDigits = String(waPhone).replace(/\D/g, '');
-                          let text = (node.config?.message || '').replace(/\{\{nome_cliente\}\}/gi, nameAns).replace(/\{\{email\}\}/gi, emailAns);
+                          const text = replaceVars(node.config?.message || '');
                           
                           console.log(`[AUTOMATION] Disparando WhatsApp p/ ${cleanDigits}`);
                           await whatsappService.sendTextMessage({ wa_id: cleanDigits, contact_phone: cleanDigits }, text);
@@ -391,8 +406,8 @@ export const appBackend = {
                       }
                       
                       if (targetEmail) {
-                          const subject = (node.config?.subject || '').replace(/\{\{nome_cliente\}\}/gi, nameAns);
-                          let body = (node.config?.body || '').replace(/\{\{nome_cliente\}\}/gi, nameAns).replace(/\{\{email\}\}/gi, emailAns);
+                          const subject = replaceVars(node.config?.subject || '');
+                          const body = replaceVars(node.config?.body || '');
                           await appBackend.sendEmailViaSendGrid(targetEmail, subject, body);
                       }
                       break;
@@ -411,12 +426,12 @@ export const appBackend = {
                       break;
 
                   case 'condition':
-                      // Lógica de ramificação
+                      // Lógica de ramificação (mock simplificado)
                       nextIdToSet = answers.length > 0 ? (node.yesId || null) : (node.noId || null);
                       break;
 
                   case 'crm_action':
-                      // Placeholder para ações futuras no CRM
+                      // Ações futuras de CRM
                       break;
               }
           } catch (err) {
@@ -464,7 +479,7 @@ export const appBackend = {
         if (activeFlows && activeFlows.length > 0) {
             for (const flowData of activeFlows) {
                 const flow: AutomationFlow = { id: flowData.id, name: flowData.name, description: flowData.description, formId: flowData.form_id, isActive: flowData.is_active, nodes: flowData.nodes || [], createdAt: flowData.created_at, updatedAt: flowData.updated_at };
-                // Chama sem await para não bloquear a resposta visual do formulário (rodando em "background")
+                // Executa o fluxo em background
                 appBackend.runFlowInstance(flow, answers);
             }
         }
@@ -715,11 +730,9 @@ export const appBackend = {
 
   savePreset: async (preset: Partial<SavedPreset>): Promise<SavedPreset> => {
     if (!isConfigured) throw new Error("Supabase não configurado");
-    // FIX: Mapping camelCase properties from Partial<SavedPreset> to snake_case for Supabase payload
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
-    // FIX: Mapping snake_case properties from Supabase result back to camelCase for SavedPreset interface
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
   },
 
@@ -802,7 +815,8 @@ export const appBackend = {
 
   saveContract: async (contract: Contract): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_contracts').upsert({ id: contract.id || crypto.randomUUID(), title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contract_date, status: contract.status, folder_id: contract.folderId, signers: contract.signers, created_at: contract.createdAt || new Date().toISOString() });
+    // FIX: Changed contract.contract_date to contract.contractDate to match Contract type
+    await supabase.from('crm_contracts').upsert({ id: contract.id || crypto.randomUUID(), title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contractDate, status: contract.status, folder_id: contract.folderId, signers: contract.signers, created_at: contract.createdAt || new Date().toISOString() });
   },
 
   sendContractEmailSimulation: async (email: string, name: string, title: string): Promise<void> => {
@@ -851,7 +865,7 @@ export const appBackend = {
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_certificates').upsert({ id: cert.id || crypto.randomUUID(), title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.body_text, layout_config: cert.layoutConfig, created_at: cert.createdAt || new Date().toISOString() });
+    await supabase.from('crm_certificates').upsert({ id: cert.id || crypto.randomUUID(), title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt || new Date().toISOString() });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -919,7 +933,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data: cert } = await supabase.from('crm_student_certificates').select('*, crm_deals(company_name, contact_name, course_city), crm_certificates(*)').eq('hash', hash).maybeSingle();
       if (!cert) return null;
-      return { studentName: cert.crm_deals?.company_name || cert.crm_deals?.contact_name || 'Aluno', studentCity: cert.crm_deals?.course_city || 'Brasil', template: { id: cert.crm_certificates.id, title: cert.crm_certificates.title, background_data: cert.crm_certificates.background_data, back_background_data: cert.crm_certificates.back_background_data, linked_product_id: cert.crm_certificates.linked_product_id, body_text: cert.crm_certificates.body_text, layout_config: cert.layout_config, createdAt: cert.crm_certificates.created_at }, issuedAt: cert.issued_at };
+      return { studentName: cert.crm_deals?.company_name || cert.crm_deals?.contact_name || 'Aluno', studentCity: cert.crm_deals?.course_city || 'Brasil', template: { id: cert.crm_certificates.id, title: cert.crm_certificates.title, background_data: cert.crm_certificates.background_data, back_background_data: cert.crm_certificates.back_background_data, linked_product_id: cert.crm_certificates.linked_product_id, body_text: cert.crm_certificates.body_text, layout_config: cert.crm_certificates.layout_config, createdAt: cert.crm_certificates.created_at }, issuedAt: cert.issued_at };
   },
 
   getExternalCertificates: async (studentId: string): Promise<ExternalCertificate[]> => {
@@ -1062,11 +1076,12 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((r: any) => ({ id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, message_template: r.message_template, isActive: !!r.is_active, createdAt: r.created_at }));
+      return (data || []).map((r: any) => ({ id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, messageTemplate: r.message_template, isActive: !!r.is_active, createdAt: r.created_at }));
   },
 
   saveWAAutomationRule: async (rule: WAAutomationRule): Promise<void> => {
       if (!isConfigured) return;
+      // FIX: Changed rule.message_template to rule.messageTemplate to match WAAutomationRule type
       await supabase.from('crm_wa_automations').upsert({ id: rule.id || crypto.randomUUID(), name: rule.name, trigger_type: rule.triggerType, pipeline_name: rule.pipelineName, stage_id: rule.stageId, product_type: rule.productType, product_id: rule.productId, message_template: rule.messageTemplate, is_active: rule.isActive, created_at: rule.createdAt || new Date().toISOString() });
   },
 

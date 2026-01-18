@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Bot, Save, Plus, Trash2, Edit2, Loader2, Sparkles, 
   MessageSquare, BookOpen, Settings, Zap, Play, Pause,
   Search, X, Send, User, ChevronRight, Info, AlertCircle,
   Database, Layout, Kanban, Sliders, Globe, RefreshCw,
   CheckCircle2, Smartphone, Wifi, WifiOff, Link2, Copy,
-  // Added missing MessageCircle import
-  MessageCircle
+  MessageCircle, GraduationCap
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { appBackend } from '../services/appBackend';
@@ -31,6 +31,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState<'config' | 'knowledge' | 'simulator' | 'whatsapp'>('config');
   const [config, setConfig] = useState<AiConfig>({ id: 'default', systemPrompt: '', isActive: false, temperature: 0.7, updatedAt: '' });
   const [knowledge, setKnowledge] = useState<AiKnowledgeItem[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -75,12 +76,14 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [configData, knowledgeData] = await Promise.all([
+      const [configData, knowledgeData, classesRes] = await Promise.all([
         appBackend.getAiConfig(),
-        appBackend.getAiKnowledgeItems()
+        appBackend.getAiKnowledgeItems(),
+        appBackend.client.from('crm_classes').select('*').order('date_mod_1', { ascending: true })
       ]);
       setConfig(configData);
       setKnowledge(knowledgeData);
+      setClasses(classesRes.data || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -111,7 +114,6 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
         const state = data.instance?.state || data.state || 'closed';
         setWaConfig(prev => ({ ...prev, isConnected: state === 'open' }));
     } catch (e) {
-        // Fixed: Incorrect state update. should update waConfig, not config.
         setWaConfig(prev => ({ ...prev, isConnected: false }));
     }
   };
@@ -216,6 +218,18 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
     }
   };
 
+  const upcomingClasses = useMemo(() => {
+      const today = new Date().toISOString().split('T')[0];
+      return classes.filter(c => c.date_mod_1 && c.date_mod_1 > today);
+  }, [classes]);
+
+  const dynamicClassesBlockText = useMemo(() => {
+    if (upcomingClasses.length === 0) return "Nenhuma turma futura cadastrada no momento.";
+    return upcomingClasses.map(c => 
+      `ESTADO: ${c.state} | CIDADE: ${c.city} | CURSO: ${c.course} | TURMA: ${c.class_code} | STUDIO: ${c.studio_mod_1} | STATUS: ${c.status} | INÍCIO MOD 1: ${new Date(c.date_mod_1).toLocaleDateString('pt-BR')}`
+    ).join('\n');
+  }, [upcomingClasses]);
+
   const handleSimulate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!simInput.trim() || isSimulating) return;
@@ -228,17 +242,19 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      // Concatena todo o conhecimento relevante para o contexto
       const knowledgeContext = knowledge.map(k => `TÍTULO: ${k.title}\nCONTEÚDO: ${k.content}`).join('\n\n');
       
       const fullSystemPrompt = `
       ${config.systemPrompt}
       
-      BASE DE CONHECIMENTO DISPONÍVEL:
+      BASE DE CONHECIMENTO ATUALIZADA (TURMAS FUTURAS):
+      ${dynamicClassesBlockText}
+      
+      BASE DE CONHECIMENTO ADICIONAL:
       ${knowledgeContext}
       
       REGRAS:
-      - Use apenas as informações da base de conhecimento acima.
+      - Use prioritariamente as informações da base de conhecimento de turmas e adicional acima.
       - Se não souber a resposta, peça para o usuário aguardar um atendente humano.
       - Seja breve e focado em converter leads ou ajudar alunos.
       `.trim();
@@ -391,13 +407,31 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
               {isLoading ? (
                 <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-600" size={40}/></div>
-              ) : filteredKnowledge.length === 0 ? (
-                <div className="text-center py-32 text-slate-300">
-                  <Database size={64} className="mx-auto mb-4 opacity-10" />
-                  <p className="font-black uppercase tracking-widest text-xs">Base de conhecimento vazia</p>
-                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Bloco Dinâmico de Cursos/Turmas */}
+                  <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-[2rem] border border-indigo-500 p-6 shadow-xl flex flex-col group relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-6 opacity-10">
+                          <GraduationCap size={80} className="text-white" />
+                      </div>
+                      <div className="flex justify-between items-start mb-4 relative z-10">
+                        <div className="p-3 bg-white/20 text-white rounded-2xl">
+                          <GraduationCap size={20}/>
+                        </div>
+                        <span className="text-[8px] font-black text-indigo-200 uppercase tracking-widest bg-white/10 px-2 py-1 rounded-full border border-white/20">Sincronizado Automático</span>
+                      </div>
+                      <h3 className="font-black text-white mb-2 relative z-10">Cursos/Turmas</h3>
+                      <div className="flex-1 overflow-y-auto max-h-40 custom-scrollbar-dark mb-4 pr-2">
+                        <pre className="text-[10px] text-indigo-100 font-mono whitespace-pre-wrap leading-relaxed">
+                            {dynamicClassesBlockText}
+                        </pre>
+                      </div>
+                      <div className="mt-auto pt-4 border-t border-white/10 flex justify-between items-center text-[9px] font-black text-indigo-300 uppercase tracking-widest">
+                        <span>VOLL LIVE DATA</span>
+                        <span>{upcomingClasses.length} Turmas Futuras</span>
+                      </div>
+                  </div>
+
                   {filteredKnowledge.map(item => (
                     <div key={item.id} className="bg-white rounded-[2rem] border border-slate-200 p-6 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all flex flex-col group">
                       <div className="flex justify-between items-start mb-4">
@@ -406,7 +440,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => { setEditingItem(item); setShowItemModal(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Edit2 size={16}/></button>
-                          <button onClick={() => handleDeleteItem(item.id)} className="p-2 text-slate-400 hover:text-red-500 rounded-xl transition-all"><Trash2 size={16}/></button>
+                          <button onClick={() => handleDeleteItem(item.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16}/></button>
                         </div>
                       </div>
                       <h3 className="font-black text-slate-800 mb-2 truncate" title={item.title}>{item.title}</h3>
@@ -417,6 +451,13 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                       </div>
                     </div>
                   ))}
+                  
+                  {filteredKnowledge.length === 0 && upcomingClasses.length === 0 && (
+                    <div className="col-span-full text-center py-32 text-slate-300">
+                      <Database size={64} className="mx-auto mb-4 opacity-10" />
+                      <p className="font-black uppercase tracking-widest text-xs">Base de conhecimento vazia</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -508,7 +549,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                                     <p className="text-[10px] font-black text-indigo-600 uppercase mt-4 tracking-widest">Digite no seu WhatsApp</p>
                                 </div>
                             )}
-                            <div className="space-y-1 text-left">{waConnLogs.map((log, i) => (<p key={i} className="text-[9px] font-mono text-slate-400">{log}</p>))}</div>
+                            <div className="space-y-1 text-left">{waConnLogs.map((log, i) => (<p key={i} className="text-[10px] font-mono text-slate-400">{log}</p>))}</div>
                         </div>
                     </div>
                 </div>
@@ -530,6 +571,9 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                   <div className="space-y-4">
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2"><Database size={14} className="text-indigo-500"/> Fontes Utilizadas</h4>
                     <div className="space-y-2">
+                        <div className="p-2 bg-indigo-600 text-white rounded-lg text-[10px] font-bold border border-indigo-500 shadow-sm flex items-center gap-2">
+                            <GraduationCap size={12} /> Cursos/Turmas (Live)
+                        </div>
                         {knowledge.slice(0, 5).map(k => (
                           <div key={k.id} className="flex items-center gap-2 p-2 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold border border-indigo-100">
                             <CheckCircle2 size={10} /> {k.title}

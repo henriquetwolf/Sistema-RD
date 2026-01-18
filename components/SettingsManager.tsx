@@ -94,6 +94,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       { id: 'classes', label: 'Turmas' },
       { id: 'teachers', label: 'Professores' },
       { id: 'landing_pages', label: 'Páginas de Venda' },
+      { id: 'chat_ia', label: 'Chat IA' },
       { id: 'global_settings', label: 'Configurações' }
   ];
 
@@ -216,11 +217,12 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO SQL
+-- SCRIPT DE REPARO SQL - VOLL PILATES
 CREATE TABLE IF NOT EXISTS public.crm_settings (
     key text PRIMARY KEY,
     value text
 );
+
 CREATE TABLE IF NOT EXISTS public.crm_companies (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     legal_name text,
@@ -228,6 +230,30 @@ CREATE TABLE IF NOT EXISTS public.crm_companies (
     webhook_url text,
     product_types text[],
     product_ids text[]
+);
+
+-- TABELAS PARA WHATSAPP E CHAT IA
+CREATE TABLE IF NOT EXISTS public.crm_whatsapp_chats (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    wa_id text UNIQUE,
+    contact_name text,
+    contact_phone text,
+    last_message text,
+    unread_count integer DEFAULT 0,
+    status text DEFAULT 'open',
+    tag text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    chat_id uuid REFERENCES public.crm_whatsapp_chats(id) ON DELETE CASCADE,
+    text text,
+    sender_type text, -- 'user', 'agent', 'system'
+    wa_message_id text,
+    status text,
+    created_at timestamp with time zone DEFAULT now()
 );
 `.trim();
 

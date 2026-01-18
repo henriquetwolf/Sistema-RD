@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Bot, Save, Plus, Trash2, Edit2, Loader2, Sparkles, 
@@ -623,7 +622,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => { setEditingItem(item); setShowItemModal(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Edit2 size={16}/></button>
-                          <button onClick={() => handleDeleteItem(item.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16}/></button>
+                          <button onClick={() => handleDeleteItem(item.id)} className="p-2 text-slate-400 hover:text-red-500 rounded-xl transition-all"><Trash2 size={16}/></button>
                         </div>
                       </div>
                       <h3 className="font-black text-slate-800 mb-2 truncate" title={item.title}>{item.title}</h3>
@@ -716,7 +715,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                             <button 
                                 onClick={handleConnectWAEvolution} 
                                 disabled={isGeneratingWAConnection || !waConfig.instanceUrl} 
-                                className="w-full py-5 bg-white border-2 border-indigo-500 text-indigo-600 rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                                className="w-full py-5 bg-white border-2 border-indigo-50 text-indigo-600 rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
                             >
                                 {isGeneratingWAConnection ? <Loader2 size={18} className="animate-spin"/> : <RefreshCw size={18}/>} Gerar Novo QR Code
                             </button>
@@ -735,6 +734,17 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                             <div className="space-y-1 text-left">{waConnLogs.map((log, i) => (<p key={i} className="text-[10px] font-mono text-slate-400">{log}</p>))}</div>
                         </div>
                     </div>
+                </div>
+                {/* Botão de Salvar Global IA também aqui para garantir persistência */}
+                <div className="max-w-4xl flex justify-end">
+                    <button 
+                        onClick={handleSaveConfig}
+                        disabled={isSaving}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-600/20 transition-all flex items-center gap-3 active:scale-95 disabled:opacity-50"
+                    >
+                        {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20}/>}
+                        Salvar Status da IA
+                    </button>
                 </div>
             </div>
         )}

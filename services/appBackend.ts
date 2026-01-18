@@ -162,7 +162,6 @@ export const appBackend = {
     }));
   },
 
-  // Métodos de Automação de Fluxo
   getAutomationFlows: async (): Promise<AutomationFlow[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_automation_flows').select('*').order('created_at', { ascending: false });
@@ -303,7 +302,7 @@ export const appBackend = {
   },
 
   /**
-   * Envia e-mail via API do SendGrid utilizando Proxy para evitar bloqueio de CORS no navegador.
+   * Envia e-mail via API do SendGrid utilizando Proxy e Bearer Token padrão.
    */
   sendEmailViaSendGrid: async (to: string, subject: string, body: string): Promise<boolean> => {
       const config = await appBackend.getEmailConfig();
@@ -445,8 +444,7 @@ export const appBackend = {
 
   saveInstructorLevel: async (level: Partial<InstructorLevel>): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_teacher_levels').upsert({ id: level.id || crypto.randomUUID(), name: level.name, honorarium: Number(level.honorarium || 0), observations: level.observations });
-    if (error) throw error;
+    await supabase.from('crm_teacher_levels').upsert({ id: level.id || crypto.randomUUID(), name: level.name, honorarium: Number(level.honorarium || 0), observations: level.observations });
   },
 
   deleteInstructorLevel: async (id: string): Promise<void> => {
@@ -602,9 +600,7 @@ export const appBackend = {
 
   getWhatsAppConfig: async (): Promise<any | null> => {
     const local = localStorage.getItem('crm_whatsapp_config');
-    if (local) {
-      try { return JSON.parse(local); } catch (e) { return null; }
-    }
+    if (local) { try { return JSON.parse(local); } catch (e) { return null; } }
     if (!isConfigured) return null;
     try {
         const { data } = await supabase.from('crm_settings').select('value').eq('key', 'whatsapp_config').maybeSingle();

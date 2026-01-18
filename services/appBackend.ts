@@ -1,4 +1,3 @@
-
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -212,11 +211,9 @@ export const appBackend = {
       fixedOwnerId: item.fixed_owner_id, 
       teamId: item.team_id, 
       targetPipeline: item.target_pipeline, 
-      // Fix: item.target_stage instead of data.target_stage
       targetStage: item.target_stage, 
       questions: item.questions || [], 
       style: item.style || {}, 
-      /* Fix: Referencing item.created_at instead of non-existent data.created_at */
       createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id,
@@ -237,10 +234,8 @@ export const appBackend = {
       description: form.description || null, 
       campaign: form.campaign || null, 
       is_lead_capture: !!form.isLeadCapture, 
-      // Fix: use camelCase from FormModel interface for distributionMode and fixedOwnerId
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
-      /* Fix: form.team_id does not exist on FormModel, corrected to form.teamId */
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
@@ -308,7 +303,7 @@ export const appBackend = {
   },
 
   /**
-   * Envia e-mail via API do SendGrid
+   * Envia e-mail via API do SendGrid utilizando Proxy para evitar bloqueio de CORS no navegador.
    */
   sendEmailViaSendGrid: async (to: string, subject: string, body: string): Promise<boolean> => {
       const config = await appBackend.getEmailConfig();
@@ -318,10 +313,13 @@ export const appBackend = {
       }
 
       try {
-          const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+          const proxyUrl = "https://corsproxy.io/?";
+          const targetUrl = "https://api.sendgrid.com/v3/mail/send";
+          
+          const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
               method: 'POST',
               headers: {
-                  'Authorization': `Bearer ${config.apiKey}`,
+                  'Authorization': `Bearer ${config.apiKey.trim()}`,
                   'Content-Type': 'application/json'
               },
               body: JSON.stringify({
@@ -346,21 +344,14 @@ export const appBackend = {
       }
   },
 
-  /**
-   * Executa a lógica de automação de fluxo associada a uma submissão
-   */
   runFlowInstance: async (flow: AutomationFlow, answers: FormAnswer[]) => {
-      // Localiza o nó gatilho
       const triggerNode = flow.nodes.find(n => n.type === 'trigger');
       if (!triggerNode || !triggerNode.nextId) return;
 
       let currentNodeId: string | undefined | null = triggerNode.nextId;
-      
-      // Mapeamento de tags para substituição na mensagem
       const nameAns = answers.find(a => a.questionTitle.toLowerCase().includes('nome'))?.value || 'Cliente';
       const emailAns = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value || '---';
 
-      // Execução assíncrona (respeitando waits e sequências)
       while (currentNodeId) {
           const node = flow.nodes.find(n => n.id === currentNodeId);
           if (!node) break;
@@ -371,62 +362,38 @@ export const appBackend = {
                   let msg = node.config.message || '';
                   msg = msg.replace(/\{\{nome_cliente\}\}/gi, nameAns);
                   msg = msg.replace(/\{\{email\}\}/gi, emailAns);
-                  
                   try {
                       await whatsappService.sendTextMessage({ wa_id: phone, contact_phone: phone }, msg);
-                      await appBackend.logWAAutomation({
-                          ruleName: `FLUXO: ${flow.name}`,
-                          studentName: nameAns,
-                          phone: phone,
-                          message: msg
-                      });
-                  } catch (e) {
-                      console.error("Erro no WhatsApp do Fluxo:", e);
-                  }
+                      await appBackend.logWAAutomation({ ruleName: `FLUXO: ${flow.name}`, studentName: nameAns, phone: phone, message: msg });
+                  } catch (e) { console.error(e); }
               }
               currentNodeId = node.nextId || null;
           } else if (node.type === 'email') {
-              // Busca o email no campo indicado na configuração do nó
               const email = answers.find(a => a.questionId === node.config.emailFieldId)?.value;
               if (email) {
                   const subject = (node.config.subject || '').replace(/\{\{nome_cliente\}\}/gi, nameAns);
-                  let body = (node.config.body || '');
-                  body = body.replace(/\{\{nome_cliente\}\}/gi, nameAns);
-                  body = body.replace(/\{\{email\}\}/gi, emailAns);
-
+                  let body = (node.config.body || '').replace(/\{\{nome_cliente\}\}/gi, nameAns).replace(/\{\{email\}\}/gi, emailAns);
                   await appBackend.sendEmailViaSendGrid(email, subject, body);
               }
               currentNodeId = node.nextId || null;
-          } else if (node.type === 'crm_action') {
-              // Lógica para mover deal ou criar ação
-              currentNodeId = node.nextId || null;
           } else if (node.type === 'wait') {
-              // Implementação da espera de tempo real
               const days = parseInt(node.config.days) || 0;
               const hours = parseInt(node.config.hours) || 0;
               const minutes = parseInt(node.config.minutes) || 0;
-              
               const totalMs = ((days * 24 * 60) + (hours * 60) + minutes) * 60 * 1000;
-              
-              if (totalMs > 0) {
-                  console.log(`[FLUXO] Pausando execução por ${totalMs}ms...`);
-                  await new Promise(resolve => setTimeout(resolve, totalMs));
-              }
+              if (totalMs > 0) await new Promise(resolve => setTimeout(resolve, totalMs));
               currentNodeId = node.nextId || null;
           } else {
-              break;
+              currentNodeId = node.nextId || null;
           }
       }
   },
 
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
     if (!isConfigured) return;
-    
-    // 1. Grava a submissão no banco
     const { error: subError } = await supabase.from('crm_form_submissions').insert([{ form_id: formId, answers, student_id: studentId }]);
     if (subError) throw subError;
 
-    // 2. Processa Lead se ativado
     if (isLeadCapture) {
         try {
             const { data: form } = await supabase.from('crm_forms').select('*').eq('id', formId).single();
@@ -451,44 +418,26 @@ export const appBackend = {
         } catch (crmErr) { console.error(crmErr); }
     }
 
-    // 3. Verifica e executa fluxos de automação vinculados ao formulário
     try {
-        const { data: activeFlows } = await supabase
-            .from('crm_automation_flows')
-            .select('*')
-            .eq('form_id', formId)
-            .eq('is_active', true);
-
+        const { data: activeFlows } = await supabase.from('crm_automation_flows').select('*').eq('form_id', formId).eq('is_active', true);
         if (activeFlows && activeFlows.length > 0) {
             for (const flowData of activeFlows) {
-                const flow: AutomationFlow = {
-                    id: flowData.id,
-                    name: flowData.name,
-                    description: flowData.description,
-                    formId: flowData.form_id,
-                    isActive: flowData.is_active,
-                    nodes: flowData.nodes || [],
-                    createdAt: flowData.created_at,
-                    updatedAt: flowData.updated_at
-                };
-                // Executa em "background" (não espera o término para não travar o UI do formulário)
+                const flow: AutomationFlow = { id: flowData.id, name: flowData.name, description: flowData.description, formId: flowData.form_id, isActive: flowData.is_active, nodes: flowData.nodes || [], createdAt: flowData.created_at, updatedAt: flowData.updated_at };
                 appBackend.runFlowInstance(flow, answers);
             }
         }
-    } catch (flowErr) {
-        console.error("Erro ao verificar fluxos:", flowErr);
-    }
+    } catch (flowErr) { console.error(flowErr); }
   },
 
   getFormSubmissions: async (formId: string): Promise<any[]> => {
-    if (!isConfigured) return;
+    if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_form_submissions').select('*').eq('form_id', formId).order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
   },
 
   getInstructorLevels: async (): Promise<InstructorLevel[]> => {
-    if (!isConfigured) return [{ id: '1', name: 'Mestre', honorarium: 1500 }, { id: '2', name: 'Sênior', honorarium: 1200 }];
+    if (!isConfigured) return [];
     const { data, error = null } = await supabase.from('crm_teacher_levels').select('*').order('name');
     if (error) throw error;
     return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Sem nível', honorarium: Number(item.honorarium || 0), observations: item.observations }));
@@ -496,9 +445,7 @@ export const appBackend = {
 
   saveInstructorLevel: async (level: Partial<InstructorLevel>): Promise<void> => {
     if (!isConfigured) return;
-    const payload: any = { name: level.name, honorarium: Number(level.honorarium || 0), observations: level.observations };
-    if (level.id) payload.id = level.id;
-    const { error } = await supabase.from('crm_teacher_levels').upsert(payload);
+    const { error } = await supabase.from('crm_teacher_levels').upsert({ id: level.id || crypto.randomUUID(), name: level.name, honorarium: Number(level.honorarium || 0), observations: level.observations });
     if (error) throw error;
   },
 
@@ -542,26 +489,12 @@ export const appBackend = {
   getCompanies: async (): Promise<CompanySetting[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_companies').select('*').order('legal_name');
-    return (data || []).map((item: any) => ({ 
-      id: item.id, 
-      legalName: item.legal_name || 'Sem nome', 
-      cnpj: item.cnpj || '', 
-      webhookUrl: item.webhook_url || '', 
-      productTypes: item.product_types || [], 
-      productIds: item.product_ids || [] 
-    }));
+    return (data || []).map((item: any) => ({ id: item.id, legalName: item.legal_name || 'Sem nome', cnpj: item.cnpj || '', webhookUrl: item.webhook_url || '', productTypes: item.product_types || [], productIds: item.product_ids || [] }));
   },
 
   saveCompany: async (company: CompanySetting): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_companies').upsert({ 
-        id: company.id || crypto.randomUUID(), 
-        legal_name: company.legalName, 
-        cnpj: company.cnpj, 
-        webhook_url: company.webhookUrl, 
-        product_types: company.productTypes, 
-        product_ids: company.productIds 
-    });
+    await supabase.from('crm_companies').upsert({ id: company.id || crypto.randomUUID(), legal_name: company.legalName, cnpj: company.cnpj, webhook_url: company.webhookUrl, product_types: company.productTypes, product_ids: company.productIds });
   },
 
   deleteCompany: async (id: string): Promise<void> => {
@@ -670,18 +603,12 @@ export const appBackend = {
   getWhatsAppConfig: async (): Promise<any | null> => {
     const local = localStorage.getItem('crm_whatsapp_config');
     if (local) {
-      try {
-        return JSON.parse(local);
-      } catch (e) { return null; }
+      try { return JSON.parse(local); } catch (e) { return null; }
     }
     if (!isConfigured) return null;
     try {
         const { data } = await supabase.from('crm_settings').select('value').eq('key', 'whatsapp_config').maybeSingle();
-        if (data?.value) {
-          try {
-            return JSON.parse(data.value);
-          } catch (e) { return null; }
-        }
+        if (data?.value) return JSON.parse(data.value);
     } catch (e) { return null; }
     return null;
   },
@@ -717,72 +644,27 @@ export const appBackend = {
   getLandingPages: async (): Promise<LandingPage[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_landing_pages').select('*').order('created_at', { ascending: false });
-    return (data || []).map((item: any) => ({
-      id: item.id,
-      title: item.title || item.name || 'Sem título',
-      productName: item.product_name || '',
-      slug: item.domain || '',
-      content: item.content || {},
-      createdAt: item.created_at,
-      updatedAt: item.updated_at,
-      isActive: item.is_active !== false,
-      theme: item.theme || 'modern'
-    }));
+    return (data || []).map((item: any) => ({ id: item.id, title: item.title || item.name || 'Sem título', productName: item.product_name || '', slug: item.domain || '', content: item.content || {}, createdAt: item.created_at, updatedAt: item.updated_at, isActive: item.is_active !== false, theme: item.theme || 'modern' }));
   },
 
   getLandingPageById: async (id: string): Promise<LandingPage | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('crm_landing_pages').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
-    return {
-      id: data.id,
-      title: data.title || data.name || 'Sem título',
-      productName: data.product_name || '',
-      slug: data.domain || '',
-      content: data.content || {},
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-      isActive: data.is_active !== false,
-      theme: data.theme || 'modern'
-    };
+    return { id: data.id, title: data.title || data.name || 'Sem título', productName: data.product_name || '', slug: data.domain || '', content: data.content || {}, createdAt: data.created_at, updatedAt: data.updated_at, isActive: data.is_active !== false, theme: data.theme || 'modern' };
   },
 
   saveLandingPage: async (lp: LandingPage): Promise<void> => {
     if (!isConfigured) return;
-    
     const isNew = !lp.id || (typeof lp.id === 'string' && lp.id.trim() === '');
-    const baseSlug = lp.slug || slugify(lp.title || 'nova-pagina');
-    const domainToSave = isNew ? `${baseSlug}-${Math.random().toString(36).substring(2, 7)}` : baseSlug;
-
-    const payload: any = {
-      title: lp.title || 'Nova Página',
-      domain: domainToSave,
-      product_name: lp.productName || null,
-      content: lp.content || {},
-      is_active: lp.isActive !== false,
-      theme: lp.theme || 'modern',
-      updated_at: new Date().toISOString()
-    };
-    
-    try {
-        if (isNew) {
-            payload.created_at = new Date().toISOString();
-            const { error } = await supabase.from('crm_landing_pages').insert([payload]);
-            if (error) throw error;
-        } else {
-            const { error } = await supabase.from('crm_landing_pages').update(payload).eq('id', lp.id);
-            if (error) throw error;
-        }
-    } catch (err: any) {
-        console.error("Erro fatal ao salvar Landing Page no Supabase:", err);
-        throw err;
-    }
+    const payload: any = { title: lp.title || 'Nova Página', domain: lp.slug || slugify(lp.title), product_name: lp.productName || null, content: lp.content || {}, is_active: lp.isActive !== false, theme: lp.theme || 'modern', updated_at: new Date().toISOString() };
+    if (isNew) { payload.created_at = new Date().toISOString(); await supabase.from('crm_landing_pages').insert([payload]); }
+    else await supabase.from('crm_landing_pages').update(payload).eq('id', lp.id);
   },
 
   deleteLandingPage: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('crm_landing_pages').delete().eq('id', id);
-    if (error) throw error;
+    await supabase.from('crm_landing_pages').delete().eq('id', id);
   },
 
   getPresets: async (): Promise<SavedPreset[]> => {
@@ -802,154 +684,35 @@ export const appBackend = {
 
   deletePreset: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from(PRESETS_TABLE).delete().eq('id', id);
-    if (error) throw error;
+    await supabase.from(PRESETS_TABLE).delete().eq('id', id);
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('crm_contracts').select('*').eq('id', id).maybeSingle();
     if (!data) return null;
-    return {
-      id: data.id,
-      title: data.title || '',
-      content: data.content || '',
-      city: data.city || '',
-      contract_date: data.contract_date || '',
-      status: data.status as any,
-      folderId: data.folder_id,
-      signers: data.signers || [],
-      createdAt: data.created_at
-    };
+    return { id: data.id, title: data.title || '', content: data.content || '', city: data.city || '', contractDate: data.contract_date || '', status: data.status as any, folderId: data.folder_id, signers: data.signers || [], createdAt: data.created_at };
   },
 
   logWAAutomation: async (log: Omit<WAAutomationLog, 'id' | 'createdAt'>): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_wa_automation_logs').insert([{
-      rule_name: log.ruleName,
-      student_name: log.studentName,
-      phone: log.phone,
-      message: log.message
-    }]);
+    await supabase.from('crm_wa_automation_logs').insert([{ rule_name: log.ruleName, student_name: log.studentName, phone: log.phone, message: log.message }]);
   },
 
   saveSupportTicket: async (ticket: Partial<SupportTicket>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: ticket.id || crypto.randomUUID(),
-        sender_id: ticket.senderId,
-        sender_name: ticket.senderName,
-        sender_email: ticket.senderEmail,
-        sender_role: ticket.senderRole,
-        target_id: ticket.targetId || null,
-        target_name: ticket.targetName || null,
-        target_email: ticket.targetEmail || null,
-        target_role: ticket.targetRole || null,
-        subject: ticket.subject,
-        message: ticket.message,
-        tag: ticket.tag,
-        status: ticket.status || 'open',
-        assigned_id: ticket.assignedId || null,
-        assigned_name: ticket.assignedName || null,
-        created_at: ticket.createdAt || new Date().toISOString(),
-        updated_at: new Date().toISOString()
-    };
-    const { error } = await supabase.from('crm_support_tickets').upsert(payload);
-    if (error) throw error;
+    await supabase.from('crm_support_tickets').upsert({ id: ticket.id || crypto.randomUUID(), sender_id: ticket.senderId, sender_name: ticket.senderName, sender_email: ticket.senderEmail, sender_role: ticket.senderRole, target_id: ticket.targetId || null, target_name: ticket.targetName || null, target_email: ticket.targetEmail || null, target_role: ticket.targetRole || null, subject: ticket.subject, message: ticket.message, tag: ticket.tag, status: ticket.status || 'open', assigned_id: ticket.assignedId || null, assigned_name: ticket.assignedName || null, created_at: ticket.createdAt || new Date().toISOString(), updated_at: new Date().toISOString() });
   },
 
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    return (data || []).map((s: any) => ({
-        id: s.id,
-        status: s.status,
-        responsibleName: s.responsible_name,
-        cpf: s.cpf,
-        phone: s.phone,
-        email: s.email,
-        password: s.password,
-        secondContactName: s.second_contact_name,
-        secondContactPhone: s.second_contact_phone,
-        fantasyName: s.fantasy_name,
-        legalName: s.legal_name,
-        studioPhone: s.studio_phone,
-        address: s.address,
-        city: s.city,
-        state: s.state,
-        country: s.country,
-        sizeM2: s.size_m2,
-        studentCapacity: s.student_capacity,
-        rentValue: s.rent_value,
-        methodology: s.methodology,
-        studioType: s.studio_type,
-        nameOnSite: s.name_on_site,
-        bank: s.bank,
-        agency: s.agency,
-        account: s.account,
-        beneficiary: s.beneficiary,
-        pixKey: s.pix_key,
-        hasReformer: !!s.has_reformer,
-        qtyReformer: s.qty_reformer,
-        hasLadderBarrel: !!s.has_ladder_barrel,
-        qtyLadderBarrel: s.qty_ladder_barrel,
-        hasChair: !!s.has_chair,
-        qtyChair: s.qty_chair,
-        hasCadillac: !!s.has_cadillac,
-        qtyCadillac: s.qty_cadillac,
-        hasChairsForCourse: !!s.has_chairs_for_course,
-        hasTv: !!s.has_tv,
-        maxKitsCapacity: s.max_kits_capacity,
-        attachments: s.attachments
-    }));
+    return (data || []).map((s: any) => ({ id: s.id, status: s.status, responsibleName: s.responsible_name, cpf: s.cpf, phone: s.phone, email: s.email, password: s.password, secondContactName: s.second_contact_name, secondContactPhone: s.second_contact_phone, fantasyName: s.fantasy_name, legalName: s.legal_name, cnpj: s.cnpj, studioPhone: s.studio_phone, address: s.address, city: s.city, state: s.state, country: s.country, sizeM2: s.size_m2, studentCapacity: s.student_capacity, rentValue: s.rent_value, methodology: s.methodology, studioType: s.studio_type, nameOnSite: s.name_on_site, bank: s.bank, agency: s.agency, account: s.account, beneficiary: s.beneficiary, pixKey: s.pix_key, hasReformer: !!s.has_reformer, qtyReformer: s.qty_reformer, hasLadderBarrel: !!s.has_ladder_barrel, qtyLadderBarrel: s.qty_ladder_barrel, hasChair: !!s.has_chair, qtyChair: s.qty_chair, hasCadillac: !!s.has_cadillac, qtyCadillac: s.qty_cadillac, hasChairsForCourse: !!s.has_chairs_for_course, hasTv: !!s.has_tv, maxKitsCapacity: s.max_kits_capacity, attachments: s.attachments }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: studio.id || crypto.randomUUID(),
-        status: studio.status,
-        responsible_name: studio.responsibleName,
-        cpf: studio.cpf,
-        phone: studio.phone,
-        email: studio.email,
-        password: studio.password,
-        second_contact_name: studio.secondContactName,
-        second_contact_phone: studio.secondContactPhone,
-        fantasy_name: studio.fantasyName,
-        legal_name: studio.legalName,
-        cnpj: studio.cnpj,
-        studio_phone: studio.studioPhone,
-        address: studio.address,
-        city: studio.city,
-        state: studio.state,
-        country: studio.country,
-        size_m2: studio.sizeM2,
-        student_capacity: studio.studentCapacity,
-        rent_value: studio.rentValue,
-        methodology: studio.methodology,
-        studio_type: studio.studioType,
-        name_on_site: studio.nameOnSite,
-        bank: studio.bank,
-        agency: studio.agency,
-        account: studio.account,
-        beneficiary: studio.beneficiary,
-        pix_key: studio.pixKey,
-        has_reformer: !!studio.hasReformer,
-        qty_reformer: studio.qtyReformer,
-        has_ladder_barrel: !!studio.hasLadderBarrel,
-        qty_ladder_barrel: studio.qtyLadderBarrel,
-        has_chair: !!studio.hasChair,
-        qty_chair: studio.qtyChair,
-        has_cadillac: !!studio.hasCadillac,
-        qty_cadillac: studio.qtyCadillac,
-        has_chairs_for_course: !!studio.hasChairsForCourse,
-        has_tv: !!studio.hasTv,
-        max_kits_capacity: studio.maxKitsCapacity,
-        attachments: studio.attachments
-    };
-    const { error } = await supabase.from('crm_partner_studios').upsert(payload);
-    if (error) throw error;
+    await supabase.from('crm_partner_studios').upsert({ id: studio.id || crypto.randomUUID(), status: studio.status, responsible_name: studio.responsibleName, cpf: studio.cpf, phone: studio.phone, email: studio.email, password: studio.password, second_contact_name: studio.secondContactName, second_contact_phone: studio.secondContactPhone, fantasy_name: studio.fantasyName, legal_name: studio.legalName, cnpj: studio.cnpj, studio_phone: studio.studioPhone, address: studio.address, city: studio.city, state: studio.state, country: studio.country, size_m2: studio.sizeM2, student_capacity: studio.studentCapacity, rent_value: studio.rentValue, methodology: studio.methodology, studio_type: studio.studioType, name_on_site: studio.nameOnSite, bank: studio.bank, agency: studio.agency, account: studio.account, beneficiary: studio.beneficiary, pix_key: studio.pixKey, has_reformer: !!studio.hasReformer, qty_reformer: studio.qtyReformer, has_ladder_barrel: !!studio.hasLadderBarrel, qty_ladder_barrel: studio.qtyLadderBarrel, has_chair: !!studio.hasChair, qty_chair: studio.qtyChair, has_cadillac: !!studio.hasCadillac, qty_cadillac: studio.qtyCadillac, has_chairs_for_course: !!studio.hasChairsForCourse, has_tv: !!studio.hasTv, max_kits_capacity: studio.maxKitsCapacity, attachments: studio.attachments });
   },
 
   deletePartnerStudio: async (id: string): Promise<void> => {
@@ -960,26 +723,12 @@ export const appBackend = {
   getTeacherNews: async (): Promise<TeacherNews[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_teacher_news').select('*').order('created_at', { ascending: false });
-    return (data || []).map((n: any) => ({
-        id: n.id,
-        title: n.title,
-        content: n.content,
-        imageUrl: n.image_url,
-        createdAt: n.created_at
-    }));
+    return (data || []).map((n: any) => ({ id: n.id, title: n.title, content: n.content, imageUrl: n.image_url, createdAt: n.created_at }));
   },
 
   saveTeacherNews: async (news: Partial<TeacherNews>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: news.id || crypto.randomUUID(),
-        title: news.title,
-        content: news.content,
-        image_url: news.imageUrl,
-        created_at: news.createdAt || new Date().toISOString()
-    };
-    const { error } = await supabase.from('crm_teacher_news').upsert(payload);
-    if (error) throw error;
+    await supabase.from('crm_teacher_news').upsert({ id: news.id || crypto.randomUUID(), title: news.title, content: news.content, image_url: news.imageUrl, created_at: news.createdAt || new Date().toISOString() });
   },
 
   deleteTeacherNews: async (id: string): Promise<void> => {
@@ -991,64 +740,27 @@ export const appBackend = {
     if (!isConfigured) return;
     const { data: contract } = await supabase.from('crm_contracts').select('signers, status').eq('id', contractId).single();
     if (!contract) throw new Error("Contrato não encontrado");
-
     const signers = (contract.signers || []) as ContractSigner[];
-    const updatedSigners = signers.map(s => 
-        s.id === signerId ? { ...s, status: 'signed' as const, signatureData, signedAt: new Date().toISOString() } : s
-    );
-
+    const updatedSigners = signers.map(s => s.id === signerId ? { ...s, status: 'signed' as const, signatureData, signedAt: new Date().toISOString() } : s);
     const allSigned = updatedSigners.every(s => s.status === 'signed');
-
-    const { error } = await supabase.from('crm_contracts').update({
-        signers: updatedSigners,
-        status: allSigned ? 'signed' : 'sent',
-        updated_at: new Date().toISOString()
-    }).eq('id', contractId);
-
-    if (error) throw error;
+    await supabase.from('crm_contracts').update({ signers: updatedSigners, status: allSigned ? 'signed' : 'sent', updated_at: new Date().toISOString() }).eq('id', contractId);
   },
 
   getContracts: async (): Promise<Contract[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').order('created_at', { ascending: false });
-    return (data || []).map((d: any) => ({
-      id: d.id,
-      title: d.title || '',
-      content: d.content || '',
-      city: d.city || '',
-      contractDate: d.contract_date || '',
-      status: d.status as any,
-      folderId: d.folder_id,
-      signers: d.signers || [],
-      createdAt: d.created_at
-    }));
+    return (data || []).map((d: any) => ({ id: d.id, title: d.title || '', content: d.content || '', city: d.city || '', contractDate: d.contract_date || '', status: d.status as any, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getContractFolders: async (): Promise<ContractFolder[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contract_folders').select('*').order('name');
-    return (data || []).map((f: any) => ({
-        id: f.id,
-        name: f.name,
-        createdAt: f.created_at
-    }));
+    return (data || []).map((f: any) => ({ id: f.id, name: f.name, createdAt: f.created_at }));
   },
 
   saveContract: async (contract: Contract): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: contract.id || crypto.randomUUID(),
-        title: contract.title,
-        content: contract.content,
-        city: contract.city,
-        contract_date: contract.contractDate,
-        status: contract.status,
-        folder_id: contract.folderId,
-        signers: contract.signers,
-        created_at: contract.createdAt || new Date().toISOString()
-    };
-    const { error } = await supabase.from('crm_contracts').upsert(payload);
-    if (error) throw error;
+    await supabase.from('crm_contracts').upsert({ id: contract.id || crypto.randomUUID(), title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contractDate, status: contract.status, folder_id: contract.folderId, signers: contract.signers, created_at: contract.createdAt || new Date().toISOString() });
   },
 
   sendContractEmailSimulation: async (email: string, name: string, title: string): Promise<void> => {
@@ -1058,11 +770,7 @@ export const appBackend = {
 
   saveContractFolder: async (folder: ContractFolder): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_contract_folders').upsert({
-        id: folder.id || crypto.randomUUID(),
-        name: folder.name,
-        created_at: folder.createdAt || new Date().toISOString()
-    });
+    await supabase.from('crm_contract_folders').upsert({ id: folder.id || crypto.randomUUID(), name: folder.name, created_at: folder.createdAt || new Date().toISOString() });
   },
 
   deleteContractFolder: async (id: string): Promise<void> => {
@@ -1078,78 +786,30 @@ export const appBackend = {
   issueCertificate: async (studentDealId: string, templateId: string): Promise<string> => {
     if (!isConfigured) return 'mock-hash';
     const hash = crypto.randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase();
-    const { error } = await supabase.from('crm_student_certificates').insert([{
-        student_deal_id: studentDealId,
-        certificate_template_id: templateId,
-        hash: hash,
-        issued_at: new Date().toISOString()
-    }]);
-    if (error) throw error;
+    await supabase.from('crm_student_certificates').insert([{ student_deal_id: studentDealId, certificate_template_id: templateId, hash: hash, issued_at: new Date().toISOString() }]);
     return hash;
   },
 
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('title');
-    return (data || []).map((c: any) => ({
-        id: c.id,
-        title: c.title,
-        description: c.description,
-        price: Number(c.price || 0),
-        // Fix: Changed payment_link to paymentLink to match OnlineCourse interface
-        paymentLink: c.payment_link,
-        imageUrl: c.image_url,
-        certificateTemplateId: c.certificate_template_id,
-        createdAt: c.created_at
-    }));
+    return (data || []).map((c: any) => ({ id: c.id, title: c.title, description: c.description, price: Number(c.price || 0), paymentLink: c.payment_link, imageUrl: c.image_url, certificateTemplateId: c.certificate_template_id, createdAt: c.created_at }));
   },
 
   saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: course.id || crypto.randomUUID(),
-        title: course.title,
-        description: course.description,
-        price: course.price,
-        payment_link: course.paymentLink,
-        image_url: course.imageUrl,
-        // Fix: Changed course.certificate_template_id to course.certificateTemplateId
-        certificate_template_id: course.certificateTemplateId || null,
-        created_at: course.createdAt || new Date().toISOString()
-    };
-    const { error } = await supabase.from('crm_online_courses').upsert(payload);
-    if (error) throw error;
+    await supabase.from('crm_online_courses').upsert({ id: course.id || crypto.randomUUID(), title: course.title, description: course.description, price: course.price, payment_link: course.paymentLink, image_url: course.imageUrl, certificate_template_id: course.certificateTemplateId || null, created_at: course.createdAt || new Date().toISOString() });
   },
 
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('title');
-    return (data || []).map((c: any) => ({
-        id: c.id,
-        title: c.title,
-        background_data: c.background_data,
-        back_background_data: c.back_background_data,
-        linked_product_id: c.linked_product_id,
-        body_text: c.body_text,
-        layout_config: c.layout_config,
-        createdAt: c.created_at
-    }));
+    return (data || []).map((c: any) => ({ id: c.id, title: c.title, backgroundData: c.background_data, backBackgroundData: c.back_background_data, linkedProductId: c.linked_product_id, bodyText: c.body_text, layoutConfig: c.layout_config, createdAt: c.created_at }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: cert.id || crypto.randomUUID(),
-        title: cert.title,
-        background_data: cert.backgroundData,
-        back_background_data: cert.backBackgroundData,
-        linked_product_id: cert.linkedProductId,
-        body_text: cert.bodyText,
-        layout_config: cert.layoutConfig,
-        created_at: cert.createdAt || new Date().toISOString()
-    };
-    const { error } = await supabase.from('crm_certificates').upsert(payload);
-    if (error) throw error;
+    await supabase.from('crm_certificates').upsert({ id: cert.id || crypto.randomUUID(), title: cert.title, background_data: cert.backgroundData, back_background_data: cert.backBackgroundData, linked_product_id: cert.linkedProductId, body_text: cert.bodyText, layout_config: cert.layoutConfig, created_at: cert.createdAt || new Date().toISOString() });
   },
 
   deleteCertificate: async (id: string): Promise<void> => {
@@ -1160,24 +820,12 @@ export const appBackend = {
   getCourseModules: async (courseId: string): Promise<CourseModule[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_course_modules').select('*').eq('course_id', courseId).order('order_index');
-    return (data || []).map((m: any) => ({
-        id: m.id,
-        courseId: m.course_id,
-        title: m.title,
-        orderIndex: m.order_index
-    }));
+    return (data || []).map((m: any) => ({ id: m.id, courseId: m.course_id, title: m.title, orderIndex: m.order_index }));
   },
 
   saveCourseModule: async (mod: Partial<CourseModule>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: mod.id || crypto.randomUUID(),
-        course_id: mod.courseId,
-        title: mod.title,
-        order_index: mod.orderIndex
-    };
-    const { error } = await supabase.from('crm_course_modules').upsert(payload);
-    if (error) throw error;
+    await supabase.from('crm_course_modules').upsert({ id: mod.id || crypto.randomUUID(), course_id: mod.courseId, title: mod.title, order_index: mod.orderIndex });
   },
 
   deleteCourseModule: async (id: string): Promise<void> => {
@@ -1188,104 +836,54 @@ export const appBackend = {
   getModuleLessons: async (moduleId: string): Promise<CourseLesson[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index');
-    return (data || []).map((l: any) => ({
-        id: l.id,
-        moduleId: l.module_id,
-        title: l.title,
-        description: l.description,
-        videoUrl: l.video_url,
-        materials: l.materials || [],
-        orderIndex: l.order_index
-    }));
+    return (data || []).map((l: any) => ({ id: l.id, moduleId: l.module_id, title: l.title, description: l.description, videoUrl: l.video_url, materials: l.materials || [], orderIndex: l.order_index }));
   },
 
   saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
     if (!isConfigured) return;
-    const payload = {
-        id: lesson.id || crypto.randomUUID(),
-        module_id: lesson.moduleId,
-        title: lesson.title,
-        description: lesson.description,
-        video_url: lesson.videoUrl,
-        materials: lesson.materials || [],
-        order_index: lesson.orderIndex
-    };
-    const { error } = await supabase.from('crm_course_lessons').upsert(payload);
-    if (error) throw error;
+    await supabase.from('crm_course_lessons').upsert({ id: lesson.id || crypto.randomUUID(), module_id: lesson.moduleId, title: lesson.title, description: lesson.description, video_url: lesson.videoUrl, materials: lesson.materials || [], order_index: lesson.orderIndex });
   },
 
   deleteCourseLesson: async (id: string): Promise<void> => {
-      if (!isConfigured) return;
-      await supabase.from('crm_course_lessons').delete().eq('id', id);
+    if (!isConfigured) return;
+    await supabase.from('crm_course_lessons').delete().eq('id', id);
   },
 
   getPendingContractsByEmail: async (email: string): Promise<Contract[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_contracts').select('*').eq('status', 'sent');
-    return (data || []).filter((c: any) => 
-      c.signers?.some((s: any) => s.email.toLowerCase() === email.toLowerCase() && s.status === 'pending')
-    ).map((d: any) => ({
-      id: d.id, title: d.title || '', content: d.content || '', city: d.city || '', contractDate: d.contract_date || '', status: d.status as any, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at
-    }));
+    return (data || []).filter((c: any) => c.signers?.some((s: any) => s.email.toLowerCase() === email.toLowerCase() && s.status === 'pending')).map((d: any) => ({ id: d.id, title: d.title || '', content: d.content || '', city: d.city || '', contractDate: d.contract_date || '', status: d.status as any, folderId: d.folder_id, signers: d.signers || [], createdAt: d.created_at }));
   },
 
   getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('crm_support_tickets').select('*').eq('sender_id', senderId).order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map((t: any) => ({
-      id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role, targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role, subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, assignedId: t.assigned_id, assignedName: t.assigned_name, createdAt: t.created_at, updatedAt: t.updated_at
-    }));
+    return (data || []).map((t: any) => ({ id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role, targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role, subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, assignedId: t.assigned_id, assignedName: t.assigned_name, createdAt: t.created_at, updatedAt: t.updated_at }));
   },
 
   getSupportTicketMessages: async (ticketId: string): Promise<SupportMessage[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_support_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-      return (data || []).map((m: any) => ({
-          id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role, content: m.content, attachment_url: m.attachment_url, attachment_name: m.attachment_name, createdAt: m.created_at
-      }));
+      return (data || []).map((m: any) => ({ id: m.id, ticketId: m.ticket_id, senderId: m.sender_id, senderName: m.sender_name, senderRole: m.sender_role, content: m.content, attachmentUrl: m.attachment_url, attachmentName: m.attachment_name, createdAt: m.created_at }));
   },
 
   addSupportMessage: async (msg: Partial<SupportMessage>): Promise<void> => {
       if (!isConfigured) return;
-      await supabase.from('crm_support_messages').insert([{
-          ticket_id: (msg as any).ticketId,
-          sender_id: (msg as any).senderId,
-          sender_name: (msg as any).senderName,
-          sender_role: (msg as any).senderRole,
-          content: (msg as any).content,
-          attachment_url: (msg as any).attachmentUrl,
-          attachment_name: (msg as any).attachmentName
-      }]);
+      await supabase.from('crm_support_messages').insert([{ ticket_id: (msg as any).ticketId, sender_id: (msg as any).senderId, sender_name: (msg as any).senderName, sender_role: (msg as any).senderRole, content: (msg as any).content, attachment_url: (msg as any).attachmentUrl, attachment_name: (msg as any).attachmentName }]);
   },
 
   getStudentCertificate: async (hash: string): Promise<any | null> => {
       if (!isConfigured) return null;
       const { data: cert } = await supabase.from('crm_student_certificates').select('*, crm_deals(company_name, contact_name, course_city), crm_certificates(*)').eq('hash', hash).maybeSingle();
       if (!cert) return null;
-      return {
-          studentName: cert.crm_deals?.company_name || cert.crm_deals?.contact_name || 'Aluno',
-          studentCity: cert.crm_deals?.course_city || 'Brasil',
-          template: {
-              id: cert.crm_certificates.id,
-              title: cert.crm_certificates.title,
-              background_data: cert.crm_certificates.background_data,
-              back_background_data: cert.crm_certificates.back_background_data,
-              linked_product_id: cert.crm_certificates.linked_product_id,
-              body_text: cert.crm_certificates.body_text,
-              layout_config: cert.crm_certificates.layout_config,
-              createdAt: cert.crm_certificates.created_at
-          },
-          issuedAt: cert.issued_at
-      };
+      return { studentName: cert.crm_deals?.company_name || cert.crm_deals?.contact_name || 'Aluno', studentCity: cert.crm_deals?.course_city || 'Brasil', template: { id: cert.crm_certificates.id, title: cert.crm_certificates.title, backgroundData: cert.crm_certificates.background_data, backBackgroundData: cert.crm_certificates.back_background_data, linkedProductId: cert.crm_certificates.linked_product_id, bodyText: cert.crm_certificates.body_text, layoutConfig: cert.crm_certificates.layout_config, createdAt: cert.crm_certificates.created_at }, issuedAt: cert.issued_at };
   },
 
   getExternalCertificates: async (studentId: string): Promise<ExternalCertificate[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_external_certificates').select('*').eq('student_id', studentId).order('created_at', { ascending: false });
-      return (data || []).map((c: any) => ({
-          id: c.id, student_id: c.student_id, course_name: c.course_name, completion_date: c.completion_date, file_url: c.file_url, file_name: c.file_name, created_at: c.created_at
-      }));
+      return (data || []).map((c: any) => ({ id: c.id, student_id: c.student_id, course_name: c.course_name, completion_date: c.completion_date, file_url: c.file_url, file_name: c.file_name, created_at: c.created_at }));
   },
 
   saveExternalCertificate: async (cert: any): Promise<void> => {
@@ -1296,15 +894,12 @@ export const appBackend = {
   getEvents: async (): Promise<EventModel[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_events').select('*').order('created_at', { ascending: false });
-      return (data || []).map((e: any) => ({
-          id: e.id, name: e.name, description: e.description, location: e.location, dates: e.dates || [], registrationOpen: !!e.registration_open, createdAt: e.created_at
-      }));
+      return (data || []).map((e: any) => ({ id: e.id, name: e.name, description: e.description, location: e.location, dates: e.dates || [], registrationOpen: !!e.registration_open, createdAt: e.created_at }));
   },
 
   saveEvent: async (evt: EventModel): Promise<EventModel> => {
       if (!isConfigured) return evt;
-      const payload = { id: evt.id, name: evt.name, description: evt.description, location: evt.location, dates: evt.dates, registration_open: evt.registrationOpen, created_at: evt.createdAt };
-      const { data, error } = await supabase.from('crm_events').upsert(payload).select().single();
+      const { data, error } = await supabase.from('crm_events').upsert({ id: evt.id || crypto.randomUUID(), name: evt.name, description: evt.description, location: evt.location, dates: evt.dates, registration_open: evt.registrationOpen, created_at: evt.createdAt || new Date().toISOString() }).select().single();
       if (error) throw error;
       return { id: data.id, name: data.name, description: data.description, location: data.location, dates: data.dates, registrationOpen: !!data.registration_open, createdAt: data.created_at };
   },
@@ -1317,15 +912,12 @@ export const appBackend = {
   getBlocks: async (eventId: string): Promise<EventBlock[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_event_blocks').select('*').eq('event_id', eventId).order('date');
-      return (data || []).map((b: any) => ({
-          id: b.id, eventId: b.event_id, date: b.date, title: b.title, maxSelections: b.max_selections
-      }));
+      return (data || []).map((b: any) => ({ id: b.id, eventId: b.event_id, date: b.date, title: b.title, maxSelections: b.max_selections }));
   },
 
   saveBlock: async (block: EventBlock): Promise<EventBlock> => {
       if (!isConfigured) return block;
-      const payload = { id: block.id, event_id: (block as any).eventId, date: block.date, title: block.title, max_selections: block.maxSelections };
-      const { data, error = null } = await supabase.from('crm_event_blocks').upsert(payload).select().single();
+      const { data, error } = await supabase.from('crm_event_blocks').upsert({ id: block.id || crypto.randomUUID(), event_id: block.eventId, date: block.date, title: block.title, max_selections: block.maxSelections }).select().single();
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, date: data.date, title: data.title, maxSelections: data.max_selections };
   },
@@ -1338,15 +930,12 @@ export const appBackend = {
   getWorkshops: async (eventId: string): Promise<Workshop[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_event_workshops').select('*').eq('event_id', eventId).order('time');
-      return (data || []).map((w: any) => ({
-          id: w.id, eventId: w.event_id, blockId: w.block_id, title: w.title, description: w.description, speaker: w.speaker, date: w.date, time: w.time, spots: w.spots
-      }));
+      return (data || []).map((w: any) => ({ id: w.id, eventId: w.event_id, blockId: w.block_id, title: w.title, description: w.description, speaker: w.speaker, date: w.date, time: w.time, spots: w.spots }));
   },
 
   saveWorkshop: async (ws: Workshop): Promise<Workshop> => {
       if (!isConfigured) return ws;
-      const payload = { id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots };
-      const { data, error } = await supabase.from('crm_event_workshops').upsert(payload).select().single();
+      const { data, error } = await supabase.from('crm_event_workshops').upsert({ id: ws.id || crypto.randomUUID(), event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots }).select().single();
       if (error) throw error;
       return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
   },
@@ -1359,9 +948,7 @@ export const appBackend = {
   getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_event_registrations').select('*').eq('event_id', eventId);
-      return (data || []).map((r: any) => ({
-          id: r.id, eventId: r.event_id, workshopId: r.workshop_id, studentId: r.student_id, studentName: r.student_name, studentEmail: r.student_email, registeredAt: r.created_at, locked: !!r.locked
-      }));
+      return (data || []).map((r: any) => ({ id: r.id, eventId: r.event_id, workshopId: r.workshop_id, studentId: r.student_id, studentName: r.student_name, studentEmail: r.student_email, registeredAt: r.created_at, locked: !!r.locked }));
   },
 
   getStudentCourseAccess: async (studentDealId: string): Promise<string[]> => {
@@ -1378,28 +965,20 @@ export const appBackend = {
 
   toggleLessonProgress: async (studentDealId: string, lessonId: string, completed: boolean): Promise<void> => {
       if (!isConfigured) return;
-      if (completed) {
-          await supabase.from('crm_student_lesson_progress').upsert([{ student_deal_id: studentDealId, lesson_id: lessonId, completed_at: new Date().toISOString() }]);
-      } else {
-          await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', studentDealId).eq('lesson_id', lessonId);
-      }
+      if (completed) await supabase.from('crm_student_lesson_progress').upsert([{ student_deal_id: studentDealId, lesson_id: lessonId, completed_at: new Date().toISOString() }]);
+      else await supabase.from('crm_student_lesson_progress').delete().eq('student_deal_id', studentDealId).eq('lesson_id', lessonId);
   },
 
   getInventory: async (): Promise<InventoryRecord[]> => {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
       if (error) throw error;
-      return (data || []).map((i: any) => ({
-          id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, item_apostila_classico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studio_id: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conferenceDate: i.conference_date || null, attachments: i.attachments, createdAt: i.created_at
-      }));
+      return (data || []).map((i: any) => ({ id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studioId: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conferenceDate: i.conference_date || null, attachments: i.attachments, createdAt: i.created_at }));
   },
 
   saveInventoryRecord: async (rec: InventoryRecord): Promise<void> => {
       if (!isConfigured) return;
-      const payload = {
-          id: rec.id || crypto.randomUUID(), type: rec.type, item_apostila_nova: rec.itemApostilaNova, item_apostila_classico: rec.itemApostilaClassico, item_sacochila: rec.itemSacochila, item_lapis: rec.itemLapis, registration_date: rec.registrationDate, studio_id: rec.studioId || null, tracking_code: rec.trackingCode, observations: rec.observations, conference_date: rec.conferenceDate || null, attachments: rec.attachments
-      };
-      await supabase.from('crm_inventory').upsert(payload);
+      await supabase.from('crm_inventory').upsert({ id: rec.id || crypto.randomUUID(), type: rec.type, item_apostila_nova: rec.itemApostilaNova, item_apostila_classico: rec.itemApostilaClassico, item_sacochila: rec.itemSacochila, item_lapis: rec.itemLapis, registration_date: rec.registrationDate, studio_id: rec.studioId || null, tracking_code: rec.trackingCode, observations: rec.observations, conference_date: rec.conferenceDate || null, attachments: rec.attachments });
   },
 
   deleteInventoryRecord: async (id: string): Promise<void> => {
@@ -1411,17 +990,12 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((n: any) => ({
-          id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifier_code: n.identifier_code, fullName: n.full_name, product_name: n.product_name, original_value: n.original_value, payment_method: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at
-      }));
+      return (data || []).map((n: any) => ({ id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifierCode: n.identifier_code, fullName: n.full_name, productName: n.product_name, originalValue: n.original_value, paymentMethod: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucherLink1: n.voucher_link_1, testDate: n.test_date, voucherLink2: n.voucher_link_2, voucherLink3: n.voucher_link_3, boletosLink: n.boletos_link, negotiationReference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at }));
   },
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
       if (!isConfigured) return;
-      const payload = {
-          id: neg.id || crypto.randomUUID(), open_installments: neg.openInstallments, total_negotiated_value: neg.totalNegotiatedValue, total_installments: neg.totalInstallments, due_date: neg.dueDate, responsible_agent: neg.responsibleAgent, identifier_code: neg.identifierCode, full_name: neg.fullName, product_name: neg.productName, original_value: neg.originalValue, payment_method: neg.paymentMethod, observations: neg.observations, status: neg.status, team: neg.team, voucher_link_1: neg.voucherLink1, test_date: neg.testDate, voucher_link_2: neg.voucherLink2, voucher_link_3: neg.voucherLink3, boletos_link: neg.boletosLink, negotiation_reference: neg.negotiationReference, attachments: neg.attachments, created_at: neg.createdAt || new Date().toISOString()
-      };
-      await supabase.from('crm_billing_negotiations').upsert(payload);
+      await supabase.from('crm_billing_negotiations').upsert({ id: neg.id || crypto.randomUUID(), open_installments: neg.openInstallments, total_negotiated_value: neg.totalNegotiatedValue, total_installments: neg.totalInstallments, due_date: neg.dueDate, responsible_agent: neg.responsibleAgent, identifier_code: neg.identifierCode, full_name: neg.fullName, product_name: neg.productName, original_value: neg.originalValue, payment_method: neg.paymentMethod, observations: neg.observations, status: neg.status, team: neg.team, voucher_link_1: neg.voucherLink1, test_date: neg.testDate, voucher_link_2: neg.voucherLink2, voucher_link_3: neg.voucherLink3, boletos_link: neg.boletosLink, negotiation_reference: neg.negotiationReference, attachments: neg.attachments, created_at: neg.createdAt || new Date().toISOString() });
   },
 
   deleteBillingNegotiation: async (id: string): Promise<void> => {
@@ -1433,9 +1007,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('crm_support_tickets').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((t: any) => ({
-          id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role, targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role, subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, assignedId: t.assigned_id, assignedName: t.assigned_name, createdAt: t.created_at, updatedAt: t.updated_at
-      }));
+      return (data || []).map((t: any) => ({ id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role, targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role, subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, assignedId: t.assigned_id, assignedName: t.assigned_name, createdAt: t.created_at, updatedAt: t.updated_at }));
   },
 
   deleteSupportTicket: async (id: string): Promise<void> => {
@@ -1448,43 +1020,33 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((r: any) => ({
-          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, 
-          // Fix: Mapping from r.message_template to camelCase messageTemplate
-          messageTemplate: r.message_template, 
-          isActive: !!r.is_active, createdAt: r.created_at
-      }));
+      return (data || []).map((r: any) => ({ id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, messageTemplate: r.message_template, isActive: !!r.is_active, createdAt: r.created_at }));
   },
 
   saveWAAutomationRule: async (rule: WAAutomationRule): Promise<void> => {
       if (!isConfigured) return;
-      const payload = {
-          // Fix: Map from camelCase triggerType and messageTemplate to snake_case trigger_type and message_template
-          id: rule.id || crypto.randomUUID(), name: rule.name, trigger_type: rule.triggerType, pipeline_name: rule.pipelineName, stage_id: rule.stageId, product_type: rule.productType, product_id: rule.productId, message_template: rule.messageTemplate, is_active: rule.isActive, created_at: rule.createdAt || new Date().toISOString()
-      };
-      await supabase.from('crm_wa_automations').upsert(payload);
+      await supabase.from('crm_wa_automations').upsert({ id: rule.id || crypto.randomUUID(), name: rule.name, trigger_type: rule.triggerType, pipeline_name: rule.pipelineName, stage_id: rule.stageId, product_type: rule.productType, product_id: rule.productId, message_template: rule.messageTemplate, is_active: rule.isActive, created_at: rule.createdAt || new Date().toISOString() });
+  },
+
+  deleteWAAutomationRule: async (id: string): Promise<void> => {
+      if (!isConfigured) return;
+      await supabase.from('crm_wa_automations').delete().eq('id', id);
   },
 
   getWAAutomationLogs: async (): Promise<WAAutomationLog[]> => {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_wa_automation_logs').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((l: any) => ({
-          id: l.id, ruleName: l.rule_name, studentName: l.student_name, phone: l.phone, message: l.message, createdAt: l.created_at
-      }));
+      return (data || []).map((l: any) => ({ id: l.id, ruleName: l.rule_name, studentName: l.student_name, phone: l.phone, message: l.message, createdAt: l.created_at }));
   },
 
   getEmailConfig: async (): Promise<EmailConfig | null> => {
     const local = localStorage.getItem('crm_email_config');
-    if (local) {
-      try { return JSON.parse(local); } catch (e) { return null; }
-    }
+    if (local) { try { return JSON.parse(local); } catch (e) { return null; } }
     if (!isConfigured) return null;
     try {
         const { data } = await supabase.from('crm_settings').select('value').eq('key', 'email_config').maybeSingle();
-        if (data?.value) {
-          return JSON.parse(data.value);
-        }
+        if (data?.value) return JSON.parse(data.value);
     } catch (e) { return null; }
     return null;
   },

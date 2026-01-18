@@ -699,4 +699,12 @@ export interface AiConfig {
   isActive: boolean;
   temperature: number;
   updatedAt: string;
+  agentConfig?: {
+    autoCreateDeal: boolean;
+    pipelineName: string;
+    stageId: string;
+    distributionMode: 'fixed' | 'round-robin';
+    fixedOwnerId?: string;
+    teamId?: string;
+  };
 }

@@ -6,10 +6,10 @@ import {
   Search, X, Send, User, ChevronRight, Info, AlertCircle,
   Database, Layout, Kanban, Sliders, Globe, RefreshCw,
   CheckCircle2, Smartphone, Wifi, WifiOff, Link2, Copy,
-  MessageCircle, GraduationCap
+  MessageCircle, GraduationCap, Target, Users, UserCheck, ArrowRightLeft
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
-import { appBackend } from '../services/appBackend';
+import { appBackend, Pipeline } from '../services/appBackend';
 import { AiConfig, AiKnowledgeItem } from '../types';
 import clsx from 'clsx';
 
@@ -28,10 +28,25 @@ interface WAConfig {
 }
 
 export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
-  const [activeTab, setActiveTab] = useState<'config' | 'knowledge' | 'simulator' | 'whatsapp'>('config');
-  const [config, setConfig] = useState<AiConfig>({ id: 'default', systemPrompt: '', isActive: false, temperature: 0.7, updatedAt: '' });
+  const [activeTab, setActiveTab] = useState<'config' | 'knowledge' | 'simulator' | 'whatsapp' | 'agent'>('config');
+  const [config, setConfig] = useState<AiConfig>({ 
+    id: 'default', 
+    systemPrompt: '', 
+    isActive: false, 
+    temperature: 0.7, 
+    updatedAt: '',
+    agentConfig: {
+      autoCreateDeal: false,
+      pipelineName: 'Padrão',
+      stageId: 'new',
+      distributionMode: 'fixed'
+    }
+  });
   const [knowledge, setKnowledge] = useState<AiKnowledgeItem[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [collaborators, setCollaborators] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -76,14 +91,32 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [configData, knowledgeData, classesRes] = await Promise.all([
+      const [configData, knowledgeData, classesRes, pipesRes, teamsRes, collabRes] = await Promise.all([
         appBackend.getAiConfig(),
         appBackend.getAiKnowledgeItems(),
-        appBackend.client.from('crm_classes').select('*').order('date_mod_1', { ascending: true })
+        appBackend.client.from('crm_classes').select('*').order('date_mod_1', { ascending: true }),
+        appBackend.getPipelines(),
+        appBackend.client.from('crm_teams').select('*'),
+        appBackend.client.from('crm_collaborators').select('id, full_name').eq('status', 'active').eq('department', 'Comercial')
       ]);
-      setConfig(configData);
+      
+      if (configData) {
+          setConfig({
+              ...configData,
+              agentConfig: configData.agentConfig || {
+                  autoCreateDeal: false,
+                  pipelineName: 'Padrão',
+                  stageId: 'new',
+                  distributionMode: 'fixed'
+              }
+          });
+      }
+      
       setKnowledge(knowledgeData);
       setClasses(classesRes.data || []);
+      setPipelines(pipesRes || []);
+      setTeams(teamsRes.data || []);
+      setCollaborators(collabRes.data || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -218,6 +251,16 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
     }
   };
 
+  const updateAgentConfig = (field: string, value: any) => {
+      setConfig(prev => ({
+          ...prev,
+          agentConfig: {
+              ...(prev.agentConfig || { autoCreateDeal: false, pipelineName: 'Padrão', stageId: 'new', distributionMode: 'fixed' }),
+              [field]: value
+          }
+      }));
+  };
+
   const upcomingClasses = useMemo(() => {
       const today = new Date().toISOString().split('T')[0];
       return classes.filter(c => c.date_mod_1 && c.date_mod_1 > today);
@@ -281,6 +324,10 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
     k.content.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const currentPipeline = useMemo(() => {
+      return pipelines.find(p => p.name === config.agentConfig?.pipelineName) || pipelines[0];
+  }, [pipelines, config.agentConfig?.pipelineName]);
+
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
       
@@ -299,6 +346,9 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
         <div className="flex bg-slate-100 p-1 rounded-2xl shadow-inner shrink-0 overflow-x-auto no-scrollbar">
           <button onClick={() => setActiveTab('config')} className={clsx("px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'config' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>
             <Sliders size={14}/> Configuração
+          </button>
+          <button onClick={() => setActiveTab('agent')} className={clsx("px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'agent' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>
+            <Bot size={14}/> Agente
           </button>
           <button onClick={() => setActiveTab('knowledge')} className={clsx("px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'knowledge' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>
             <BookOpen size={14}/> Base de Conhecimento
@@ -380,6 +430,139 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                 </button>
               </div>
             </section>
+          </div>
+        )}
+
+        {activeTab === 'agent' && (
+          <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-10 animate-in slide-in-from-right-4">
+             <section className="max-w-4xl space-y-8">
+                <div className="bg-blue-50 p-6 rounded-[2rem] border border-blue-100 flex gap-4 text-sm text-blue-800 shadow-sm">
+                    <Target size={32} className="shrink-0 text-blue-600" />
+                    <p>Configure como a IA deve interagir com seu <strong>CRM Comercial</strong>. Quando ativado, assim que a atendente capturar o nome e telefone de um novo contato, uma negociação será criada automaticamente no funil e etapa selecionados.</p>
+                </div>
+
+                <div className="p-8 bg-white rounded-[2.5rem] border-2 border-slate-100 shadow-sm space-y-8">
+                    <div className="flex items-center justify-between border-b pb-6">
+                        <div className="flex items-center gap-4">
+                            <div className={clsx("p-4 rounded-2xl shadow-sm transition-all", config.agentConfig?.autoCreateDeal ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400")}>
+                                <Zap size={24}/>
+                            </div>
+                            <div>
+                                <h3 className="font-black text-slate-800 uppercase tracking-widest">Criação Automática de Negócio</h3>
+                                <p className="text-xs text-slate-500 font-medium">Transformar chats em oportunidades no CRM.</p>
+                            </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer scale-110">
+                            <input type="checkbox" className="sr-only peer" checked={config.agentConfig?.autoCreateDeal || false} onChange={e => updateAgentConfig('autoCreateDeal', e.target.checked)} />
+                            <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+
+                    {config.agentConfig?.autoCreateDeal && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in slide-in-from-top-2">
+                            <div className="space-y-4">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Funil de Destino (CRM)</label>
+                                <div className="relative group">
+                                    <Kanban className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                                    <select 
+                                        className="w-full pl-12 pr-10 py-3.5 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-bold outline-none appearance-none cursor-pointer transition-all"
+                                        value={config.agentConfig?.pipelineName || ''}
+                                        onChange={e => updateAgentConfig('pipelineName', e.target.value)}
+                                    >
+                                        {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                    </select>
+                                    <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={18}/>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Etapa Inicial</label>
+                                <div className="relative group">
+                                    <Target className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                                    <select 
+                                        className="w-full pl-12 pr-10 py-3.5 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-2xl text-sm font-bold outline-none appearance-none cursor-pointer transition-all"
+                                        value={config.agentConfig?.stageId || ''}
+                                        onChange={e => updateAgentConfig('stageId', e.target.value)}
+                                    >
+                                        {(currentPipeline?.stages || []).map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                                    </select>
+                                    <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={18}/>
+                                </div>
+                            </div>
+
+                            <div className="md:col-span-2 space-y-6 pt-4 border-t border-slate-50">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Users size={18} className="text-indigo-600"/>
+                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest">Distribuição do Lead</h4>
+                                </div>
+                                
+                                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
+                                    <div className="flex bg-white p-1 rounded-xl border shadow-sm w-fit">
+                                        <button 
+                                            onClick={() => updateAgentConfig('distributionMode', 'fixed')}
+                                            className={clsx("px-6 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", config.agentConfig?.distributionMode === 'fixed' ? "bg-indigo-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}
+                                        >
+                                            <UserCheck size={14}/> Vendedor Fixo
+                                        </button>
+                                        <button 
+                                            onClick={() => updateAgentConfig('distributionMode', 'round-robin')}
+                                            className={clsx("px-6 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", config.agentConfig?.distributionMode === 'round-robin' ? "bg-indigo-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-50")}
+                                        >
+                                            <ArrowRightLeft size={14}/> Rodízio por Equipe
+                                        </button>
+                                    </div>
+
+                                    {config.agentConfig?.distributionMode === 'fixed' ? (
+                                        <div className="animate-in slide-in-from-top-1">
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Selecionar Consultor Responsável</label>
+                                            <div className="relative group">
+                                                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                                                <select 
+                                                    className="w-full pl-12 pr-10 py-3.5 border-2 border-slate-100 bg-white rounded-2xl text-sm font-bold outline-none appearance-none cursor-pointer focus:border-indigo-500 transition-all"
+                                                    value={config.agentConfig?.fixedOwnerId || ''}
+                                                    onChange={e => updateAgentConfig('fixedOwnerId', e.target.value)}
+                                                >
+                                                    <option value="">Escolha um consultor comercial...</option>
+                                                    {collaborators.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                                                </select>
+                                                <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={18}/>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="animate-in slide-in-from-top-1">
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Selecionar Equipe Comercial</label>
+                                            <div className="relative group">
+                                                <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                                                <select 
+                                                    className="w-full pl-12 pr-10 py-3.5 border-2 border-slate-100 bg-white rounded-2xl text-sm font-bold outline-none appearance-none cursor-pointer focus:border-indigo-500 transition-all"
+                                                    value={config.agentConfig?.teamId || ''}
+                                                    onChange={e => updateAgentConfig('teamId', e.target.value)}
+                                                >
+                                                    <option value="">Escolha uma equipe...</option>
+                                                    {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                                </select>
+                                                <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" size={18}/>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 mt-3 font-medium px-1 flex items-center gap-1.5"><Info size={12}/> Novos negócios serão distribuídos sequencialmente (Round Robin) entre os membros desta equipe.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="pt-8 border-t flex justify-end">
+                    <button 
+                        onClick={handleSaveConfig}
+                        disabled={isSaving}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-12 py-4 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-3"
+                    >
+                        {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20}/>}
+                        Salvar Configurações do Agente
+                    </button>
+                </div>
+             </section>
           </div>
         )}
 

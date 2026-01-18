@@ -235,6 +235,7 @@ export const appBackend = {
       is_lead_capture: !!form.isLeadCapture, 
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
+      // Fix: Use correct interface property teamId instead of team_id
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
@@ -302,7 +303,7 @@ export const appBackend = {
   },
 
   /**
-   * Envia e-mail via API do SendGrid utilizando Proxy e Bearer Token padrão.
+   * Envia e-mail via API do SendGrid utilizando Proxy para evitar bloqueio de CORS no navegador.
    */
   sendEmailViaSendGrid: async (to: string, subject: string, body: string): Promise<boolean> => {
       const config = await appBackend.getEmailConfig();
@@ -330,7 +331,7 @@ export const appBackend = {
           });
 
           if (!response.ok) {
-              const errData = await response.json();
+              const errData = await response.text();
               console.error("[SENDGRID ERROR]", errData);
               return false;
           }
@@ -343,6 +344,9 @@ export const appBackend = {
       }
   },
 
+  /**
+   * Executa a lógica de automação de fluxo associada a uma submissão
+   */
   runFlowInstance: async (flow: AutomationFlow, answers: FormAnswer[]) => {
       const triggerNode = flow.nodes.find(n => n.type === 'trigger');
       if (!triggerNode || !triggerNode.nextId) return;
@@ -371,7 +375,8 @@ export const appBackend = {
               const email = answers.find(a => a.questionId === node.config.emailFieldId)?.value;
               if (email) {
                   const subject = (node.config.subject || '').replace(/\{\{nome_cliente\}\}/gi, nameAns);
-                  let body = (node.config.body || '').replace(/\{\{nome_cliente\}\}/gi, nameAns).replace(/\{\{email\}\}/gi, emailAns);
+                  let body = (node.config.body || '');
+                  body = body.replace(/\{\{nome_cliente\}\}/gi, nameAns).replace(/\{\{email\}\}/gi, emailAns);
                   await appBackend.sendEmailViaSendGrid(email, subject, body);
               }
               currentNodeId = node.nextId || null;
@@ -675,12 +680,14 @@ export const appBackend = {
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
+    // Fix: Use intervalMinutes instead of interval_minutes in the returned object literal
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
   },
 
   deletePreset: async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from(PRESETS_TABLE).delete().eq('id', id);
+    const { error } = await supabase.from(PRESETS_TABLE).delete().eq('id', id);
+    if (error) throw error;
   },
 
   getContractById: async (id: string): Promise<Contract | null> => {
@@ -789,7 +796,7 @@ export const appBackend = {
   getOnlineCourses: async (): Promise<OnlineCourse[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_online_courses').select('*').order('title');
-    return (data || []).map((c: any) => ({ id: c.id, title: c.title, description: c.description, price: Number(c.price || 0), paymentLink: c.payment_link, imageUrl: c.image_url, certificateTemplateId: c.certificate_template_id, createdAt: c.created_at }));
+    return (data || []).map((c: any) => ({ id: c.id, title: c.title, description: c.description, price: Number(c.price || 0), payment_link: c.payment_link, imageUrl: c.image_url, certificateTemplateId: c.certificate_template_id, createdAt: c.created_at }));
   },
 
   saveOnlineCourse: async (course: Partial<OnlineCourse>): Promise<void> => {
@@ -800,7 +807,7 @@ export const appBackend = {
   getCertificates: async (): Promise<CertificateModel[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_certificates').select('*').order('title');
-    return (data || []).map((c: any) => ({ id: c.id, title: c.title, backgroundData: c.background_data, backBackgroundData: c.back_background_data, linkedProductId: c.linked_product_id, bodyText: c.body_text, layoutConfig: c.layout_config, createdAt: c.created_at }));
+    return (data || []).map((c: any) => ({ id: c.id, title: c.title, background_data: c.background_data, back_background_data: c.back_background_data, linked_product_id: c.linked_product_id, body_text: c.body_text, layout_config: c.layout_config, createdAt: c.created_at }));
   },
 
   saveCertificate: async (cert: CertificateModel): Promise<void> => {
@@ -832,7 +839,7 @@ export const appBackend = {
   getModuleLessons: async (moduleId: string): Promise<CourseLesson[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_course_lessons').select('*').eq('module_id', moduleId).order('order_index');
-    return (data || []).map((l: any) => ({ id: l.id, moduleId: l.module_id, title: l.title, description: l.description, videoUrl: l.video_url, materials: l.materials || [], orderIndex: l.order_index }));
+    return (data || []).map((l: any) => ({ id: l.id, moduleId: l.module_id, title: l.title, description: l.description, video_url: l.video_url, materials: l.materials || [], orderIndex: l.order_index }));
   },
 
   saveCourseLesson: async (lesson: Partial<CourseLesson>): Promise<void> => {
@@ -873,7 +880,7 @@ export const appBackend = {
       if (!isConfigured) return null;
       const { data: cert } = await supabase.from('crm_student_certificates').select('*, crm_deals(company_name, contact_name, course_city), crm_certificates(*)').eq('hash', hash).maybeSingle();
       if (!cert) return null;
-      return { studentName: cert.crm_deals?.company_name || cert.crm_deals?.contact_name || 'Aluno', studentCity: cert.crm_deals?.course_city || 'Brasil', template: { id: cert.crm_certificates.id, title: cert.crm_certificates.title, backgroundData: cert.crm_certificates.background_data, backBackgroundData: cert.crm_certificates.back_background_data, linkedProductId: cert.crm_certificates.linked_product_id, bodyText: cert.crm_certificates.body_text, layoutConfig: cert.crm_certificates.layout_config, createdAt: cert.crm_certificates.created_at }, issuedAt: cert.issued_at };
+      return { studentName: cert.crm_deals?.company_name || cert.crm_deals?.contact_name || 'Aluno', studentCity: cert.crm_deals?.course_city || 'Brasil', template: { id: cert.crm_certificates.id, title: cert.crm_certificates.title, background_data: cert.crm_certificates.background_data, back_background_data: cert.crm_certificates.back_background_data, linked_product_id: cert.crm_certificates.linked_product_id, body_text: cert.crm_certificates.body_text, layout_config: cert.crm_certificates.layout_config, createdAt: cert.crm_certificates.created_at }, issuedAt: cert.issued_at };
   },
 
   getExternalCertificates: async (studentId: string): Promise<ExternalCertificate[]> => {
@@ -986,7 +993,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((n: any) => ({ id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifierCode: n.identifier_code, fullName: n.full_name, productName: n.product_name, originalValue: n.original_value, paymentMethod: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucherLink1: n.voucher_link_1, testDate: n.test_date, voucherLink2: n.voucher_link_2, voucherLink3: n.voucher_link_3, boletosLink: n.boletos_link, negotiationReference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at }));
+      return (data || []).map((n: any) => ({ id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifier_code: n.identifier_code, full_name: n.full_name, product_name: n.product_name, original_value: n.original_value, payment_method: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at }));
   },
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {

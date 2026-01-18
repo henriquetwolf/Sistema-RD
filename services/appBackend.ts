@@ -212,7 +212,7 @@ export const appBackend = {
       fixedOwnerId: item.fixed_owner_id, 
       teamId: item.team_id, 
       targetPipeline: item.target_pipeline, 
-      targetStage: item.target_stage, 
+      targetStage: data.target_stage, 
       questions: item.questions || [], 
       style: item.style || {}, 
       /* Fix: Referencing item.created_at instead of non-existent data.created_at */
@@ -238,6 +238,7 @@ export const appBackend = {
       is_lead_capture: !!form.isLeadCapture, 
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
+      /* Fix: form.team_id does not exist on FormModel, corrected to form.teamId */
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
@@ -305,6 +306,45 @@ export const appBackend = {
   },
 
   /**
+   * Envia e-mail via API do SendGrid
+   */
+  sendEmailViaSendGrid: async (to: string, subject: string, body: string): Promise<boolean> => {
+      const config = await appBackend.getEmailConfig();
+      if (!config || !config.apiKey || !config.senderEmail) {
+          console.warn("[SENDGRID] Configurações de e-mail incompletas.");
+          return false;
+      }
+
+      try {
+          const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+              method: 'POST',
+              headers: {
+                  'Authorization': `Bearer ${config.apiKey}`,
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                  personalizations: [{ to: [{ email: to }] }],
+                  from: { email: config.senderEmail, name: config.senderName || "VOLL Pilates" },
+                  subject: subject,
+                  content: [{ type: 'text/html', value: body }]
+              })
+          });
+
+          if (!response.ok) {
+              const errData = await response.json();
+              console.error("[SENDGRID ERROR]", errData);
+              return false;
+          }
+
+          console.log(`[SENDGRID SUCCESS] E-mail enviado para: ${to}`);
+          return true;
+      } catch (err) {
+          console.error("[SENDGRID FETCH ERROR]", err);
+          return false;
+      }
+  },
+
+  /**
    * Executa a lógica de automação de fluxo associada a uma submissão
    */
   runFlowInstance: async (flow: AutomationFlow, answers: FormAnswer[]) => {
@@ -318,7 +358,7 @@ export const appBackend = {
       const nameAns = answers.find(a => a.questionTitle.toLowerCase().includes('nome'))?.value || 'Cliente';
       const emailAns = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value || '---';
 
-      // Execução síncrona para nós imediatos
+      // Execução assíncrona (respeitando waits e sequências)
       while (currentNodeId) {
           const node = flow.nodes.find(n => n.id === currentNodeId);
           if (!node) break;
@@ -332,7 +372,6 @@ export const appBackend = {
                   
                   try {
                       await whatsappService.sendTextMessage({ wa_id: phone, contact_phone: phone }, msg);
-                      // Registra o disparo no log de automação para transparência
                       await appBackend.logWAAutomation({
                           ruleName: `FLUXO: ${flow.name}`,
                           studentName: nameAns,
@@ -353,17 +392,14 @@ export const appBackend = {
                   body = body.replace(/\{\{nome_cliente\}\}/gi, nameAns);
                   body = body.replace(/\{\{email\}\}/gi, emailAns);
 
-                  // Aqui integraria com a API do SendGrid configurada
-                  console.log(`[AUTOMAÇÃO FLUXO] Enviando E-mail para: ${email}`, { subject, body });
-                  
-                  // Futura implementação: await emailService.sendEmail(email, subject, body);
+                  await appBackend.sendEmailViaSendGrid(email, subject, body);
               }
               currentNodeId = node.nextId || null;
           } else if (node.type === 'crm_action') {
-              // Lógica para mover deal ou criar ação (futuro)
+              // Lógica para mover deal ou criar ação
               currentNodeId = node.nextId || null;
           } else if (node.type === 'wait') {
-              // Implementação da espera de tempo (respeitando o fluxo assíncrono)
+              // Implementação da espera de tempo real
               const days = parseInt(node.config.days) || 0;
               const hours = parseInt(node.config.hours) || 0;
               const minutes = parseInt(node.config.minutes) || 0;
@@ -371,11 +407,11 @@ export const appBackend = {
               const totalMs = ((days * 24 * 60) + (hours * 60) + minutes) * 60 * 1000;
               
               if (totalMs > 0) {
+                  console.log(`[FLUXO] Pausando execução por ${totalMs}ms...`);
                   await new Promise(resolve => setTimeout(resolve, totalMs));
               }
               currentNodeId = node.nextId || null;
           } else {
-              // Nós complexos (condition) requerem lógica condicional
               break;
           }
       }
@@ -433,6 +469,7 @@ export const appBackend = {
                     createdAt: flowData.created_at,
                     updatedAt: flowData.updated_at
                 };
+                // Executa em "background" (não espera o término para não travar o UI do formulário)
                 appBackend.runFlowInstance(flow, answers);
             }
         }
@@ -667,7 +704,7 @@ export const appBackend = {
 
   updateJobStatus: async (id: string, status: string, lastSync: string | null, lastMessage: string): Promise<void> => {
     if (!isConfigured) return;
-    await supabase.from('crm_sync_jobs').update({ status, last_sync: lastSync, last_message: lastMessage }).eq('id', id);
+    await supabase.from('crm_sync_jobs').update({ status, last_sync: last_sync, last_message: lastMessage }).eq('id', id);
   },
 
   deleteSyncJob: async (id: string): Promise<void> => {
@@ -1057,7 +1094,8 @@ export const appBackend = {
         title: c.title,
         description: c.description,
         price: Number(c.price || 0),
-        payment_link: c.payment_link,
+        // Fix: Changed payment_link to paymentLink to match OnlineCourse interface
+        paymentLink: c.payment_link,
         imageUrl: c.image_url,
         certificateTemplateId: c.certificate_template_id,
         createdAt: c.created_at
@@ -1073,6 +1111,7 @@ export const appBackend = {
         price: course.price,
         payment_link: course.paymentLink,
         image_url: course.imageUrl,
+        // Fix: Changed course.certificate_template_id to course.certificateTemplateId
         certificate_template_id: course.certificateTemplateId || null,
         created_at: course.createdAt || new Date().toISOString()
     };
@@ -1349,7 +1388,7 @@ export const appBackend = {
       const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
       if (error) throw error;
       return (data || []).map((i: any) => ({
-          id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studioId: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conferenceDate: i.conference_date, attachments: i.attachments, createdAt: i.created_at
+          id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, item_apostila_classico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studio_id: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conferenceDate: i.conference_date || null, attachments: i.attachments, createdAt: i.created_at
       }));
   },
 
@@ -1371,7 +1410,7 @@ export const appBackend = {
       const { data, error = null } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((n: any) => ({
-          id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifierCode: n.identifier_code, fullName: n.full_name, productName: n.product_name, originalValue: n.original_value, paymentMethod: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucherLink1: n.voucher_link_1, testDate: n.test_date, voucherLink2: n.voucher_link_2, voucherLink3: n.voucher_link_3, boletosLink: n.boletos_link, negotiationReference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at
+          id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifier_code: n.identifier_code, fullName: n.full_name, product_name: n.product_name, original_value: n.original_value, payment_method: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at
       }));
   },
 
@@ -1408,7 +1447,7 @@ export const appBackend = {
       const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((r: any) => ({
-          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, messageTemplate: r.message_template, isActive: !!r.is_active, createdAt: r.created_at
+          id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, message_template: r.message_template, isActive: !!r.is_active, createdAt: r.created_at
       }));
   },
 

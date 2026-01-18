@@ -1,5 +1,4 @@
 
-
 import { createClient, Session } from '@supabase/supabase-js';
 import { 
   SavedPreset, FormModel, SurveyModel, FormAnswer, Contract, ContractFolder, 
@@ -216,6 +215,7 @@ export const appBackend = {
       targetStage: item.target_stage, 
       questions: item.questions || [], 
       style: item.style || {}, 
+      /* Fix: Referencing item.created_at instead of non-existent data.created_at */
       createdAt: item.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id,
@@ -238,6 +238,7 @@ export const appBackend = {
       is_lead_capture: !!form.isLeadCapture, 
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
+      /* Fix: form.team_id does not exist on FormModel, corrected to form.teamId */
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
@@ -318,7 +319,7 @@ export const appBackend = {
       const nameAns = answers.find(a => a.questionTitle.toLowerCase().includes('nome'))?.value || 'Cliente';
       const emailAns = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value || '---';
 
-      // Execução síncrona para nós imediatos (WhatsApp, E-mail sem delay)
+      // Execução síncrona para nós imediatos
       while (currentNodeId) {
           const node = flow.nodes.find(n => n.id === currentNodeId);
           if (!node) break;
@@ -344,12 +345,32 @@ export const appBackend = {
                   }
               }
               currentNodeId = node.nextId || null;
+          } else if (node.type === 'email') {
+              // Busca o email no campo indicado na configuração do nó
+              const email = answers.find(a => a.questionId === node.config.emailFieldId)?.value;
+              if (email) {
+                  const subject = (node.config.subject || '').replace(/\{\{nome_cliente\}\}/gi, nameAns);
+                  let body = (node.config.body || '');
+                  body = body.replace(/\{\{nome_cliente\}\}/gi, nameAns);
+                  body = body.replace(/\{\{email\}\}/gi, emailAns);
+
+                  // Aqui integraria com a API do SendGrid configurada
+                  console.log(`[AUTOMAÇÃO FLUXO] Enviando E-mail para: ${email}`, { subject, body });
+                  
+                  // Futura implementação: await emailService.sendEmail(email, subject, body);
+              }
+              currentNodeId = node.nextId || null;
           } else if (node.type === 'crm_action') {
               // Lógica para mover deal ou criar ação (futuro)
               currentNodeId = node.nextId || null;
+          } else if (node.type === 'wait') {
+              // IMPORTANTE: Em execução síncrona (como aqui), não podemos pausar o thread.
+              // Prosseguimos para o próximo nó para garantir que a cadeia não quebre.
+              // Em um ambiente real com backend (Node.js/Supabase Edge Functions), 
+              // este nó agendaria um novo disparo para daqui a X tempo.
+              currentNodeId = node.nextId || null;
           } else {
-              // Nós complexos (wait, condition) requerem backend real. 
-              // Encerramos a execução síncrona aqui.
+              // Nós complexos (condition) requerem lógica condicional
               break;
           }
       }
@@ -629,7 +650,8 @@ export const appBackend = {
 
   getSyncJobs: async (): Promise<SyncJob[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
+    const { data, error = null } = await supabase.from('crm_sync_jobs').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
     return (data || []).map((j: any) => ({ id: j.id, name: j.name || 'Sincronização', sheet_url: j.sheet_url || '', config: j.config || {}, lastSync: j.last_sync, status: j.status || 'idle', lastMessage: j.last_message || '', active: !!j.active, intervalMinutes: j.interval_minutes || 5, createdBy: j.created_by, createdAt: j.created_at }));
   },
 
@@ -721,7 +743,8 @@ export const appBackend = {
 
   getPresets: async (): Promise<SavedPreset[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from(PRESETS_TABLE).select('*').order('name');
+    const { data, error = null } = await supabase.from(PRESETS_TABLE).select('*').order('name');
+    if (error) throw error;
     return (data || []).map((item: any) => ({ id: item.id, name: item.name || 'Preset', url: item.url || '', key: item.key || '', tableName: item.table_name || '', primaryKey: item.primary_key || '', intervalMinutes: item.interval_minutes || 5, createdByName: item.created_by_name }));
   },
 
@@ -1317,9 +1340,10 @@ export const appBackend = {
 
   getInventory: async (): Promise<InventoryRecord[]> => {
       if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
+      const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
+      if (error) throw error;
       return (data || []).map((i: any) => ({
-          id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registration_date: i.registration_date, studio_id: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conference_date: i.conference_date, attachments: i.attachments, createdAt: i.created_at
+          id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studioId: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conferenceDate: i.conference_date, attachments: i.attachments, createdAt: i.created_at
       }));
   },
 
@@ -1338,9 +1362,10 @@ export const appBackend = {
 
   getBillingNegotiations: async (): Promise<BillingNegotiation[]> => {
       if (!isConfigured) return [];
-      const { data } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
+      const { data, error = null } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
       return (data || []).map((n: any) => ({
-          id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifier_code: n.identifier_code, fullName: n.full_name, product_name: n.product_name, original_value: n.original_value, payment_method: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at
+          id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifierCode: n.identifier_code, fullName: n.full_name, productName: n.product_name, originalValue: n.original_value, paymentMethod: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucherLink1: n.voucher_link_1, testDate: n.test_date, voucherLink2: n.voucher_link_2, voucherLink3: n.voucher_link_3, boletosLink: n.boletos_link, negotiationReference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at
       }));
   },
 

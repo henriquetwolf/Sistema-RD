@@ -310,6 +310,20 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
                         {selectedNode.type === 'email' && (
                             <div className="space-y-6">
                                 <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Campo do E-mail</label>
+                                    <select 
+                                        className="w-full px-5 py-4 border-2 border-slate-100 bg-white rounded-2xl text-sm font-black appearance-none cursor-pointer focus:border-indigo-500 outline-none"
+                                        value={selectedNode.config.emailFieldId || ''}
+                                        onChange={e => updateNodeConfig(selectedNode.id, { emailFieldId: e.target.value })}
+                                    >
+                                        <option value="">Selecione o campo do formulário...</option>
+                                        {currentForm?.questions.map(q => (
+                                            <option key={q.id} value={q.id}>{q.title}</option>
+                                        ))}
+                                    </select>
+                                    {!currentForm && <p className="text-[9px] text-red-500 mt-1 ml-1 font-bold">Selecione o Formulário de Entrada no nó de Gatilho.</p>}
+                                </div>
+                                <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Assunto do E-mail</label>
                                     <input type="text" className="w-full px-5 py-3.5 border-2 border-slate-100 rounded-2xl text-sm font-bold bg-slate-50" placeholder="Ex: Olá {{nome_cliente}}, seja bem-vindo!" value={selectedNode.config.subject || ''} onChange={e => updateNodeConfig(selectedNode.id, { subject: e.target.value })} />
                                 </div>

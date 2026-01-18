@@ -156,7 +156,7 @@ export const appBackend = {
       targetStage: item.target_stage, 
       questions: item.questions || [], 
       style: item.style || {}, 
-      createdAt: item.created_at, 
+      createdAt: data.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id
     }));
@@ -213,7 +213,7 @@ export const appBackend = {
       targetStage: item.target_stage, 
       questions: item.questions || [], 
       style: item.style || {}, 
-      createdAt: item.created_at, 
+      createdAt: data.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id,
       targetAudience: item.target_audience || 'all', 
@@ -235,7 +235,6 @@ export const appBackend = {
       is_lead_capture: !!form.isLeadCapture, 
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
-      // Fix: Use correct interface property teamId instead of team_id
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
@@ -302,9 +301,6 @@ export const appBackend = {
     await supabase.from('crm_form_folders').delete().eq('id', id);
   },
 
-  /**
-   * Envia e-mail via API do SendGrid utilizando Proxy para evitar bloqueio de CORS no navegador.
-   */
   sendEmailViaSendGrid: async (to: string, subject: string, body: string): Promise<boolean> => {
       const config = await appBackend.getEmailConfig();
       if (!config || !config.apiKey || !config.senderEmail) {
@@ -344,18 +340,19 @@ export const appBackend = {
       }
   },
 
-  /**
-   * Executa a lógica de automação de fluxo associada a uma submissão
-   */
   runFlowInstance: async (flow: AutomationFlow, answers: FormAnswer[]) => {
       const triggerNode = flow.nodes.find(n => n.type === 'trigger');
-      if (!triggerNode || !triggerNode.nextId) return;
+      if (!triggerNode || !triggerNode.nextId) {
+          console.debug("[FLOW] Gatilho sem conexão de saída.");
+          return;
+      }
 
       let currentNodeId: string | undefined | null = triggerNode.nextId;
       
-      // Mapeamento dinâmico de variáveis básicas baseado nos títulos das questões
       const nameAns = answers.find(a => a.questionTitle.toLowerCase().includes('nome'))?.value || 'Cliente';
       const emailAns = answers.find(a => a.questionTitle.toLowerCase().includes('email'))?.value || '---';
+
+      console.debug(`[FLOW] Iniciando fluxo: ${flow.name}`);
 
       while (currentNodeId) {
           const node = flow.nodes.find(n => n.id === currentNodeId);
@@ -363,22 +360,23 @@ export const appBackend = {
 
           try {
               if (node.type === 'whatsapp') {
-                  // Busca o telefone pelo ID do campo ou fallback pelo título se ID falhar
                   let phone = answers.find(a => a.questionId === node.config.phoneFieldId)?.value;
                   if (!phone) {
                       phone = answers.find(a => a.questionTitle.toLowerCase().includes('telefone') || a.questionTitle.toLowerCase().includes('whatsapp'))?.value;
                   }
 
                   if (phone) {
+                      const cleanPhone = String(phone).replace(/\D/g, '');
                       let msg = node.config.message || '';
                       msg = msg.replace(/\{\{nome_cliente\}\}/gi, nameAns);
                       msg = msg.replace(/\{\{email\}\}/gi, emailAns);
                       
-                      await whatsappService.sendTextMessage({ wa_id: phone, contact_phone: phone }, msg);
+                      console.debug(`[FLOW] Disparando WhatsApp para: ${cleanPhone}`);
+                      await whatsappService.sendTextMessage({ wa_id: cleanPhone, contact_phone: cleanPhone }, msg);
                       await appBackend.logWAAutomation({ 
                           ruleName: `FLUXO: ${flow.name}`, 
                           studentName: nameAns, 
-                          phone: phone, 
+                          phone: cleanPhone, 
                           message: msg 
                       });
                   }
@@ -405,30 +403,29 @@ export const appBackend = {
                   const totalMs = ((days * 24 * 60) + (hours * 60) + minutes) * 60 * 1000;
                   
                   if (totalMs > 0) {
+                      console.debug(`[FLOW] Aguardando ${totalMs}ms...`);
                       await new Promise(resolve => setTimeout(resolve, totalMs));
                   }
-                  // Após o tempo de espera, segue para o próximo nó definido
-                  currentNodeId = node.nextId || null;
+                  
+                  // Crucial: Re-buscar o nó após o await para garantir que pegamos o nextId correto e continuar
+                  const sameNode = flow.nodes.find(n => n.id === currentNodeId);
+                  currentNodeId = sameNode?.nextId || null;
 
               } else if (node.type === 'condition') {
-                  // Lógica simplificada de condição (mock): Se houver resposta segue 'yes', senão 'no'
-                  // No mundo real, aqui verificamos flags no banco.
                   currentNodeId = node.yesId || node.nextId || null;
 
               } else if (node.type === 'crm_action') {
-                  // Ação no CRM (Mover etapa, etc)
-                  // Implementar lógica de atualização de deal se houver ID de lead vinculado
                   currentNodeId = node.nextId || null;
 
               } else {
                   currentNodeId = node.nextId || null;
               }
           } catch (nodeErr) {
-              console.error(`[FLOW ERROR] Erro ao processar nó ${node.id} do tipo ${node.type}:`, nodeErr);
-              // Tenta continuar o fluxo mesmo se um nó falhar
+              console.error(`[FLOW ERROR] Erro no nó ${node.id}:`, nodeErr);
               currentNodeId = node.nextId || null;
           }
       }
+      console.debug(`[FLOW] Fluxo ${flow.name} finalizado.`);
   },
 
   submitForm: async (formId: string, answers: FormAnswer[], isLeadCapture: boolean, studentId?: string): Promise<void> => {
@@ -718,7 +715,6 @@ export const appBackend = {
     const payload = { id: preset.id || crypto.randomUUID(), name: preset.name, url: preset.url, key: preset.key, table_name: preset.tableName, primary_key: preset.primaryKey, interval_minutes: preset.intervalMinutes, created_by_name: preset.createdByName };
     const { data, error } = await supabase.from(PRESETS_TABLE).upsert(payload).select().single();
     if (error) throw error;
-    // Fix: Use intervalMinutes instead of interval_minutes in the returned object literal
     return { id: data.id, name: data.name, url: data.url, key: data.key, tableName: data.table_name, primaryKey: data.primary_key, intervalMinutes: data.interval_minutes, createdByName: data.created_by_name };
   },
 
@@ -748,7 +744,7 @@ export const appBackend = {
   getPartnerStudios: async (): Promise<PartnerStudio[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('crm_partner_studios').select('*').order('fantasy_name');
-    return (data || []).map((s: any) => ({ id: s.id, status: s.status, responsibleName: s.responsible_name, cpf: s.cpf, phone: s.phone, email: s.email, password: s.password, secondContactName: s.second_contact_name, second_contact_phone: s.second_contact_phone, fantasyName: s.fantasy_name, legalName: s.legal_name, cnpj: s.cnpj, studioPhone: s.studio_phone, address: s.address, city: s.city, state: s.state, country: s.country, sizeM2: s.size_m2, studentCapacity: s.student_capacity, rentValue: s.rent_value, methodology: s.methodology, studioType: s.studio_type, nameOnSite: s.name_on_site, bank: s.bank, agency: s.agency, account: s.account, beneficiary: s.beneficiary, pixKey: s.pix_key, hasReformer: !!s.has_reformer, qtyReformer: s.qty_reformer, hasLadderBarrel: !!s.has_ladder_barrel, qtyLadderBarrel: s.qty_ladder_barrel, hasChair: !!s.has_chair, qtyChair: s.qty_chair, hasCadillac: !!s.has_cadillac, qtyCadillac: s.qty_cadillac, hasChairsForCourse: !!s.has_chairs_for_course, hasTv: !!s.has_tv, maxKitsCapacity: s.max_kits_capacity, attachments: s.attachments }));
+    return (data || []).map((s: any) => ({ id: s.id, status: s.status, responsibleName: s.responsible_name, cpf: s.cpf, phone: s.phone, email: s.email, password: s.password, second_contact_name: s.second_contact_name, second_contact_phone: s.second_contact_phone, fantasy_name: s.fantasy_name, legal_name: s.legal_name, cnpj: s.cnpj, studio_phone: s.studio_phone, address: s.address, city: s.city, state: s.state, country: s.country, size_m2: s.size_m2, student_capacity: s.student_capacity, rent_value: s.rent_value, methodology: s.methodology, studio_type: s.studio_type, name_on_site: s.name_on_site, bank: s.bank, agency: s.agency, account: s.account, beneficiary: s.beneficiary, pix_key: s.pix_key, has_reformer: !!s.has_reformer, qty_reformer: s.qty_reformer, has_ladder_barrel: !!s.has_ladder_barrel, qty_ladder_barrel: s.qty_ladder_barrel, has_chair: !!s.has_chair, qty_chair: s.qty_chair, has_cadillac: !!s.has_cadillac, qty_cadillac: s.qty_cadillac, has_chairs_for_course: !!s.has_chairs_for_course, has_tv: !!s.has_tv, max_kits_capacity: s.max_kits_capacity, attachments: s.attachments }));
   },
 
   savePartnerStudio: async (studio: PartnerStudio): Promise<void> => {
@@ -1031,7 +1027,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_billing_negotiations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((n: any) => ({ id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsibleAgent: n.responsible_agent, identifier_code: n.identifier_code, full_name: n.full_name, product_name: n.product_name, original_value: n.original_value, payment_method: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at }));
+      return (data || []).map((n: any) => ({ id: n.id, openInstallments: n.open_installments, totalNegotiatedValue: n.total_negotiated_value, totalInstallments: n.total_installments, dueDate: n.due_date, responsible_agent: n.responsible_agent, identifier_code: n.identifier_code, full_name: n.full_name, product_name: n.product_name, original_value: n.original_value, payment_method: n.payment_method, observations: n.observations, status: n.status, team: n.team, voucher_link_1: n.voucher_link_1, test_date: n.test_date, voucher_link_2: n.voucher_link_2, voucher_link_3: n.voucher_link_3, boletos_link: n.boletos_link, negotiation_reference: n.negotiation_reference, attachments: n.attachments, createdAt: n.created_at }));
   },
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {

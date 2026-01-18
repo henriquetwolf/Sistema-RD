@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Search, Filter, Lock, Unlock, Mail, Phone, ArrowLeft, Loader2, RefreshCw, 
@@ -6,7 +5,7 @@ import {
   List, DollarSign, XCircle, Tag, MapPin, Building, User, Briefcase, Hash, Info, Map, FileSpreadsheet, RotateCcw
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
-import { OnlineCourse } from '../types';
+import { OnlineCourse, Pipeline } from '../types';
 import clsx from 'clsx';
 
 declare const XLSX: any;
@@ -27,6 +26,7 @@ interface StudentDeal {
     product_type?: string;
     status: string;
     stage: string;
+    pipeline?: string;
     value: number;
     payment_method: string;
     created_at: string;
@@ -77,6 +77,7 @@ interface CertStatus {
 export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'cpf_search' | 'exclusions'>('list');
   const [deals, setDeals] = useState<StudentDeal[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [onlineCourses, setOnlineCourses] = useState<OnlineCourse[]>([]);
   const [courseAccessMap, setCourseAccessMap] = useState<Record<string, string[]>>({});
   const [certificates, setCertificates] = useState<Record<string, CertStatus>>({});
@@ -105,11 +106,16 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-        const { data, error } = await appBackend.client.from('crm_deals').select('*').order('contact_name', { ascending: true });
-        if (error) throw error;
+        const [dealsRes, pipesRes] = await Promise.all([
+            appBackend.client.from('crm_deals').select('*').order('contact_name', { ascending: true }),
+            appBackend.getPipelines()
+        ]);
         
-        const mappedDeals = data.map((s: any) => ({ ...s, student_access_enabled: s.student_access_enabled !== false }));
+        if (dealsRes.error) throw dealsRes.error;
+        
+        const mappedDeals = dealsRes.data.map((s: any) => ({ ...s, student_access_enabled: s.student_access_enabled !== false }));
         setDeals(mappedDeals);
+        setPipelines(pipesRes || []);
 
         if (mappedDeals.length > 0) {
             const [issuedCertsRes, prodsRes, coursesRes, accessesRes] = await Promise.all([
@@ -182,9 +188,19 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
   };
 
   const groupedStudents = useMemo(() => {
-    const activeDeals = deals.filter(d => d.status !== 'excluido');
+    const activeDeals = deals.filter(d => {
+        if (d.status === 'excluido') return false;
+        
+        // Filtro para garantir que apenas negócios na etapa final de seu funil apareçam (Alunos)
+        const pipe = pipelines.find(p => p.name === d.pipeline);
+        if (!pipe || !pipe.stages || pipe.stages.length === 0) {
+            return d.stage === 'closed';
+        }
+        const lastStageId = pipe.stages[pipe.stages.length - 1].id;
+        return d.stage === lastStageId;
+    });
     return getGroupedStudents(activeDeals);
-  }, [deals]);
+  }, [deals, pipelines]);
 
   const excludedGroupedStudents = useMemo(() => {
     const excludedDeals = deals.filter(d => d.status === 'excluido');
@@ -352,7 +368,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                     onClick={() => setActiveSubTab('list')}
                     className={clsx("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2", activeSubTab === 'list' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
                 >
-                    <List size={14}/> Lista Geral
+                    <List size={14}/> Lista Geral (Alunos)
                 </button>
                 <button 
                     onClick={() => setActiveSubTab('cpf_search')}
@@ -389,7 +405,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                 </div>
 
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto min-h-[400px]">
-                    {isLoading ? <div className="flex justify-center items-center h-64"><Loader2 size={32} className="animate-spin text-teal-600" /></div> : (
+                    {isLoading ? <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-teal-600" /></div> : (
                         <table className="w-full text-left text-sm text-slate-600 border-collapse">
                             <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
                                 <tr>
@@ -637,7 +653,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ onBack }) => {
                             <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-600/20"><Briefcase size={24}/></div>
                             <div>
                                 <h3 className="text-xl font-black text-slate-800 tracking-tight">Negociação Comercial</h3>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                                     Nº {viewingDeal.deal_number} • <span className="text-indigo-600">Visualização de Registro</span>
                                 </p>
                             </div>

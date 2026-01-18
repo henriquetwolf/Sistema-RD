@@ -1282,7 +1282,8 @@ export const appBackend = {
       const payload = { id: ws.id, event_id: ws.eventId, block_id: ws.blockId, title: ws.title, description: ws.description, speaker: ws.speaker, date: ws.date, time: ws.time, spots: ws.spots };
       const { data, error } = await supabase.from('crm_event_workshops').upsert(payload).select().single();
       if (error) throw error;
-      return { id: data.id, eventId: data.event_id, block_id: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
+      /* Fix: Changed property name block_id to blockId in return object to match Workshop interface */
+      return { id: data.id, eventId: data.event_id, blockId: data.block_id, title: data.title, description: data.description, speaker: data.speaker, date: data.date, time: data.time, spots: data.spots };
   },
 
   deleteWorkshop: async (id: string): Promise<void> => {
@@ -1323,7 +1324,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
       return (data || []).map((i: any) => ({
-          id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studioId: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conferenceDate: i.conference_date, attachments: i.attachments, createdAt: i.created_at
+          id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studioId: i.studio_id, trackingCode: i.tracking_code, observations: i.observations, conference_date: i.conference_date, attachments: i.attachments, createdAt: i.created_at
       }));
   },
 

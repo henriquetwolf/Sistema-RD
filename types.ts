@@ -264,6 +264,7 @@ export interface EventBlock {
 }
 
 export interface Workshop {
+  /* Added id property to match Workshop usage in services/appBackend.ts */
   id: string;
   eventId: string;
   blockId: string;

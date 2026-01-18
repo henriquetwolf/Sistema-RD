@@ -39,7 +39,7 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
         type === 'whatsapp' ? 'Enviar WhatsApp' : 
         type === 'condition' ? 'Verificar Ação' : 'Ação CRM',
       config: 
-        type === 'wait' ? { days: 1, hours: 0 } : 
+        type === 'wait' ? { days: 0, hours: 0, minutes: 0 } : 
         type === 'crm_action' ? { stage: 'negotiation' } : {}
     };
 
@@ -265,7 +265,7 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
                             <input 
                                 className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-black focus:bg-white focus:border-indigo-500 transition-all outline-none"
                                 value={selectedNode.title}
-                                onChange={e => setFlow({...flow, nodes: flow.nodes.map(n => n.id === selectedNode.id ? { ...n, title: e.target.value } : n)})}
+                                onChange={e => setFlow({...flow, nodes: prevNodes => prevNodes.map(n => n.id === selectedNode.id ? { ...n, title: e.target.value } : n)})}
                             />
                         </div>
 
@@ -290,16 +290,20 @@ export const AutomationFlowEditor: React.FC<AutomationFlowEditorProps> = ({ flow
                         )}
 
                         {selectedNode.type === 'wait' && (
-                            <div className="grid grid-cols-2 gap-6">
+                            <div className="grid grid-cols-3 gap-4">
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Dias</label>
-                                    <input type="number" className="w-full px-5 py-3.5 border-2 border-slate-100 rounded-2xl font-black bg-slate-50" value={selectedNode.config.days || 0} onChange={e => updateNodeConfig(selectedNode.id, { days: parseInt(e.target.value) || 0 })} />
+                                    <input type="number" className="w-full px-4 py-3 border-2 border-slate-100 rounded-2xl font-black bg-slate-50" value={selectedNode.config.days || 0} onChange={e => updateNodeConfig(selectedNode.id, { days: parseInt(e.target.value) || 0 })} />
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Horas</label>
-                                    <input type="number" className="w-full px-5 py-3.5 border-2 border-slate-100 rounded-2xl font-black bg-slate-50" value={selectedNode.config.hours || 0} onChange={e => updateNodeConfig(selectedNode.id, { hours: parseInt(e.target.value) || 0 })} />
+                                    <input type="number" className="w-full px-4 py-3 border-2 border-slate-100 rounded-2xl font-black bg-slate-50" value={selectedNode.config.hours || 0} onChange={e => updateNodeConfig(selectedNode.id, { hours: parseInt(e.target.value) || 0 })} />
                                 </div>
-                                <p className="col-span-2 text-[10px] text-slate-400 italic text-center">* O lead aguardará este tempo antes de prosseguir para o próximo nó.</p>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Minutos</label>
+                                    <input type="number" className="w-full px-4 py-3 border-2 border-slate-100 rounded-2xl font-black bg-slate-50" value={selectedNode.config.minutes || 0} onChange={e => updateNodeConfig(selectedNode.id, { minutes: parseInt(e.target.value) || 0 })} />
+                                </div>
+                                <p className="col-span-3 text-[10px] text-slate-400 italic text-center">* O lead aguardará este tempo antes de prosseguir para o próximo nó.</p>
                             </div>
                         )}
 

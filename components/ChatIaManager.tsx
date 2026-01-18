@@ -59,7 +59,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
       instanceName: '',
       apiKey: '',
       pairingNumber: '',
-      isConnected: boolean;
+      isConnected: false
   });
   const [isSavingWAConfig, setIsSavingWAConfig] = useState(false);
   const [isGeneratingWAConnection, setIsGeneratingWAConnection] = useState(false);
@@ -172,7 +172,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
         };
         // Salva as credenciais do WhatsApp
         await appBackend.saveWhatsAppConfig(sanitizedConfig);
-        // Garante que o status da IA também seja persistido
+        // Garante que o status da IA também seja persistido para que a Edge Function saiba que deve responder
         await appBackend.saveAiConfig(config);
         
         setWaConfig(sanitizedConfig);
@@ -742,7 +742,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                             )}
                             {pairingCodeValue && (
                                 <div className="text-center pt-4 animate-in zoom-in-95">
-                                    <div className="inline-block px-10 py-6 bg-white rounded-3xl shadow-xl border-2 border-indigo-200 text-3xl font-black tracking-[0.5em] text-indigo-600">{pairingCodeValue}</div>
+                                    <div className="inline-block px-10 py-6 bg-white rounded-3xl shadow-xl border-2 border-orange-200 text-3xl font-black tracking-[0.5em] text-indigo-600">{pairingCodeValue}</div>
                                     <p className="text-[10px] font-black text-indigo-600 uppercase mt-4 tracking-widest">Digite no seu WhatsApp</p>
                                 </div>
                             )}
@@ -869,7 +869,6 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                 <div className="px-8 py-6 bg-slate-50 border-t flex justify-end gap-3 rounded-b-[2.5rem]">
                     <button onClick={() => setShowItemModal(false)} className="px-6 py-3 text-slate-500 font-bold text-sm hover:underline">Cancelar</button>
                     <button 
-                      /* Fix: Corrected handleSaveKnowledgeKnowledgeItem typo to handleSaveKnowledgeItem */
                       onClick={handleSaveKnowledgeItem}
                       disabled={isSaving || !editingItem?.title || !editingItem?.content}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center gap-2 active:scale-95 disabled:opacity-50"

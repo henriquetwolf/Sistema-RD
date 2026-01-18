@@ -575,7 +575,7 @@ function App() {
                                             <span className="text-teal-100 text-xs font-black uppercase tracking-[0.2em]">Painel de Controle</span>
                                         </div>
                                         <h2 className="text-4xl font-black tracking-tight mb-2">
-                                            <span className="text-white font-black">Bem-Vindo</span>, <span className="text-white">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
+                                            <span className="text-emerald-400 font-black">Bem-Vindo</span>, <span className="text-white">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
                                         </h2>
                                         <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed">
                                             Seu centro de comando está pronto. Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.
@@ -599,7 +599,7 @@ function App() {
                                                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><CheckCircle size={64} className="text-green-600" /></div>
                                                     <p className="text-sm font-medium text-slate-500 mb-1">Vendas Fechadas (Dia)</p>
-                                                    <h4 className="text-3xl font-black text-slate-800">{overviewStats.leadsToday}</h4>
+                                                    <h4 className="text-3xl font-black text-slate-800">{overviewStats.salesToday}</h4>
                                                     <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-green-600 uppercase"><TrendingUp size={10} /> Batendo meta</div>
                                                 </div>
                                                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">

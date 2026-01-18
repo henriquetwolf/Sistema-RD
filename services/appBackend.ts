@@ -238,7 +238,6 @@ export const appBackend = {
       is_lead_capture: !!form.isLeadCapture, 
       distribution_mode: form.distributionMode || 'fixed', 
       fixed_owner_id: form.fixedOwnerId || null, 
-      /* Fix: form.team_id does not exist on FormModel, corrected to form.teamId */
       team_id: form.teamId || null, 
       target_pipeline: form.targetPipeline || null, 
       target_stage: form.targetStage || null, 
@@ -364,10 +363,16 @@ export const appBackend = {
               // Lógica para mover deal ou criar ação (futuro)
               currentNodeId = node.nextId || null;
           } else if (node.type === 'wait') {
-              // IMPORTANTE: Em execução síncrona (como aqui), não podemos pausar o thread.
-              // Prosseguimos para o próximo nó para garantir que a cadeia não quebre.
-              // Em um ambiente real com backend (Node.js/Supabase Edge Functions), 
-              // este nó agendaria um novo disparo para daqui a X tempo.
+              // Implementação da espera de tempo (respeitando o fluxo assíncrono)
+              const days = parseInt(node.config.days) || 0;
+              const hours = parseInt(node.config.hours) || 0;
+              const minutes = parseInt(node.config.minutes) || 0;
+              
+              const totalMs = ((days * 24 * 60) + (hours * 60) + minutes) * 60 * 1000;
+              
+              if (totalMs > 0) {
+                  await new Promise(resolve => setTimeout(resolve, totalMs));
+              }
               currentNodeId = node.nextId || null;
           } else {
               // Nós complexos (condition) requerem lógica condicional
@@ -1185,7 +1190,8 @@ export const appBackend = {
 
   getSupportTicketsBySender: async (senderId: string): Promise<SupportTicket[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('crm_support_tickets').select('*').eq('sender_id', senderId).order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('crm_support_tickets').select('*').eq('sender_id', senderId).order('created_at', { ascending: false });
+    if (error) throw error;
     return (data || []).map((t: any) => ({
       id: t.id, senderId: t.sender_id, senderName: t.sender_name, senderEmail: t.sender_email, senderRole: t.sender_role, targetId: t.target_id, targetName: t.target_name, targetEmail: t.target_email, targetRole: t.target_role, subject: t.subject, message: t.message, tag: t.tag, status: t.status, response: t.response, assignedId: t.assigned_id, assignedName: t.assigned_name, createdAt: t.created_at, updatedAt: t.updated_at
     }));

@@ -188,7 +188,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
   };
 
   const handleSaveWAConfig = async () => {
-    setIsLoading(true);
+    setIsSavingWAConfig(true);
     try {
         const sanitizedConfig = {
             ...waConfig,
@@ -202,7 +202,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
         setWaConfig(sanitizedConfig);
         alert("Configurações salvas com sucesso!");
         checkRealStatus(sanitizedConfig);
-    } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsLoading(false); }
+    } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsSavingWAConfig(false); }
   };
 
   const handleConnectWAEvolution = async () => {
@@ -595,7 +595,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
 
                 <div className="pt-8 border-t flex justify-end">
                     <button 
-                        onClick={handleSaveConfig}
+                        onClick={handleSaveConfig} 
                         disabled={isSaving}
                         className="bg-indigo-600 hover:bg-indigo-700 text-white px-12 py-4 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-3"
                     >

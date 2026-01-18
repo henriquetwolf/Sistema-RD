@@ -6,12 +6,14 @@ import {
   AlertCircle, ShieldCheck, UserPlus, List, MoveRight,
   Clock, CheckCircle, Circle, MessageSquare, ExternalLink, GraduationCap, School, Building2, Store, Heart,
   Filter, LayoutGrid, ArrowRightLeft, DollarSign, Briefcase,
-  Edit2, Trash2, Tag, Hash, Kanban, Copy
+  Edit2, Trash2, Tag, Hash, Kanban, Copy,
+  // Added missing icon imports to fix line 572 and 575
+  Bot, Zap
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
 import { whatsappService } from '../services/whatsappService';
-import { AttendanceTag } from '../types';
+import { AttendanceTag, AiConfig } from '../types';
 
 // --- TYPES ---
 type ChatStatus = 'open' | 'pending' | 'waiting' | 'closed';
@@ -71,6 +73,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
   const [isSending, setIsSending] = useState(false);
   const [globalContactInfo, setGlobalContactInfo] = useState<any>(null);
   const [draggedChatId, setDraggedChatId] = useState<string | null>(null);
+  const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -125,7 +128,17 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
       fetchConversations();
       fetchTags();
       loadConfig();
+      fetchAiConfig();
   }, []);
+
+  const fetchAiConfig = async () => {
+    try {
+      const cfg = await appBackend.getAiConfig();
+      setAiConfig(cfg);
+    } catch (e) {
+      console.error("Erro ao carregar config da IA:", e);
+    }
+  };
 
   useEffect(() => {
       const timer = setInterval(() => {
@@ -133,6 +146,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
             fetchConversations(false);
             if (selectedChatId) fetchMessages(selectedChatId, false);
             checkRealStatus();
+            fetchAiConfig(); // Atualiza status da IA periodicamente
           }
       }, 15000); 
       return () => clearInterval(timer);
@@ -233,7 +247,9 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
     if (!target.instanceUrl || !target.instanceName) return;
     try {
         let baseUrl = target.instanceUrl.trim();
-        if (!baseUrl.includes('://')) baseUrl = `https://${baseUrl}`;
+        if (!baseUrl.includes('://')) {
+            baseUrl = `https://${baseUrl}`;
+        }
         baseUrl = baseUrl.replace(/\/$/, "");
 
         const response = await fetch(`${baseUrl}/instance/connectionState/${target.instanceName.trim()}`, {
@@ -360,7 +376,9 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
           if (!config.instanceUrl || !config.instanceName) throw new Error("Preencha os dados da instância.");
           
           let baseUrl = config.instanceUrl.trim();
-          if (!baseUrl.includes('://')) baseUrl = `https://${baseUrl}`;
+          if (!baseUrl.includes('://')) {
+              baseUrl = `https://${baseUrl}`;
+          }
           baseUrl = baseUrl.replace(/\/$/, "");
 
           if (config.evolutionMethod === 'code') {
@@ -444,13 +462,19 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
 
   const filteredConversations = useMemo(() => {
     return conversations.filter(c => {
+      // REGRA: Se Atendimento Automático estiver ATIVADO, ocultamos chats em estágio de atendimento do robô (open/pending)
+      // pois eles estão sendo tratados pela IA e não devem "direcionar" para o atendimento humano.
+      if (aiConfig?.isActive && (c.status === 'open' || c.status === 'pending')) {
+          return false;
+      }
+
       const matchesSearch = (c.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesPhone = (c.contact_phone || c.wa_id || '').includes(searchPhone.replace(/\D/g, ''));
       const matchesTag = selectedTagFilter === 'all' || c.tag === selectedTagFilter;
       const matchesStatus = selectedStatusFilters.length === 0 || selectedStatusFilters.includes(c.status);
       return matchesSearch && matchesPhone && matchesTag && matchesStatus;
     });
-  }, [conversations, searchTerm, searchPhone, selectedTagFilter, selectedStatusFilters]);
+  }, [conversations, searchTerm, searchPhone, selectedTagFilter, selectedStatusFilters, aiConfig]);
 
   const toggleStatusFilter = (status: ChatStatus) => {
       setSelectedStatusFilters(prev => 
@@ -543,13 +567,23 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                 </div>
                 {config.isConnected ? <Wifi size={14} className="text-teal-400" /> : <WifiOff size={14} className="text-red-400" />}
             </div>
+            
+            {aiConfig?.isActive && (
+                <div className="bg-indigo-600 p-3 rounded-2xl text-white flex items-center justify-between shadow-lg shadow-indigo-200 animate-pulse mt-2">
+                    <div className="flex items-center gap-2">
+                        <Bot size={16} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">IA Operacional Ativa</span>
+                    </div>
+                    <Zap size={14} fill="currentColor" className="text-amber-400" />
+                </div>
+            )}
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50/30">
             {isLoading && filteredConversations.length === 0 ? (<div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-teal-600" /></div>) : 
             viewMode === 'list' ? (
                 filteredConversations.map(conv => (
-                    <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-5 cursor-pointer transition-all hover:bg-white border-l-4 group relative", selectedChatId === conv.id ? "bg-white border-l-teal-500 shadow-sm" : "border-l-transparent border-b border-slate-50")}>
+                    <div key={conv.id} onClick={() => setSelectedChatId(conv.id)} className={clsx("p-5 cursor-pointer transition-all hover:bg-white border-l-4 group relative", selectedChatId === conv.id ? "bg-white border-l-teal-50 shadow-sm" : "border-l-transparent border-b border-slate-50")}>
                         <div className="flex justify-between items-start mb-1">
                             <div className="flex flex-col">
                                 <span className={clsx("font-black text-sm", conv.unread_count > 0 ? "text-slate-900" : "text-slate-600")}>{conv.contact_name}</span>
@@ -818,7 +852,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                       <div className="flex items-center gap-3"><Settings className="text-teal-600" size={24}/> <h3 className="text-lg font-black text-slate-800">Evolution API Config</h3></div>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                   </div>
-                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 hide-scrollbar flex-1">
+                  <div className="p-8 overflow-y-auto custom-scrollbar space-y-6 flex-1">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">URL da API</label><input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" value={config.instanceUrl} onChange={e => setConfig({...config, instanceUrl: e.target.value})} placeholder="https://api.voll.com" /></div>
                           <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Instância</label><input type="text" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" value={config.instanceName} onChange={e => setConfig({...config, instanceName: e.target.value})} placeholder="Instancia_VOLL" /></div>
@@ -841,8 +875,12 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                         <div className="flex justify-between items-center"><h4 className="text-xs font-black text-teal-800 uppercase tracking-widest">Conectar Novo Aparelho</h4><div className="flex gap-2"><button onClick={() => setConfig({...config, evolutionMethod: 'qr'})} className={clsx("px-3 py-1 rounded-lg text-[10px] font-bold uppercase", config.evolutionMethod === 'qr' ? "bg-teal-600 text-white" : "bg-white text-teal-600 border")}>QR Code</button><button onClick={() => setConfig({...config, evolutionMethod: 'code'})} className={clsx("px-3 py-1 rounded-lg text-[10px] font-bold uppercase", config.evolutionMethod === 'code' ? "bg-teal-600 text-white" : "bg-white text-teal-600 border")}>Código</button></div></div>
                         {config.evolutionMethod === 'code' && (<div><label className="block text-[10px] font-bold text-teal-700 uppercase mb-1">Celular (com DDI+DDD)</label><input type="text" className="w-full px-4 py-2 border rounded-xl text-sm" placeholder="5551999999999" value={config.pairingNumber} onChange={e => setConfig({...config, pairingNumber: e.target.value})} /></div>)}
                         <button onClick={handleConnectEvolution} disabled={isGeneratingConnection} className="w-full py-4 bg-white border-2 border-teal-500 text-teal-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-teal-500 hover:text-white transition-all flex items-center justify-center gap-2">{isGeneratingConnection ? <Loader2 size={18} className="animate-spin"/> : <Wifi size={18}/>} Iniciar Pareamento</button>
-                        {qrCodeUrl && (<div className="flex flex-col items-center pt-4 animate-in zoom-in-95"><div className="p-4 bg-white rounded-3xl shadow-xl border-2 border-teal-100"><img src={qrCodeUrl} className="w-48 h-48" alt="QR" /></div><p className="text-xs text-teal-600 font-bold mt-4">ESCANEIE COM SEU CELULAR</p></div>)}
-                        {pairingCodeValue && (<div className="text-center pt-4 animate-in zoom-in-95"><div className="inline-block px-10 py-6 bg-white rounded-3xl shadow-xl border-2 border-teal-200 text-3xl font-black tracking-[0.5em] text-teal-600">{pairingCodeValue}</div><p className="text-xs text-teal-600 font-bold mt-4 uppercase">DIGITE NO SEU WHATSAPP</p></div>)}
+                        {qrCodeUrl && (
+                            <div className="flex flex-col items-center pt-4 animate-in zoom-in-95"><div className="p-4 bg-white rounded-3xl shadow-xl border-2 border-teal-100"><img src={qrCodeUrl} className="w-48 h-48" alt="QR" /></div><p className="text-xs text-teal-600 font-bold mt-4">ESCANEIE COM SEU CELULAR</p></div>
+                        )}
+                        {pairingCodeValue && (
+                            <div className="text-center pt-4 animate-in zoom-in-95"><div className="inline-block px-10 py-6 bg-white rounded-3xl shadow-xl border-2 border-teal-200 text-3xl font-black tracking-[0.5em] text-teal-600">{pairingCodeValue}</div><p className="text-xs text-teal-600 font-bold mt-4 uppercase">DIGITE NO SEU WHATSAPP</p></div>
+                        )}
                         <div className="space-y-1">{connLogs.map((log, i) => (<p key={i} className="text-[10px] font-mono text-teal-400">{log}</p>))}</div>
                       </div>
                   </div>
@@ -858,7 +896,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                   <form onSubmit={handleStartNewChat} className="p-8 space-y-6">
                       <div className="space-y-4">
                           <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Celular do Destinatário</label><div className="relative"><Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/><input type="text" required className="w-full pl-12 pr-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm focus:bg-white outline-none font-bold" value={newChatPhone} onChange={e => setNewChatPhone(e.target.value.replace(/\D/g, ''))} placeholder="5551999999999" /></div></div>
-                          <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nome (Opcional)</label><input type="text" className="w-full px-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm outline-none" value={newChatName} onChange={e => setNewChatName(e.target.value)} placeholder="Identificação do contato" /></div>
+                          <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nome (Opcional)</label><input type="text" className="w-full px-4 py-3 border border-slate-200 bg-slate-50 rounded-2xl text-sm outline-none" value={newChatName} onChange={setNewChatName(e.target.value)} placeholder="Identificação do contato" /></div>
                       </div>
                       <button type="submit" disabled={isCreatingChat} className="w-full py-4 bg-teal-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-teal-600/20 active:scale-95 disabled:opacity-70 flex items-center justify-center gap-3">{isCreatingChat ? <Loader2 size={18} className="animate-spin" /> : 'Abrir Chat'}</button>
                   </form>

@@ -59,7 +59,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
       instanceName: '',
       apiKey: '',
       pairingNumber: '',
-      isConnected: false
+      isConnected: boolean;
   });
   const [isSavingWAConfig, setIsSavingWAConfig] = useState(false);
   const [isGeneratingWAConnection, setIsGeneratingWAConnection] = useState(false);
@@ -128,11 +128,11 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
     const c = await appBackend.getWhatsAppConfig();
     if (c) {
         setWaConfig(prev => ({ ...prev, ...c }));
-        checkWARealStatus(c);
+        checkRealStatus(c);
     }
   };
 
-  const checkWARealStatus = async (targetConfig?: any) => {
+  const checkRealStatus = async (targetConfig?: any) => {
     const target = targetConfig || waConfig;
     if (!target.instanceUrl || !target.instanceName) return;
     try {
@@ -151,6 +151,16 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
     }
   };
 
+  const handleToggleAiActive = async (enabled: boolean) => {
+      const updatedConfig = { ...config, isActive: enabled };
+      setConfig(updatedConfig);
+      try {
+          await appBackend.saveAiConfig(updatedConfig);
+      } catch (e) {
+          console.error("Erro ao salvar status da IA:", e);
+      }
+  };
+
   const handleSaveWAConfig = async () => {
     setIsSavingWAConfig(true);
     try {
@@ -162,12 +172,12 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
         };
         // Salva as credenciais do WhatsApp
         await appBackend.saveWhatsAppConfig(sanitizedConfig);
-        // CRÍTICO: Também salva o status de ativação da IA para garantir que a Edge Function responda
+        // Garante que o status da IA também seja persistido
         await appBackend.saveAiConfig(config);
         
         setWaConfig(sanitizedConfig);
         alert("Configurações salvas com sucesso!");
-        checkWARealStatus(sanitizedConfig);
+        checkRealStatus(sanitizedConfig);
     } catch (e: any) { alert(`Erro: ${e.message}`); } finally { setIsSavingWAConfig(false); }
   };
 
@@ -347,7 +357,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
           </div>
         </div>
 
-        <div className="flex bg-slate-100 p-1 rounded-2xl shadow-inner shrink-0 overflow-x-auto max-w-full">
+        <div className="flex bg-slate-100 p-1 rounded-2xl shadow-inner shrink-0 overflow-x-auto max-w-full no-scrollbar overflow-y-hidden">
           <button onClick={() => setActiveTab('config')} className={clsx("px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap", activeTab === 'config' ? "bg-white text-indigo-700 shadow-md" : "text-slate-500 hover:text-slate-700")}>
             <Sliders size={14}/> Configuração
           </button>
@@ -417,7 +427,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={config.isActive} onChange={e => setConfig({...config, isActive: e.target.checked})} />
+                    <input type="checkbox" className="sr-only peer" checked={config.isActive} onChange={e => handleToggleAiActive(e.target.checked)} />
                     <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600"></div>
                   </label>
                 </div>
@@ -661,11 +671,11 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                         </div>
                         <div>
                             <h4 className="font-black text-slate-800 text-xl tracking-tight">Atendimento Automático IA</h4>
-                            <p className="text-xs text-slate-500 font-medium mt-1">Quando ativado, a IA interceptará e responderá novos chats no WhatsApp baseando-se no conhecimento salvo.</p>
+                            <p className="text-xs text-slate-500 font-medium mt-1">Quando ativado, a IA responderá novos chats no WhatsApp. Se for desligado, a automação para imediatamente.</p>
                         </div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer scale-125 mr-4">
-                        <input type="checkbox" className="sr-only peer" checked={config.isActive} onChange={e => setConfig({...config, isActive: e.target.checked})} />
+                        <input type="checkbox" className="sr-only peer" checked={config.isActive} onChange={e => handleToggleAiActive(e.target.checked)} />
                         <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600 shadow-inner"></div>
                     </label>
                 </div>
@@ -695,7 +705,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                         <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white space-y-4 shadow-xl relative overflow-hidden">
                             <div className="absolute top-0 right-0 p-8 opacity-5"><Link2 size={100}/></div>
                             <div className="flex items-center gap-3 mb-2"><Link2 className="text-indigo-400" size={24}/> <h3 className="text-xs font-black uppercase tracking-widest">Sincronização Webhook</h3></div>
-                            <p className="text-[10px] text-slate-400 leading-relaxed font-medium">URL para a Evolution API enviar eventos para que a IA processe e responda em tempo real.</p>
+                            <p className="text-[10px] text-slate-400 leading-relaxed font-medium">Copie o link abaixo e cole nas configurações de Webhook da sua instância Evolution para que a IA receba as mensagens.</p>
                             <div className="flex gap-2">
                                 <input type="text" readOnly className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-mono text-indigo-300 outline-none" value={webhookUrlDisplay} />
                                 <button onClick={() => { navigator.clipboard.writeText(webhookUrlDisplay); alert("Webhook copiado!"); }} className="p-3 bg-white/10 text-white rounded-2xl hover:bg-white/20 transition-all active:scale-95" title="Copiar URL"><Copy size={18}/></button>
@@ -847,7 +857,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                         />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Conteúdo (Informações para a IA)</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Conteúdo (Informações para a IA)</label>
                         <textarea 
                             className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm h-64 focus:bg-white outline-none transition-all focus:border-indigo-500 leading-relaxed font-medium" 
                             placeholder="Descreva aqui as informações técnicas, comerciais ou regras que o robô deve conhecer..."
@@ -859,6 +869,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                 <div className="px-8 py-6 bg-slate-50 border-t flex justify-end gap-3 rounded-b-[2.5rem]">
                     <button onClick={() => setShowItemModal(false)} className="px-6 py-3 text-slate-500 font-bold text-sm hover:underline">Cancelar</button>
                     <button 
+                      /* Fix: Corrected handleSaveKnowledgeKnowledgeItem typo to handleSaveKnowledgeItem */
                       onClick={handleSaveKnowledgeItem}
                       disabled={isSaving || !editingItem?.title || !editingItem?.content}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center gap-2 active:scale-95 disabled:opacity-50"

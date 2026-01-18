@@ -168,7 +168,8 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
             ...waConfig,
             instanceUrl: waConfig.instanceUrl.trim().replace(/\/$/, ""),
             instanceName: waConfig.instanceName.trim(),
-            apiKey: waConfig.apiKey.trim()
+            apiKey: waConfig.apiKey.trim(),
+            pairingNumber: waConfig.pairingNumber.trim()
         };
         // Salva as credenciais do WhatsApp
         await appBackend.saveWhatsAppConfig(sanitizedConfig);
@@ -346,7 +347,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
     <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
       
       {/* Header */}
-      <div className="bg-white border-b border-slate-100 px-8 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+      <div className="bg-white border-b border-slate-200 px-8 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-4">
           <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-200 text-white">
             <Bot size={24} />
@@ -690,6 +691,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                             <div className="space-y-4">
                                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">URL da API</label><input type="text" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold" value={waConfig.instanceUrl} onChange={e => setWaConfig({...waConfig, instanceUrl: e.target.value})} placeholder="https://api.voll.com" /></div>
                                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Nome Instância</label><input type="text" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold" value={waConfig.instanceName} onChange={e => setWaConfig({...waConfig, instanceName: e.target.value})} placeholder="Instancia_VOLL" /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Número do Celular (com DDI)</label><input type="text" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold" value={waConfig.pairingNumber} onChange={e => setWaConfig({...waConfig, pairingNumber: e.target.value})} placeholder="5551999999999" /></div>
                                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">API Key Global</label><input type="password" title="API Key" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold" value={waConfig.apiKey} onChange={e => setWaConfig({...waConfig, apiKey: e.target.value})} /></div>
                             </div>
 
@@ -839,12 +841,12 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
       {/* MODAL: NOVO ITEM DE CONHECIMENTO */}
       {showItemModal && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
                 <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50 shrink-0">
                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-3"><Database size={24} className="text-indigo-600"/> {editingItem?.id ? 'Editar Bloco' : 'Novo Bloco de Dados'}</h3>
                     <button onClick={() => setShowItemModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
                 </div>
-                <div className="p-8 space-y-6">
+                <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Título do Bloco (Resumo)</label>
                         <input 
@@ -857,7 +859,7 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                         />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Conteúdo (Informações para a IA)</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Conteúdo (Informações para a IA)</label>
                         <textarea 
                             className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm h-64 focus:bg-white outline-none transition-all focus:border-indigo-500 leading-relaxed font-medium" 
                             placeholder="Descreva aqui as informações técnicas, comerciais ou regras que o robô deve conhecer..."

@@ -255,6 +255,23 @@ CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
     status text,
     created_at timestamp with time zone DEFAULT now()
 );
+
+-- CONFIGURAÇÃO DE IA (NECESSÁRIO PARA O ROBÔ RESPONDER)
+CREATE TABLE IF NOT EXISTS public.crm_ai_config (
+    id text PRIMARY KEY DEFAULT 'default',
+    system_prompt text,
+    is_active boolean DEFAULT false,
+    temperature numeric DEFAULT 0.7,
+    agent_config jsonb,
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.crm_ai_knowledge (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    title text,
+    content text,
+    created_at timestamp with time zone DEFAULT now()
+);
 `.trim();
 
   const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
@@ -284,7 +301,7 @@ CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
                 { id: 'database', label: 'Banco', color: 'text-amber-700' },
                 { id: 'sql_script', label: 'SQL', color: 'text-red-700' }
             ].map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id as SettingsTab)} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === tab.id ? `bg-white ${tab.color} shadow-sm` : "text-slate-500 hover:text-slate-700")}>{tab.label}</button>
+                <button key={tab.id} onClick={() => setActiveTab(tab.id as SettingsTab)} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'tab' ? `bg-white ${tab.color} shadow-sm` : "text-slate-500 hover:text-slate-700")}>{tab.label}</button>
             ))}
         </div>
       </div>

@@ -723,10 +723,10 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
 
                             <button 
                                 onClick={handleSaveWAConfig} 
-                                disabled={isLoading}
+                                disabled={isSavingWAConfig}
                                 className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
                             >
-                                {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Credenciais
+                                {isSavingWAConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Credenciais
                             </button>
                         </div>
 

@@ -96,18 +96,30 @@ export const FinanceiroManager: React.FC = () => {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const isClientIdValid = config.clientId.includes('-') && config.clientId.length > 20;
+    // Validação mais flexível: Apenas checa se não está vazio e tem um tamanho mínimo
+    const isClientIdEmpty = config.clientId.trim().length === 0;
+    const isClientIdValid = config.clientId.trim().length > 10;
 
     const handleConnect = () => {
-        if (!isClientIdValid) {
-            alert("O seu Client ID parece estar incorreto. Verifique o passo 3 do guia.");
+        const cleanClientId = config.clientId.trim();
+        const cleanRedirectUri = config.redirectUri.trim();
+
+        if (isClientIdEmpty) {
+            alert("O campo Client ID não pode estar vazio.");
             return;
         }
-        if (!config.redirectUri) {
+
+        if (!isClientIdValid) {
+            alert("O Client ID informado parece ser curto demais para uma chave de API válida. Por favor, verifique se copiou o código completo no Portal de Desenvolvedores.");
+            return;
+        }
+
+        if (!cleanRedirectUri) {
             alert("A URL de redirecionamento não pode estar vazia.");
             return;
         }
-        const authUrl = `https://app.contaazul.com/auth/authorize?client_id=${config.clientId.trim()}&redirect_uri=${encodeURIComponent(config.redirectUri.trim())}&scope=sales%20financial&state=voll_erp`;
+
+        const authUrl = `https://app.contaazul.com/auth/authorize?client_id=${cleanClientId}&redirect_uri=${encodeURIComponent(cleanRedirectUri)}&scope=sales%20financial&state=voll_erp`;
         window.open(authUrl, '_blank');
     };
 
@@ -198,7 +210,6 @@ export const FinanceiroManager: React.FC = () => {
                                                 {copied ? <Check size={14}/> : "Copiar"}
                                             </button>
                                         </div>
-                                        <p className="text-[9px] text-slate-400 italic px-1">Este link deve ser <strong>exatamente igual</strong> ao cadastrado no Portal Conta Azul.</p>
                                     </div>
 
                                     {/* PASSO AQUI NO ERP 2: CLIENT ID */}
@@ -211,7 +222,7 @@ export const FinanceiroManager: React.FC = () => {
                                                 type="text" 
                                                 className={clsx(
                                                     "w-full px-5 py-3.5 border-2 rounded-2xl text-sm font-mono outline-none transition-all",
-                                                    isClientIdValid ? "bg-white border-slate-100 focus:border-teal-500" : "bg-red-50 border-red-100 focus:border-red-500"
+                                                    (isClientIdValid || isClientIdEmpty) ? "bg-white border-slate-100 focus:border-teal-500" : "bg-red-50 border-red-100 focus:border-red-500"
                                                 )} 
                                                 value={config.clientId} 
                                                 onChange={e => setConfig({...config, clientId: e.target.value})}
@@ -219,6 +230,9 @@ export const FinanceiroManager: React.FC = () => {
                                             />
                                             {isClientIdValid && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 text-green-500" size={18}/>}
                                         </div>
+                                        {!isClientIdValid && !isClientIdEmpty && (
+                                            <p className="text-[10px] text-red-500 font-bold ml-1 animate-pulse">Código parece curto demais. Verifique se copiou tudo.</p>
+                                        )}
                                     </div>
 
                                     {/* PASSO AQUI NO ERP 3: CLIENT SECRET */}
@@ -259,7 +273,7 @@ export const FinanceiroManager: React.FC = () => {
                             <div>
                                 <h4 className="text-xs font-black text-amber-900 uppercase">Dica de Segurança</h4>
                                 <p className="text-[10px] text-amber-700 mt-1 leading-relaxed font-medium">
-                                    Nunca compartilhe seu <strong>Client Secret</strong> com ninguém. Ele funciona como uma "senha mestre" para sua conta bancária digital.
+                                    Nunca compartilhe seu <strong>Client Secret</strong> com ninguém. Ele funciona como uma "senha mestre" para sua conta.
                                 </p>
                             </div>
                         </div>
@@ -273,10 +287,8 @@ export const FinanceiroManager: React.FC = () => {
                             </h3>
 
                             <div className="space-y-10 relative">
-                                {/* Linha vertical decorativa */}
                                 <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-slate-100 -z-0"></div>
 
-                                {/* PASSO 1 */}
                                 <div className="flex gap-6 relative z-10">
                                     <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-lg shadow-indigo-200">01</div>
                                     <div className="space-y-2 pt-1">
@@ -290,7 +302,6 @@ export const FinanceiroManager: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* PASSO 2 */}
                                 <div className="flex gap-6 relative z-10">
                                     <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-lg shadow-indigo-200">02</div>
                                     <div className="space-y-3 pt-1">
@@ -299,13 +310,9 @@ export const FinanceiroManager: React.FC = () => {
                                             No formulário do Conta Azul, localize o campo <strong className="text-slate-700">"URL de Redirecionamento"</strong>. <br/>
                                             Use a URL que está no campo <strong className="text-indigo-600">"A"</strong> do formulário ao lado.
                                         </p>
-                                        <div className="bg-slate-50 p-3 rounded-xl border border-dashed border-slate-200 text-[10px] text-slate-400 italic">
-                                            * Se este link não for exato (incluindo o https:// e a barra final), a integração dará erro 404.
-                                        </div>
                                     </div>
                                 </div>
 
-                                {/* PASSO 3 */}
                                 <div className="flex gap-6 relative z-10">
                                     <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-lg shadow-indigo-200">03</div>
                                     <div className="space-y-3 pt-1">
@@ -316,14 +323,13 @@ export const FinanceiroManager: React.FC = () => {
                                         <div className="flex items-center gap-3 bg-red-50 p-4 rounded-2xl border border-red-100">
                                             <AlertTriangle className="text-red-500 shrink-0" size={20}/>
                                             <p className="text-xs text-red-700 font-bold leading-tight">
-                                                Atenção: Use apenas UUIDs (ex: 8a7f...-432a...). <br/>
-                                                Não use URLs de login ou códigos do Cognito.
+                                                Atenção: Use apenas as chaves geradas no portal de desenvolvedores. <br/>
+                                                Não use URLs de login ou códigos temporários.
                                             </p>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* PASSO 4 */}
                                 <div className="flex gap-6 relative z-10">
                                     <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-lg shadow-indigo-200">04</div>
                                     <div className="space-y-2 pt-1">
@@ -333,12 +339,6 @@ export const FinanceiroManager: React.FC = () => {
                                         </p>
                                     </div>
                                 </div>
-                            </div>
-
-                            <div className="mt-12 pt-8 border-t border-slate-100 flex items-center gap-6 justify-center opacity-50 grayscale group-hover:grayscale-0 transition-all">
-                                <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" className="h-6" alt="VOLL"/>
-                                <ArrowRightLeft className="text-slate-300" size={20}/>
-                                <img src="https://logospng.org/download/conta-azul/logo-conta-azul-icon-1024.png" className="h-8" alt="CA"/>
                             </div>
                         </div>
                     </div>

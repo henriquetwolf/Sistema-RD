@@ -120,41 +120,42 @@ export const FinanceiroManager: React.FC = () => {
             const cleanSecret = config.clientSecret.trim();
             const fixedRedirect = 'https://sistema-rd.vercel.app/';
 
-            // Algumas instâncias da API token do Conta Azul aceitam JSON e 
-            // as credenciais no corpo para evitar problemas com headers via Proxy
-            const body = {
-                grant_type: 'authorization_code',
-                client_id: cleanId,
-                client_secret: cleanSecret,
-                code: authCode.trim(),
-                redirect_uri: fixedRedirect
-            };
+            // Credenciais em Base64 para o header Authorization: Basic
+            const credentials = btoa(`${cleanId}:${cleanSecret}`);
 
+            // Conforme a documentação oficial, a troca de token deve ser feita no subdomínio auth
+            const targetUrl = "https://auth.contaazul.com/oauth2/token";
             const proxyUrl = "https://corsproxy.io/?";
-            const targetUrl = "https://api.contaazul.com/oauth2/token";
 
-            console.log("Solicitando troca de token (JSON Mode)...");
+            // O corpo deve ser x-www-form-urlencoded
+            const body = new URLSearchParams();
+            body.append('grant_type', 'authorization_code');
+            body.append('code', authCode.trim());
+            body.append('redirect_uri', fixedRedirect);
+
+            console.log("Iniciando troca de token final...");
 
             const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Authorization': `Basic ${credentials}`,
+                    'Content-Type': 'application/x-www-form-urlencoded',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify(body)
+                body: body.toString()
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                console.error("Erro Conta Azul:", data);
+                console.error("Erro na resposta do Conta Azul:", data);
                 const errorMsg = data.error_description || data.message || data.error || "Erro desconhecido";
                 
                 if (response.status === 401) {
-                    throw new Error(`Erro 401 (Não Autorizado): ${errorMsg}. Verifique se o Secret no Conta Azul é o mesmo que você colou aqui.`);
+                    throw new Error(`Erro 401 (Não Autorizado): ${errorMsg}. O Conta Azul recusou o seu Client ID ou Secret. Verifique se copiou corretamente sem espaços.`);
                 }
                 if (response.status === 400) {
-                    throw new Error(`Erro 400 (Bad Request): ${errorMsg}. Isso geralmente ocorre se a URL de redirecionamento no portal do Conta Azul for diferente de ${fixedRedirect}`);
+                    throw new Error(`Erro 400 (Requisição Inválida): ${errorMsg}. Verifique se a URL de Redirecionamento no Portal é exatamente ${fixedRedirect}`);
                 }
                 throw new Error(`Erro ${response.status}: ${errorMsg}`);
             }
@@ -175,10 +176,11 @@ export const FinanceiroManager: React.FC = () => {
             setAuthCode(null);
             alert("Conta Azul conectada com sucesso!");
             
+            // Limpa a URL e volta para a aba geral
             window.history.replaceState({}, document.title, window.location.pathname);
             setActiveSubTab('overview');
         } catch (e: any) {
-            console.error("Erro na finalização:", e);
+            console.error("Falha técnica na integração:", e);
             alert(e.message);
         } finally {
             setIsSaving(false);
@@ -243,8 +245,8 @@ export const FinanceiroManager: React.FC = () => {
                                     <Zap size={40} className="animate-pulse" />
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Autorização Recebida</h3>
-                                    <p className="text-sm text-indigo-700 mt-2 font-medium">Clique no botão abaixo para concluir a integração.</p>
+                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Autorização Confirmada</h3>
+                                    <p className="text-sm text-indigo-700 mt-2 font-medium">Clique no botão para receber o Token de acesso.</p>
                                 </div>
                                 <button 
                                     onClick={handleFinalizeIntegration}
@@ -306,13 +308,14 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <AlertTriangle className="text-amber-500" /> Checklist de Suporte
+                                <AlertTriangle className="text-amber-500" /> Solução para Erro 401
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Resolução de Erros 401/400</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Por que o 401 acontece?</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        As credenciais estão sendo enviadas agora no corpo da requisição JSON para evitar bloqueios de proxy. Se o erro persistir, o motivo será exibido detalhadamente no aviso de erro.
+                                        O erro 401 significa que as chaves não foram aceitas pelo endpoint de autenticação. 
+                                        O sistema foi atualizado para usar o endpoint <code>auth.contaazul.com</code>, que é o padrão correto para troca de tokens.
                                     </p>
                                 </div>
 
@@ -320,14 +323,14 @@ export const FinanceiroManager: React.FC = () => {
                                     <div className="flex gap-4">
                                         <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-lg">01</div>
                                         <p className="text-sm text-slate-600 leading-relaxed font-bold">
-                                            Certifique-se de que no Portal do Conta Azul a URL cadastrada termina exatamente com barra:<br/>
-                                            <code className="bg-slate-100 px-2 py-1 rounded text-red-600">https://sistema-rd.vercel.app/</code>
+                                            Verifique se você copiou o <strong>Client Secret</strong> completo. Chaves do Conta Azul às vezes começam ou terminam com caracteres especiais.
                                         </p>
                                     </div>
                                     <div className="flex gap-4">
                                         <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-black text-xs shrink-0 shadow-sm">02</div>
                                         <p className="text-sm text-slate-600 leading-relaxed">
-                                            Se houver erro de "código expirado", basta clicar em <strong>2. Autorizar Conexão</strong> novamente e refazer o passo 3.
+                                            A URL de redirecionamento no portal deve ser exatamente:<br/>
+                                            <code className="bg-slate-100 px-2 py-1 rounded text-red-600">https://sistema-rd.vercel.app/</code>
                                         </p>
                                     </div>
                                 </div>

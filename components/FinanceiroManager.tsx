@@ -34,7 +34,7 @@ export const FinanceiroManager: React.FC = () => {
 
     useEffect(() => {
         loadConfig();
-        // Verifica se voltamos do Conta Azul com um código na URL
+        // Captura o código da URL caso o Conta Azul tenha redirecionado de volta
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
         if (code) {
@@ -86,7 +86,7 @@ export const FinanceiroManager: React.FC = () => {
                 }, { onConflict: 'key' });
             
             setConfig(sanitizedConfig);
-            alert("Dados configurados e salvos!");
+            alert("Configurações salvas com sucesso!");
         } catch (e: any) {
             alert("Erro ao salvar: " + e.message);
         } finally {
@@ -99,8 +99,11 @@ export const FinanceiroManager: React.FC = () => {
             alert("Preencha o Client ID e a URL de Redirecionamento primeiro.");
             return;
         }
-        // Endpoint oficial da API v2
+        
+        // Endpoint OAuth2 Conta Azul
         const authUrl = `https://app.contaazul.com/auth/authorize?scope=sales%20financial&state=voll_erp&response_type=code&redirect_uri=${encodeURIComponent(config.redirectUri.trim())}&client_id=${config.clientId.trim()}`;
+        
+        // Redireciona na mesma aba para garantir que o callback funcione no Vercel
         window.location.href = authUrl;
     };
 
@@ -108,10 +111,8 @@ export const FinanceiroManager: React.FC = () => {
         if (!authCode) return;
         setIsSaving(true);
         try {
-            // Conta Azul requer Basic Auth (clientId:clientSecret em base64) para trocar o token
+            // Conta Azul requer troca do code por token via POST
             const credentials = btoa(`${config.clientId.trim()}:${config.clientSecret.trim()}`);
-            
-            // Usando o CORS Proxy para evitar bloqueio do navegador
             const proxyUrl = "https://corsproxy.io/?";
             const targetUrl = "https://api.contaazul.com/oauth2/token";
             
@@ -130,12 +131,11 @@ export const FinanceiroManager: React.FC = () => {
 
             if (!response.ok) {
                 const errorData = await response.text();
-                throw new Error(`Falha na API: ${response.status} - ${errorData}`);
+                throw new Error(`Erro na troca de token: ${response.status}`);
             }
 
             const data = await response.json();
             
-            // Sucesso! Vamos salvar os tokens
             const updatedConfig: ContaAzulConfig = { 
                 ...config, 
                 isConnected: true, 
@@ -150,14 +150,13 @@ export const FinanceiroManager: React.FC = () => {
             
             setConfig(updatedConfig);
             setAuthCode(null);
-            alert("Integração concluída com sucesso! O ERP agora está conectado ao seu Conta Azul.");
+            alert("Conta Azul conectada com sucesso!");
             
-            // Limpa a URL para não processar o código novamente ao dar F5
+            // Limpa a URL e volta para a visão geral
             window.history.replaceState({}, document.title, window.location.pathname);
             setActiveSubTab('overview');
         } catch (e: any) {
-            console.error(e);
-            alert("Erro ao finalizar integração: " + e.message);
+            alert("Erro ao finalizar: " + e.message);
         } finally {
             setIsSaving(false);
         }
@@ -186,11 +185,7 @@ export const FinanceiroManager: React.FC = () => {
                                 <ShieldCheck size={40} />
                             </div>
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Conexão Ativa</h3>
-                            <div className="space-y-1">
-                                <p className="text-xs text-slate-500 font-medium">Último sincronismo de tokens:</p>
-                                <p className="text-xs font-bold text-teal-600">{new Date(config.lastSync!).toLocaleString()}</p>
-                            </div>
-                            <p className="text-xs text-slate-400 mt-4 leading-relaxed max-w-xs">Sua conta está integrada e pronta para transacionar dados entre o CRM e o Financeiro.</p>
+                            <p className="text-xs text-slate-500">Sua conta está integrada e sincronizada.</p>
                         </div>
                     ) : (
                         <div className="bg-white p-12 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
@@ -198,21 +193,21 @@ export const FinanceiroManager: React.FC = () => {
                                 <Wallet size={40} />
                             </div>
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Aguardando Conexão</h3>
-                            <p className="text-sm text-slate-500 max-w-xs leading-relaxed font-medium">Acesse a aba de <strong>Configuração</strong> para conectar seu Conta Azul.</p>
+                            <p className="text-sm text-slate-500 max-w-xs leading-relaxed font-medium">Acesse a aba de <strong>Configuração</strong> para conectar.</p>
                         </div>
                     )}
 
                     <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col space-y-6">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><TrendingUp size={14}/> Atividades Recentes</h4>
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><TrendingUp size={14}/> Atividades</h4>
                         <div className="flex-1 flex flex-col items-center justify-center text-slate-300 italic text-xs">
-                            Nenhum registro de transação recente.
+                            Sem transações recentes.
                         </div>
                     </div>
 
                     <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col space-y-6">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><DollarSign size={14}/> Saldo Consolidado</h4>
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><DollarSign size={14}/> Saldo</h4>
                         <div className="flex-1 flex flex-col items-center justify-center text-slate-300 italic text-xs">
-                            Conecte a API para visualizar saldos.
+                            Conecte a API para visualizar.
                         </div>
                     </div>
                 </div>
@@ -226,7 +221,7 @@ export const FinanceiroManager: React.FC = () => {
                                 </div>
                                 <div>
                                     <h3 className="text-xl font-black text-indigo-900">Autorização Recebida</h3>
-                                    <p className="text-sm text-indigo-700 mt-2">Clique no botão abaixo para gerar seus tokens de acesso e finalizar o processo.</p>
+                                    <p className="text-sm text-indigo-700 mt-2">Clique no botão abaixo para gerar os tokens e finalizar.</p>
                                 </div>
                                 <button 
                                     onClick={handleFinalizeIntegration}
@@ -255,27 +250,27 @@ export const FinanceiroManager: React.FC = () => {
                                 ) : (
                                     <div className="space-y-6">
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">A. Redirect URI (URL Salva no Portal)</label>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">1. URL de Redirecionamento (Salvar no Portal)</label>
                                             <div className="flex gap-2">
-                                                <input type="text" className="flex-1 px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xs font-mono font-bold text-indigo-700 outline-none focus:bg-white focus:border-indigo-300" value={config.redirectUri} onChange={e => setConfig({...config, redirectUri: e.target.value})} />
-                                                <button onClick={() => { navigator.clipboard.writeText(config.redirectUri); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-3 bg-slate-100 rounded-2xl text-slate-400 hover:text-teal-600 transition-all">{copied ? <Check size={20}/> : <Copy size={20}/>}</button>
+                                                <input readOnly type="text" className="flex-1 px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xs font-mono font-bold text-indigo-700 outline-none" value={config.redirectUri} />
+                                                <button onClick={() => { navigator.clipboard.writeText(config.redirectUri); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-3 bg-slate-100 rounded-2xl text-slate-400 hover:text-teal-600 transition-all" title="Copiar URL">{copied ? <Check size={20}/> : <Copy size={20}/>}</button>
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">B. Client ID</label>
-                                            <input type="text" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientId} onChange={e => setConfig({...config, clientId: e.target.value})} placeholder="Cole o client_id aqui" />
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">2. Client ID</label>
+                                            <input type="text" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientId} onChange={e => setConfig({...config, clientId: e.target.value.trim()})} placeholder="Cole o client_id aqui" />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">C. Client Secret</label>
-                                            <input type="password" title="Secret" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientSecret} onChange={e => setConfig({...config, clientSecret: e.target.value})} placeholder="Cole o client_secret aqui" />
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">3. Client Secret</label>
+                                            <input type="password" title="Secret" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientSecret} onChange={e => setConfig({...config, clientSecret: e.target.value.trim()})} placeholder="Cole o client_secret aqui" />
                                         </div>
 
                                         <div className="flex flex-col gap-3 pt-4">
-                                            <button onClick={handleSaveConfig} disabled={isSaving} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2">
-                                                <Save size={16}/> 1. Salvar Configuração
+                                            <button onClick={handleSaveConfig} disabled={isSaving} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all">
+                                                1. Salvar Dados
                                             </button>
                                             <button onClick={handleConnect} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all flex items-center justify-center gap-2 active:scale-95">
-                                                <RefreshCw size={18}/> 2. Autorizar no Conta Azul
+                                                <RefreshCw size={18}/> 2. Autorizar Conexão
                                             </button>
                                         </div>
                                     </div>
@@ -287,7 +282,7 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <ListChecks className="text-teal-600" /> Fluxo de Conexão
+                                <ListChecks className="text-teal-600" /> Como resolver o erro
                             </h3>
                             <div className="space-y-10 relative">
                                 <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-slate-100 -z-0"></div>
@@ -295,9 +290,9 @@ export const FinanceiroManager: React.FC = () => {
                                 <div className="flex gap-6 relative z-10">
                                     <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-lg">01</div>
                                     <div className="pt-1">
-                                        <h4 className="font-bold text-slate-800">Passo Inicial</h4>
+                                        <h4 className="font-bold text-slate-800">Copie a URL correta</h4>
                                         <p className="text-sm text-slate-500 leading-relaxed">
-                                            Preencha os campos A, B e C com os dados do Portal do Desenvolvedor do Conta Azul e clique em <strong>Salvar Configuração</strong>.
+                                            Clique no botão de copiar no campo <strong>1. URL de Redirecionamento</strong> acima. É vital que ela seja salva exatamente igual no Portal do Conta Azul.
                                         </p>
                                     </div>
                                 </div>
@@ -305,9 +300,9 @@ export const FinanceiroManager: React.FC = () => {
                                 <div className="flex gap-6 relative z-10">
                                     <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-lg">02</div>
                                     <div className="pt-1">
-                                        <h4 className="font-bold text-slate-800">Autorização do Usuário</h4>
+                                        <h4 className="font-bold text-slate-800">Acesse o Portal do Desenvolvedor</h4>
                                         <p className="text-sm text-slate-500 leading-relaxed">
-                                            Clique em <strong>Autorizar no Conta Azul</strong>. Você será levado para o login deles para permitir que o ERP acesse seus dados financeiros.
+                                            Vá em seu App no Conta Azul, clique em <strong>Editar Informações</strong> e cole a URL no campo <strong>"URL de Redirecionamento"</strong>.
                                         </p>
                                     </div>
                                 </div>
@@ -315,9 +310,9 @@ export const FinanceiroManager: React.FC = () => {
                                 <div className="flex gap-6 relative z-10">
                                     <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-lg">03</div>
                                     <div className="pt-1">
-                                        <h4 className="font-bold text-slate-800">Geração de Tokens</h4>
+                                        <h4 className="font-bold text-slate-800">Dica do Client ID</h4>
                                         <p className="text-sm text-slate-500 leading-relaxed">
-                                            Ao retornar para este sistema, clique no botão verde que aparecerá para finalizar. O sistema salvará os tokens de acesso de forma segura no banco de dados.
+                                            O erro "Página não encontrada" costuma ocorrer quando o <strong>Client ID</strong> enviado é inválido. Certifique-se de que não há espaços sobrando ao colar.
                                         </p>
                                     </div>
                                 </div>

@@ -6,6 +6,7 @@ import {
   Layers, BookOpen, Video, FileText, List, ChevronRight, GripVertical, Paperclip, 
   Download, ListPlus, LayoutTemplate, Upload, Image as ImageIcon, RefreshCw, AlertTriangle,
   Settings, Layout, PlayCircle, Code,
+  /* Added missing icon imports to fix errors on lines 539-542 */
   GraduationCap, School, Building2, Store
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -443,7 +444,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
 
                             <div className="md:col-span-2">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Título do Curso</label>
-                                <input type="text" className="w-full px-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-2xl text-base font-black outline-none transition-all" value={editingCourse?.title} onChange={e => setEditingCourse(prev => prev ? {...prev, title: e.target.value} : null)} />
+                                <input type="text" className="w-full px-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-2xl text-base font-black outline-none transition-all" value={editingCourse?.title} onChange={e => setEditingCourse(prev => prev ? {...prev, title: e.target.value} : null)} />
                             </div>
 
                             <div className="md:col-span-2">
@@ -648,7 +649,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Título da Aula *</label>
                             <input 
                                 type="text" 
-                                className="w-full px-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-2xl text-base font-black outline-none transition-all" 
+                                className="w-full px-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 rounded-2xl text-base font-bold outline-none transition-all" 
                                 value={editingLesson?.title} 
                                 onChange={e => setEditingLesson(prev => prev ? {...prev, title: e.target.value} : null)} 
                                 placeholder="Ex: Exercícios de Solo Nível 1" 
@@ -736,7 +737,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                     </div>
                     <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 rounded-b-[2.5rem]">
                         <button onClick={() => setShowLessonModal(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl font-bold text-sm">Cancelar</button>
-                        <button onClick={handleSaveLesson} disabled={isSaving || !editingLesson?.title} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                        <button onClick={handleSaveLesson} disabled={isSaving || !editingLesson?.title} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-2.5 rounded-xl font-black text-sm shadow-xl active:scale-95 disabled:opacity-50 transition-all flex items-center gap-2">
                             {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Aula
                         </button>
                     </div>

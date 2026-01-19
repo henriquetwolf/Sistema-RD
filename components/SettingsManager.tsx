@@ -94,7 +94,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       { id: 'classes', label: 'Turmas' },
       { id: 'teachers', label: 'Professores' },
       { id: 'landing_pages', label: 'Páginas de Venda' },
-      { id: 'chat_ia', label: 'Chat IA' },
       { id: 'global_settings', label: 'Configurações' }
   ];
 
@@ -217,15 +216,11 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO SQL - VOLL PILATES GROUP V2
--- Rode este código no SQL Editor do Supabase para corrigir tabelas e Chat IA.
-
--- 1. Tabelas Base e Configurações
+-- SCRIPT DE REPARO SQL
 CREATE TABLE IF NOT EXISTS public.crm_settings (
     key text PRIMARY KEY,
     value text
 );
-
 CREATE TABLE IF NOT EXISTS public.crm_companies (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     legal_name text,
@@ -233,80 +228,6 @@ CREATE TABLE IF NOT EXISTS public.crm_companies (
     webhook_url text,
     product_types text[],
     product_ids text[]
-);
-
--- 2. Estrutura de WhatsApp (Atendimento e Histórico IA)
-CREATE TABLE IF NOT EXISTS public.crm_whatsapp_chats (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    wa_id text UNIQUE,
-    contact_name text,
-    contact_phone text,
-    last_message text,
-    unread_count integer DEFAULT 0,
-    status text DEFAULT 'open',
-    tag text,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    chat_id uuid REFERENCES public.crm_whatsapp_chats(id) ON DELETE CASCADE,
-    text text,
-    sender_type text, -- 'user', 'agent', 'system'
-    wa_message_id text,
-    status text DEFAULT 'sent',
-    created_at timestamp with time zone DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.crm_attendance_tags (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    name text UNIQUE,
-    color text,
-    created_at timestamp with time zone DEFAULT now()
-);
-
--- 3. Inteligência Artificial (Cérebro do Robô)
-CREATE TABLE IF NOT EXISTS public.crm_ai_config (
-    id text PRIMARY KEY DEFAULT 'default',
-    system_prompt text,
-    is_active boolean DEFAULT false,
-    temperature numeric DEFAULT 0.7,
-    agent_config jsonb DEFAULT '{"autoCreateDeal": false, "pipelineName": "Padrão", "stageId": "new", "distributionMode": "fixed"}'::jsonb,
-    updated_at timestamp with time zone DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.crm_ai_knowledge (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    title text,
-    content text,
-    created_at timestamp with time zone DEFAULT now()
-);
-
--- Garante que o registro padrão da IA exista para não dar erro de leitura
-INSERT INTO public.crm_ai_config (id, system_prompt, is_active)
-VALUES ('default', 'Você é o assistente virtual da VOLL Pilates.', false)
-ON CONFLICT (id) DO NOTHING;
-
--- 4. Logs de Automação de WhatsApp
-CREATE TABLE IF NOT EXISTS public.crm_wa_automation_logs (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    rule_name text,
-    student_name text,
-    phone text,
-    message text,
-    created_at timestamp with time zone DEFAULT now()
-);
-
--- 5. Outras Tabelas de Apoio
-CREATE TABLE IF NOT EXISTS public.crm_activity_logs (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_name text,
-    action text,
-    module text,
-    details text,
-    record_id text,
-    created_at timestamp with time zone DEFAULT now()
 );
 `.trim();
 
@@ -666,7 +587,7 @@ CREATE TABLE IF NOT EXISTS public.crm_activity_logs (
       )}
 
       {editingCompany && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="text-lg font-black text-slate-800">{editingCompany.id ? 'Editar Empresa' : 'Nova Empresa do Grupo'}</h3>
@@ -697,7 +618,7 @@ CREATE TABLE IF NOT EXISTS public.crm_activity_logs (
       )}
 
       {editingBanner && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="text-lg font-black text-slate-800">Gerenciar Banner</h3>
@@ -755,7 +676,7 @@ CREATE TABLE IF NOT EXISTS public.crm_activity_logs (
       )}
 
       {editingLevel && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="text-lg font-black text-slate-800">{editingLevel.id ? 'Editar Nível' : 'Novo Nível Docente'}</h3>
@@ -786,7 +707,7 @@ CREATE TABLE IF NOT EXISTS public.crm_activity_logs (
       )}
 
       {editingTrigger && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="text-lg font-black text-slate-800">Gatilho de Integração</h3>
@@ -822,9 +743,9 @@ CREATE TABLE IF NOT EXISTS public.crm_activity_logs (
       )}
 
       {editingCourseInfo && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                  <div className="px-10 py-8 border-b flex justify-between items-center bg-slate-50 shrink-0 rounded-t-[2.5rem]">
+                  <div className="px-10 py-8 border-b flex justify-between items-center bg-slate-50 shrink-0">
                       <h3 className="text-xl font-black text-slate-800">Editor de Portal Técnico</h3>
                       <button onClick={() => setEditingCourseInfo(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
                   </div>
@@ -867,7 +788,7 @@ CREATE TABLE IF NOT EXISTS public.crm_activity_logs (
       )}
 
       {editingTag && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="text-lg font-black text-slate-800">{editingTag.id ? 'Editar Tag' : 'Nova Tag Suporte'}</h3>

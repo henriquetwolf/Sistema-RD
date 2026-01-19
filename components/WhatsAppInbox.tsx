@@ -219,6 +219,7 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
       }
   };
 
+  // Fix: Corrected the state setter function name to match the state declaration (draggedChatId, setDraggedChatId)
   const handleDragStart = (id: string) => setDraggedChatId(id);
   const handleOnDrop = async (newStatus: ChatStatus) => {
       if (!draggedChatId) return;
@@ -566,16 +567,6 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                 </div>
                 {config.isConnected ? <Wifi size={14} className="text-teal-400" /> : <WifiOff size={14} className="text-red-400" />}
             </div>
-            
-            {aiConfig?.isActive && (
-                <div className="bg-indigo-600 p-3 rounded-2xl text-white flex items-center justify-between shadow-lg shadow-indigo-200 animate-pulse mt-2">
-                    <div className="flex items-center gap-2">
-                        <Bot size={16} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">IA Operacional Ativa</span>
-                    </div>
-                    <Zap size={14} fill="currentColor" className="text-amber-400" />
-                </div>
-            )}
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50/30">
@@ -633,11 +624,11 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                                             draggable 
                                             onDragStart={() => handleDragStart(c.id)}
                                             onClick={() => setSelectedChatId(c.id)}
-                                            className={clsx("bg-white p-3 rounded-xl shadow-sm border mb-2 cursor-grab active:cursor-grabbing hover:border-teal-400 transition-all group relative", selectedChatId === c.id ? "ring-2 ring-teal-500 border-transparent" : "border-slate-100")}
+                                            className={clsx("bg-white p-3 rounded-xl shadow-sm border mb-2 cursor-grab active:cursor-grabbing hover:border-teal-400 transition-all group relative", selectedChatId === c.id ? "ring-2 ring-teal-50 ring-offset-2 z-10 border-transparent shadow-md bg-white/90" : "border-slate-100 shadow-sm")}
                                         >
                                             <div className="flex justify-between items-start mb-1">
                                                 <p className="text-xs font-bold text-slate-800 truncate pr-4">{c.contact_name}</p>
-                                                <button onClick={(e) => handleDeleteChat(e, c.id)} className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-red-500 absolute top-2 right-2"><Trash2 size={10}/></button>
+                                                <button onClick={(e) => { e.stopPropagation(); handleDeleteChat(e, c.id); }} className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-red-500 absolute top-2 right-2"><Trash2 size={10}/></button>
                                             </div>
                                             <p className="text-[10px] text-slate-500 truncate">{c.last_message}</p>
                                             {c.tag && (
@@ -874,8 +865,8 @@ export const WhatsAppInbox: React.FC<WhatsAppInboxProps> = ({ onNavigateToRecord
                         <div className="flex justify-between items-center"><h4 className="text-xs font-black text-teal-800 uppercase tracking-widest">Conectar Novo Aparelho</h4><div className="flex gap-2"><button onClick={() => setConfig({...config, evolutionMethod: 'qr'})} className={clsx("px-3 py-1 rounded-lg text-[10px] font-bold uppercase", config.evolutionMethod === 'qr' ? "bg-teal-600 text-white" : "bg-white text-teal-600 border")}>QR Code</button><button onClick={() => setConfig({...config, evolutionMethod: 'code'})} className={clsx("px-3 py-1 rounded-lg text-[10px] font-bold uppercase", config.evolutionMethod === 'code' ? "bg-teal-600 text-white" : "bg-white text-teal-600 border")}>Código</button></div></div>
                         {config.evolutionMethod === 'code' && (<div><label className="block text-[10px] font-bold text-teal-700 uppercase mb-1">Celular (com DDI+DDD)</label><input type="text" className="w-full px-4 py-2 border rounded-xl text-sm" placeholder="5551999999999" value={config.pairingNumber} onChange={e => setConfig({...config, pairingNumber: e.target.value})} /></div>)}
                         <button onClick={handleConnectEvolution} disabled={isGeneratingConnection} className="w-full py-4 bg-white border-2 border-teal-500 text-teal-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-teal-500 hover:text-white transition-all flex items-center justify-center gap-2">{isGeneratingConnection ? <Loader2 size={18} className="animate-spin"/> : <Wifi size={18}/>} Iniciar Pareamento</button>
-                        {qrCodeUrl && (<div className="flex flex-col items-center pt-4 animate-in zoom-in-95"><div className="p-4 bg-white rounded-3xl shadow-xl border-2 border-teal-100"><img src={qrCodeUrl} className="w-48 h-48" alt="QR" /></div><p className="text-xs text-teal-600 font-bold mt-4">ESCANEIE COM SEU CELULAR</p></div>)}
-                        {pairingCodeValue && (<div className="text-center pt-4 animate-in zoom-in-95"><div className="inline-block px-10 py-6 bg-white rounded-3xl shadow-xl border-2 border-teal-200 text-3xl font-black tracking-[0.5em] text-teal-600">{pairingCodeValue}</div><p className="text-xs text-teal-600 font-bold mt-4 uppercase">DIGITE NO SEU WHATSAPP</p></div>)}
+                        {qrCodeUrl && (<div><div className="p-4 bg-white rounded-3xl shadow-xl border-2 border-teal-100"><img src={qrCodeUrl} className="w-48 h-48" alt="QR" /></div><p className="text-xs text-teal-600 font-bold mt-4">ESCANEIE COM SEU CELULAR</p></div>)}
+                        {pairingCodeValue && (<div><div className="inline-block px-10 py-6 bg-white rounded-3xl shadow-xl border-2 border-orange-200 text-3xl font-black tracking-[0.5em] text-teal-600">{pairingCodeValue}</div><p className="text-xs text-teal-600 font-bold mt-4 uppercase">DIGITE NO SEU WHATSAPP</p></div>)}
                         <div className="space-y-1">{connLogs.map((log, i) => (<p key={i} className="text-[10px] font-mono text-teal-400">{log}</p>))}</div>
                       </div>
                   </div>

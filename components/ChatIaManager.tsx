@@ -115,7 +115,8 @@ export const ChatIaManager: React.FC<ChatIaManagerProps> = ({ onBack }) => {
                   pipelineName: 'Padrão',
                   stageId: 'new',
                   distributionMode: 'fixed'
-              }
+              },
+              isActive: false // Forçamos inativo ao carregar se estiver oculto
           });
       }
       

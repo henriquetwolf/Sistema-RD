@@ -531,7 +531,7 @@ function App() {
                 </div>
             </header>
 
-            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'chat_ia') && "max-w-full")}>
+            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk') && "max-w-full")}>
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                     <aside className="w-full md:w-64 flex-shrink-0">
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
@@ -667,7 +667,6 @@ function App() {
                         {dashboardTab === 'products' && <ProductsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'students' && <StudentsManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'events' && <EventsManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'chat_ia' && <ChatIaManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'global_settings' && <SettingsManager onLogoChange={handleLogoChange} currentLogo={appLogo} jobs={jobs} onStartWizard={handleStartWizard} onDeleteJob={handleDeleteJob} />}
                         {dashboardTab === 'analysis' && <SalesAnalysis />}
                         {dashboardTab === 'whatsapp' && <WhatsAppInbox onNavigateToRecord={handleDeepNavigation} currentAgentName={currentUserName} />}

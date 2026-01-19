@@ -4,7 +4,8 @@ import {
   AlertCircle, ShieldCheck, CheckCircle2, Cloud, Info, ExternalLink, Key, ListChecks,
   Copy, Globe, MousePointerClick, Check, Eye, EyeOff, AlertTriangle, ShieldAlert,
   ArrowRightLeft, Lock, Layout, Zap, ArrowRight, MousePointer2, CheckCircle,
-  FileSpreadsheet, TrendingUp, DollarSign, History, User
+  FileSpreadsheet, TrendingUp, DollarSign, History, User, ArrowUpRight, ArrowDownRight,
+  TrendingDown
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -19,9 +20,9 @@ interface ContaAzulConfig {
     refreshToken?: string;
 }
 
-interface ReceivableItem {
+interface FinancialItem {
     id: string;
-    customer_name: string;
+    name: string;
     value: number;
     due_date: string;
     status: string;
@@ -37,9 +38,9 @@ export const FinanceiroManager: React.FC = () => {
     });
     
     // Estados de Dados Financeiros
-    const [overdueTotal, setOverdueTotal] = useState(0);
-    const [overdueCount, setOverdueCount] = useState(0);
-    const [recentOverdue, setRecentOverdue] = useState<ReceivableItem[]>([]);
+    const [receivableTotal, setReceivableTotal] = useState(0);
+    const [payableTotal, setPayableTotal] = useState(0);
+    const [overdueRecent, setOverdueRecent] = useState<FinancialItem[]>([]);
     
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -57,7 +58,6 @@ export const FinanceiroManager: React.FC = () => {
         }
     }, []);
 
-    // Busca dados sempre que a configuração mudar ou o tab de visão geral for ativado
     useEffect(() => {
         if (config.isConnected && config.accessToken && activeSubTab === 'overview') {
             fetchFinancialData();
@@ -91,7 +91,6 @@ export const FinanceiroManager: React.FC = () => {
 
     const handleRefreshToken = async () => {
         if (!config.refreshToken) return null;
-        
         try {
             const cleanId = config.clientId.trim();
             const cleanSecret = config.clientSecret.trim();
@@ -138,68 +137,52 @@ export const FinanceiroManager: React.FC = () => {
         if (!token) return;
 
         setIsFetchingData(true);
-        console.log("Financeiro: Buscando títulos vencidos...");
-        
         try {
             const proxyUrl = "https://corsproxy.io/?";
-            // Aumentamos o size para garantir que pegamos todos os vencidos importantes
-            const targetUrl = "https://api.contaazul.com/v1/receivables?status=OVERDUE&size=100";
+            
+            // 1. Buscar Contas a Receber (Em aberto e Vencidas)
+            const recUrl = "https://api.contaazul.com/v1/receivables?status=OPEN&status=OVERDUE&size=100";
+            const payUrl = "https://api.contaazul.com/v1/payables?status=OPEN&status=OVERDUE&size=100";
 
-            const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json'
-                }
-            });
+            const [recRes, payRes] = await Promise.all([
+                fetch(proxyUrl + encodeURIComponent(recUrl), { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }),
+                fetch(proxyUrl + encodeURIComponent(payUrl), { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } })
+            ]);
 
-            if (response.status === 401) {
-                console.warn("Token expirado, tentando renovar...");
+            if (recRes.status === 401 || payRes.status === 401) {
                 const newToken = await handleRefreshToken();
-                if (newToken) {
-                    fetchFinancialData(newToken);
-                }
+                if (newToken) fetchFinancialData(newToken);
                 return;
             }
 
-            if (!response.ok) {
-                const errData = await response.json();
-                console.error("Erro na API de Recebíveis:", errData);
-                throw new Error("Erro ao buscar recebíveis");
-            }
+            const recData = await recRes.json();
+            const payData = await payRes.json();
 
-            const data = await response.json();
-            console.log("Dados brutos recebidos do Conta Azul:", data);
-
-            // A API do Conta Azul pode retornar uma lista direta ou dentro de um campo "items" ou "content"
-            const rawItems = Array.isArray(data) ? data : (data.items || data.content || []);
+            // Processar Recebíveis
+            const recItems = Array.isArray(recData) ? recData : (recData.items || recData.content || []);
+            const recSum = recItems.reduce((acc: number, curr: any) => acc + Number(curr.value || 0), 0);
             
-            if (rawItems.length === 0) {
-                console.log("Nenhum título vencido retornado pela API.");
-                setOverdueTotal(0);
-                setOverdueCount(0);
-                setRecentOverdue([]);
-                return;
-            }
+            // Processar Pagáveis
+            const payItems = Array.isArray(payData) ? payData : (payData.items || payData.content || []);
+            const paySum = payItems.reduce((acc: number, curr: any) => acc + Number(curr.value || 0), 0);
 
-            // Processa os dados de forma resiliente
-            const items: ReceivableItem[] = rawItems.map((r: any) => ({
-                id: r.id,
-                customer_name: r.customer?.name || r.customer_name || "Cliente não identificado",
-                value: Number(r.value || 0),
-                due_date: r.due_date,
-                status: r.status
-            }));
+            // Filtrar apenas os vencidos para a listagem rápida
+            const overdue = recItems
+                .filter((r: any) => r.status === 'OVERDUE')
+                .map((r: any) => ({
+                    id: r.id,
+                    name: r.customer?.name || r.customer_name || "Cliente",
+                    value: Number(r.value || 0),
+                    due_date: r.due_date,
+                    status: r.status
+                }));
 
-            const total = items.reduce((acc, curr) => acc + curr.value, 0);
-            
-            console.log(`Sucesso: ${items.length} títulos somando ${total}`);
-            
-            setOverdueTotal(total);
-            setOverdueCount(items.length);
-            setRecentOverdue(items.slice(0, 5)); 
+            setReceivableTotal(recSum);
+            setPayableTotal(paySum);
+            setOverdueRecent(overdue.slice(0, 5));
 
         } catch (e) {
-            console.error("Erro técnico no fluxo financeiro:", e);
+            console.error("Erro ao buscar dados financeiros:", e);
         } finally {
             setIsFetchingData(false);
         }
@@ -214,16 +197,9 @@ export const FinanceiroManager: React.FC = () => {
                 clientSecret: config.clientSecret.trim(),
                 redirectUri: 'https://sistema-rd.vercel.app/'
             };
-
-            await appBackend.client
-                .from('crm_settings')
-                .upsert({ 
-                    key: 'conta_azul_config', 
-                    value: JSON.stringify(sanitizedConfig) 
-                }, { onConflict: 'key' });
-            
+            await appBackend.client.from('crm_settings').upsert({ key: 'conta_azul_config', value: JSON.stringify(sanitizedConfig) }, { onConflict: 'key' });
             setConfig(sanitizedConfig);
-            alert("Configurações salvas com sucesso!");
+            alert("Configurações salvas!");
         } catch (e: any) {
             alert("Erro ao salvar: " + e.message);
         } finally {
@@ -232,11 +208,7 @@ export const FinanceiroManager: React.FC = () => {
     };
 
     const handleConnect = () => {
-        if (!config.clientId) {
-            alert("Preencha o Client ID primeiro.");
-            return;
-        }
-        
+        if (!config.clientId) { alert("Preencha o Client ID."); return; }
         const baseUrl = "https://auth.contaazul.com/login";
         const params = new URLSearchParams({
             response_type: 'code',
@@ -245,7 +217,6 @@ export const FinanceiroManager: React.FC = () => {
             state: 'voll_erp',
             scope: 'openid profile aws.cognito.signin.user.admin'
         });
-
         window.location.href = `${baseUrl}?${params.toString()}`;
     };
 
@@ -255,7 +226,6 @@ export const FinanceiroManager: React.FC = () => {
         try {
             const cleanId = config.clientId.trim();
             const cleanSecret = config.clientSecret.trim();
-            const fixedRedirect = 'https://sistema-rd.vercel.app/';
             const credentials = btoa(`${cleanId}:${cleanSecret}`);
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
             const proxyUrl = "https://corsproxy.io/?";
@@ -263,7 +233,7 @@ export const FinanceiroManager: React.FC = () => {
             const body = new URLSearchParams();
             body.append('grant_type', 'authorization_code');
             body.append('code', authCode.trim());
-            body.append('redirect_uri', fixedRedirect);
+            body.append('redirect_uri', 'https://sistema-rd.vercel.app/');
 
             const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
                 method: 'POST',
@@ -276,11 +246,7 @@ export const FinanceiroManager: React.FC = () => {
             });
 
             const data = await response.json();
-
-            if (!response.ok) {
-                const errorMsg = data.error_description || data.message || data.error || "Erro desconhecido";
-                throw new Error(`Erro ${response.status}: ${errorMsg}`);
-            }
+            if (!response.ok) throw new Error(data.message || "Erro na integração");
 
             const updatedConfig: ContaAzulConfig = { 
                 ...config, 
@@ -290,20 +256,13 @@ export const FinanceiroManager: React.FC = () => {
                 refreshToken: data.refresh_token
             };
 
-            await appBackend.client
-                .from('crm_settings')
-                .upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
-            
+            await appBackend.client.from('crm_settings').upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
             setConfig(updatedConfig);
             setAuthCode(null);
-            alert("Conta Azul conectada com sucesso!");
+            alert("Conectado com sucesso!");
             window.history.replaceState({}, document.title, window.location.pathname);
             setActiveSubTab('overview');
-        } catch (e: any) {
-            alert(e.message);
-        } finally {
-            setIsSaving(false);
-        }
+        } catch (e: any) { alert(e.message); } finally { setIsSaving(false); }
     };
 
     const formatCurrency = (val: number) => {
@@ -338,63 +297,86 @@ export const FinanceiroManager: React.FC = () => {
             </div>
 
             {activeSubTab === 'overview' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {config.isConnected ? (
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center space-y-4 animate-in zoom-in-95">
-                            <div className="w-20 h-20 bg-teal-50 rounded-3xl flex items-center justify-center text-teal-600 shadow-inner">
-                                <ShieldCheck size={40} />
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* CARD RECEBER */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group">
+                            <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                                <ArrowUpRight size={80} className="text-emerald-600" />
                             </div>
-                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Conexão Ativa</h3>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sincronizado via Conta Azul</p>
-                        </div>
-                    ) : (
-                        <div className="bg-white p-12 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
-                            <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center text-slate-300">
-                                <Wallet size={40} />
-                            </div>
-                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Aguardando Conexão</h3>
-                            <p className="text-sm text-slate-500 max-w-xs leading-relaxed font-medium">Acesse a aba de <strong>Configuração</strong> para conectar.</p>
-                        </div>
-                    )}
-
-                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col space-y-6">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Últimos Vencidos</h4>
-                        <div className="flex-1 space-y-3">
-                            {recentOverdue.length > 0 ? (
-                                recentOverdue.map(item => (
-                                    <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                                        <div className="min-w-0">
-                                            <p className="text-[11px] font-black text-slate-800 truncate">{item.customer_name}</p>
-                                            <p className="text-[9px] text-red-500 font-bold uppercase tracking-tighter">Venceu em {new Date(item.due_date).toLocaleDateString()}</p>
-                                        </div>
-                                        <span className="text-xs font-black text-slate-700 shrink-0">{formatCurrency(item.value)}</span>
-                                    </div>
-                                ))
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-2">
+                                <TrendingUp size={14} className="text-emerald-500"/> Total a Receber
+                            </h4>
+                            {isFetchingData ? (
+                                <div className="py-4 animate-pulse bg-slate-100 rounded-xl w-32 h-10"></div>
                             ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-xs">
-                                    {isFetchingData ? <Loader2 className="animate-spin" /> : 'Sem inadimplência recente.'}
-                                </div>
+                                <h3 className="text-3xl font-black text-slate-800">{formatCurrency(receivableTotal)}</h3>
                             )}
+                            <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-tighter">Soma de títulos em aberto e vencidos.</p>
+                        </div>
+
+                        {/* CARD PAGAR */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group">
+                            <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                                <ArrowDownRight size={80} className="text-rose-600" />
+                            </div>
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-2">
+                                <TrendingDown size={14} className="text-rose-500"/> Total a Pagar
+                            </h4>
+                            {isFetchingData ? (
+                                <div className="py-4 animate-pulse bg-slate-100 rounded-xl w-32 h-10"></div>
+                            ) : (
+                                <h3 className="text-3xl font-black text-slate-800">{formatCurrency(payableTotal)}</h3>
+                            )}
+                            <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-tighter">Soma de despesas em aberto e vencidas.</p>
+                        </div>
+
+                        {/* STATUS CONEXÃO */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center space-y-3">
+                            <div className={clsx("w-16 h-16 rounded-3xl flex items-center justify-center shadow-inner", config.isConnected ? "bg-teal-50 text-teal-600" : "bg-slate-50 text-slate-300")}>
+                                <ShieldCheck size={32} />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "Conexão Ativa" : "Sem Conexão"}</h3>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sincronizado: ${new Date(config.lastSync!).toLocaleDateString()}` : "Configure a API do Conta Azul"}</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col space-y-6">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><DollarSign size={14}/> Inadimplência Total</h4>
-                        <div className="flex-1 flex flex-col items-center justify-center text-center space-y-2">
-                            {config.isConnected ? (
-                                <>
-                                    <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">{overdueCount} Títulos Vencidos</p>
-                                    <h3 className="text-4xl font-black text-slate-800">{formatCurrency(overdueTotal)}</h3>
-                                    <div className="mt-4 p-4 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
-                                        <AlertCircle className="text-red-500" size={20} />
-                                        <p className="text-[10px] text-red-700 font-bold uppercase leading-tight text-left">Valor total aguardando recebimento na API.</p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* LISTA VENCIDOS */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col space-y-6">
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Recebíveis Vencidos</h4>
+                            <div className="flex-1 space-y-3">
+                                {overdueRecent.length > 0 ? (
+                                    overdueRecent.map(item => (
+                                        <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-teal-300 transition-all">
+                                            <div className="min-w-0">
+                                                <p className="text-[11px] font-black text-slate-800 truncate uppercase">{item.name}</p>
+                                                <p className="text-[9px] text-red-500 font-bold uppercase tracking-tighter">Vencimento: {new Date(item.due_date).toLocaleDateString()}</p>
+                                            </div>
+                                            <span className="text-sm font-black text-slate-700 shrink-0">{formatCurrency(item.value)}</span>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-xs py-10">
+                                        {isFetchingData ? <Loader2 className="animate-spin" /> : 'Nenhuma inadimplência crítica detectada.'}
                                     </div>
-                                </>
-                            ) : (
-                                <div className="text-slate-300 italic text-xs text-center px-6">
-                                    Conecte a API para visualizar os valores vencidos em tempo real.
+                                )}
+                            </div>
+                        </div>
+
+                        {/* INFO AJUDA */}
+                        <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white relative overflow-hidden flex flex-col justify-center">
+                            <div className="absolute top-0 right-0 p-8 opacity-10"><Info size={120}/></div>
+                            <div className="relative z-10 space-y-4">
+                                <h3 className="text-2xl font-black tracking-tight leading-tight">Painel de Controle Financeiro</h3>
+                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Os dados exibidos são extraídos diretamente da sua conta no Conta Azul em tempo real. Mantenha os lançamentos atualizados no portal oficial para garantir a precisão deste dashboard.</p>
+                                <div className="pt-4 flex gap-4">
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Integrado via</span><span className="font-bold">OAuth 2.0</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">Encryption SSL</span></div>
                                 </div>
-                            )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -470,29 +452,20 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <AlertTriangle className="text-amber-500" /> Solução para Erro 401
+                                <AlertTriangle className="text-amber-500" /> Notas Técnicas
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">O que o sistema busca?</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Escopo da Sincronização</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        Assim que conectado, o ERP consulta automaticamente a lista de <strong>Recebíveis</strong> (Contas a Receber) com o status de vencido. O valor exibido na tela inicial é a soma total de todos os títulos em atraso no seu Conta Azul.
+                                        O sistema consulta automaticamente os recebíveis e pagáveis. Se os valores não aparecerem, verifique se o seu aplicativo no portal de desenvolvedores do Conta Azul tem os escopos <strong>"financeiro"</strong> habilitados.
                                     </p>
                                 </div>
-
-                                <div className="space-y-4">
-                                    <div className="flex gap-4">
-                                        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-lg">01</div>
-                                        <p className="text-sm text-slate-600 leading-relaxed font-bold">
-                                            Certifique-se de que o App cadastrado no Conta Azul tem permissões para ler "Recebíveis".
-                                        </p>
-                                    </div>
-                                    <div className="flex gap-4">
-                                        <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-black text-xs shrink-0 shadow-sm">02</div>
-                                        <p className="text-sm text-slate-600 leading-relaxed">
-                                            A sincronização é automática, mas você pode usar o botão <strong>Sincronizar</strong> no topo da tela para forçar uma atualização manual.
-                                        </p>
-                                    </div>
+                                <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
+                                    <h4 className="font-bold text-amber-800 text-sm">Total a Receber/Pagar</h4>
+                                    <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                                        Os valores apresentados referem-se à soma de todos os títulos com status "Em Aberto" e "Vencido" na sua base de dados atual.
+                                    </p>
                                 </div>
                             </div>
                         </div>

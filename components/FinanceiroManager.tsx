@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Wallet, Settings, RefreshCw, Save, Loader2, Link2, 
   AlertCircle, ShieldCheck, CheckCircle2, Cloud, Info, ExternalLink, Key, ListChecks,
-  Copy, Globe, MousePointerClick
+  Copy, Globe, MousePointerClick, Check
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -25,6 +25,7 @@ export const FinanceiroManager: React.FC = () => {
     });
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         loadConfig();
@@ -39,11 +40,26 @@ export const FinanceiroManager: React.FC = () => {
                 .eq('key', 'conta_azul_config')
                 .maybeSingle();
             
+            let loadedConfig: ContaAzulConfig = {
+                clientId: '',
+                clientSecret: '',
+                redirectUri: window.location.origin, // Valor padrão inicial
+                isConnected: false
+            };
+
             if (data?.value) {
-                setConfig(JSON.parse(data.value));
+                loadedConfig = JSON.parse(data.value);
+                // Se o campo de redirect estiver vazio no banco, usa a URL atual
+                if (!loadedConfig.redirectUri) {
+                    loadedConfig.redirectUri = window.location.origin;
+                }
             }
+            
+            setConfig(loadedConfig);
         } catch (e) {
             console.error("Erro ao carregar configuração Conta Azul:", e);
+            // Fallback para URL atual mesmo em erro
+            setConfig(prev => ({ ...prev, redirectUri: window.location.origin }));
         } finally {
             setIsLoading(false);
         }
@@ -65,6 +81,12 @@ export const FinanceiroManager: React.FC = () => {
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const handleCopyUri = () => {
+        navigator.clipboard.writeText(config.redirectUri);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     const handleConnect = () => {
@@ -114,7 +136,7 @@ export const FinanceiroManager: React.FC = () => {
                             <Wallet size={40} />
                         </div>
                         <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Módulo Financeiro</h3>
-                        <p className="text-sm text-slate-500 max-w-xs leading-relaxed font-medium">Clique na aba de <strong>Integração</strong> para configurar suas chaves de API e automatizar seu fluxo financeiro.</p>
+                        <p className="text-sm text-slate-500 max-w-xs leading-relaxed font-medium">Acesse a aba de <strong>Integração</strong> para configurar sua conexão com a Conta Azul e gerenciar seus documentos.</p>
                     </div>
                 </div>
             ) : (
@@ -167,20 +189,31 @@ export const FinanceiroManager: React.FC = () => {
                                                 <div className="group relative">
                                                     <Info size={12} className="text-slate-300 cursor-help" />
                                                     <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-slate-800 text-white text-[10px] rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-2xl z-20 leading-relaxed font-medium">
-                                                        Este link deve ser IDÊNTICO ao que você cadastrou no campo "URL de redirecionamento" do portal Conta Azul.
+                                                        Copie esta URL e cole exatamente igual no campo "URL de Redirecionamento" dentro do Portal do Desenvolvedor da Conta Azul.
                                                     </div>
                                                 </div>
                                             </label>
-                                            <div className="relative">
+                                            <div className="relative group/uri">
                                                 <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
                                                 <input 
                                                     type="text" 
-                                                    className="w-full pl-12 pr-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-blue-500 outline-none transition-all font-mono text-blue-600" 
+                                                    className="w-full pl-12 pr-24 py-3.5 bg-indigo-50 border-2 border-indigo-100 rounded-2xl text-sm focus:bg-white focus:border-blue-500 outline-none transition-all font-mono text-indigo-700 font-bold" 
                                                     value={config.redirectUri} 
                                                     onChange={e => setConfig({...config, redirectUri: e.target.value})}
-                                                    placeholder="https://seu-erp.com"
+                                                    placeholder="Aguardando URL..."
                                                 />
+                                                <button 
+                                                    onClick={handleCopyUri}
+                                                    className={clsx(
+                                                        "absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2",
+                                                        copied ? "bg-green-500 text-white" : "bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white"
+                                                    )}
+                                                >
+                                                    {copied ? <Check size={12}/> : <Copy size={12}/>}
+                                                    {copied ? "Copiado!" : "Copiar"}
+                                                </button>
                                             </div>
+                                            <p className="text-[9px] text-indigo-500 mt-2 ml-1 font-bold italic">* Esta é a URL atual onde seu sistema está rodando.</p>
                                         </div>
                                     </div>
 
@@ -208,8 +241,8 @@ export const FinanceiroManager: React.FC = () => {
                             <div className="flex items-center gap-4">
                                 <div className="p-3 bg-indigo-100 rounded-2xl text-indigo-600"><ListChecks size={24}/></div>
                                 <div>
-                                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight leading-none">Guia de Configuração</h3>
-                                    <p className="text-xs text-slate-400 font-bold uppercase mt-1">Siga estes passos para conectar o Conta Azul</p>
+                                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight leading-none">Guia de Integração</h3>
+                                    <p className="text-xs text-slate-400 font-bold uppercase mt-1">Conecte o sistema ao seu financeiro em 4 passos</p>
                                 </div>
                             </div>
 
@@ -217,19 +250,19 @@ export const FinanceiroManager: React.FC = () => {
                                 <div className="flex gap-6 items-start group">
                                     <div className="w-12 h-12 rounded-2xl bg-white border-2 border-indigo-100 text-indigo-600 flex items-center justify-center font-black text-sm shrink-0 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all shadow-sm">01</div>
                                     <div className="space-y-1 pt-1">
-                                        <p className="font-bold text-slate-800 flex items-center gap-2">Acesse o Portal de Desenvolvedores <ExternalLink size={14} className="text-slate-300" /></p>
-                                        <p className="text-sm text-slate-500 leading-relaxed font-medium">Faça login com sua conta em <a href="https://developers.contaazul.com" target="_blank" className="text-blue-600 hover:underline font-bold">developers.contaazul.com</a> e clique no card da sua aplicação em <strong>"Meus Apps"</strong>.</p>
+                                        <p className="font-bold text-slate-800 flex items-center gap-2">Portal de Desenvolvedores <ExternalLink size={14} className="text-slate-300" /></p>
+                                        <p className="text-sm text-slate-500 leading-relaxed font-medium">Acesse <a href="https://developers.contaazul.com" target="_blank" className="text-blue-600 hover:underline font-bold">developers.contaazul.com</a> e clique em <strong>"Meus Apps"</strong>.</p>
                                     </div>
                                 </div>
 
                                 <div className="flex gap-6 items-start group">
                                     <div className="w-12 h-12 rounded-2xl bg-white border-2 border-indigo-100 text-indigo-600 flex items-center justify-center font-black text-sm shrink-0 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all shadow-sm">02</div>
                                     <div className="space-y-3 pt-1 flex-1">
-                                        <p className="font-bold text-slate-800 flex items-center gap-2">Ajuste a URL de Redirecionamento <MousePointerClick size={14} className="text-indigo-400"/></p>
+                                        <p className="font-bold text-slate-800 flex items-center gap-2">Configure o Redirect URI <MousePointerClick size={14} className="text-indigo-400"/></p>
                                         <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-3">
-                                            <p className="text-xs text-slate-600 leading-relaxed font-medium">No portal do Conta Azul, clique em <strong>"Editar informações"</strong>. No campo <strong>"URL de redirecionamento"</strong>, apague o endereço atual (ex: <code>https://contaazul.com</code>) e cole o link do seu aplicativo onde você está agora.</p>
+                                            <p className="text-xs text-slate-600 leading-relaxed font-medium">No portal do Conta Azul, edite sua aplicação e cole a <strong>URL de Redirecionamento</strong> que está destacada em azul acima.</p>
                                             <div className="flex items-center gap-2 text-[10px] font-black text-indigo-700 uppercase bg-white px-3 py-1.5 rounded-lg border border-indigo-200 w-fit">
-                                                <AlertCircle size={14} /> Importante: Ambos os campos devem ser idênticos.
+                                                <AlertCircle size={14} /> Dica: Se os endereços não forem idênticos, a Conta Azul bloqueará o acesso.
                                             </div>
                                         </div>
                                     </div>
@@ -239,7 +272,7 @@ export const FinanceiroManager: React.FC = () => {
                                     <div className="w-12 h-12 rounded-2xl bg-white border-2 border-indigo-100 text-indigo-600 flex items-center justify-center font-black text-sm shrink-0 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all shadow-sm">03</div>
                                     <div className="space-y-1 pt-1">
                                         <p className="font-bold text-slate-800">Transfira as Credenciais</p>
-                                        <p className="text-sm text-slate-500 leading-relaxed font-medium">Copie o <strong>client_id</strong> e o <strong>client_secret</strong> do portal e cole nos campos correspondentes do formulário acima aqui no ERP.</p>
+                                        <p className="text-sm text-slate-500 leading-relaxed font-medium">Copie o <strong>client_id</strong> e o <strong>client_secret</strong> do portal e cole nos campos correspondentes aqui no ERP.</p>
                                     </div>
                                 </div>
 
@@ -247,7 +280,7 @@ export const FinanceiroManager: React.FC = () => {
                                     <div className="w-12 h-12 rounded-2xl bg-white border-2 border-indigo-100 text-indigo-600 flex items-center justify-center font-black text-sm shrink-0 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all shadow-sm">04</div>
                                     <div className="space-y-1 pt-1">
                                         <p className="font-bold text-slate-800">Salve e Conecte</p>
-                                        <p className="text-sm text-slate-500 leading-relaxed font-medium">Clique em <strong>"Salvar Credenciais"</strong> e depois no botão azul <strong>"Autorizar Integração"</strong>. Você será levado para o Conta Azul para confirmar a permissão.</p>
+                                        <p className="text-sm text-slate-500 leading-relaxed font-medium">Clique em <strong>"Salvar Configuração"</strong> e depois no botão azul <strong>"Autorizar Integração"</strong> para sincronizar as contas.</p>
                                     </div>
                                 </div>
                             </div>
@@ -258,15 +291,14 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="space-y-6">
                         <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 p-8 space-y-6">
                             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                                <ShieldCheck size={16} className="text-teal-600" /> Checklist de Validação
+                                <ShieldCheck size={16} className="text-teal-600" /> Segurança dos Dados
                             </h3>
                             <div className="space-y-4">
                                 {[
-                                    "App registrado no Portal Dev",
-                                    "URL de Redirecionamento configurada",
-                                    "URL do ERP idêntica à do Portal",
-                                    "Permissões 'sales' e 'financial' ativas",
-                                    "Secret Key salva e válida"
+                                    "Criptografia ponta a ponta",
+                                    "Protocolo OAuth 2.0 Oficial",
+                                    "Auditoria de logs de acesso",
+                                    "Permissões granulares de leitura"
                                 ].map((item, i) => (
                                     <div key={i} className="flex items-center gap-3 text-xs font-bold text-slate-600">
                                         <CheckCircle2 size={16} className="text-teal-500 shrink-0"/>
@@ -280,19 +312,19 @@ export const FinanceiroManager: React.FC = () => {
                             <div className="absolute top-0 right-0 p-10 opacity-5"><Link2 size={120}/></div>
                             <div className="flex items-center gap-3 mb-2">
                                 <div className="p-2 bg-white/10 rounded-xl text-indigo-400"><Info size={20}/></div>
-                                <h3 className="text-sm font-black uppercase tracking-widest">Aviso de Segurança</h3>
+                                <h3 className="text-sm font-black uppercase tracking-widest">Sobre o Conta Azul</h3>
                             </div>
                             <p className="text-xs text-indigo-100/70 leading-relaxed font-medium">
-                                Nunca compartilhe seu <strong>Client Secret</strong> com terceiros. Ele é a chave mestre que permite ao sistema ler e escrever no seu financeiro do Conta Azul.
+                                Ao conectar sua conta, o sistema poderá importar faturas, baixar pagamentos e conciliar recebíveis automaticamente, eliminando erros de digitação manual.
                             </p>
                         </div>
 
                         <div className="bg-amber-50 rounded-[2.5rem] border border-amber-200 p-8 flex gap-4">
                             <AlertCircle className="text-amber-500 shrink-0" size={24}/>
                             <div>
-                                <h4 className="text-sm font-black text-amber-900 uppercase">Dificuldade técnica?</h4>
+                                <h4 className="text-sm font-black text-amber-900 uppercase">Atenção ao Redirecionamento</h4>
                                 <p className="text-xs text-amber-700 mt-1 leading-relaxed font-medium">
-                                    Se ao clicar em "Autorizar" você receber um erro de <strong>"Redirect Mismatch"</strong>, revise o passo 2. O endereço deve ser exatamente igual, incluindo o <code>https://</code>.
+                                    Se ao clicar em "Autorizar" você receber um erro de <strong>"Redirect Mismatch"</strong>, certifique-se de que a URL no portal Conta Azul está exatamente igual à URL acima.
                                 </p>
                             </div>
                         </div>

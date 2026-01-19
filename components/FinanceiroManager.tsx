@@ -56,8 +56,7 @@ export const FinanceiroManager: React.FC = () => {
                 const loaded = JSON.parse(data.value);
                 setConfig({
                     ...loaded,
-                    // Garante que o redirectUri seja o do Vercel conforme fornecido
-                    redirectUri: loaded.redirectUri || 'https://sistema-rd.vercel.app/'
+                    redirectUri: 'https://sistema-rd.vercel.app/'
                 });
             } else {
                 setConfig(prev => ({ ...prev, redirectUri: 'https://sistema-rd.vercel.app/' }));
@@ -76,7 +75,7 @@ export const FinanceiroManager: React.FC = () => {
                 ...config,
                 clientId: config.clientId.trim(),
                 clientSecret: config.clientSecret.trim(),
-                redirectUri: config.redirectUri.trim()
+                redirectUri: 'https://sistema-rd.vercel.app/'
             };
 
             await appBackend.client
@@ -96,17 +95,16 @@ export const FinanceiroManager: React.FC = () => {
     };
 
     const handleConnect = () => {
-        if (!config.clientId || !config.redirectUri) {
-            alert("Preencha o Client ID e a URL de Redirecionamento primeiro.");
+        if (!config.clientId) {
+            alert("Preencha o Client ID primeiro.");
             return;
         }
         
-        // Endpoint OAuth2 Conta Azul conforme novo portal
         const baseUrl = "https://auth.contaazul.com/login";
         const params = new URLSearchParams({
             response_type: 'code',
             client_id: config.clientId.trim(),
-            redirect_uri: config.redirectUri.trim(),
+            redirect_uri: 'https://sistema-rd.vercel.app/',
             state: 'voll_erp',
             scope: 'openid profile aws.cognito.signin.user.admin'
         });
@@ -120,21 +118,19 @@ export const FinanceiroManager: React.FC = () => {
         try {
             const cleanId = config.clientId.trim();
             const cleanSecret = config.clientSecret.trim();
-            const cleanRedirect = config.redirectUri.trim();
+            const fixedRedirect = 'https://sistema-rd.vercel.app/';
 
+            // Credenciais em Base64 para o Header Authorization
             const credentials = btoa(`${cleanId}:${cleanSecret}`);
             
-            // Usando proxy para evitar CORS e enviando como x-www-form-urlencoded (mais compatível)
             const proxyUrl = "https://corsproxy.io/?";
             const targetUrl = "https://api.contaazul.com/oauth2/token";
             
-            const params = new URLSearchParams();
-            params.append('grant_type', 'authorization_code');
-            params.append('redirect_uri', cleanRedirect);
-            params.append('code', authCode);
-            // Injetando no corpo também para garantir
-            params.append('client_id', cleanId);
-            params.append('client_secret', cleanSecret);
+            // Parametros no formato x-www-form-urlencoded conforme doc do Conta Azul
+            const bodyParams = new URLSearchParams();
+            bodyParams.append('grant_type', 'authorization_code');
+            bodyParams.append('redirect_uri', fixedRedirect);
+            bodyParams.append('code', authCode);
 
             const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
                 method: 'POST',
@@ -142,13 +138,13 @@ export const FinanceiroManager: React.FC = () => {
                     'Authorization': `Basic ${credentials}`,
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
-                body: params.toString()
+                body: bodyParams.toString()
             });
 
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error("Token Error Details:", errorText);
-                throw new Error(`Erro na troca de token (${response.status}). Verifique se o Client Secret está correto.`);
+                console.error("Erro 400 Detalhes:", errorText);
+                throw new Error(`Erro na troca de token (${response.status}). Certifique-se de que o Código não expirou e a URL de Redirecionamento no Portal é exatamente https://sistema-rd.vercel.app/`);
             }
 
             const data = await response.json();
@@ -236,8 +232,8 @@ export const FinanceiroManager: React.FC = () => {
                                     <Zap size={40} className="animate-pulse" />
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-black text-indigo-900 uppercase">Autorização Recebida</h3>
-                                    <p className="text-sm text-indigo-700 mt-2 font-medium">O Conta Azul autorizou o acesso. Agora clique abaixo para validar suas credenciais finais.</p>
+                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Código Recebido</h3>
+                                    <p className="text-sm text-indigo-700 mt-2 font-medium">O Conta Azul autorizou. Clique abaixo para gerar as chaves finais.</p>
                                 </div>
                                 <button 
                                     onClick={handleFinalizeIntegration}
@@ -267,7 +263,7 @@ export const FinanceiroManager: React.FC = () => {
                                 ) : (
                                     <div className="space-y-6">
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">1. URL de Redirecionamento (Salvar no Portal)</label>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">1. URL de Redirecionamento (Copiar p/ Portal)</label>
                                             <div className="flex gap-2">
                                                 <input readOnly type="text" className="flex-1 px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xs font-mono font-bold text-indigo-700 outline-none" value={config.redirectUri} />
                                                 <button onClick={() => { navigator.clipboard.writeText(config.redirectUri); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-3 bg-slate-100 rounded-2xl text-slate-400 hover:text-teal-600 transition-all" title="Copiar URL">{copied ? <Check size={20}/> : <Copy size={20}/>}</button>
@@ -278,8 +274,8 @@ export const FinanceiroManager: React.FC = () => {
                                             <input type="text" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientId} onChange={e => setConfig({...config, clientId: e.target.value.trim()})} placeholder="Cole o client_id aqui" />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">3. Client Secret</label>
-                                            <input type="password" title="Secret" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientSecret} onChange={e => setConfig({...config, clientSecret: e.target.value.trim()})} placeholder="Cole o client_secret aqui" />
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">3. Client Secret (Visível)</label>
+                                            <input type="text" title="Secret" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientSecret} onChange={e => setConfig({...config, clientSecret: e.target.value.trim()})} placeholder="Cole o client_secret aqui" />
                                         </div>
 
                                         <div className="flex flex-col gap-3 pt-4">
@@ -299,41 +295,35 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <AlertTriangle className="text-amber-500" /> Solução para o erro 401
+                                <AlertTriangle className="text-amber-500" /> Atenção ao Erro 400
                             </h3>
                             <div className="space-y-6">
-                                <div className="p-5 bg-red-50 border-l-4 border-red-500 rounded-r-xl">
-                                    <h4 className="font-bold text-red-800 text-sm">O que é o erro 401?</h4>
-                                    <p className="text-xs text-red-700 mt-1 leading-relaxed">
-                                        Significa <strong>"Não Autorizado"</strong>. O Conta Azul recebeu seu pedido, mas disse que o seu <strong>Client Secret</strong> não confere com o Client ID fornecido.
+                                <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
+                                    <h4 className="font-bold text-indigo-800 text-sm">Por que acontece o erro 400?</h4>
+                                    <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
+                                        O erro 400 no Passo 3 geralmente significa que a **URL de Redirecionamento** configurada no portal do Conta Azul é diferente da URL que o sistema está enviando.
                                     </p>
                                 </div>
 
                                 <div className="space-y-4">
                                     <div className="flex gap-4">
-                                        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-lg">01</div>
-                                        <p className="text-sm text-slate-600 leading-relaxed">
-                                            Vá no <strong>Portal do Desenvolvedor do Conta Azul</strong> e gere um novo <strong>Client Secret</strong> se houver dúvida. Certifique-se de não copiar espaços em branco antes ou depois.
+                                        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-lg">!!!</div>
+                                        <p className="text-sm text-slate-600 leading-relaxed font-bold">
+                                            No portal do Conta Azul, a URL deve ser EXATAMENTE:<br/>
+                                            <code className="bg-slate-100 px-2 py-1 rounded text-red-600">https://sistema-rd.vercel.app/</code>
                                         </p>
                                     </div>
                                     <div className="flex gap-4">
-                                        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-lg">02</div>
+                                        <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-black text-xs shrink-0 shadow-sm">02</div>
                                         <p className="text-sm text-slate-600 leading-relaxed">
-                                            Confirme se o <strong>Client ID</strong> é o mesmo que aparece na URL de login do Conta Azul.
-                                        </p>
-                                    </div>
-                                    <div className="flex gap-4">
-                                        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-lg">03</div>
-                                        <p className="text-sm text-slate-600 leading-relaxed">
-                                            A URL de redirecionamento <strong>deve terminar em /</strong> conforme solicitado: <br/>
-                                            <code className="bg-slate-100 px-2 py-1 rounded text-indigo-700 font-bold">https://sistema-rd.vercel.app/</code>
+                                            Verifique se não há espaços em branco no final do seu **Client Secret**.
                                         </p>
                                     </div>
                                 </div>
 
-                                <div className="mt-8 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex gap-3 text-xs text-indigo-800">
-                                    <Info size={18} className="shrink-0 text-indigo-500" />
-                                    <p><strong>Nota Técnica:</strong> O sistema agora envia as credenciais via <em>Form Url Encoded</em> e no corpo da requisição, o que costuma resolver problemas de bloqueio de cabeçalhos por segurança.</p>
+                                <div className="mt-8 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3 text-xs text-amber-800">
+                                    <Info size={18} className="shrink-0 text-amber-500" />
+                                    <p><strong>Dica de Segurança:</strong> Após conectar com sucesso, você pode voltar o campo para modo secreto se desejar, mas para depuração deixamos visível.</p>
                                 </div>
                             </div>
                         </div>

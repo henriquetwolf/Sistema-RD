@@ -37,7 +37,6 @@ export const FinanceiroManager: React.FC = () => {
         isConnected: false
     });
     
-    // Estados de Dados Financeiros
     const [receivableTotal, setReceivableTotal] = useState(0);
     const [payableTotal, setPayableTotal] = useState(0);
     const [overdueRecent, setOverdueRecent] = useState<FinancialItem[]>([]);
@@ -49,11 +48,11 @@ export const FinanceiroManager: React.FC = () => {
     const [authCode, setAuthCode] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    // Lista de Proxies para rotação em caso de erro
+    // Proxies otimizados para POST e Headers Customizados
     const PROXIES = [
+        "https://api.codetabs.com/v1/proxy/?url=",
         "https://api.allorigins.win/raw?url=",
-        "https://corsproxy.io/?",
-        "https://api.codetabs.com/v1/proxy/?url="
+        "https://corsproxy.io/?"
     ];
 
     useEffect(() => {
@@ -97,26 +96,33 @@ export const FinanceiroManager: React.FC = () => {
         }
     };
 
-    // Função auxiliar para tentar requisição em múltiplos proxies
+    // Função de fetch que tenta diferentes estratégias de Proxy
     const fetchWithProxy = async (targetUrl: string, options: any) => {
         let lastError = null;
         for (const proxy of PROXIES) {
             try {
+                // Formata a URL dependendo do proxy
                 const url = proxy + encodeURIComponent(targetUrl);
-                const response = await fetch(url, options);
-                if (response.ok || response.status === 401 || response.status === 400) {
+                const response = await fetch(url, {
+                    ...options,
+                    // Garante que o modo seja cors e que os headers sejam passados
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+
+                if (response.ok || response.status === 401) {
                     return response;
                 }
-                if (response.status === 429 || response.status === 403) {
-                    console.warn(`Proxy ${proxy} reportou erro ${response.status}. Tentando próximo...`);
-                    continue;
-                }
-            } catch (e) {
+                
+                const errText = await response.text();
+                console.warn(`Proxy ${proxy} falhou com status ${response.status}: ${errText.substring(0, 50)}`);
+                lastError = new Error(`Proxy Error ${response.status}`);
+            } catch (e: any) {
                 lastError = e;
                 continue;
             }
         }
-        throw lastError || new Error("Todos os túneis de conexão estão ocupados. Tente novamente em 1 minuto.");
+        throw lastError || new Error("Falha na comunicação com o servidor. Tente novamente.");
     };
 
     const handleDisconnect = async () => {
@@ -132,25 +138,23 @@ export const FinanceiroManager: React.FC = () => {
     const handleRefreshToken = async () => {
         if (!config.refreshToken) return null;
         try {
+            const credentials = btoa(`${config.clientId.trim()}:${config.clientSecret.trim()}`);
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
-            const body = new URLSearchParams();
-            body.append('grant_type', 'refresh_token');
-            body.append('refresh_token', config.refreshToken);
-            body.append('client_id', config.clientId.trim());
-            body.append('client_secret', config.clientSecret.trim());
+
+            // Corpo formatado manualmente como string de formulário
+            const bodyStr = `grant_type=refresh_token&refresh_token=${encodeURIComponent(config.refreshToken)}`;
 
             const response = await fetchWithProxy(targetUrl, {
                 method: 'POST',
                 headers: {
+                    'Authorization': `Basic ${credentials}`,
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'Accept': 'application/json'
                 },
-                body: body.toString()
+                body: bodyStr
             });
 
-            if (!response.ok) {
-                throw new Error("Sessão expirada. Re-autorize o acesso na aba Configuração.");
-            }
+            if (!response.ok) throw new Error("Sessão expirada. Por favor, autorize novamente.");
 
             const data = await response.json();
             const updatedConfig = {
@@ -160,15 +164,11 @@ export const FinanceiroManager: React.FC = () => {
                 refreshToken: data.refresh_token || config.refreshToken
             };
 
-            await appBackend.client
-                .from('crm_settings')
-                .upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
-            
+            await appBackend.client.from('crm_settings').upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
             setConfig(updatedConfig);
             return data.access_token;
         } catch (e: any) {
             setErrorMsg(e.message);
-            setConfig(prev => ({ ...prev, isConnected: false }));
             return null;
         }
     };
@@ -194,12 +194,7 @@ export const FinanceiroManager: React.FC = () => {
             const baseUrlReceber = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-receber/buscar";
             const baseUrlPagar = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar";
             
-            const params = new URLSearchParams();
-            params.append('data_vencimento_inicio', '2020-01-01');
-            params.append('data_vencimento_fim', '2030-12-31');
-            params.append('situacao', 'ABERTO');
-            params.append('situacao', 'ATRASADO');
-            params.append('itens_por_pagina', '100');
+            const query = "data_vencimento_inicio=2020-01-01&data_vencimento_fim=2030-12-31&situacao=ABERTO&situacao=ATRASADO&itens_por_pagina=100";
 
             const headers = { 
                 'Authorization': `Bearer ${token}`, 
@@ -207,8 +202,8 @@ export const FinanceiroManager: React.FC = () => {
             };
 
             const [recRes, payRes] = await Promise.all([
-                fetchWithProxy(`${baseUrlReceber}?${params.toString()}`, { headers }),
-                fetchWithProxy(`${baseUrlPagar}?${params.toString()}`, { headers })
+                fetchWithProxy(`${baseUrlReceber}?${query}`, { headers }),
+                fetchWithProxy(`${baseUrlPagar}?${query}`, { headers })
             ]);
 
             if (recRes.status === 401 || payRes.status === 401) {
@@ -216,8 +211,6 @@ export const FinanceiroManager: React.FC = () => {
                 if (newToken) fetchFinancialData(newToken);
                 return;
             }
-
-            if (!recRes.ok || !payRes.ok) throw new Error("Falha ao buscar dados financeiros.");
 
             const recData = await recRes.json();
             const payData = await payRes.json();
@@ -243,13 +236,10 @@ export const FinanceiroManager: React.FC = () => {
             setOverdueRecent(overdue.slice(0, 5));
 
             const updatedConfig = { ...config, lastSync: new Date().toISOString(), isConnected: true };
-            await appBackend.client
-                .from('crm_settings')
-                .upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
+            await appBackend.client.from('crm_settings').upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
             setConfig(updatedConfig);
 
         } catch (e: any) {
-            console.error("ERRO FINANCEIRO:", e.message);
             setErrorMsg(e.message);
         } finally {
             setIsFetchingData(false);
@@ -265,9 +255,9 @@ export const FinanceiroManager: React.FC = () => {
                 clientSecret: config.clientSecret.trim(),
                 redirectUri: 'https://sistema-rd.vercel.app/'
             };
-            await appBackend.client.from('crm_settings').upsert({ key: 'conta_azul_config', value: JSON.stringify(sanitizedConfig) }, { onConflict: 'key' });
+            await appBackend.client.from('crm_settings').upsert({ key: 'conta_azul_config', value: JSON.stringify(sanitizedConfig) });
             setConfig(sanitizedConfig);
-            alert("Credenciais salvas com sucesso!");
+            alert("Credenciais salvas!");
         } catch (e: any) {
             alert("Erro ao salvar: " + e.message);
         } finally {
@@ -291,27 +281,31 @@ export const FinanceiroManager: React.FC = () => {
     const handleFinalizeIntegration = async () => {
         if (!authCode) return;
         setIsSaving(true);
-        console.log("Finalizando integração com rotação de Proxy...");
+        setErrorMsg(null);
         try {
+            const credentials = btoa(`${config.clientId.trim()}:${config.clientSecret.trim()}`);
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
-            const body = new URLSearchParams();
-            body.append('grant_type', 'authorization_code');
-            body.append('code', authCode.trim());
-            body.append('redirect_uri', 'https://sistema-rd.vercel.app/');
-            body.append('client_id', config.clientId.trim());
-            body.append('client_secret', config.clientSecret.trim());
+            
+            // Construção manual do body string para evitar que o proxy o corrompa
+            const bodyParts = [
+                `grant_type=authorization_code`,
+                `code=${encodeURIComponent(authCode.trim())}`,
+                `redirect_uri=${encodeURIComponent('https://sistema-rd.vercel.app/')}`
+            ];
+            const bodyStr = bodyParts.join('&');
 
             const response = await fetchWithProxy(targetUrl, {
                 method: 'POST',
                 headers: {
+                    'Authorization': `Basic ${credentials}`,
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'Accept': 'application/json'
                 },
-                body: body.toString()
+                body: bodyStr
             });
 
             const data = await response.json();
-            if (!response.ok) throw new Error(data.message || "Falha na troca de tokens.");
+            if (!response.ok) throw new Error(data.message || "A API do Conta Azul rejeitou as credenciais (400/401). Verifique o Secret.");
 
             const updatedConfig: ContaAzulConfig = { 
                 ...config, 
@@ -328,7 +322,9 @@ export const FinanceiroManager: React.FC = () => {
             window.history.replaceState({}, document.title, window.location.pathname);
             setActiveSubTab('overview');
         } catch (e: any) { 
-            alert("Erro na finalização: " + e.message); 
+            console.error("Erro na integração:", e.message);
+            setErrorMsg(e.message);
+            alert("Falha na integração: " + e.message); 
         } finally { 
             setIsSaving(false); 
         }
@@ -369,9 +365,9 @@ export const FinanceiroManager: React.FC = () => {
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl flex items-start gap-3 animate-in slide-in-from-top-2">
                     <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
                     <div className="flex-1">
-                        <p className="text-sm font-bold text-red-800">Atenção Necessária</p>
+                        <p className="text-sm font-bold text-red-800">Erro de Integração</p>
                         <p className="text-xs text-red-700 mt-1">{errorMsg}</p>
-                        <p className="text-[10px] text-red-400 mt-2 font-bold uppercase">Se o erro persistir, aguarde 1 minuto para o túnel de conexão liberar.</p>
+                        <p className="text-[10px] text-red-400 mt-2 font-bold uppercase">Dica: Verifique se o Client Secret foi copiado corretamente do portal Conta Azul.</p>
                     </div>
                 </div>
             )}
@@ -414,7 +410,7 @@ export const FinanceiroManager: React.FC = () => {
                                 {config.isConnected ? <ShieldCheck size={32} /> : <Unplug size={32} />}
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "API v1 Conectada" : "Desconectado"}</h3>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "API v1 Ativa" : "Desconectado"}</h3>
                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sinc: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Configure as credenciais"}</p>
                             </div>
                         </div>
@@ -445,11 +441,11 @@ export const FinanceiroManager: React.FC = () => {
                         <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white relative overflow-hidden flex flex-col justify-center">
                             <div className="absolute top-0 right-0 p-8 opacity-10"><Info size={120}/></div>
                             <div className="relative z-10 space-y-4">
-                                <h3 className="text-2xl font-black tracking-tight leading-tight">Painel de Controle Financeiro</h3>
-                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta integração utiliza um sistema de redundância de túneis para garantir a conexão mesmo com bloqueios de rede.</p>
+                                <h3 className="text-2xl font-black tracking-tight leading-tight">Mapeamento de Dados</h3>
+                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta integração utiliza túneis de comunicação otimizados. Se os dados não aparecerem, tente realizar uma nova sincronização manual.</p>
                                 <div className="pt-4 flex gap-4">
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Tecnologia</span><span className="font-bold">Redundância de Proxy</span></div>
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">OAuth 2.0 SSL</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Protocolo</span><span className="font-bold">OAuth2 Basic</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Endpoint</span><span className="font-bold">v1/financeiro</span></div>
                                 </div>
                             </div>
                         </div>
@@ -464,15 +460,15 @@ export const FinanceiroManager: React.FC = () => {
                                     <Zap size={40} className="animate-pulse" />
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Autorização Confirmada</h3>
-                                    <p className="text-sm text-indigo-700 mt-2 font-medium">Clique no botão para finalizar a integração.</p>
+                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Código Recebido</h3>
+                                    <p className="text-sm text-indigo-700 mt-2 font-medium">Trocaremos o código pelo Token Permanente agora.</p>
                                 </div>
                                 <button 
                                     onClick={handleFinalizeIntegration}
                                     disabled={isSaving}
                                     className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-2"
                                 >
-                                    {isSaving ? <Loader2 size={18} className="animate-spin" /> : <><CheckCircle size={18}/> 3. Finalizar Conexão</>}
+                                    {isSaving ? <Loader2 size={18} className="animate-spin" /> : <><CheckCircle size={18}/> 3. Trocar Token Final</>}
                                 </button>
                             </div>
                         ) : (
@@ -506,7 +502,7 @@ export const FinanceiroManager: React.FC = () => {
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">3. Client Secret</label>
-                                            <input type="text" title="Secret" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientSecret} onChange={e => setConfig({...config, clientSecret: e.target.value.trim()})} placeholder="client_secret do portal" />
+                                            <input type="password" title="Secret" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientSecret} onChange={e => setConfig({...config, clientSecret: e.target.value.trim()})} placeholder="client_secret do portal" />
                                         </div>
 
                                         <div className="flex flex-col gap-3 pt-4">
@@ -529,19 +525,19 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <ShieldAlert className="text-amber-500" /> Resolução de Conectividade
+                                <ShieldAlert className="text-amber-500" /> Resolução de Erros de Token
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Problemas com Proxy</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Erro 400 (Bad Request)</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        Se um túnel de conexão estiver sobrecarregado (Rate Limit), o sistema tentará automaticamente outro provedor. Caso receba erro persistente, aguarde 60 segundos antes de tentar novamente.
+                                        Isso geralmente ocorre quando o Client Secret está incorreto ou o código de autorização expirou. Certifique-se de clicar em "Salvar Dados" antes de "Autorizar Conexão".
                                     </p>
                                 </div>
                                 <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
-                                    <h4 className="font-bold text-amber-800 text-sm">Credenciais Inválidas</h4>
+                                    <h4 className="font-bold text-amber-800 text-sm">Erro de Proxy (403/500)</h4>
                                     <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                        Ao alterar o Client ID ou Secret, os tokens anteriores tornam-se inválidos. Sempre clique em "Salvar Dados" e depois em "Autorizar Conexão" para renovar o acesso.
+                                        O sistema agora rotaciona entre 3 túneis diferentes automaticamente para evitar bloqueios de CORS e limites de taxa. Se a falha persistir, aguarde 60 segundos.
                                     </p>
                                 </div>
                             </div>

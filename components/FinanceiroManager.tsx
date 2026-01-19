@@ -132,57 +132,96 @@ export const FinanceiroManager: React.FC = () => {
         }
     };
 
+    const parseValue = (val: any): number => {
+        if (typeof val === 'number') return val;
+        if (!val) return 0;
+        // Remove R$, espaços e converte formato brasileiro para americano
+        const clean = String(val).replace('R$', '').replace(/\s/g, '');
+        const normalized = clean.includes(',') && clean.includes('.') 
+            ? clean.replace(/\./g, '').replace(',', '.') 
+            : clean.replace(',', '.');
+        return parseFloat(normalized) || 0;
+    };
+
     const fetchFinancialData = async (tokenOverride?: string) => {
         const token = tokenOverride || config.accessToken;
         if (!token) return;
 
         setIsFetchingData(true);
+        console.log("Financeiro: Iniciando sincronização com Conta Azul...");
+        
         try {
             const proxyUrl = "https://corsproxy.io/?";
             
-            // 1. Buscar Contas a Receber (Em aberto e Vencidas)
-            const recUrl = "https://api.contaazul.com/v1/receivables?status=OPEN&status=OVERDUE&size=100";
-            const payUrl = "https://api.contaazul.com/v1/payables?status=OPEN&status=OVERDUE&size=100";
+            // Filtros:
+            // 1. Buscamos um range de datas bem grande para não filtrar apenas o mês atual
+            // 2. Buscamos tanto OPEN (Em aberto) quanto OVERDUE (Vencido)
+            const dateParams = "expiration_start=2024-01-01&expiration_end=2028-12-31";
+            const recUrl = `https://api.contaazul.com/v1/receivables?status=OPEN&status=OVERDUE&size=100&${dateParams}`;
+            const payUrl = `https://api.contaazul.com/v1/payables?status=OPEN&status=OVERDUE&size=100&${dateParams}`;
+
+            console.log("Financeiro: Chamando APIs...");
 
             const [recRes, payRes] = await Promise.all([
-                fetch(proxyUrl + encodeURIComponent(recUrl), { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }),
-                fetch(proxyUrl + encodeURIComponent(payUrl), { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } })
+                fetch(proxyUrl + encodeURIComponent(recUrl), { 
+                    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } 
+                }),
+                fetch(proxyUrl + encodeURIComponent(payUrl), { 
+                    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } 
+                })
             ]);
 
             if (recRes.status === 401 || payRes.status === 401) {
+                console.warn("Financeiro: Token expirado. Tentando renovação automática...");
                 const newToken = await handleRefreshToken();
                 if (newToken) fetchFinancialData(newToken);
                 return;
             }
 
+            if (!recRes.ok || !payRes.ok) {
+                console.error("Financeiro: Erro na resposta da API", { recStatus: recRes.status, payStatus: payRes.status });
+                throw new Error("Falha na comunicação com Conta Azul");
+            }
+
             const recData = await recRes.json();
             const payData = await payRes.json();
 
+            console.log("Financeiro: Dados brutos recebidos", { recData, payData });
+
             // Processar Recebíveis
             const recItems = Array.isArray(recData) ? recData : (recData.items || recData.content || []);
-            const recSum = recItems.reduce((acc: number, curr: any) => acc + Number(curr.value || 0), 0);
+            const recSum = recItems.reduce((acc: number, curr: any) => acc + parseValue(curr.value), 0);
             
             // Processar Pagáveis
             const payItems = Array.isArray(payData) ? payData : (payData.items || payData.content || []);
-            const paySum = payItems.reduce((acc: number, curr: any) => acc + Number(curr.value || 0), 0);
+            const paySum = payItems.reduce((acc: number, curr: any) => acc + parseValue(curr.value), 0);
 
-            // Filtrar apenas os vencidos para a listagem rápida
+            // Filtrar apenas os vencidos (OVERDUE) para a listagem rápida de atenção
             const overdue = recItems
                 .filter((r: any) => r.status === 'OVERDUE')
                 .map((r: any) => ({
                     id: r.id,
                     name: r.customer?.name || r.customer_name || "Cliente",
-                    value: Number(r.value || 0),
+                    value: parseValue(r.value),
                     due_date: r.due_date,
                     status: r.status
                 }));
+
+            console.log("Financeiro: Sincronização concluída com sucesso", { recSum, paySum, overdueCount: overdue.length });
 
             setReceivableTotal(recSum);
             setPayableTotal(paySum);
             setOverdueRecent(overdue.slice(0, 5));
 
+            // Atualiza a data da última sincronização
+            const updatedConfig = { ...config, lastSync: new Date().toISOString() };
+            await appBackend.client
+                .from('crm_settings')
+                .upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
+            setConfig(updatedConfig);
+
         } catch (e) {
-            console.error("Erro ao buscar dados financeiros:", e);
+            console.error("Financeiro: Erro técnico grave", e);
         } finally {
             setIsFetchingData(false);
         }
@@ -226,6 +265,7 @@ export const FinanceiroManager: React.FC = () => {
         try {
             const cleanId = config.clientId.trim();
             const cleanSecret = config.clientSecret.trim();
+            const fixedRedirect = 'https://sistema-rd.vercel.app/';
             const credentials = btoa(`${cleanId}:${cleanSecret}`);
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
             const proxyUrl = "https://corsproxy.io/?";
@@ -233,7 +273,7 @@ export const FinanceiroManager: React.FC = () => {
             const body = new URLSearchParams();
             body.append('grant_type', 'authorization_code');
             body.append('code', authCode.trim());
-            body.append('redirect_uri', 'https://sistema-rd.vercel.app/');
+            body.append('redirect_uri', fixedRedirect);
 
             const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
                 method: 'POST',
@@ -338,7 +378,7 @@ export const FinanceiroManager: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "Conexão Ativa" : "Sem Conexão"}</h3>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sincronizado: ${new Date(config.lastSync!).toLocaleDateString()}` : "Configure a API do Conta Azul"}</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sincronizado: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Configure a API do Conta Azul"}</p>
                             </div>
                         </div>
                     </div>
@@ -353,7 +393,7 @@ export const FinanceiroManager: React.FC = () => {
                                         <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-teal-300 transition-all">
                                             <div className="min-w-0">
                                                 <p className="text-[11px] font-black text-slate-800 truncate uppercase">{item.name}</p>
-                                                <p className="text-[9px] text-red-500 font-bold uppercase tracking-tighter">Vencimento: {new Date(item.due_date).toLocaleDateString()}</p>
+                                                <p className="text-[9px] text-red-500 font-bold uppercase tracking-tighter">Vencimento: {item.due_date ? new Date(item.due_date).toLocaleDateString('pt-BR') : '--'}</p>
                                             </div>
                                             <span className="text-sm font-black text-slate-700 shrink-0">{formatCurrency(item.value)}</span>
                                         </div>
@@ -397,7 +437,7 @@ export const FinanceiroManager: React.FC = () => {
                                     disabled={isSaving}
                                     className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-2"
                                 >
-                                    {isSaving ? <Loader2 className="animate-spin" /> : <><CheckCircle size={18}/> 3. Finalizar Conexão</>}
+                                    {isSaving ? <Loader2 size={18} className="animate-spin" /> : <><CheckCircle size={18}/> 3. Finalizar Conexão</>}
                                 </button>
                                 <button onClick={() => { setAuthCode(null); window.history.replaceState({}, document.title, window.location.pathname); }} className="text-[10px] font-black text-slate-400 uppercase hover:text-red-500">Recomeçar processo</button>
                             </div>
@@ -464,7 +504,7 @@ export const FinanceiroManager: React.FC = () => {
                                 <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
                                     <h4 className="font-bold text-amber-800 text-sm">Total a Receber/Pagar</h4>
                                     <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                        Os valores apresentados referem-se à soma de todos os títulos com status "Em Aberto" e "Vencido" na sua base de dados atual.
+                                        Os valores apresentados referem-se à soma de todos os títulos com status "Em Aberto" e "Vencido" na sua base de dados atual, abrangendo um range de datas amplo.
                                     </p>
                                 </div>
                             </div>

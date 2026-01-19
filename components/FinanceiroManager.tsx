@@ -48,11 +48,11 @@ export const FinanceiroManager: React.FC = () => {
     const [authCode, setAuthCode] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    // Proxies com prioridade para corsproxy.io (mais rápido para Body Auth)
+    // Lista de Proxies com nova prioridade (AllOrigins é mais estável para volume)
     const PROXIES = [
-        "https://corsproxy.io/?",
         "https://api.allorigins.win/raw?url=",
-        "https://api.codetabs.com/v1/proxy/?url="
+        "https://api.codetabs.com/v1/proxy/?url=",
+        "https://corsproxy.io/?"
     ];
 
     useEffect(() => {
@@ -106,16 +106,23 @@ export const FinanceiroManager: React.FC = () => {
                     mode: 'cors'
                 });
 
+                // Se o proxy retornar 429 (Rate Limit) ou 403 (Forbidden por limite), tenta o próximo
+                if (response.status === 429 || response.status === 403) {
+                    console.warn(`Proxy ${proxy} atingiu limite de taxa. Tentando o próximo da lista...`);
+                    continue;
+                }
+
                 if (response.ok || response.status === 400 || response.status === 401) {
                     return response;
                 }
-                lastError = new Error(`Proxy status: ${response.status}`);
+                
+                lastError = new Error(`Status de erro do proxy: ${response.status}`);
             } catch (e: any) {
                 lastError = e;
                 continue;
             }
         }
-        throw lastError || new Error("Falha de conexão.");
+        throw lastError || new Error("Todos os túneis de conexão estão ocupados. Tente novamente em 1 minuto.");
     };
 
     const handleDisconnect = async () => {
@@ -140,7 +147,7 @@ export const FinanceiroManager: React.FC = () => {
                 body: bodyStr
             });
 
-            if (!response.ok) throw new Error("Falha ao renovar acesso.");
+            if (!response.ok) throw new Error("Sessão expirada. Por favor, autorize novamente.");
             const data = await response.json();
             
             const updatedConfig = {
@@ -179,7 +186,9 @@ export const FinanceiroManager: React.FC = () => {
         try {
             const baseUrlReceber = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-receber/buscar";
             const baseUrlPagar = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar";
-            const query = "data_vencimento_inicio=2020-01-01&data_vencimento_fim=2030-12-31&situacao=ABERTO&situacao=ATRASADO&itens_por_pagina=100";
+            
+            // Adicionado timestamp para evitar cache do proxy
+            const query = `data_vencimento_inicio=2020-01-01&data_vencimento_fim=2030-12-31&situacao=ABERTO&situacao=ATRASADO&itens_por_pagina=100&_t=${Date.now()}`;
 
             const headers = { 
                 'Authorization': `Bearer ${token}`, 
@@ -261,11 +270,9 @@ export const FinanceiroManager: React.FC = () => {
         if (!authCode) return;
         setIsSaving(true);
         setErrorMsg(null);
-        console.log("Iniciando finalização via Body Auth...");
         try {
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
             
-            // Credenciais enviadas via Body elimina erros de CORS nos headers de Authorization
             const bodyStr = [
                 `grant_type=authorization_code`,
                 `code=${encodeURIComponent(authCode.trim())}`,
@@ -283,10 +290,9 @@ export const FinanceiroManager: React.FC = () => {
             const data = await response.json();
 
             if (!response.ok) {
-                // Se o erro for 400 ou 401, o código provavelmente expirou (usado uma vez)
                 setAuthCode(null);
                 window.history.replaceState({}, document.title, window.location.pathname);
-                throw new Error("O código de autorização expirou ou é inválido. Por favor, clique em '2. Autorizar Conexão' novamente.");
+                throw new Error(data.message || "O código de autorização expirou ou é inválido. Por favor, reinicie a autorização.");
             }
 
             const updatedConfig: ContaAzulConfig = { 
@@ -346,8 +352,9 @@ export const FinanceiroManager: React.FC = () => {
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl flex items-start gap-3 animate-in slide-in-from-top-2">
                     <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
                     <div className="flex-1">
-                        <p className="text-sm font-bold text-red-800">Falha na Integração</p>
+                        <p className="text-sm font-bold text-red-800">Falha na Conexão</p>
                         <p className="text-xs text-red-700 mt-1">{errorMsg}</p>
+                        <p className="text-[10px] text-red-400 mt-2 font-bold uppercase">Dica: Os túneis de conexão gratuita podem estar sobrecarregados. Tente novamente em alguns minutos.</p>
                     </div>
                 </div>
             )}
@@ -390,7 +397,7 @@ export const FinanceiroManager: React.FC = () => {
                                 {config.isConnected ? <ShieldCheck size={32} /> : <Unplug size={32} />}
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "API v1 Ativa" : "Desconectado"}</h3>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "Conectado via Tunel" : "Desconectado"}</h3>
                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sinc: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Configure as credenciais"}</p>
                             </div>
                         </div>
@@ -421,11 +428,11 @@ export const FinanceiroManager: React.FC = () => {
                         <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white relative overflow-hidden flex flex-col justify-center">
                             <div className="absolute top-0 right-0 p-8 opacity-10"><Info size={120}/></div>
                             <div className="relative z-10 space-y-4">
-                                <h3 className="text-2xl font-black tracking-tight leading-tight">Solução de Conectividade</h3>
-                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta integração utiliza um túnel seguro otimizado para evitar bloqueios de CORS em navegadores modernos.</p>
+                                <h3 className="text-2xl font-black tracking-tight leading-tight">Mapeamento Financeiro</h3>
+                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta integração utiliza rotatividade de túneis para garantir a conexão sem bloqueios de rede.</p>
                                 <div className="pt-4 flex gap-4">
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Auth Mode</span><span className="font-bold">Body Creds</span></div>
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Proxy</span><span className="font-bold">Auto-Rotation</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Tecnologia</span><span className="font-bold">Multi-Proxy</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">Body Creds</span></div>
                                 </div>
                             </div>
                         </div>
@@ -505,19 +512,19 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <ShieldAlert className="text-amber-500" /> Resolução de Erros Críticos
+                                <ShieldAlert className="text-amber-500" /> Solução de Erros de Proxy
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Problemas com Proxy</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Problemas com Rate Limit</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        Ao utilizar proxies públicos, alguns cabeçalhos de segurança podem ser bloqueados. O sistema agora envia credenciais no corpo da mensagem para garantir compatibilidade total.
+                                        Os serviços de proxy gratuitos têm limites de uso. O sistema agora tenta rotacionar automaticamente entre 3 provedores diferentes se um deles falhar.
                                     </p>
                                 </div>
                                 <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
-                                    <h4 className="font-bold text-amber-800 text-sm">Código Expirado</h4>
+                                    <h4 className="font-bold text-amber-800 text-sm">Dica de Estabilidade</h4>
                                     <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                        O código retornado pelo Conta Azul após o login só vale por uma única tentativa. Se você clicou em "Finalizar" e deu erro, o código foi invalidado. Você <strong>precisa</strong> clicar em "Autorizar Conexão" novamente para gerar um novo código.
+                                        Se a sincronização falhar persistentemente, clique em "Sincronizar" novamente. O sistema buscará uma nova rota de conexão limpa para os dados do Conta Azul.
                                     </p>
                                 </div>
                             </div>

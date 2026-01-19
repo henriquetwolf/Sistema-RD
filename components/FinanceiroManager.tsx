@@ -147,23 +147,16 @@ export const FinanceiroManager: React.FC = () => {
         if (!token) return;
 
         setIsFetchingData(true);
-        console.log("Financeiro V1: Iniciando busca de dados...");
+        console.log("Financeiro V1: Iniciando busca total de títulos em aberto...");
         
         try {
             const proxyUrl = "https://corsproxy.io/?";
             
-            // Definição de intervalo de tempo (Obrigatório para resultados consistentes na v1)
-            const dateStart = "2024-01-01";
-            const dateEnd = "2026-12-31";
-
             const baseUrlReceber = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-receber/buscar";
             const baseUrlPagar = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar";
             
-            // Construção da Query de busca
-            // situacao: ABERTO, ATRASADO
+            // Removendo filtros de data para pegar tudo que está pendente no sistema
             const params = new URLSearchParams();
-            params.append('data_vencimento_inicio', dateStart);
-            params.append('data_vencimento_fim', dateEnd);
             params.append('situacao', 'ABERTO');
             params.append('situacao', 'ATRASADO');
             params.append('itens_por_pagina', '100');
@@ -183,14 +176,13 @@ export const FinanceiroManager: React.FC = () => {
             ]);
 
             if (recRes.status === 401 || payRes.status === 401) {
-                console.warn("Sessão expirada, tentando renovar...");
                 const newToken = await handleRefreshToken();
                 if (newToken) fetchFinancialData(newToken);
                 return;
             }
 
             if (!recRes.ok || !payRes.ok) {
-                throw new Error("Erro na comunicação com a API");
+                throw new Error(`Erro API: ${recRes.status} / ${payRes.status}`);
             }
 
             const recData = await recRes.json();
@@ -199,19 +191,11 @@ export const FinanceiroManager: React.FC = () => {
             const recItems = recData.items || recData.content || [];
             const payItems = payData.items || payData.content || [];
 
-            console.log(`Financeiro V1: ${recItems.length} recebíveis e ${payItems.length} pagáveis encontrados.`);
+            console.log("DADOS RECEBIDOS:", { receber: recItems, pagar: payItems });
 
-            // Soma Total a Receber (v1 utiliza valor_total ou valor)
-            const recSum = recItems.reduce((acc: number, curr: any) => {
-                return acc + parseValue(curr.valor_total || curr.valor);
-            }, 0);
-            
-            // Soma Total a Pagar
-            const paySum = payItems.reduce((acc: number, curr: any) => {
-                return acc + parseValue(curr.valor_total || curr.valor);
-            }, 0);
+            const recSum = recItems.reduce((acc: number, curr: any) => acc + parseValue(curr.valor_total || curr.valor), 0);
+            const paySum = payItems.reduce((acc: number, curr: any) => acc + parseValue(curr.valor_total || curr.valor), 0);
 
-            // Mapeia os atrasados (ATRASADO) para o widget de atenção
             const overdue = recItems
                 .filter((r: any) => r.situacao === 'ATRASADO')
                 .map((r: any) => ({
@@ -226,15 +210,14 @@ export const FinanceiroManager: React.FC = () => {
             setPayableTotal(paySum);
             setOverdueRecent(overdue.slice(0, 5));
 
-            // Atualiza data da sincronização
             const updatedConfig = { ...config, lastSync: new Date().toISOString() };
             await appBackend.client
                 .from('crm_settings')
                 .upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
             setConfig(updatedConfig);
 
-        } catch (e) {
-            console.error("Erro crítico na sincronização financeira:", e);
+        } catch (e: any) {
+            console.error("ERRO NA SINCRONIZAÇÃO:", e.message);
         } finally {
             setIsFetchingData(false);
         }
@@ -351,7 +334,6 @@ export const FinanceiroManager: React.FC = () => {
             {activeSubTab === 'overview' ? (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* CARD RECEBER */}
                         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group">
                             <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
                                 <ArrowUpRight size={80} className="text-emerald-600" />
@@ -364,10 +346,9 @@ export const FinanceiroManager: React.FC = () => {
                             ) : (
                                 <h3 className="text-3xl font-black text-slate-800">{formatCurrency(receivableTotal)}</h3>
                             )}
-                            <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-tighter">Eventos de entrada (Aberto/Atrasado).</p>
+                            <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-tighter">Soma de todos os títulos em aberto.</p>
                         </div>
 
-                        {/* CARD PAGAR */}
                         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group">
                             <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
                                 <ArrowDownRight size={80} className="text-rose-600" />
@@ -380,10 +361,9 @@ export const FinanceiroManager: React.FC = () => {
                             ) : (
                                 <h3 className="text-3xl font-black text-slate-800">{formatCurrency(payableTotal)}</h3>
                             )}
-                            <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-tighter">Eventos de saída (Aberto/Atrasado).</p>
+                            <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-tighter">Soma de todas as despesas em aberto.</p>
                         </div>
 
-                        {/* STATUS CONEXÃO */}
                         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center space-y-3">
                             <div className={clsx("w-16 h-16 rounded-3xl flex items-center justify-center shadow-inner", config.isConnected ? "bg-teal-50 text-teal-600" : "bg-slate-50 text-slate-300")}>
                                 <ShieldCheck size={32} />
@@ -396,7 +376,6 @@ export const FinanceiroManager: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* LISTA ATRASADOS */}
                         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col space-y-6">
                             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Recebíveis Atrasados</h4>
                             <div className="flex-1 space-y-3">
@@ -412,18 +391,17 @@ export const FinanceiroManager: React.FC = () => {
                                     ))
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-xs py-10">
-                                        {isFetchingData ? <Loader2 className="animate-spin" /> : 'Nenhum atraso identificado no período.'}
+                                        {isFetchingData ? <Loader2 className="animate-spin" /> : 'Nenhum atraso identificado.'}
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* INFO AJUDA */}
                         <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white relative overflow-hidden flex flex-col justify-center">
                             <div className="absolute top-0 right-0 p-8 opacity-10"><Info size={120}/></div>
                             <div className="relative z-10 space-y-4">
                                 <h3 className="text-2xl font-black tracking-tight leading-tight">Painel de Controle Financeiro</h3>
-                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Os dados exibidos referem-se ao intervalo de vencimentos entre 2024 e 2026. Títulos fora deste período não serão somados.</p>
+                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Os dados exibidos referem-se a todos os títulos pendentes em sua conta. Mantenha os lançamentos atualizados no portal para precisão total.</p>
                                 <div className="pt-4 flex gap-4">
                                     <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Tecnologia</span><span className="font-bold">OAuth 2.0</span></div>
                                     <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">SSL Proxy</span></div>
@@ -504,19 +482,19 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <AlertTriangle className="text-amber-500" /> Notas de Sincronização
+                                <AlertTriangle className="text-amber-500" /> Checklist de Configuração
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Filtro de Data</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Escopos da API</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        Para evitar lentidão, o sistema busca títulos com vencimento entre <strong>01/01/2024</strong> e <strong>31/12/2026</strong>. Se você possui títulos fora desse intervalo, eles não serão contabilizados no total.
+                                        No Portal do Desenvolvedor, seu app deve ter o escopo <strong>"financeiro"</strong> ativado. Se ele não estiver, a API retornará dados vazios mesmo com a conexão ativa.
                                     </p>
                                 </div>
                                 <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
-                                    <h4 className="font-bold text-amber-800 text-sm">Escopo Financeiro</h4>
+                                    <h4 className="font-bold text-amber-800 text-sm">Situação dos Títulos</h4>
                                     <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                        Este módulo consulta especificamente <strong>Contas a Receber</strong> e <strong>Contas a Pagar</strong>. Certifique-se de que os lançamentos estão com as situações "Em Aberto" ou "Vencido" no sistema oficial.
+                                        O dashboard busca apenas o que está "Aberto" ou "Atrasado". Se todos os seus lançamentos no Conta Azul estiverem marcados como "Pagos/Baixados", os cards mostrarão R$ 0,00.
                                     </p>
                                 </div>
                             </div>

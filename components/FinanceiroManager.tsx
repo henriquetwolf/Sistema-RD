@@ -5,7 +5,7 @@ import {
   Copy, Globe, MousePointerClick, Check, Eye, EyeOff, AlertTriangle, ShieldAlert,
   ArrowRightLeft, Lock, Layout, Zap, ArrowRight, MousePointer2, CheckCircle,
   FileSpreadsheet, TrendingUp, DollarSign, History, User, ArrowUpRight, ArrowDownRight,
-  TrendingDown
+  TrendingDown, Unplug
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -47,6 +47,7 @@ export const FinanceiroManager: React.FC = () => {
     const [isFetchingData, setIsFetchingData] = useState(false);
     const [copied, setCopied] = useState(false);
     const [authCode, setAuthCode] = useState<string | null>(null);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     useEffect(() => {
         loadConfig();
@@ -89,9 +90,20 @@ export const FinanceiroManager: React.FC = () => {
         }
     };
 
+    const handleDisconnect = async () => {
+        if (!window.confirm("Deseja desconectar a integração com o Conta Azul?")) return;
+        const resetConfig = { ...config, isConnected: false, accessToken: '', refreshToken: '' };
+        await appBackend.client.from('crm_settings').upsert({ key: 'conta_azul_config', value: JSON.stringify(resetConfig) });
+        setConfig(resetConfig);
+        setReceivableTotal(0);
+        setPayableTotal(0);
+        setOverdueRecent([]);
+    };
+
     const handleRefreshToken = async () => {
         if (!config.refreshToken) return null;
         try {
+            console.log("Financeiro: Tentando renovar token...");
             const cleanId = config.clientId.trim();
             const cleanSecret = config.clientSecret.trim();
             const credentials = btoa(`${cleanId}:${cleanSecret}`);
@@ -111,11 +123,15 @@ export const FinanceiroManager: React.FC = () => {
                 body: body.toString()
             });
 
-            if (!response.ok) throw new Error("Falha ao renovar token");
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.message || "Refresh token inválido ou expirado.");
+            }
 
             const data = await response.json();
             const updatedConfig = {
                 ...config,
+                isConnected: true,
                 accessToken: data.access_token,
                 refreshToken: data.refresh_token || config.refreshToken
             };
@@ -126,8 +142,11 @@ export const FinanceiroManager: React.FC = () => {
             
             setConfig(updatedConfig);
             return data.access_token;
-        } catch (e) {
+        } catch (e: any) {
             console.error("Erro ao renovar token:", e);
+            setErrorMsg("Sua conexão expirou. Por favor, autorize o acesso novamente na aba Configuração.");
+            // Marcamos como desconectado para forçar novo login
+            setConfig(prev => ({ ...prev, isConnected: false }));
             return null;
         }
     };
@@ -147,32 +166,30 @@ export const FinanceiroManager: React.FC = () => {
         if (!token) return;
 
         setIsFetchingData(true);
-        console.log("Financeiro V1: Iniciando busca total de títulos em aberto...");
+        setErrorMsg(null);
+        console.log("Financeiro V1: Buscando títulos...");
         
         try {
             const proxyUrl = "https://corsproxy.io/?";
-            
             const baseUrlReceber = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-receber/buscar";
             const baseUrlPagar = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar";
             
-            // Removendo filtros de data para pegar tudo que está pendente no sistema
+            // API V1 EXIGE intervalo de data ou retorna vazio/hoje por padrão
             const params = new URLSearchParams();
+            params.append('data_vencimento_inicio', '2020-01-01');
+            params.append('data_vencimento_fim', '2030-12-31');
             params.append('situacao', 'ABERTO');
             params.append('situacao', 'ATRASADO');
             params.append('itens_por_pagina', '100');
 
-            const fullUrlReceber = `${baseUrlReceber}?${params.toString()}`;
-            const fullUrlPagar = `${baseUrlPagar}?${params.toString()}`;
-
             const headers = { 
                 'Authorization': `Bearer ${token}`, 
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
+                'Accept': 'application/json'
             };
 
             const [recRes, payRes] = await Promise.all([
-                fetch(proxyUrl + encodeURIComponent(fullUrlReceber), { headers }),
-                fetch(proxyUrl + encodeURIComponent(fullUrlPagar), { headers })
+                fetch(proxyUrl + encodeURIComponent(`${baseUrlReceber}?${params.toString()}`), { headers }),
+                fetch(proxyUrl + encodeURIComponent(`${baseUrlPagar}?${params.toString()}`), { headers })
             ]);
 
             if (recRes.status === 401 || payRes.status === 401) {
@@ -182,7 +199,7 @@ export const FinanceiroManager: React.FC = () => {
             }
 
             if (!recRes.ok || !payRes.ok) {
-                throw new Error(`Erro API: ${recRes.status} / ${payRes.status}`);
+                throw new Error("Falha na comunicação com a API do Conta Azul.");
             }
 
             const recData = await recRes.json();
@@ -191,7 +208,7 @@ export const FinanceiroManager: React.FC = () => {
             const recItems = recData.items || recData.content || [];
             const payItems = payData.items || payData.content || [];
 
-            console.log("DADOS RECEBIDOS:", { receber: recItems, pagar: payItems });
+            console.log(`Financeiro V1: Encontrados ${recItems.length} recebíveis e ${payItems.length} pagáveis.`);
 
             const recSum = recItems.reduce((acc: number, curr: any) => acc + parseValue(curr.valor_total || curr.valor), 0);
             const paySum = payItems.reduce((acc: number, curr: any) => acc + parseValue(curr.valor_total || curr.valor), 0);
@@ -210,14 +227,15 @@ export const FinanceiroManager: React.FC = () => {
             setPayableTotal(paySum);
             setOverdueRecent(overdue.slice(0, 5));
 
-            const updatedConfig = { ...config, lastSync: new Date().toISOString() };
+            const updatedConfig = { ...config, lastSync: new Date().toISOString(), isConnected: true };
             await appBackend.client
                 .from('crm_settings')
                 .upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
             setConfig(updatedConfig);
 
         } catch (e: any) {
-            console.error("ERRO NA SINCRONIZAÇÃO:", e.message);
+            console.error("ERRO FINANCEIRO:", e.message);
+            setErrorMsg("Erro ao sincronizar dados. Verifique suas credenciais.");
         } finally {
             setIsFetchingData(false);
         }
@@ -331,6 +349,16 @@ export const FinanceiroManager: React.FC = () => {
                 </div>
             </div>
 
+            {errorMsg && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl flex items-start gap-3 animate-in slide-in-from-top-2">
+                    <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                    <div>
+                        <p className="text-sm font-bold text-red-800">Atenção Necessária</p>
+                        <p className="text-xs text-red-700 mt-1">{errorMsg}</p>
+                    </div>
+                </div>
+            )}
+
             {activeSubTab === 'overview' ? (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -366,11 +394,11 @@ export const FinanceiroManager: React.FC = () => {
 
                         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center space-y-3">
                             <div className={clsx("w-16 h-16 rounded-3xl flex items-center justify-center shadow-inner", config.isConnected ? "bg-teal-50 text-teal-600" : "bg-slate-50 text-slate-300")}>
-                                <ShieldCheck size={32} />
+                                {config.isConnected ? <ShieldCheck size={32} /> : <Unplug size={32} />}
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "API v1 Ativa" : "Sem Conexão"}</h3>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sinc: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Configure as credenciais"}</p>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "API v1 Conectada" : "Desconectado"}</h3>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sinc: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Renove a autorização"}</p>
                             </div>
                         </div>
                     </div>
@@ -401,7 +429,7 @@ export const FinanceiroManager: React.FC = () => {
                             <div className="absolute top-0 right-0 p-8 opacity-10"><Info size={120}/></div>
                             <div className="relative z-10 space-y-4">
                                 <h3 className="text-2xl font-black tracking-tight leading-tight">Painel de Controle Financeiro</h3>
-                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Os dados exibidos referem-se a todos os títulos pendentes em sua conta. Mantenha os lançamentos atualizados no portal para precisão total.</p>
+                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta integração busca todos os títulos com vencimento entre 2020 e 2030 que ainda não foram baixados no Conta Azul.</p>
                                 <div className="pt-4 flex gap-4">
                                     <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Tecnologia</span><span className="font-bold">OAuth 2.0</span></div>
                                     <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">SSL Proxy</span></div>
@@ -429,7 +457,6 @@ export const FinanceiroManager: React.FC = () => {
                                 >
                                     {isSaving ? <Loader2 size={18} className="animate-spin" /> : <><CheckCircle size={18}/> 3. Finalizar Conexão</>}
                                 </button>
-                                <button onClick={() => { setAuthCode(null); window.history.replaceState({}, document.title, window.location.pathname); }} className="text-[10px] font-black text-slate-400 uppercase hover:text-red-500">Recomeçar processo</button>
                             </div>
                         ) : (
                             <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 p-8 space-y-8 relative overflow-hidden">
@@ -441,7 +468,7 @@ export const FinanceiroManager: React.FC = () => {
                                         "px-3 py-1 rounded-full text-[9px] font-black uppercase flex items-center gap-1.5 border",
                                         config.isConnected ? "bg-green-50 text-green-700 border-green-200" : "bg-amber-50 text-amber-700 border-amber-200"
                                     )}>
-                                        {config.isConnected ? "Conectado" : "Não Integrado"}
+                                        {config.isConnected ? "Conectado" : "Ação Necessária"}
                                     </div>
                                 </div>
 
@@ -472,6 +499,9 @@ export const FinanceiroManager: React.FC = () => {
                                             <button onClick={handleConnect} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all flex items-center justify-center gap-2 active:scale-95">
                                                 <RefreshCw size={18}/> 2. Autorizar Conexão
                                             </button>
+                                            {config.isConnected && (
+                                                <button onClick={handleDisconnect} className="w-full text-[10px] font-black uppercase text-red-400 hover:text-red-600 mt-2">Desconectar conta</button>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -482,19 +512,19 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <AlertTriangle className="text-amber-500" /> Checklist de Configuração
+                                <ShieldAlert className="text-amber-500" /> Resolução de Erros
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Escopos da API</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Erro 401 (Unauthorized)</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        No Portal do Desenvolvedor, seu app deve ter o escopo <strong>"financeiro"</strong> ativado. Se ele não estiver, a API retornará dados vazios mesmo com a conexão ativa.
+                                        Isso indica que o token expirou. O sistema tenta renovar, mas se as credenciais (ID/Secret) mudaram no portal, a renovação falha. Clique em "Autorizar Conexão" para gerar um novo par de chaves.
                                     </p>
                                 </div>
                                 <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
-                                    <h4 className="font-bold text-amber-800 text-sm">Situação dos Títulos</h4>
+                                    <h4 className="font-bold text-amber-800 text-sm">Lista Vazia (R$ 0,00)</h4>
                                     <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                        O dashboard busca apenas o que está "Aberto" ou "Atrasado". Se todos os seus lançamentos no Conta Azul estiverem marcados como "Pagos/Baixados", os cards mostrarão R$ 0,00.
+                                        Certifique-se de que existem títulos em situação **"Aberto"** ou **"Atrasado"** no seu Conta Azul. Títulos já pagos ou cancelados não são somados neste dashboard.
                                     </p>
                                 </div>
                             </div>

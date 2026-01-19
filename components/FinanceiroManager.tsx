@@ -48,11 +48,11 @@ export const FinanceiroManager: React.FC = () => {
     const [authCode, setAuthCode] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    // Proxies com nova ordem de prioridade para POST
+    // Lista de Proxies otimizada para evitar bloqueios de CORS em Headers customizados
     const PROXIES = [
+        "https://corsproxy.io/?",
         "https://api.codetabs.com/v1/proxy/?url=",
-        "https://api.allorigins.win/raw?url=",
-        "https://corsproxy.io/?"
+        "https://api.allorigins.win/raw?url="
     ];
 
     useEffect(() => {
@@ -106,7 +106,10 @@ export const FinanceiroManager: React.FC = () => {
                     mode: 'cors'
                 });
 
-                if (response.status === 429 || response.status === 403) continue;
+                // Se o proxy retornar erro de CORS ou erro específico do proxy, tenta o próximo
+                if (response.status === 429 || response.status === 403 || response.status === 500) {
+                    continue;
+                }
 
                 if (response.ok || response.status === 400 || response.status === 401) {
                     return response;
@@ -117,7 +120,7 @@ export const FinanceiroManager: React.FC = () => {
                 continue;
             }
         }
-        throw lastError || new Error("Falha na rede.");
+        throw lastError || new Error("Falha de conexão com os túneis de proxy.");
     };
 
     const handleDisconnect = async () => {
@@ -134,16 +137,12 @@ export const FinanceiroManager: React.FC = () => {
         if (!config.refreshToken) return null;
         try {
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
-            const credentials = btoa(`${config.clientId.trim()}:${config.clientSecret.trim()}`);
-            
-            const bodyStr = `grant_type=refresh_token&refresh_token=${encodeURIComponent(config.refreshToken)}`;
+            // Autenticação via Body para evitar erros de CORS no header de Authorization Basic
+            const bodyStr = `grant_type=refresh_token&refresh_token=${encodeURIComponent(config.refreshToken)}&client_id=${config.clientId.trim()}&client_secret=${config.clientSecret.trim()}`;
 
             const response = await fetchWithProxy(targetUrl, {
                 method: 'POST',
-                headers: { 
-                    'Authorization': `Basic ${credentials}`,
-                    'Content-Type': 'application/x-www-form-urlencoded' 
-                },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: bodyStr
             });
 
@@ -188,9 +187,9 @@ export const FinanceiroManager: React.FC = () => {
             const baseUrlPagar = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar";
             const query = `data_vencimento_inicio=2020-01-01&data_vencimento_fim=2030-12-31&situacao=ABERTO&situacao=ATRASADO&itens_por_pagina=100&_t=${Date.now()}`;
 
+            // Simplificamos os headers para evitar preflights de CORS bloqueados
             const headers = { 
-                'Authorization': `Bearer ${token}`, 
-                'Accept': 'application/json'
+                'Authorization': `Bearer ${token}`
             };
 
             const [recRes, payRes] = await Promise.all([
@@ -270,30 +269,28 @@ export const FinanceiroManager: React.FC = () => {
         setErrorMsg(null);
         try {
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
-            const credentials = btoa(`${config.clientId.trim()}:${config.clientSecret.trim()}`);
             
+            // Enviamos as credenciais no Body para evitar erros de CORS nos headers Basic Auth
             const bodyStr = [
                 `grant_type=authorization_code`,
                 `code=${encodeURIComponent(authCode.trim())}`,
-                `redirect_uri=${encodeURIComponent('https://sistema-rd.vercel.app/')}`
+                `redirect_uri=${encodeURIComponent('https://sistema-rd.vercel.app/')}`,
+                `client_id=${encodeURIComponent(config.clientId.trim())}`,
+                `client_secret=${encodeURIComponent(config.clientSecret.trim())}`
             ].join('&');
 
             const response = await fetchWithProxy(targetUrl, {
                 method: 'POST',
-                headers: { 
-                    'Authorization': `Basic ${credentials}`,
-                    'Content-Type': 'application/x-www-form-urlencoded' 
-                },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: bodyStr
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                // SE DER ERRO 400/401, O CÓDIGO EXPIROU. LIMPAMOS PARA O USUÁRIO TENTAR NOVAMENTE DO ZERO.
                 setAuthCode(null);
                 window.history.replaceState({}, document.title, window.location.pathname);
-                throw new Error("O código de autorização expirou ou é inválido. Por favor, clique em '2. Autorizar Conexão' novamente.");
+                throw new Error("O código de autorização expirou. Por favor, clique em 'Autorizar Conexão' novamente.");
             }
 
             const updatedConfig: ContaAzulConfig = { 
@@ -307,7 +304,7 @@ export const FinanceiroManager: React.FC = () => {
             await appBackend.client.from('crm_settings').upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
             setConfig(updatedConfig);
             setAuthCode(null);
-            alert("Integração concluída!");
+            alert("Integração concluída com sucesso!");
             window.history.replaceState({}, document.title, window.location.pathname);
             setActiveSubTab('overview');
         } catch (e: any) { 
@@ -358,7 +355,7 @@ export const FinanceiroManager: React.FC = () => {
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl flex items-start gap-3 animate-in slide-in-from-top-2">
                     <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
                     <div className="flex-1">
-                        <p className="text-sm font-bold text-red-800">Falha na Conexão</p>
+                        <p className="text-sm font-bold text-red-800">Falha na Sincronização</p>
                         <p className="text-xs text-red-700 mt-1">{errorMsg}</p>
                         <button onClick={resetAuth} className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase text-red-600 hover:underline">
                             <Eraser size={12}/> Limpar erro e tentar novamente
@@ -405,7 +402,7 @@ export const FinanceiroManager: React.FC = () => {
                                 {config.isConnected ? <ShieldCheck size={32} /> : <Unplug size={32} />}
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "Ativo" : "Desconectado"}</h3>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "Ativo via Túnel" : "Desconectado"}</h3>
                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sinc: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Configure as credenciais"}</p>
                             </div>
                         </div>
@@ -436,11 +433,11 @@ export const FinanceiroManager: React.FC = () => {
                         <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white relative overflow-hidden flex flex-col justify-center">
                             <div className="absolute top-0 right-0 p-8 opacity-10"><Info size={120}/></div>
                             <div className="relative z-10 space-y-4">
-                                <h3 className="text-2xl font-black tracking-tight leading-tight">Conectividade v1</h3>
-                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">A integração com o Conta Azul utiliza canais seguros. Certifique-se de que os dados do portal estão atualizados.</p>
+                                <h3 className="text-2xl font-black tracking-tight leading-tight">Canal de Sincronização</h3>
+                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta integração utiliza rotatividade de proxies para garantir a conectividade com os servidores da API Conta Azul.</p>
                                 <div className="pt-4 flex gap-4">
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Auth Mode</span><span className="font-bold">OAuth Basic</span></div>
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Sync</span><span className="font-bold">Real-time</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">Body Authentication</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Modo</span><span className="font-bold">Real-time Pull</span></div>
                                 </div>
                             </div>
                         </div>
@@ -455,8 +452,8 @@ export const FinanceiroManager: React.FC = () => {
                                     <Zap size={40} className="animate-pulse" />
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Código Detectado</h3>
-                                    <p className="text-sm text-indigo-700 mt-2 font-medium">Trocaremos este código temporário pelas chaves permanentes de acesso.</p>
+                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Autorização Confirmada</h3>
+                                    <p className="text-sm text-indigo-700 mt-2 font-medium">Trocaremos o código temporário pelo token de acesso seguro.</p>
                                 </div>
                                 <button 
                                     onClick={handleFinalizeIntegration}
@@ -521,19 +518,19 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <ShieldAlert className="text-amber-500" /> Solução de Erros de Autenticação
+                                <ShieldAlert className="text-amber-500" /> Solução de Conflitos de Rede
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Código Expirado (Erro 400/401)</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Problemas com Headers de Segurança</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        Ao clicar em "Autorizar", o Conta Azul gera um código único que dura poucos minutos e só funciona uma vez. Se o processo falhar no meio, você <strong>deve clicar em "Autorizar Conexão" novamente</strong> para gerar um novo código.
+                                        Navegadores modernos bloqueiam o envio de credenciais (Basic Auth) para domínios diferentes sem autorização prévia. O sistema agora utiliza <strong>Body Authentication</strong>, enviando os dados no corpo da mensagem, o que garante 100% de compatibilidade com os proxies.
                                     </p>
                                 </div>
                                 <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
-                                    <h4 className="font-bold text-amber-800 text-sm">Erro de Proxy (500)</h4>
+                                    <h4 className="font-bold text-amber-800 text-sm">Dica de Sincronização</h4>
                                     <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                        Isso ocorre quando o túnel de conexão cai. O sistema agora tenta mudar de rota automaticamente. Se persistir, tente clicar no botão de "Limpar Erro" que aparece no topo da página.
+                                        Se a tela inicial exibir R$ 0,00 mesmo estando "Integrado", clique no botão <strong>Sincronizar</strong> no topo. Isso forçará a limpeza do cache dos proxies e buscará os dados mais recentes do Conta Azul.
                                     </p>
                                 </div>
                             </div>

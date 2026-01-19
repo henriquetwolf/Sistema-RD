@@ -120,40 +120,46 @@ export const FinanceiroManager: React.FC = () => {
             const cleanSecret = config.clientSecret.trim();
             const fixedRedirect = 'https://sistema-rd.vercel.app/';
 
-            // Credenciais em Base64 para o Header Authorization
+            // Conta Azul requer corpo em Form Data (x-www-form-urlencoded) para o Passo 3
+            const body = new URLSearchParams();
+            body.append('grant_type', 'authorization_code');
+            body.append('redirect_uri', fixedRedirect);
+            body.append('code', authCode.trim());
+            // Algumas instâncias do Conta Azul exigem as credenciais no corpo se o Header falhar
+            body.append('client_id', cleanId);
+            body.append('client_secret', cleanSecret);
+
             const credentials = btoa(`${cleanId}:${cleanSecret}`);
-            
             const proxyUrl = "https://corsproxy.io/?";
             const targetUrl = "https://api.contaazul.com/oauth2/token";
-            
-            // Conta Azul requer corpo em JSON no Passo 3
-            const body = {
+
+            console.log("Iniciando troca de token com:", {
                 grant_type: 'authorization_code',
                 redirect_uri: fixedRedirect,
-                code: authCode.trim()
-            };
+                code: authCode.trim().substring(0, 5) + "..."
+            });
 
             const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Basic ${credentials}`,
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify(body)
+                body: body.toString()
             });
 
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error("Erro na Troca de Token:", errorText);
+                console.error("Erro na Integração:", response.status, errorText);
                 
                 if (response.status === 401) {
-                    throw new Error("Erro 401 (Não Autorizado): Seu Client ID ou Client Secret estão incorretos no Conta Azul.");
+                    throw new Error("Erro 401 (Não Autorizado): O Conta Azul rejeitou as credenciais. Verifique se o Client Secret foi copiado corretamente e não possui espaços.");
                 }
                 if (response.status === 400) {
-                    throw new Error("Erro 400 (Bad Request): A URL de Redirecionamento no Portal do Conta Azul deve ser EXATAMENTE https://sistema-rd.vercel.app/ (com a barra no final).");
+                    throw new Error("Erro 400 (Bad Request): Verifique se a URL de redirecionamento no Portal do Desenvolvedor é exatamente https://sistema-rd.vercel.app/");
                 }
-                throw new Error(`Erro ${response.status} na integração. Verifique os logs do console.`);
+                throw new Error(`Erro ${response.status}: ${errorText || 'Falha na comunicação com Conta Azul'}`);
             }
 
             const data = await response.json();
@@ -177,6 +183,7 @@ export const FinanceiroManager: React.FC = () => {
             window.history.replaceState({}, document.title, window.location.pathname);
             setActiveSubTab('overview');
         } catch (e: any) {
+            console.error("Catch Error:", e);
             alert(e.message);
         } finally {
             setIsSaving(false);
@@ -241,8 +248,8 @@ export const FinanceiroManager: React.FC = () => {
                                     <Zap size={40} className="animate-pulse" />
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Autorização Recebida</h3>
-                                    <p className="text-sm text-indigo-700 mt-2 font-medium">O código foi capturado com sucesso.</p>
+                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Código Recebido</h3>
+                                    <p className="text-sm text-indigo-700 mt-2 font-medium">Autorização confirmada. Finalize para conectar.</p>
                                 </div>
                                 <button 
                                     onClick={handleFinalizeIntegration}
@@ -304,28 +311,27 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <AlertTriangle className="text-amber-500" /> Checklist Final
+                                <AlertTriangle className="text-amber-500" /> Solução do Erro 401
                             </h3>
                             <div className="space-y-6">
-                                <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Atenção ao Formato JSON</h4>
-                                    <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        As versões recentes da API do Conta Azul exigem o corpo da requisição em JSON para o passo final. O sistema foi atualizado para este formato.
+                                <div className="p-5 bg-red-50 border-l-4 border-red-500 rounded-r-xl">
+                                    <h4 className="font-bold text-red-800 text-sm">O que é o erro 401?</h4>
+                                    <p className="text-xs text-red-700 mt-1 leading-relaxed">
+                                        Significa que o Conta Azul não reconheceu suas chaves. Isso pode ser um caractere invisível, um espaço no final ou o formato de envio. O sistema agora envia as chaves em dois formatos simultâneos para garantir compatibilidade.
                                     </p>
                                 </div>
 
                                 <div className="space-y-4">
                                     <div className="flex gap-4">
-                                        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-lg">!!!</div>
+                                        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-lg">01</div>
                                         <p className="text-sm text-slate-600 leading-relaxed font-bold">
-                                            Certifique-se de que no Portal do Conta Azul a URL cadastrada termina com barra:<br/>
-                                            <code className="bg-slate-100 px-2 py-1 rounded text-red-600">https://sistema-rd.vercel.app/</code>
+                                            Gere um NOVO Client Secret no portal do Conta Azul. Secrets antigos podem expirar ou serem invalidados se o app for alterado.
                                         </p>
                                     </div>
                                     <div className="flex gap-4">
                                         <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-black text-xs shrink-0 shadow-sm">02</div>
                                         <p className="text-sm text-slate-600 leading-relaxed">
-                                            Se o erro persistir, gere um <strong>novo Client Secret</strong> no portal deles para garantir que o anterior não expirou.
+                                            Após colar o segredo novo, clique em <strong>1. Salvar Dados</strong> antes de tentar autorizar.
                                         </p>
                                     </div>
                                 </div>

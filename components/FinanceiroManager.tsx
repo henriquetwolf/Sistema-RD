@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Wallet, Settings, RefreshCw, Save, Loader2, Link2, 
   AlertCircle, ShieldCheck, CheckCircle2, Cloud, Info, ExternalLink, Key, ListChecks,
   Copy, Globe, MousePointerClick, Check, Eye, EyeOff, AlertTriangle, ShieldAlert,
   ArrowRightLeft, Lock, Layout, Zap, ArrowRight, MousePointer2, CheckCircle,
-  FileSpreadsheet, TrendingUp, DollarSign, History
+  FileSpreadsheet, TrendingUp, DollarSign, History, User
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -19,6 +19,14 @@ interface ContaAzulConfig {
     refreshToken?: string;
 }
 
+interface ReceivableItem {
+    id: string;
+    customer_name: string;
+    value: number;
+    due_date: string;
+    status: string;
+}
+
 export const FinanceiroManager: React.FC = () => {
     const [activeSubTab, setActiveSubTab] = useState<'overview' | 'integração'>('overview');
     const [config, setConfig] = useState<ContaAzulConfig>({
@@ -27,14 +35,20 @@ export const FinanceiroManager: React.FC = () => {
         redirectUri: 'https://sistema-rd.vercel.app/',
         isConnected: false
     });
+    
+    // Estados de Dados Financeiros
+    const [overdueTotal, setOverdueTotal] = useState(0);
+    const [overdueCount, setOverdueCount] = useState(0);
+    const [recentOverdue, setRecentOverdue] = useState<ReceivableItem[]>([]);
+    
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [isFetchingData, setIsFetchingData] = useState(false);
     const [copied, setCopied] = useState(false);
     const [authCode, setAuthCode] = useState<string | null>(null);
 
     useEffect(() => {
         loadConfig();
-        // Captura o código da URL caso o Conta Azul tenha redirecionado de volta
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
         if (code) {
@@ -42,6 +56,13 @@ export const FinanceiroManager: React.FC = () => {
             setActiveSubTab('integração');
         }
     }, []);
+
+    // Busca dados sempre que a configuração mudar ou o tab de visão geral for ativado
+    useEffect(() => {
+        if (config.isConnected && config.accessToken && activeSubTab === 'overview') {
+            fetchFinancialData();
+        }
+    }, [config.isConnected, config.accessToken, activeSubTab]);
 
     const loadConfig = async () => {
         setIsLoading(true);
@@ -65,6 +86,102 @@ export const FinanceiroManager: React.FC = () => {
             console.error("Erro ao carregar configuração:", e);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleRefreshToken = async () => {
+        if (!config.refreshToken) return null;
+        
+        try {
+            const cleanId = config.clientId.trim();
+            const cleanSecret = config.clientSecret.trim();
+            const credentials = btoa(`${cleanId}:${cleanSecret}`);
+            const proxyUrl = "https://corsproxy.io/?";
+            const targetUrl = "https://auth.contaazul.com/oauth2/token";
+
+            const body = new URLSearchParams();
+            body.append('grant_type', 'refresh_token');
+            body.append('refresh_token', config.refreshToken);
+
+            const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Basic ${credentials}`,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: body.toString()
+            });
+
+            if (!response.ok) throw new Error("Falha ao renovar token");
+
+            const data = await response.json();
+            const updatedConfig = {
+                ...config,
+                accessToken: data.access_token,
+                refreshToken: data.refresh_token || config.refreshToken
+            };
+
+            await appBackend.client
+                .from('crm_settings')
+                .upsert({ key: 'conta_azul_config', value: JSON.stringify(updatedConfig) });
+            
+            setConfig(updatedConfig);
+            return data.access_token;
+        } catch (e) {
+            console.error("Erro ao renovar token:", e);
+            return null;
+        }
+    };
+
+    const fetchFinancialData = async (tokenOverride?: string) => {
+        const token = tokenOverride || config.accessToken;
+        if (!token) return;
+
+        setIsFetchingData(true);
+        try {
+            const proxyUrl = "https://corsproxy.io/?";
+            // Filtro status=OVERDUE busca títulos vencidos
+            const targetUrl = "https://api.contaazul.com/v1/receivables?status=OVERDUE&size=50";
+
+            const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (response.status === 401) {
+                // Token expirado, tenta renovar uma vez
+                const newToken = await handleRefreshToken();
+                if (newToken) {
+                    fetchFinancialData(newToken);
+                }
+                return;
+            }
+
+            if (!response.ok) throw new Error("Erro ao buscar recebíveis");
+
+            const data = await response.json();
+            
+            // Processa os dados
+            const items: ReceivableItem[] = data.map((r: any) => ({
+                id: r.id,
+                customer_name: r.customer?.name || "Cliente não identificado",
+                value: r.value,
+                due_date: r.due_date,
+                status: r.status
+            }));
+
+            const total = items.reduce((acc, curr) => acc + curr.value, 0);
+            
+            setOverdueTotal(total);
+            setOverdueCount(items.length);
+            setRecentOverdue(items.slice(0, 5)); // Pega os 5 primeiros para o card de atividades
+
+        } catch (e) {
+            console.error("Erro financeiro:", e);
+        } finally {
+            setIsFetchingData(false);
         }
     };
 
@@ -119,21 +236,14 @@ export const FinanceiroManager: React.FC = () => {
             const cleanId = config.clientId.trim();
             const cleanSecret = config.clientSecret.trim();
             const fixedRedirect = 'https://sistema-rd.vercel.app/';
-
-            // Credenciais em Base64 para o header Authorization: Basic
             const credentials = btoa(`${cleanId}:${cleanSecret}`);
-
-            // Conforme a documentação oficial, a troca de token deve ser feita no subdomínio auth
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
             const proxyUrl = "https://corsproxy.io/?";
 
-            // O corpo deve ser x-www-form-urlencoded
             const body = new URLSearchParams();
             body.append('grant_type', 'authorization_code');
             body.append('code', authCode.trim());
             body.append('redirect_uri', fixedRedirect);
-
-            console.log("Iniciando troca de token final...");
 
             const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
                 method: 'POST',
@@ -148,15 +258,7 @@ export const FinanceiroManager: React.FC = () => {
             const data = await response.json();
 
             if (!response.ok) {
-                console.error("Erro na resposta do Conta Azul:", data);
                 const errorMsg = data.error_description || data.message || data.error || "Erro desconhecido";
-                
-                if (response.status === 401) {
-                    throw new Error(`Erro 401 (Não Autorizado): ${errorMsg}. O Conta Azul recusou o seu Client ID ou Secret. Verifique se copiou corretamente sem espaços.`);
-                }
-                if (response.status === 400) {
-                    throw new Error(`Erro 400 (Requisição Inválida): ${errorMsg}. Verifique se a URL de Redirecionamento no Portal é exatamente ${fixedRedirect}`);
-                }
                 throw new Error(`Erro ${response.status}: ${errorMsg}`);
             }
 
@@ -175,16 +277,17 @@ export const FinanceiroManager: React.FC = () => {
             setConfig(updatedConfig);
             setAuthCode(null);
             alert("Conta Azul conectada com sucesso!");
-            
-            // Limpa a URL e volta para a aba geral
             window.history.replaceState({}, document.title, window.location.pathname);
             setActiveSubTab('overview');
         } catch (e: any) {
-            console.error("Falha técnica na integração:", e);
             alert(e.message);
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const formatCurrency = (val: number) => {
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
     };
 
     return (
@@ -196,9 +299,21 @@ export const FinanceiroManager: React.FC = () => {
                     </h2>
                     <p className="text-sm text-slate-500 font-medium">Gestão Integrada Conta Azul.</p>
                 </div>
-                <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
-                    <button onClick={() => setActiveSubTab('overview')} className={clsx("px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all", activeSubTab === 'overview' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Visão Geral</button>
-                    <button onClick={() => setActiveSubTab('integração')} className={clsx("px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all", activeSubTab === 'integração' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Configuração</button>
+                <div className="flex items-center gap-3">
+                    {config.isConnected && (
+                        <button 
+                            onClick={() => fetchFinancialData()} 
+                            disabled={isFetchingData}
+                            className="p-2.5 bg-white border border-slate-200 text-slate-500 hover:text-teal-600 rounded-xl transition-all shadow-sm flex items-center gap-2 font-bold text-xs"
+                        >
+                            <RefreshCw size={16} className={clsx(isFetchingData && "animate-spin")} />
+                            {isFetchingData ? 'Sincronizando...' : 'Sincronizar'}
+                        </button>
+                    )}
+                    <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
+                        <button onClick={() => setActiveSubTab('overview')} className={clsx("px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all", activeSubTab === 'overview' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Visão Geral</button>
+                        <button onClick={() => setActiveSubTab('integração')} className={clsx("px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all", activeSubTab === 'integração' ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>Configuração</button>
+                    </div>
                 </div>
             </div>
 
@@ -210,7 +325,7 @@ export const FinanceiroManager: React.FC = () => {
                                 <ShieldCheck size={40} />
                             </div>
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Conexão Ativa</h3>
-                            <p className="text-xs text-slate-500">Sua conta está integrada e sincronizada.</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sincronizado via Conta Azul</p>
                         </div>
                     ) : (
                         <div className="bg-white p-12 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
@@ -223,16 +338,43 @@ export const FinanceiroManager: React.FC = () => {
                     )}
 
                     <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col space-y-6">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><TrendingUp size={14}/> Atividades</h4>
-                        <div className="flex-1 flex flex-col items-center justify-center text-slate-300 italic text-xs">
-                            Sem transações recentes.
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Últimos Vencidos</h4>
+                        <div className="flex-1 space-y-3">
+                            {recentOverdue.length > 0 ? (
+                                recentOverdue.map(item => (
+                                    <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <div className="min-w-0">
+                                            <p className="text-[11px] font-black text-slate-800 truncate">{item.customer_name}</p>
+                                            <p className="text-[9px] text-red-500 font-bold uppercase tracking-tighter">Venceu em {new Date(item.due_date).toLocaleDateString()}</p>
+                                        </div>
+                                        <span className="text-xs font-black text-slate-700 shrink-0">{formatCurrency(item.value)}</span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-xs">
+                                    {isFetchingData ? <Loader2 className="animate-spin" /> : 'Sem inadimplência recente.'}
+                                </div>
+                            )}
                         </div>
                     </div>
 
                     <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col space-y-6">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><DollarSign size={14}/> Saldo</h4>
-                        <div className="flex-1 flex flex-col items-center justify-center text-slate-300 italic text-xs">
-                            Conecte a API para visualizar.
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><DollarSign size={14}/> Inadimplência Total</h4>
+                        <div className="flex-1 flex flex-col items-center justify-center text-center space-y-2">
+                            {config.isConnected ? (
+                                <>
+                                    <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">{overdueCount} Títulos Vencidos</p>
+                                    <h3 className="text-4xl font-black text-slate-800">{formatCurrency(overdueTotal)}</h3>
+                                    <div className="mt-4 p-4 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
+                                        <AlertCircle className="text-red-500" size={20} />
+                                        <p className="text-[10px] text-red-700 font-bold uppercase leading-tight text-left">Valor total aguardando recebimento na API.</p>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="text-slate-300 italic text-xs text-center px-6">
+                                    Conecte a API para visualizar os valores vencidos em tempo real.
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -312,10 +454,9 @@ export const FinanceiroManager: React.FC = () => {
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Por que o 401 acontece?</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">O que o sistema busca?</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        O erro 401 significa que as chaves não foram aceitas pelo endpoint de autenticação. 
-                                        O sistema foi atualizado para usar o endpoint <code>auth.contaazul.com</code>, que é o padrão correto para troca de tokens.
+                                        Assim que conectado, o ERP consulta automaticamente a lista de <strong>Recebíveis</strong> (Contas a Receber) com o status de vencido. O valor exibido na tela inicial é a soma total de todos os títulos em atraso no seu Conta Azul.
                                     </p>
                                 </div>
 
@@ -323,14 +464,13 @@ export const FinanceiroManager: React.FC = () => {
                                     <div className="flex gap-4">
                                         <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-lg">01</div>
                                         <p className="text-sm text-slate-600 leading-relaxed font-bold">
-                                            Verifique se você copiou o <strong>Client Secret</strong> completo. Chaves do Conta Azul às vezes começam ou terminam com caracteres especiais.
+                                            Certifique-se de que o App cadastrado no Conta Azul tem permissões para ler "Recebíveis".
                                         </p>
                                     </div>
                                     <div className="flex gap-4">
                                         <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-black text-xs shrink-0 shadow-sm">02</div>
                                         <p className="text-sm text-slate-600 leading-relaxed">
-                                            A URL de redirecionamento no portal deve ser exatamente:<br/>
-                                            <code className="bg-slate-100 px-2 py-1 rounded text-red-600">https://sistema-rd.vercel.app/</code>
+                                            A sincronização é automática, mas você pode usar o botão <strong>Sincronizar</strong> no topo da tela para forçar uma atualização manual.
                                         </p>
                                     </div>
                                 </div>

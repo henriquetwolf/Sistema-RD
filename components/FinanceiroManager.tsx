@@ -147,56 +147,71 @@ export const FinanceiroManager: React.FC = () => {
         if (!token) return;
 
         setIsFetchingData(true);
-        console.log("Financeiro: Iniciando busca via API v1 Financial Events...");
+        console.log("Financeiro V1: Iniciando busca de dados...");
         
         try {
             const proxyUrl = "https://corsproxy.io/?";
             
-            // Novos Endpoints da v1 Financial Events
-            // situacao: ABERTO, ATRASADO, BAIXADO, CANCELADO
+            // Definição de intervalo de tempo (Obrigatório para resultados consistentes na v1)
+            const dateStart = "2024-01-01";
+            const dateEnd = "2026-12-31";
+
             const baseUrlReceber = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-receber/buscar";
             const baseUrlPagar = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar";
             
-            // Filtramos apenas o que não foi baixado/cancelado
-            const queryParams = "situacao=ABERTO&situacao=ATRASADO&itens_por_pagina=100";
+            // Construção da Query de busca
+            // situacao: ABERTO, ATRASADO
+            const params = new URLSearchParams();
+            params.append('data_vencimento_inicio', dateStart);
+            params.append('data_vencimento_fim', dateEnd);
+            params.append('situacao', 'ABERTO');
+            params.append('situacao', 'ATRASADO');
+            params.append('itens_por_pagina', '100');
+
+            const fullUrlReceber = `${baseUrlReceber}?${params.toString()}`;
+            const fullUrlPagar = `${baseUrlPagar}?${params.toString()}`;
+
+            const headers = { 
+                'Authorization': `Bearer ${token}`, 
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
 
             const [recRes, payRes] = await Promise.all([
-                fetch(proxyUrl + encodeURIComponent(`${baseUrlReceber}?${queryParams}`), { 
-                    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } 
-                }),
-                fetch(proxyUrl + encodeURIComponent(`${baseUrlPagar}?${queryParams}`), { 
-                    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } 
-                })
+                fetch(proxyUrl + encodeURIComponent(fullUrlReceber), { headers }),
+                fetch(proxyUrl + encodeURIComponent(fullUrlPagar), { headers })
             ]);
 
             if (recRes.status === 401 || payRes.status === 401) {
-                console.warn("Token expirado na v1, renovando...");
+                console.warn("Sessão expirada, tentando renovar...");
                 const newToken = await handleRefreshToken();
                 if (newToken) fetchFinancialData(newToken);
                 return;
             }
 
             if (!recRes.ok || !payRes.ok) {
-                throw new Error(`Erro na API: Receber(${recRes.status}) Pagar(${payRes.status})`);
+                throw new Error("Erro na comunicação com a API");
             }
 
             const recData = await recRes.json();
             const payData = await payRes.json();
 
-            console.log("Financeiro: Resposta Receber", recData);
-            console.log("Financeiro: Resposta Pagar", payData);
+            const recItems = recData.items || recData.content || [];
+            const payItems = payData.items || payData.content || [];
 
-            // A API v1 retorna os dados dentro de "items"
-            const recItems = recData.items || [];
-            const payItems = payData.items || [];
+            console.log(`Financeiro V1: ${recItems.length} recebíveis e ${payItems.length} pagáveis encontrados.`);
 
-            // Soma Total a Receber
-            const recSum = recItems.reduce((acc: number, curr: any) => acc + parseValue(curr.valor_total || curr.valor), 0);
+            // Soma Total a Receber (v1 utiliza valor_total ou valor)
+            const recSum = recItems.reduce((acc: number, curr: any) => {
+                return acc + parseValue(curr.valor_total || curr.valor);
+            }, 0);
             
             // Soma Total a Pagar
-            const paySum = payItems.reduce((acc: number, curr: any) => acc + parseValue(curr.valor_total || curr.valor), 0);
+            const paySum = payItems.reduce((acc: number, curr: any) => {
+                return acc + parseValue(curr.valor_total || curr.valor);
+            }, 0);
 
-            // Mapeia os atrasados para a lista de atenção
+            // Mapeia os atrasados (ATRASADO) para o widget de atenção
             const overdue = recItems
                 .filter((r: any) => r.situacao === 'ATRASADO')
                 .map((r: any) => ({
@@ -211,6 +226,7 @@ export const FinanceiroManager: React.FC = () => {
             setPayableTotal(paySum);
             setOverdueRecent(overdue.slice(0, 5));
 
+            // Atualiza data da sincronização
             const updatedConfig = { ...config, lastSync: new Date().toISOString() };
             await appBackend.client
                 .from('crm_settings')
@@ -218,7 +234,7 @@ export const FinanceiroManager: React.FC = () => {
             setConfig(updatedConfig);
 
         } catch (e) {
-            console.error("Erro técnico na sincronização v1:", e);
+            console.error("Erro crítico na sincronização financeira:", e);
         } finally {
             setIsFetchingData(false);
         }
@@ -373,14 +389,14 @@ export const FinanceiroManager: React.FC = () => {
                                 <ShieldCheck size={32} />
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "API v1 Conectada" : "Sem Conexão"}</h3>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sincronizado: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Configure as credenciais"}</p>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "API v1 Ativa" : "Sem Conexão"}</h3>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sinc: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Configure as credenciais"}</p>
                             </div>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* LISTA VENCIDOS */}
+                        {/* LISTA ATRASADOS */}
                         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col space-y-6">
                             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Recebíveis Atrasados</h4>
                             <div className="flex-1 space-y-3">
@@ -396,7 +412,7 @@ export const FinanceiroManager: React.FC = () => {
                                     ))
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-xs py-10">
-                                        {isFetchingData ? <Loader2 className="animate-spin" /> : 'Nenhum atraso identificado na v1.'}
+                                        {isFetchingData ? <Loader2 className="animate-spin" /> : 'Nenhum atraso identificado no período.'}
                                     </div>
                                 )}
                             </div>
@@ -406,11 +422,11 @@ export const FinanceiroManager: React.FC = () => {
                         <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white relative overflow-hidden flex flex-col justify-center">
                             <div className="absolute top-0 right-0 p-8 opacity-10"><Info size={120}/></div>
                             <div className="relative z-10 space-y-4">
-                                <h3 className="text-2xl font-black tracking-tight leading-tight">Painel de Eventos Financeiros</h3>
-                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta versão utiliza os novos endpoints de consulta de Eventos Financeiros do Conta Azul, permitindo uma visão consolidada de parcelas e títulos.</p>
+                                <h3 className="text-2xl font-black tracking-tight leading-tight">Painel de Controle Financeiro</h3>
+                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Os dados exibidos referem-se ao intervalo de vencimentos entre 2024 e 2026. Títulos fora deste período não serão somados.</p>
                                 <div className="pt-4 flex gap-4">
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Tecnologia</span><span className="font-bold">v1 Search</span></div>
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">OAuth 2.0</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Tecnologia</span><span className="font-bold">OAuth 2.0</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">SSL Proxy</span></div>
                                 </div>
                             </div>
                         </div>
@@ -488,19 +504,19 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <AlertTriangle className="text-amber-500" /> Requisitos da API v1
+                                <AlertTriangle className="text-amber-500" /> Notas de Sincronização
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Escopos Necessários</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Filtro de Data</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        No portal de desenvolvedores do Conta Azul, verifique se o escopo <strong>"financeiro"</strong> está marcado. Sem ele, a API de buscar eventos financeiros retornará erro 403 ou vazio.
+                                        Para evitar lentidão, o sistema busca títulos com vencimento entre <strong>01/01/2024</strong> e <strong>31/12/2026</strong>. Se você possui títulos fora desse intervalo, eles não serão contabilizados no total.
                                     </p>
                                 </div>
                                 <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
-                                    <h4 className="font-bold text-amber-800 text-sm">Filtragem de Dados</h4>
+                                    <h4 className="font-bold text-amber-800 text-sm">Escopo Financeiro</h4>
                                     <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                        Este dashboard agora consulta os endpoints <code>/financeiro/eventos-financeiros/...</code> para obter os totais de forma mais precisa, ignorando lançamentos cancelados ou baixados.
+                                        Este módulo consulta especificamente <strong>Contas a Receber</strong> e <strong>Contas a Pagar</strong>. Certifique-se de que os lançamentos estão com as situações "Em Aberto" ou "Vencido" no sistema oficial.
                                     </p>
                                 </div>
                             </div>

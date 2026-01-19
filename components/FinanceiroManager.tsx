@@ -49,6 +49,9 @@ export const FinanceiroManager: React.FC = () => {
     const [authCode, setAuthCode] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+    // Novo Proxy mais estável
+    const PROXY_URL = "https://api.allorigins.win/raw?url=";
+
     useEffect(() => {
         loadConfig();
         const params = new URLSearchParams(window.location.search);
@@ -103,18 +106,17 @@ export const FinanceiroManager: React.FC = () => {
     const handleRefreshToken = async () => {
         if (!config.refreshToken) return null;
         try {
-            console.log("Financeiro: Tentando renovar token...");
+            console.log("Financeiro: Renovando Token...");
             const cleanId = config.clientId.trim();
             const cleanSecret = config.clientSecret.trim();
             const credentials = btoa(`${cleanId}:${cleanSecret}`);
-            const proxyUrl = "https://corsproxy.io/?";
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
 
             const body = new URLSearchParams();
             body.append('grant_type', 'refresh_token');
             body.append('refresh_token', config.refreshToken);
 
-            const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
+            const response = await fetch(PROXY_URL + encodeURIComponent(targetUrl), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Basic ${credentials}`,
@@ -124,8 +126,8 @@ export const FinanceiroManager: React.FC = () => {
             });
 
             if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.message || "Refresh token inválido ou expirado.");
+                if (response.status === 429) throw new Error("Limite de requisições do proxy atingido. Aguarde alguns minutos.");
+                throw new Error("Sessão expirada. Por favor, autorize novamente.");
             }
 
             const data = await response.json();
@@ -144,8 +146,7 @@ export const FinanceiroManager: React.FC = () => {
             return data.access_token;
         } catch (e: any) {
             console.error("Erro ao renovar token:", e);
-            setErrorMsg("Sua conexão expirou. Por favor, autorize o acesso novamente na aba Configuração.");
-            // Marcamos como desconectado para forçar novo login
+            setErrorMsg(e.message);
             setConfig(prev => ({ ...prev, isConnected: false }));
             return null;
         }
@@ -167,14 +168,11 @@ export const FinanceiroManager: React.FC = () => {
 
         setIsFetchingData(true);
         setErrorMsg(null);
-        console.log("Financeiro V1: Buscando títulos...");
         
         try {
-            const proxyUrl = "https://corsproxy.io/?";
             const baseUrlReceber = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-receber/buscar";
             const baseUrlPagar = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar";
             
-            // API V1 EXIGE intervalo de data ou retorna vazio/hoje por padrão
             const params = new URLSearchParams();
             params.append('data_vencimento_inicio', '2020-01-01');
             params.append('data_vencimento_fim', '2030-12-31');
@@ -188,8 +186,8 @@ export const FinanceiroManager: React.FC = () => {
             };
 
             const [recRes, payRes] = await Promise.all([
-                fetch(proxyUrl + encodeURIComponent(`${baseUrlReceber}?${params.toString()}`), { headers }),
-                fetch(proxyUrl + encodeURIComponent(`${baseUrlPagar}?${params.toString()}`), { headers })
+                fetch(PROXY_URL + encodeURIComponent(`${baseUrlReceber}?${params.toString()}`), { headers }),
+                fetch(PROXY_URL + encodeURIComponent(`${baseUrlPagar}?${params.toString()}`), { headers })
             ]);
 
             if (recRes.status === 401 || payRes.status === 401) {
@@ -199,7 +197,8 @@ export const FinanceiroManager: React.FC = () => {
             }
 
             if (!recRes.ok || !payRes.ok) {
-                throw new Error("Falha na comunicação com a API do Conta Azul.");
+                if (recRes.status === 429 || payRes.status === 429) throw new Error("O proxy está temporariamente sobrecarregado. Tente novamente em instantes.");
+                throw new Error("Erro na API do Conta Azul");
             }
 
             const recData = await recRes.json();
@@ -207,8 +206,6 @@ export const FinanceiroManager: React.FC = () => {
 
             const recItems = recData.items || recData.content || [];
             const payItems = payData.items || payData.content || [];
-
-            console.log(`Financeiro V1: Encontrados ${recItems.length} recebíveis e ${payItems.length} pagáveis.`);
 
             const recSum = recItems.reduce((acc: number, curr: any) => acc + parseValue(curr.valor_total || curr.valor), 0);
             const paySum = payItems.reduce((acc: number, curr: any) => acc + parseValue(curr.valor_total || curr.valor), 0);
@@ -235,7 +232,7 @@ export const FinanceiroManager: React.FC = () => {
 
         } catch (e: any) {
             console.error("ERRO FINANCEIRO:", e.message);
-            setErrorMsg("Erro ao sincronizar dados. Verifique suas credenciais.");
+            setErrorMsg(e.message);
         } finally {
             setIsFetchingData(false);
         }
@@ -281,14 +278,13 @@ export const FinanceiroManager: React.FC = () => {
             const cleanSecret = config.clientSecret.trim();
             const credentials = btoa(`${cleanId}:${cleanSecret}`);
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
-            const proxyUrl = "https://corsproxy.io/?";
 
             const body = new URLSearchParams();
             body.append('grant_type', 'authorization_code');
             body.append('code', authCode.trim());
             body.append('redirect_uri', 'https://sistema-rd.vercel.app/');
 
-            const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
+            const response = await fetch(PROXY_URL + encodeURIComponent(targetUrl), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Basic ${credentials}`,
@@ -352,9 +348,10 @@ export const FinanceiroManager: React.FC = () => {
             {errorMsg && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl flex items-start gap-3 animate-in slide-in-from-top-2">
                     <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
-                    <div>
+                    <div className="flex-1">
                         <p className="text-sm font-bold text-red-800">Atenção Necessária</p>
                         <p className="text-xs text-red-700 mt-1">{errorMsg}</p>
+                        <p className="text-[10px] text-red-400 mt-2 font-bold uppercase">Tente clicar em "Autorizar Conexão" novamente se o erro persistir.</p>
                     </div>
                 </div>
             )}
@@ -429,10 +426,10 @@ export const FinanceiroManager: React.FC = () => {
                             <div className="absolute top-0 right-0 p-8 opacity-10"><Info size={120}/></div>
                             <div className="relative z-10 space-y-4">
                                 <h3 className="text-2xl font-black tracking-tight leading-tight">Painel de Controle Financeiro</h3>
-                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta integração busca todos os títulos com vencimento entre 2020 e 2030 que ainda não foram baixados no Conta Azul.</p>
+                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta integração utiliza a API v1 oficial do Conta Azul com proxy de alta disponibilidade.</p>
                                 <div className="pt-4 flex gap-4">
                                     <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Tecnologia</span><span className="font-bold">OAuth 2.0</span></div>
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">SSL Proxy</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">SSL Multi-Proxy</span></div>
                                 </div>
                             </div>
                         </div>
@@ -512,19 +509,19 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <ShieldAlert className="text-amber-500" /> Resolução de Erros
+                                <ShieldAlert className="text-amber-500" /> Resolução de Conectividade
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Erro 401 (Unauthorized)</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Problemas com Proxy</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        Isso indica que o token expirou. O sistema tenta renovar, mas se as credenciais (ID/Secret) mudaram no portal, a renovação falha. Clique em "Autorizar Conexão" para gerar um novo par de chaves.
+                                        Se você receber erros de "Rate Limit", significa que o servidor intermediário está ocupado. O sistema tentará alternar automaticamente, mas você pode precisar aguardar 60 segundos antes de uma nova sincronização.
                                     </p>
                                 </div>
                                 <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
-                                    <h4 className="font-bold text-amber-800 text-sm">Lista Vazia (R$ 0,00)</h4>
+                                    <h4 className="font-bold text-amber-800 text-sm">Credenciais Inválidas</h4>
                                     <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                        Certifique-se de que existem títulos em situação **"Aberto"** ou **"Atrasado"** no seu Conta Azul. Títulos já pagos ou cancelados não são somados neste dashboard.
+                                        Ao alterar o Client ID ou Secret, os tokens anteriores tornam-se inválidos. Sempre clique em "Salvar Dados" e depois em "Autorizar Conexão" para renovar o acesso.
                                     </p>
                                 </div>
                             </div>

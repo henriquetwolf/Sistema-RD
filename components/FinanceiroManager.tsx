@@ -126,25 +126,34 @@ export const FinanceiroManager: React.FC = () => {
             const proxyUrl = "https://corsproxy.io/?";
             const targetUrl = "https://api.contaazul.com/oauth2/token";
             
-            // Parametros no formato x-www-form-urlencoded conforme doc do Conta Azul
-            const bodyParams = new URLSearchParams();
-            bodyParams.append('grant_type', 'authorization_code');
-            bodyParams.append('redirect_uri', fixedRedirect);
-            bodyParams.append('code', authCode);
+            // Conta Azul requer corpo em JSON no Passo 3
+            const body = {
+                grant_type: 'authorization_code',
+                redirect_uri: fixedRedirect,
+                code: authCode.trim()
+            };
 
             const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Basic ${credentials}`,
-                    'Content-Type': 'application/x-www-form-urlencoded'
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 },
-                body: bodyParams.toString()
+                body: JSON.stringify(body)
             });
 
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error("Erro 400 Detalhes:", errorText);
-                throw new Error(`Erro na troca de token (${response.status}). Certifique-se de que o Código não expirou e a URL de Redirecionamento no Portal é exatamente https://sistema-rd.vercel.app/`);
+                console.error("Erro na Troca de Token:", errorText);
+                
+                if (response.status === 401) {
+                    throw new Error("Erro 401 (Não Autorizado): Seu Client ID ou Client Secret estão incorretos no Conta Azul.");
+                }
+                if (response.status === 400) {
+                    throw new Error("Erro 400 (Bad Request): A URL de Redirecionamento no Portal do Conta Azul deve ser EXATAMENTE https://sistema-rd.vercel.app/ (com a barra no final).");
+                }
+                throw new Error(`Erro ${response.status} na integração. Verifique os logs do console.`);
             }
 
             const data = await response.json();
@@ -232,8 +241,8 @@ export const FinanceiroManager: React.FC = () => {
                                     <Zap size={40} className="animate-pulse" />
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Código Recebido</h3>
-                                    <p className="text-sm text-indigo-700 mt-2 font-medium">O Conta Azul autorizou. Clique abaixo para gerar as chaves finais.</p>
+                                    <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Autorização Recebida</h3>
+                                    <p className="text-sm text-indigo-700 mt-2 font-medium">O código foi capturado com sucesso.</p>
                                 </div>
                                 <button 
                                     onClick={handleFinalizeIntegration}
@@ -295,13 +304,13 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <AlertTriangle className="text-amber-500" /> Atenção ao Erro 400
+                                <AlertTriangle className="text-amber-500" /> Checklist Final
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Por que acontece o erro 400?</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Atenção ao Formato JSON</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        O erro 400 no Passo 3 geralmente significa que a **URL de Redirecionamento** configurada no portal do Conta Azul é diferente da URL que o sistema está enviando.
+                                        As versões recentes da API do Conta Azul exigem o corpo da requisição em JSON para o passo final. O sistema foi atualizado para este formato.
                                     </p>
                                 </div>
 
@@ -309,21 +318,16 @@ export const FinanceiroManager: React.FC = () => {
                                     <div className="flex gap-4">
                                         <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-lg">!!!</div>
                                         <p className="text-sm text-slate-600 leading-relaxed font-bold">
-                                            No portal do Conta Azul, a URL deve ser EXATAMENTE:<br/>
+                                            Certifique-se de que no Portal do Conta Azul a URL cadastrada termina com barra:<br/>
                                             <code className="bg-slate-100 px-2 py-1 rounded text-red-600">https://sistema-rd.vercel.app/</code>
                                         </p>
                                     </div>
                                     <div className="flex gap-4">
                                         <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-black text-xs shrink-0 shadow-sm">02</div>
                                         <p className="text-sm text-slate-600 leading-relaxed">
-                                            Verifique se não há espaços em branco no final do seu **Client Secret**.
+                                            Se o erro persistir, gere um <strong>novo Client Secret</strong> no portal deles para garantir que o anterior não expirou.
                                         </p>
                                     </div>
-                                </div>
-
-                                <div className="mt-8 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3 text-xs text-amber-800">
-                                    <Info size={18} className="shrink-0 text-amber-500" />
-                                    <p><strong>Dica de Segurança:</strong> Após conectar com sucesso, você pode voltar o campo para modo secreto se desejar, mas para depuração deixamos visível.</p>
                                 </div>
                             </div>
                         </div>

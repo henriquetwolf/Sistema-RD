@@ -1,5 +1,4 @@
 
-/* Fix: Explicitly importing Buffer from 'buffer' for Node environment in Vercel function */
 import { Buffer } from 'buffer';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
@@ -7,14 +6,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { method, query, body } = req;
   const path = query.path as string;
 
-  const clientId = process.env.CONTA_AZUL_CLIENT_ID;
-  const clientSecret = process.env.CONTA_AZUL_CLIENT_SECRET;
+  // Tenta pegar do ambiente (Vercel)
+  let clientId = process.env.CONTA_AZUL_CLIENT_ID || '';
+  let clientSecret = process.env.CONTA_AZUL_CLIENT_SECRET || '';
 
-  if (!clientId || !clientSecret) {
-    return res.status(500).json({ error: "Variáveis de ambiente CONTA_AZUL_CLIENT_ID ou SECRET não configuradas no Vercel." });
+  // Se o frontend enviou as chaves no corpo (OAuth), usamos elas
+  if (path === 'oauth/token' && body.client_id && body.client_secret) {
+      clientId = body.client_id;
+      clientSecret = body.client_secret;
+      
+      // Removemos do body para não enviar duplicado no form-data da Conta Azul
+      delete body.client_id;
+      delete body.client_secret;
   }
 
-  // No Node.js (Vercel), Buffer é o padrão para Base64
+  if (!clientId || !clientSecret) {
+      // Se chegamos aqui sem chaves, retornamos erro explicativo
+      return res.status(400).json({ 
+          error: "Credenciais ausentes", 
+          message: "Configure o Client ID e Secret no painel ou nas variáveis de ambiente do Vercel." 
+      });
+  }
+
   const credentials = Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString('base64');
 
   try {
@@ -44,8 +57,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const response = await fetch(targetUrl, options);
-    
-    // Lemos como texto primeiro para evitar o erro "Unexpected end of JSON input"
     const responseText = await response.text();
     let responseData;
     

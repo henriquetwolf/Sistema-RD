@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
+  /* Added Zap to fix 'Cannot find name Zap' error on line 217 */
   Wallet, RefreshCw, Loader2, Key, Copy, Check, Save, ShieldCheck, Unplug, Eraser, AlertCircle,
-  /* Fix: Added missing icon imports X and Info */
-  X, Info
+  X, Info, Zap
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
@@ -37,8 +37,7 @@ export const FinanceiroManager: React.FC = () => {
         if (code) {
             setAuthCode(code);
             setActiveSubTab('integração');
-            // Limpa a URL sem reload
-            window.history.replaceState({}, document.title, window.location.pathname);
+            // Mantemos o code para a finalização
         }
     }, []);
 
@@ -100,9 +99,10 @@ export const FinanceiroManager: React.FC = () => {
     };
 
     const handleConnect = async () => {
-        // Primeiro salvamos as chaves atuais
         try {
+            // Salva antes de ir para o login para garantir que temos as chaves
             await appBackend.saveContaAzulConfig({ ...config, isConnected: false });
+            
             const baseUrl = "https://auth.contaazul.com/login";
             const params = new URLSearchParams({
                 response_type: 'code',
@@ -127,7 +127,10 @@ export const FinanceiroManager: React.FC = () => {
                 body: {
                     grant_type: 'authorization_code',
                     code: authCode,
-                    redirect_uri: config.redirectUri
+                    redirect_uri: config.redirectUri,
+                    // Enviamos as chaves para o proxy usar na autenticação Basic
+                    client_id: config.clientId.trim(),
+                    client_secret: config.clientSecret.trim()
                 }
             });
 
@@ -146,6 +149,10 @@ export const FinanceiroManager: React.FC = () => {
             await appBackend.saveContaAzulConfig(updatedConfig);
             setConfig(updatedConfig);
             setAuthCode(null);
+            
+            // Limpa a URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
             alert("Conectado com sucesso!");
             fetchFinancialData(data.access_token);
         } catch (e: any) {
@@ -156,6 +163,7 @@ export const FinanceiroManager: React.FC = () => {
     const handleClear = () => {
         setAuthCode(null);
         setErrorMsg(null);
+        window.history.replaceState({}, document.title, window.location.pathname);
     };
 
     return (
@@ -193,7 +201,7 @@ export const FinanceiroManager: React.FC = () => {
                     </div>
                     <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
                         <div className={clsx("w-16 h-16 rounded-3xl flex items-center justify-center mb-3", config.isConnected ? "bg-teal-50 text-teal-600" : "bg-slate-50 text-slate-300")}>
-                            <ShieldCheck size={32}/>
+                            {config.isConnected ? <ShieldCheck size={32}/> : <Unplug size={32}/>}
                         </div>
                         <p className="text-xs font-black uppercase">{config.isConnected ? "Integração Ativa" : "Desconectado"}</p>
                         <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-tighter">API V1 • OAuth 2.0</p>
@@ -206,8 +214,12 @@ export const FinanceiroManager: React.FC = () => {
                         
                         {authCode ? (
                             <div className="p-6 bg-indigo-50 border-2 border-indigo-200 rounded-2xl text-center space-y-4 animate-in zoom-in-95">
-                                <p className="text-sm font-bold text-indigo-800">Código de autorização recebido!</p>
-                                <button onClick={handleFinalizeIntegration} disabled={isFetchingData} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2">
+                                <div className="p-3 bg-white rounded-full w-fit mx-auto shadow-sm">
+                                    <Zap className="text-indigo-600" size={32} />
+                                </div>
+                                <p className="text-sm font-bold text-indigo-800 uppercase tracking-tighter">Conexão Autorizada!</p>
+                                <p className="text-xs text-indigo-600 px-4">Clique no botão abaixo para gerar seu token de acesso permanente.</p>
+                                <button onClick={handleFinalizeIntegration} disabled={isFetchingData} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95">
                                     {isFetchingData ? <Loader2 size={20} className="animate-spin" /> : <Check size={20}/>}
                                     Finalizar e Salvar Token
                                 </button>
@@ -241,7 +253,7 @@ export const FinanceiroManager: React.FC = () => {
                             <p>3. No campo <strong>URL de Redirecionamento</strong>, você DEVE configurar exatamente:<br/>
                                <code className="bg-white px-2 py-1 rounded border text-indigo-600 font-bold block mt-2 text-xs">https://sistema-rd.vercel.app/</code>
                             </p>
-                            <p>4. Certifique-se de que as chaves (ID e Secret) foram salvas no Vercel antes de clicar em autorizar.</p>
+                            <p>4. Se o erro "invalid_token" persistir, verifique se o seu aplicativo no Conta Azul está no status "Em Desenvolvimento" ou "Publicado".</p>
                         </div>
                     </div>
                 </div>

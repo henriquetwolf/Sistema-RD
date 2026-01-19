@@ -217,7 +217,10 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO SQL - VOLL PILATES
+-- SCRIPT DE REPARO SQL - VOLL PILATES GROUP V2
+-- Rode este código no SQL Editor do Supabase para corrigir tabelas e Chat IA.
+
+-- 1. Tabelas Base e Configurações
 CREATE TABLE IF NOT EXISTS public.crm_settings (
     key text PRIMARY KEY,
     value text
@@ -232,7 +235,7 @@ CREATE TABLE IF NOT EXISTS public.crm_companies (
     product_ids text[]
 );
 
--- TABELAS PARA WHATSAPP E CHAT IA
+-- 2. Estrutura de WhatsApp (Atendimento e Histórico IA)
 CREATE TABLE IF NOT EXISTS public.crm_whatsapp_chats (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     wa_id text UNIQUE,
@@ -252,17 +255,24 @@ CREATE TABLE IF NOT EXISTS public.crm_whatsapp_messages (
     text text,
     sender_type text, -- 'user', 'agent', 'system'
     wa_message_id text,
-    status text,
+    status text DEFAULT 'sent',
     created_at timestamp with time zone DEFAULT now()
 );
 
--- CONFIGURAÇÃO DE IA (NECESSÁRIO PARA O ROBÔ RESPONDER)
+CREATE TABLE IF NOT EXISTS public.crm_attendance_tags (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    name text UNIQUE,
+    color text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+-- 3. Inteligência Artificial (Cérebro do Robô)
 CREATE TABLE IF NOT EXISTS public.crm_ai_config (
     id text PRIMARY KEY DEFAULT 'default',
     system_prompt text,
     is_active boolean DEFAULT false,
     temperature numeric DEFAULT 0.7,
-    agent_config jsonb,
+    agent_config jsonb DEFAULT '{"autoCreateDeal": false, "pipelineName": "Padrão", "stageId": "new", "distributionMode": "fixed"}'::jsonb,
     updated_at timestamp with time zone DEFAULT now()
 );
 
@@ -270,6 +280,32 @@ CREATE TABLE IF NOT EXISTS public.crm_ai_knowledge (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     title text,
     content text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+-- Garante que o registro padrão da IA exista para não dar erro de leitura
+INSERT INTO public.crm_ai_config (id, system_prompt, is_active)
+VALUES ('default', 'Você é o assistente virtual da VOLL Pilates.', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- 4. Logs de Automação de WhatsApp
+CREATE TABLE IF NOT EXISTS public.crm_wa_automation_logs (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    rule_name text,
+    student_name text,
+    phone text,
+    message text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+-- 5. Outras Tabelas de Apoio
+CREATE TABLE IF NOT EXISTS public.crm_activity_logs (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_name text,
+    action text,
+    module text,
+    details text,
+    record_id text,
     created_at timestamp with time zone DEFAULT now()
 );
 `.trim();
@@ -301,7 +337,7 @@ CREATE TABLE IF NOT EXISTS public.crm_ai_knowledge (
                 { id: 'database', label: 'Banco', color: 'text-amber-700' },
                 { id: 'sql_script', label: 'SQL', color: 'text-red-700' }
             ].map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id as SettingsTab)} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === 'tab' ? `bg-white ${tab.color} shadow-sm` : "text-slate-500 hover:text-slate-700")}>{tab.label}</button>
+                <button key={tab.id} onClick={() => setActiveTab(tab.id as SettingsTab)} className={clsx("px-4 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap", activeTab === tab.id ? `bg-white ${tab.color} shadow-sm` : "text-slate-500 hover:text-slate-700")}>{tab.label}</button>
             ))}
         </div>
       </div>
@@ -630,7 +666,7 @@ CREATE TABLE IF NOT EXISTS public.crm_ai_knowledge (
       )}
 
       {editingCompany && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="text-lg font-black text-slate-800">{editingCompany.id ? 'Editar Empresa' : 'Nova Empresa do Grupo'}</h3>
@@ -661,7 +697,7 @@ CREATE TABLE IF NOT EXISTS public.crm_ai_knowledge (
       )}
 
       {editingBanner && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="text-lg font-black text-slate-800">Gerenciar Banner</h3>
@@ -719,7 +755,7 @@ CREATE TABLE IF NOT EXISTS public.crm_ai_knowledge (
       )}
 
       {editingLevel && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="text-lg font-black text-slate-800">{editingLevel.id ? 'Editar Nível' : 'Novo Nível Docente'}</h3>
@@ -750,7 +786,7 @@ CREATE TABLE IF NOT EXISTS public.crm_ai_knowledge (
       )}
 
       {editingTrigger && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="text-lg font-black text-slate-800">Gatilho de Integração</h3>
@@ -786,9 +822,9 @@ CREATE TABLE IF NOT EXISTS public.crm_ai_knowledge (
       )}
 
       {editingCourseInfo && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                  <div className="px-10 py-8 border-b flex justify-between items-center bg-slate-50 shrink-0">
+                  <div className="px-10 py-8 border-b flex justify-between items-center bg-slate-50 shrink-0 rounded-t-[2.5rem]">
                       <h3 className="text-xl font-black text-slate-800">Editor de Portal Técnico</h3>
                       <button onClick={() => setEditingCourseInfo(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
                   </div>
@@ -831,7 +867,7 @@ CREATE TABLE IF NOT EXISTS public.crm_ai_knowledge (
       )}
 
       {editingTag && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm animate-in zoom-in-95 overflow-hidden">
                   <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
                       <h3 className="text-lg font-black text-slate-800">{editingTag.id ? 'Editar Tag' : 'Nova Tag Suporte'}</h3>

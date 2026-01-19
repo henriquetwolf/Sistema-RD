@@ -138,10 +138,12 @@ export const FinanceiroManager: React.FC = () => {
         if (!token) return;
 
         setIsFetchingData(true);
+        console.log("Financeiro: Buscando títulos vencidos...");
+        
         try {
             const proxyUrl = "https://corsproxy.io/?";
-            // Filtro status=OVERDUE busca títulos vencidos
-            const targetUrl = "https://api.contaazul.com/v1/receivables?status=OVERDUE&size=50";
+            // Aumentamos o size para garantir que pegamos todos os vencidos importantes
+            const targetUrl = "https://api.contaazul.com/v1/receivables?status=OVERDUE&size=100";
 
             const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
                 headers: {
@@ -151,7 +153,7 @@ export const FinanceiroManager: React.FC = () => {
             });
 
             if (response.status === 401) {
-                // Token expirado, tenta renovar uma vez
+                console.warn("Token expirado, tentando renovar...");
                 const newToken = await handleRefreshToken();
                 if (newToken) {
                     fetchFinancialData(newToken);
@@ -159,27 +161,45 @@ export const FinanceiroManager: React.FC = () => {
                 return;
             }
 
-            if (!response.ok) throw new Error("Erro ao buscar recebíveis");
+            if (!response.ok) {
+                const errData = await response.json();
+                console.error("Erro na API de Recebíveis:", errData);
+                throw new Error("Erro ao buscar recebíveis");
+            }
 
             const data = await response.json();
+            console.log("Dados brutos recebidos do Conta Azul:", data);
+
+            // A API do Conta Azul pode retornar uma lista direta ou dentro de um campo "items" ou "content"
+            const rawItems = Array.isArray(data) ? data : (data.items || data.content || []);
             
-            // Processa os dados
-            const items: ReceivableItem[] = data.map((r: any) => ({
+            if (rawItems.length === 0) {
+                console.log("Nenhum título vencido retornado pela API.");
+                setOverdueTotal(0);
+                setOverdueCount(0);
+                setRecentOverdue([]);
+                return;
+            }
+
+            // Processa os dados de forma resiliente
+            const items: ReceivableItem[] = rawItems.map((r: any) => ({
                 id: r.id,
-                customer_name: r.customer?.name || "Cliente não identificado",
-                value: r.value,
+                customer_name: r.customer?.name || r.customer_name || "Cliente não identificado",
+                value: Number(r.value || 0),
                 due_date: r.due_date,
                 status: r.status
             }));
 
             const total = items.reduce((acc, curr) => acc + curr.value, 0);
             
+            console.log(`Sucesso: ${items.length} títulos somando ${total}`);
+            
             setOverdueTotal(total);
             setOverdueCount(items.length);
-            setRecentOverdue(items.slice(0, 5)); // Pega os 5 primeiros para o card de atividades
+            setRecentOverdue(items.slice(0, 5)); 
 
         } catch (e) {
-            console.error("Erro financeiro:", e);
+            console.error("Erro técnico no fluxo financeiro:", e);
         } finally {
             setIsFetchingData(false);
         }

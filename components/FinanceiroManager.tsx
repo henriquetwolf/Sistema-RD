@@ -135,7 +135,6 @@ export const FinanceiroManager: React.FC = () => {
     const parseValue = (val: any): number => {
         if (typeof val === 'number') return val;
         if (!val) return 0;
-        // Remove R$, espaços e converte formato brasileiro para americano
         const clean = String(val).replace('R$', '').replace(/\s/g, '');
         const normalized = clean.includes(',') && clean.includes('.') 
             ? clean.replace(/\./g, '').replace(',', '.') 
@@ -148,72 +147,70 @@ export const FinanceiroManager: React.FC = () => {
         if (!token) return;
 
         setIsFetchingData(true);
-        console.log("Financeiro: Iniciando sincronização com Conta Azul...");
+        console.log("Financeiro: Iniciando busca via API v1 Financial Events...");
         
         try {
             const proxyUrl = "https://corsproxy.io/?";
             
-            // Filtros:
-            // 1. Buscamos um range de datas bem grande para não filtrar apenas o mês atual
-            // 2. Buscamos tanto OPEN (Em aberto) quanto OVERDUE (Vencido)
-            const dateParams = "expiration_start=2024-01-01&expiration_end=2028-12-31";
-            const recUrl = `https://api.contaazul.com/v1/receivables?status=OPEN&status=OVERDUE&size=100&${dateParams}`;
-            const payUrl = `https://api.contaazul.com/v1/payables?status=OPEN&status=OVERDUE&size=100&${dateParams}`;
-
-            console.log("Financeiro: Chamando APIs...");
+            // Novos Endpoints da v1 Financial Events
+            // situacao: ABERTO, ATRASADO, BAIXADO, CANCELADO
+            const baseUrlReceber = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-receber/buscar";
+            const baseUrlPagar = "https://api.contaazul.com/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar";
+            
+            // Filtramos apenas o que não foi baixado/cancelado
+            const queryParams = "situacao=ABERTO&situacao=ATRASADO&itens_por_pagina=100";
 
             const [recRes, payRes] = await Promise.all([
-                fetch(proxyUrl + encodeURIComponent(recUrl), { 
+                fetch(proxyUrl + encodeURIComponent(`${baseUrlReceber}?${queryParams}`), { 
                     headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } 
                 }),
-                fetch(proxyUrl + encodeURIComponent(payUrl), { 
+                fetch(proxyUrl + encodeURIComponent(`${baseUrlPagar}?${queryParams}`), { 
                     headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } 
                 })
             ]);
 
             if (recRes.status === 401 || payRes.status === 401) {
-                console.warn("Financeiro: Token expirado. Tentando renovação automática...");
+                console.warn("Token expirado na v1, renovando...");
                 const newToken = await handleRefreshToken();
                 if (newToken) fetchFinancialData(newToken);
                 return;
             }
 
             if (!recRes.ok || !payRes.ok) {
-                console.error("Financeiro: Erro na resposta da API", { recStatus: recRes.status, payStatus: payRes.status });
-                throw new Error("Falha na comunicação com Conta Azul");
+                throw new Error(`Erro na API: Receber(${recRes.status}) Pagar(${payRes.status})`);
             }
 
             const recData = await recRes.json();
             const payData = await payRes.json();
 
-            console.log("Financeiro: Dados brutos recebidos", { recData, payData });
+            console.log("Financeiro: Resposta Receber", recData);
+            console.log("Financeiro: Resposta Pagar", payData);
 
-            // Processar Recebíveis
-            const recItems = Array.isArray(recData) ? recData : (recData.items || recData.content || []);
-            const recSum = recItems.reduce((acc: number, curr: any) => acc + parseValue(curr.value), 0);
+            // A API v1 retorna os dados dentro de "items"
+            const recItems = recData.items || [];
+            const payItems = payData.items || [];
+
+            // Soma Total a Receber
+            const recSum = recItems.reduce((acc: number, curr: any) => acc + parseValue(curr.valor_total || curr.valor), 0);
             
-            // Processar Pagáveis
-            const payItems = Array.isArray(payData) ? payData : (payData.items || payData.content || []);
-            const paySum = payItems.reduce((acc: number, curr: any) => acc + parseValue(curr.value), 0);
+            // Soma Total a Pagar
+            const paySum = payItems.reduce((acc: number, curr: any) => acc + parseValue(curr.valor_total || curr.valor), 0);
 
-            // Filtrar apenas os vencidos (OVERDUE) para a listagem rápida de atenção
+            // Mapeia os atrasados para a lista de atenção
             const overdue = recItems
-                .filter((r: any) => r.status === 'OVERDUE')
+                .filter((r: any) => r.situacao === 'ATRASADO')
                 .map((r: any) => ({
                     id: r.id,
-                    name: r.customer?.name || r.customer_name || "Cliente",
-                    value: parseValue(r.value),
-                    due_date: r.due_date,
-                    status: r.status
+                    name: r.nome_cliente || r.cliente?.nome || "Cliente",
+                    value: parseValue(r.valor_total || r.valor),
+                    due_date: r.data_vencimento || r.vencimento,
+                    status: r.situacao
                 }));
-
-            console.log("Financeiro: Sincronização concluída com sucesso", { recSum, paySum, overdueCount: overdue.length });
 
             setReceivableTotal(recSum);
             setPayableTotal(paySum);
             setOverdueRecent(overdue.slice(0, 5));
 
-            // Atualiza a data da última sincronização
             const updatedConfig = { ...config, lastSync: new Date().toISOString() };
             await appBackend.client
                 .from('crm_settings')
@@ -221,7 +218,7 @@ export const FinanceiroManager: React.FC = () => {
             setConfig(updatedConfig);
 
         } catch (e) {
-            console.error("Financeiro: Erro técnico grave", e);
+            console.error("Erro técnico na sincronização v1:", e);
         } finally {
             setIsFetchingData(false);
         }
@@ -265,7 +262,6 @@ export const FinanceiroManager: React.FC = () => {
         try {
             const cleanId = config.clientId.trim();
             const cleanSecret = config.clientSecret.trim();
-            const fixedRedirect = 'https://sistema-rd.vercel.app/';
             const credentials = btoa(`${cleanId}:${cleanSecret}`);
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
             const proxyUrl = "https://corsproxy.io/?";
@@ -273,7 +269,7 @@ export const FinanceiroManager: React.FC = () => {
             const body = new URLSearchParams();
             body.append('grant_type', 'authorization_code');
             body.append('code', authCode.trim());
-            body.append('redirect_uri', fixedRedirect);
+            body.append('redirect_uri', 'https://sistema-rd.vercel.app/');
 
             const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
                 method: 'POST',
@@ -316,7 +312,7 @@ export const FinanceiroManager: React.FC = () => {
                     <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
                         <Wallet className="text-teal-600" /> Financeiro
                     </h2>
-                    <p className="text-sm text-slate-500 font-medium">Gestão Integrada Conta Azul.</p>
+                    <p className="text-sm text-slate-500 font-medium">Gestão Integrada Conta Azul (v1 API).</p>
                 </div>
                 <div className="flex items-center gap-3">
                     {config.isConnected && (
@@ -352,7 +348,7 @@ export const FinanceiroManager: React.FC = () => {
                             ) : (
                                 <h3 className="text-3xl font-black text-slate-800">{formatCurrency(receivableTotal)}</h3>
                             )}
-                            <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-tighter">Soma de títulos em aberto e vencidos.</p>
+                            <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-tighter">Eventos de entrada (Aberto/Atrasado).</p>
                         </div>
 
                         {/* CARD PAGAR */}
@@ -368,7 +364,7 @@ export const FinanceiroManager: React.FC = () => {
                             ) : (
                                 <h3 className="text-3xl font-black text-slate-800">{formatCurrency(payableTotal)}</h3>
                             )}
-                            <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-tighter">Soma de despesas em aberto e vencidas.</p>
+                            <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-tighter">Eventos de saída (Aberto/Atrasado).</p>
                         </div>
 
                         {/* STATUS CONEXÃO */}
@@ -377,8 +373,8 @@ export const FinanceiroManager: React.FC = () => {
                                 <ShieldCheck size={32} />
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "Conexão Ativa" : "Sem Conexão"}</h3>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sincronizado: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Configure a API do Conta Azul"}</p>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "API v1 Conectada" : "Sem Conexão"}</h3>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sincronizado: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Configure as credenciais"}</p>
                             </div>
                         </div>
                     </div>
@@ -386,7 +382,7 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* LISTA VENCIDOS */}
                         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col space-y-6">
-                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Recebíveis Vencidos</h4>
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Recebíveis Atrasados</h4>
                             <div className="flex-1 space-y-3">
                                 {overdueRecent.length > 0 ? (
                                     overdueRecent.map(item => (
@@ -400,7 +396,7 @@ export const FinanceiroManager: React.FC = () => {
                                     ))
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-xs py-10">
-                                        {isFetchingData ? <Loader2 className="animate-spin" /> : 'Nenhuma inadimplência crítica detectada.'}
+                                        {isFetchingData ? <Loader2 className="animate-spin" /> : 'Nenhum atraso identificado na v1.'}
                                     </div>
                                 )}
                             </div>
@@ -410,11 +406,11 @@ export const FinanceiroManager: React.FC = () => {
                         <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white relative overflow-hidden flex flex-col justify-center">
                             <div className="absolute top-0 right-0 p-8 opacity-10"><Info size={120}/></div>
                             <div className="relative z-10 space-y-4">
-                                <h3 className="text-2xl font-black tracking-tight leading-tight">Painel de Controle Financeiro</h3>
-                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Os dados exibidos são extraídos diretamente da sua conta no Conta Azul em tempo real. Mantenha os lançamentos atualizados no portal oficial para garantir a precisão deste dashboard.</p>
+                                <h3 className="text-2xl font-black tracking-tight leading-tight">Painel de Eventos Financeiros</h3>
+                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta versão utiliza os novos endpoints de consulta de Eventos Financeiros do Conta Azul, permitindo uma visão consolidada de parcelas e títulos.</p>
                                 <div className="pt-4 flex gap-4">
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Integrado via</span><span className="font-bold">OAuth 2.0</span></div>
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">Encryption SSL</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Tecnologia</span><span className="font-bold">v1 Search</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">OAuth 2.0</span></div>
                                 </div>
                             </div>
                         </div>
@@ -430,7 +426,7 @@ export const FinanceiroManager: React.FC = () => {
                                 </div>
                                 <div>
                                     <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Autorização Confirmada</h3>
-                                    <p className="text-sm text-indigo-700 mt-2 font-medium">Clique no botão para receber o Token de acesso.</p>
+                                    <p className="text-sm text-indigo-700 mt-2 font-medium">Clique no botão para finalizar a integração.</p>
                                 </div>
                                 <button 
                                     onClick={handleFinalizeIntegration}
@@ -460,7 +456,7 @@ export const FinanceiroManager: React.FC = () => {
                                 ) : (
                                     <div className="space-y-6">
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">1. URL de Redirecionamento (Copiar p/ Portal)</label>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">1. URL de Redirecionamento</label>
                                             <div className="flex gap-2">
                                                 <input readOnly type="text" className="flex-1 px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xs font-mono font-bold text-indigo-700 outline-none" value={config.redirectUri} />
                                                 <button onClick={() => { navigator.clipboard.writeText(config.redirectUri); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-3 bg-slate-100 rounded-2xl text-slate-400 hover:text-teal-600 transition-all" title="Copiar URL">{copied ? <Check size={20}/> : <Copy size={20}/>}</button>
@@ -468,11 +464,11 @@ export const FinanceiroManager: React.FC = () => {
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">2. Client ID</label>
-                                            <input type="text" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientId} onChange={e => setConfig({...config, clientId: e.target.value.trim()})} placeholder="Cole o client_id aqui" />
+                                            <input type="text" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientId} onChange={e => setConfig({...config, clientId: e.target.value.trim()})} placeholder="client_id do portal conta azul" />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">3. Client Secret (Visível)</label>
-                                            <input type="text" title="Secret" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientSecret} onChange={e => setConfig({...config, clientSecret: e.target.value.trim()})} placeholder="Cole o client_secret aqui" />
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">3. Client Secret</label>
+                                            <input type="text" title="Secret" className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-mono focus:bg-white focus:border-teal-500 outline-none" value={config.clientSecret} onChange={e => setConfig({...config, clientSecret: e.target.value.trim()})} placeholder="client_secret do portal" />
                                         </div>
 
                                         <div className="flex flex-col gap-3 pt-4">
@@ -492,19 +488,19 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <AlertTriangle className="text-amber-500" /> Notas Técnicas
+                                <AlertTriangle className="text-amber-500" /> Requisitos da API v1
                             </h3>
                             <div className="space-y-6">
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
-                                    <h4 className="font-bold text-indigo-800 text-sm">Escopo da Sincronização</h4>
+                                    <h4 className="font-bold text-indigo-800 text-sm">Escopos Necessários</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        O sistema consulta automaticamente os recebíveis e pagáveis. Se os valores não aparecerem, verifique se o seu aplicativo no portal de desenvolvedores do Conta Azul tem os escopos <strong>"financeiro"</strong> habilitados.
+                                        No portal de desenvolvedores do Conta Azul, verifique se o escopo <strong>"financeiro"</strong> está marcado. Sem ele, a API de buscar eventos financeiros retornará erro 403 ou vazio.
                                     </p>
                                 </div>
                                 <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
-                                    <h4 className="font-bold text-amber-800 text-sm">Total a Receber/Pagar</h4>
+                                    <h4 className="font-bold text-amber-800 text-sm">Filtragem de Dados</h4>
                                     <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                        Os valores apresentados referem-se à soma de todos os títulos com status "Em Aberto" e "Vencido" na sua base de dados atual, abrangendo um range de datas amplo.
+                                        Este dashboard agora consulta os endpoints <code>/financeiro/eventos-financeiros/...</code> para obter os totais de forma mais precisa, ignorando lançamentos cancelados ou baixados.
                                     </p>
                                 </div>
                             </div>

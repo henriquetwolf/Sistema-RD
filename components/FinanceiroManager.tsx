@@ -100,10 +100,22 @@ export const FinanceiroManager: React.FC = () => {
             return;
         }
         
-        // Endpoint OAuth2 Conta Azul
-        const authUrl = `https://app.contaazul.com/auth/authorize?scope=sales%20financial&state=voll_erp&response_type=code&redirect_uri=${encodeURIComponent(config.redirectUri.trim())}&client_id=${config.clientId.trim()}`;
+        /**
+         * Endpoint e parâmetros atualizados conforme fornecido pelo usuário.
+         * Note que o scope e o endpoint de login mudaram para o novo portal.
+         */
+        const baseUrl = "https://auth.contaazul.com/login";
+        const params = new URLSearchParams({
+            response_type: 'code',
+            client_id: config.clientId.trim(),
+            redirect_uri: config.redirectUri.trim(),
+            state: 'voll_erp',
+            scope: 'openid profile aws.cognito.signin.user.admin'
+        });
+
+        const authUrl = `${baseUrl}?${params.toString()}`;
         
-        // Redireciona na mesma aba para garantir que o callback funcione no Vercel
+        // Redireciona na mesma aba para garantir que o callback funcione corretamente
         window.location.href = authUrl;
     };
 
@@ -282,7 +294,7 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="xl:col-span-7">
                         <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-10 h-full">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-8 flex items-center gap-3">
-                                <ListChecks className="text-teal-600" /> Como resolver o erro
+                                <ListChecks className="text-teal-600" /> Fluxo de Conexão
                             </h3>
                             <div className="space-y-10 relative">
                                 <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-slate-100 -z-0"></div>

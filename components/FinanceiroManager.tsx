@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  /* Added Zap to fix 'Cannot find name Zap' error on line 217 */
-  Wallet, RefreshCw, Loader2, Key, Copy, Check, Save, ShieldCheck, Unplug, Eraser, AlertCircle,
+  Wallet, RefreshCw, Loader2, Key, Check, Save, ShieldCheck, Unplug, AlertCircle,
   X, Info, Zap
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -14,8 +13,6 @@ interface ContaAzulConfig {
     redirectUri: string;
     isConnected: boolean;
     lastSync?: string;
-    accessToken?: string;
-    refreshToken?: string;
 }
 
 export const FinanceiroManager: React.FC = () => {
@@ -37,7 +34,6 @@ export const FinanceiroManager: React.FC = () => {
         if (code) {
             setAuthCode(code);
             setActiveSubTab('integração');
-            // Mantemos o code para a finalização
         }
     }, []);
 
@@ -69,30 +65,28 @@ export const FinanceiroManager: React.FC = () => {
         }
 
         if (!response.ok) {
+            if (data.error === 'not_connected') {
+                setConfig(prev => ({ ...prev, isConnected: false }));
+            }
             throw new Error(data.error || data.message || `Erro HTTP ${response.status}`);
         }
         return data;
     };
 
-    const fetchFinancialData = async (tokenOverride?: string) => {
-        const token = tokenOverride || config.accessToken;
-        if (!token) return;
+    const fetchFinancialData = async () => {
         setIsFetchingData(true);
         setErrorMsg(null);
         try {
+            // Não enviamos mais Authorization aqui, o Proxy injeta do banco
             const query = `data_vencimento_inicio=2020-01-01&data_vencimento_fim=2030-12-31&situacao=ABERTO&itens_por_pagina=100`;
-            
-            const data = await callInternalProxy(`v1/financeiro/eventos-financeiros/contas-a-receber/buscar?${query}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const data = await callInternalProxy(`v1/financeiro/eventos-financeiros/contas-a-receber/buscar?${query}`);
 
             const items = data.items || data.content || [];
             const total = items.reduce((acc: number, curr: any) => acc + (curr.valor_total || curr.valor || 0), 0);
             setReceivableTotal(total);
-
-            const updatedConfig = { ...config, lastSync: new Date().toISOString(), isConnected: true };
-            await appBackend.saveContaAzulConfig(updatedConfig);
-            setConfig(updatedConfig);
+            
+            // O Proxy já atualiza o status de conexão no banco, mas atualizamos o UI
+            if (!config.isConnected) setConfig(prev => ({ ...prev, isConnected: true }));
         } catch (e: any) {
             setErrorMsg(e.message);
         } finally { setIsFetchingData(false); }
@@ -100,7 +94,7 @@ export const FinanceiroManager: React.FC = () => {
 
     const handleConnect = async () => {
         try {
-            // Salva antes de ir para o login para garantir que temos as chaves
+            // Salva as chaves para que o Proxy as encontre durante a troca do code
             await appBackend.saveContaAzulConfig({ ...config, isConnected: false });
             
             const baseUrl = "https://auth.contaazul.com/login";
@@ -122,39 +116,24 @@ export const FinanceiroManager: React.FC = () => {
         setIsFetchingData(true);
         setErrorMsg(null);
         try {
-            const data = await callInternalProxy('oauth/token', {
+            // A rota /oauth/token no proxy agora salva automaticamente no DB
+            await callInternalProxy('oauth/token', {
                 method: 'POST',
                 body: {
                     grant_type: 'authorization_code',
                     code: authCode,
                     redirect_uri: config.redirectUri,
-                    // Enviamos as chaves para o proxy usar na autenticação Basic
                     client_id: config.clientId.trim(),
                     client_secret: config.clientSecret.trim()
                 }
             });
 
-            if (!data.access_token) {
-                throw new Error("A API não retornou um token de acesso válido.");
-            }
-
-            const updatedConfig = {
-                ...config,
-                isConnected: true,
-                accessToken: data.access_token,
-                refreshToken: data.refresh_token,
-                lastSync: new Date().toISOString()
-            };
-
-            await appBackend.saveContaAzulConfig(updatedConfig);
-            setConfig(updatedConfig);
             setAuthCode(null);
-            
-            // Limpa a URL
             window.history.replaceState({}, document.title, window.location.pathname);
             
-            alert("Conectado com sucesso!");
-            fetchFinancialData(data.access_token);
+            alert("Conectado e tokens salvos com segurança no servidor!");
+            loadConfig(); // Recarrega status do banco
+            fetchFinancialData();
         } catch (e: any) {
             setErrorMsg(e.message);
         } finally { setIsFetchingData(false); }
@@ -204,7 +183,7 @@ export const FinanceiroManager: React.FC = () => {
                             {config.isConnected ? <ShieldCheck size={32}/> : <Unplug size={32}/>}
                         </div>
                         <p className="text-xs font-black uppercase">{config.isConnected ? "Integração Ativa" : "Desconectado"}</p>
-                        <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-tighter">API V1 • OAuth 2.0</p>
+                        <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-tighter">Gestão de Token em Servidor</p>
                     </div>
                 </div>
             ) : (
@@ -217,19 +196,18 @@ export const FinanceiroManager: React.FC = () => {
                                 <div className="p-3 bg-white rounded-full w-fit mx-auto shadow-sm">
                                     <Zap className="text-indigo-600" size={32} />
                                 </div>
-                                <p className="text-sm font-bold text-indigo-800 uppercase tracking-tighter">Conexão Autorizada!</p>
-                                <p className="text-xs text-indigo-600 px-4">Clique no botão abaixo para gerar seu token de acesso permanente.</p>
-                                <button onClick={handleFinalizeIntegration} disabled={isFetchingData} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95">
+                                <p className="text-sm font-bold text-indigo-800 uppercase tracking-tighter">Autorização Concedida!</p>
+                                <button onClick={handleFinalizeIntegration} disabled={isFetchingData} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2">
                                     {isFetchingData ? <Loader2 size={20} className="animate-spin" /> : <Check size={20}/>}
-                                    Finalizar e Salvar Token
+                                    Salvar Conexão no Servidor
                                 </button>
-                                <button onClick={handleClear} className="text-[10px] font-bold text-slate-400 uppercase hover:text-red-500">Reiniciar Processo</button>
+                                <button onClick={handleClear} className="text-[10px] font-bold text-slate-400 uppercase hover:text-red-500">Reiniciar</button>
                             </div>
                         ) : (
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Client ID</label>
-                                    <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white outline-none focus:ring-2 focus:ring-teal-500 transition-all font-mono" value={config.clientId} onChange={e => setConfig({...config, clientId: e.target.value.trim()})} placeholder="Encontrado no portal do desenvolvedor" />
+                                    <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white outline-none focus:ring-2 focus:ring-teal-500 transition-all font-mono" value={config.clientId} onChange={e => setConfig({...config, clientId: e.target.value.trim()})} />
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Client Secret</label>
@@ -237,23 +215,18 @@ export const FinanceiroManager: React.FC = () => {
                                 </div>
                                 <div className="pt-4 space-y-2">
                                     <button onClick={handleConnect} className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2">
-                                        <Key size={20}/> Autorizar com Conta Azul
+                                        Conectar Conta Azul
                                     </button>
-                                    <p className="text-[10px] text-slate-400 text-center italic">Você será redirecionado para o login oficial do Conta Azul.</p>
                                 </div>
                             </div>
                         )}
                     </div>
 
                     <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200 space-y-6">
-                        <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 uppercase tracking-tighter"><Info size={20} className="text-blue-500"/> Instruções Importantes</h3>
+                        <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 uppercase tracking-tighter"><Info size={20} className="text-blue-500"/> Segurança</h3>
                         <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
-                            <p>1. Acesse o <strong>Portal do Desenvolvedor</strong> no Conta Azul.</p>
-                            <p>2. Crie um novo aplicativo do tipo <strong>API V1</strong>.</p>
-                            <p>3. No campo <strong>URL de Redirecionamento</strong>, você DEVE configurar exatamente:<br/>
-                               <code className="bg-white px-2 py-1 rounded border text-indigo-600 font-bold block mt-2 text-xs">https://sistema-rd.vercel.app/</code>
-                            </p>
-                            <p>4. Se o erro "invalid_token" persistir, verifique se o seu aplicativo no Conta Azul está no status "Em Desenvolvimento" ou "Publicado".</p>
+                            <p>Agora seus tokens são armazenados de forma criptografada no banco de dados e nunca ficam expostos no navegador.</p>
+                            <p>O sistema gerencia automaticamente a renovação do acesso (refresh token), garantindo que sua integração nunca pare.</p>
                         </div>
                     </div>
                 </div>

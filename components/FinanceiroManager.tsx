@@ -49,8 +49,12 @@ export const FinanceiroManager: React.FC = () => {
     const [authCode, setAuthCode] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    // Proxy mais robusto para OAuth
-    const PRIMARY_PROXY = "https://corsproxy.io/?";
+    // Lista de Proxies para rotação em caso de erro
+    const PROXIES = [
+        "https://api.allorigins.win/raw?url=",
+        "https://corsproxy.io/?",
+        "https://api.codetabs.com/v1/proxy/?url="
+    ];
 
     useEffect(() => {
         loadConfig();
@@ -93,6 +97,28 @@ export const FinanceiroManager: React.FC = () => {
         }
     };
 
+    // Função auxiliar para tentar requisição em múltiplos proxies
+    const fetchWithProxy = async (targetUrl: string, options: any) => {
+        let lastError = null;
+        for (const proxy of PROXIES) {
+            try {
+                const url = proxy + encodeURIComponent(targetUrl);
+                const response = await fetch(url, options);
+                if (response.ok || response.status === 401 || response.status === 400) {
+                    return response;
+                }
+                if (response.status === 429 || response.status === 403) {
+                    console.warn(`Proxy ${proxy} reportou erro ${response.status}. Tentando próximo...`);
+                    continue;
+                }
+            } catch (e) {
+                lastError = e;
+                continue;
+            }
+        }
+        throw lastError || new Error("Todos os túneis de conexão estão ocupados. Tente novamente em 1 minuto.");
+    };
+
     const handleDisconnect = async () => {
         if (!window.confirm("Deseja desconectar a integração com o Conta Azul?")) return;
         const resetConfig = { ...config, isConnected: false, accessToken: '', refreshToken: '' };
@@ -106,17 +132,14 @@ export const FinanceiroManager: React.FC = () => {
     const handleRefreshToken = async () => {
         if (!config.refreshToken) return null;
         try {
-            console.log("Financeiro: Renovando Token via Body Auth...");
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
-
             const body = new URLSearchParams();
             body.append('grant_type', 'refresh_token');
             body.append('refresh_token', config.refreshToken);
-            // Enviando no body para evitar bloqueio de header 'Authorization' pelo Proxy
             body.append('client_id', config.clientId.trim());
             body.append('client_secret', config.clientSecret.trim());
 
-            const response = await fetch(PRIMARY_PROXY + encodeURIComponent(targetUrl), {
+            const response = await fetchWithProxy(targetUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -126,8 +149,7 @@ export const FinanceiroManager: React.FC = () => {
             });
 
             if (!response.ok) {
-                if (response.status === 429) throw new Error("Muitas tentativas. Aguarde 1 minuto.");
-                throw new Error("Sessão expirada. Re-autorize o acesso.");
+                throw new Error("Sessão expirada. Re-autorize o acesso na aba Configuração.");
             }
 
             const data = await response.json();
@@ -185,13 +207,9 @@ export const FinanceiroManager: React.FC = () => {
             };
 
             const [recRes, payRes] = await Promise.all([
-                fetch(PRIMARY_PROXY + encodeURIComponent(`${baseUrlReceber}?${params.toString()}`), { headers }),
-                fetch(PRIMARY_PROXY + encodeURIComponent(`${baseUrlPagar}?${params.toString()}`), { headers })
+                fetchWithProxy(`${baseUrlReceber}?${params.toString()}`, { headers }),
+                fetchWithProxy(`${baseUrlPagar}?${params.toString()}`, { headers })
             ]);
-
-            if (recRes.status === 429) {
-                throw new Error("Limite de requisições atingido no proxy. Tente novamente em 60 segundos.");
-            }
 
             if (recRes.status === 401 || payRes.status === 401) {
                 const newToken = await handleRefreshToken();
@@ -231,6 +249,7 @@ export const FinanceiroManager: React.FC = () => {
             setConfig(updatedConfig);
 
         } catch (e: any) {
+            console.error("ERRO FINANCEIRO:", e.message);
             setErrorMsg(e.message);
         } finally {
             setIsFetchingData(false);
@@ -272,18 +291,17 @@ export const FinanceiroManager: React.FC = () => {
     const handleFinalizeIntegration = async () => {
         if (!authCode) return;
         setIsSaving(true);
-        console.log("Finalizando integração via Body Params...");
+        console.log("Finalizando integração com rotação de Proxy...");
         try {
             const targetUrl = "https://auth.contaazul.com/oauth2/token";
             const body = new URLSearchParams();
             body.append('grant_type', 'authorization_code');
             body.append('code', authCode.trim());
             body.append('redirect_uri', 'https://sistema-rd.vercel.app/');
-            // Injetando credenciais no corpo para evitar erro de Header do Proxy
             body.append('client_id', config.clientId.trim());
             body.append('client_secret', config.clientSecret.trim());
 
-            const response = await fetch(PRIMARY_PROXY + encodeURIComponent(targetUrl), {
+            const response = await fetchWithProxy(targetUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -353,7 +371,7 @@ export const FinanceiroManager: React.FC = () => {
                     <div className="flex-1">
                         <p className="text-sm font-bold text-red-800">Atenção Necessária</p>
                         <p className="text-xs text-red-700 mt-1">{errorMsg}</p>
-                        <p className="text-[10px] text-red-400 mt-2 font-bold uppercase">Aguarde um momento ou tente re-autorizar a conexão se persistir.</p>
+                        <p className="text-[10px] text-red-400 mt-2 font-bold uppercase">Se o erro persistir, aguarde 1 minuto para o túnel de conexão liberar.</p>
                     </div>
                 </div>
             )}
@@ -396,7 +414,7 @@ export const FinanceiroManager: React.FC = () => {
                                 {config.isConnected ? <ShieldCheck size={32} /> : <Unplug size={32} />}
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "Conectado via Proxy" : "Desconectado"}</h3>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{config.isConnected ? "API v1 Conectada" : "Desconectado"}</h3>
                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{config.isConnected ? `Sinc: ${config.lastSync ? new Date(config.lastSync).toLocaleString('pt-BR') : '--'}` : "Configure as credenciais"}</p>
                             </div>
                         </div>
@@ -428,10 +446,10 @@ export const FinanceiroManager: React.FC = () => {
                             <div className="absolute top-0 right-0 p-8 opacity-10"><Info size={120}/></div>
                             <div className="relative z-10 space-y-4">
                                 <h3 className="text-2xl font-black tracking-tight leading-tight">Painel de Controle Financeiro</h3>
-                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta integração utiliza métodos de segurança que minimizam bloqueios de rede. Mantenha seus dados atualizados no portal para precisão total.</p>
+                                <p className="text-indigo-200 text-sm font-medium leading-relaxed max-w-sm">Esta integração utiliza um sistema de redundância de túneis para garantir a conexão mesmo com bloqueios de rede.</p>
                                 <div className="pt-4 flex gap-4">
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Tecnologia</span><span className="font-bold">OAuth Body Auth</span></div>
-                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">CORS Tunnel</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Tecnologia</span><span className="font-bold">Redundância de Proxy</span></div>
+                                    <div className="flex flex-col"><span className="text-[10px] font-black text-indigo-400 uppercase">Segurança</span><span className="font-bold">OAuth 2.0 SSL</span></div>
                                 </div>
                             </div>
                         </div>
@@ -517,7 +535,7 @@ export const FinanceiroManager: React.FC = () => {
                                 <div className="p-5 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
                                     <h4 className="font-bold text-indigo-800 text-sm">Problemas com Proxy</h4>
                                     <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                                        Ao utilizar proxies públicos, alguns cabeçalhos de segurança podem ser bloqueados. O sistema agora envia as credenciais de forma otimizada para garantir a troca de tokens mesmo através desses túneis.
+                                        Se um túnel de conexão estiver sobrecarregado (Rate Limit), o sistema tentará automaticamente outro provedor. Caso receba erro persistente, aguarde 60 segundos antes de tentar novamente.
                                     </p>
                                 </div>
                                 <div className="p-5 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">

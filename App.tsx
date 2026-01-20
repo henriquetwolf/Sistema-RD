@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -32,6 +33,7 @@ import { BulkWhatsAppSender } from './components/BulkWhatsAppSender';
 import { PartnerStudiosManager } from './components/PartnerStudiosManager';
 import { InventoryManager } from './components/InventoryManager';
 import { BillingManager } from './components/BillingManager';
+import { FinanceiroManager } from './components/FinanceiroManager';
 import { SupportManager } from './components/SupportManager';
 import { AiAssistant } from './components/AiAssistant';
 import { LandingPageManager } from './components/LandingPageManager';
@@ -47,11 +49,11 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap, Send, Bot, MonitorPlay
+  LifeBuoy, Zap, Send, Bot, MonitorPlay, Wallet
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'financeiro' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages';
 
 function App() {
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
@@ -539,6 +541,7 @@ function App() {
                                 {canAccess('hr') && <button onClick={() => setDashboardTab('hr')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'hr' ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Heart size={18} /> Recursos Humanos</button>}
                                 {canAccess('crm') && <button onClick={() => setDashboardTab('crm')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'crm' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Kanban size={18} /> CRM Comercial</button>}
                                 {canAccess('landing_pages') && <button onClick={() => setDashboardTab('landing_pages')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'landing_pages' ? "bg-orange-50 text-orange-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><MonitorPlay size={18} /> Páginas de Venda</button>}
+                                {canAccess('financeiro') && <button onClick={() => setDashboardTab('financeiro')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'financeiro' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Wallet size={18} /> Financeiro</button>}
                                 {canAccess('billing') && <button onClick={() => setDashboardTab('billing')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'billing' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><CreditCard size={18} /> Cobrança</button>}
                                 {canAccess('inventory') && <button onClick={() => setDashboardTab('inventory')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'inventory' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Package size={18} /> Controle de Estoque</button>}
                                 {canAccess('suporte_interno') && <button onClick={() => setDashboardTab('suporte_interno')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'suporte_interno' ? "bg-indigo-50 text-indigo-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><LifeBuoy size={18} /> Suporte Interno</button>}
@@ -574,8 +577,8 @@ function App() {
                                             </div>
                                             <span className="text-teal-100 text-xs font-black uppercase tracking-[0.2em]">Painel de Controle</span>
                                         </div>
-                                        <h2 className="text-4xl font-black tracking-tight mb-2">
-                                            <span className="text-white font-black">Bem-Vindo</span>, <span className="text-white">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
+                                        <h2 className="text-4xl font-black tracking-tight mb-2 text-white">
+                                            <span className="font-black">Bem-Vindo</span>, <span>{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
                                         </h2>
                                         <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed">
                                             Seu centro de comando está pronto. Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.
@@ -652,6 +655,7 @@ function App() {
                             </div>
                         )}
                         {dashboardTab === 'hr' && <HrDashboard collaborators={allCollaborators} onEditCollaborator={(c) => { setDashboardTab('hr'); }} />}
+                        {dashboardTab === 'financeiro' && <FinanceiroManager />}
                         {dashboardTab === 'inventory' && <InventoryManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'billing' && <BillingManager />}
                         {dashboardTab === 'suporte_interno' && <SupportManager />}

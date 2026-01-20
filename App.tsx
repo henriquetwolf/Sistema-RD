@@ -93,6 +93,12 @@ function App() {
   const [receberGeralColumnFilters, setReceberGeralColumnFilters] = useState<Record<string, string>>({});
   const rowsPerPage = 50;
 
+  // Filtros Dashboard Conta Azul
+  const [caStartDate, setCaStartDate] = useState('');
+  const [caEndDate, setCaEndDate] = useState('');
+  const [caCategory, setCaCategory] = useState('');
+  const [caCostCenter, setCaCostCenter] = useState('');
+
   const [overviewStats, setOverviewStats] = useState({
       leadsToday: 0,
       salesToday: 0,
@@ -234,6 +240,32 @@ function App() {
 
   const filteredReceberGeral = useMemo(() => {
     return receberGeralData.filter(item => {
+      // Filtros do Dashboard
+      const keys = Object.keys(item);
+      const catKey = keys.find(k => k.toLowerCase().includes('categoria'));
+      const ccKey = keys.find(k => k.toLowerCase().includes('centro') && k.toLowerCase().includes('custo'));
+      const dKey = keys.find(k => k.toLowerCase().includes('vencimento') || k.toLowerCase().includes('venc'));
+
+      if (caCategory && catKey && String(item[catKey] || '').toLowerCase() !== caCategory.toLowerCase()) return false;
+      if (caCostCenter && ccKey && String(item[ccKey] || '').toLowerCase() !== caCostCenter.toLowerCase()) return false;
+      
+      if (caStartDate || caEndDate) {
+          const dueDate = dKey ? item[dKey] : null;
+          if (dueDate) {
+              let vDate: Date;
+              if (typeof dueDate === 'string' && dueDate.includes('/')) {
+                  const [d, m, y] = dueDate.split('/').map(Number);
+                  vDate = new Date(y, m - 1, d);
+              } else {
+                  vDate = new Date(dueDate);
+              }
+              const isoDate = vDate.toISOString().split('T')[0];
+              if (caStartDate && isoDate < caStartDate) return false;
+              if (caEndDate && isoDate > caEndDate) return false;
+          }
+      }
+
+      // Filtros da Tabela
       const matchesGlobal = Object.values(item).some(val => 
         String(val).toLowerCase().includes(receberGeralSearch.toLowerCase())
       );
@@ -245,12 +277,12 @@ function App() {
 
       return matchesGlobal && matchesColumns;
     });
-  }, [receberGeralData, receberGeralSearch, receberGeralColumnFilters]);
+  }, [receberGeralData, receberGeralSearch, receberGeralColumnFilters, caStartDate, caEndDate, caCategory, caCostCenter]);
 
   // Reset page when filters change
   useEffect(() => {
     setReceberGeralPage(1);
-  }, [receberGeralSearch, receberGeralColumnFilters]);
+  }, [receberGeralSearch, receberGeralColumnFilters, caStartDate, caEndDate, caCategory, caCostCenter]);
 
   const paginatedReceberGeral = useMemo(() => {
     const start = (receberGeralPage - 1) * rowsPerPage;
@@ -259,15 +291,34 @@ function App() {
 
   const totalReceberGeralPages = Math.ceil(filteredReceberGeral.length / rowsPerPage);
 
+  const caFilterOptions = useMemo(() => {
+      if (!receberGeralData.length) return { categories: [], costCenters: [] };
+      const keys = Object.keys(receberGeralData[0]);
+      const catKey = keys.find(k => k.toLowerCase().includes('categoria'));
+      const ccKey = keys.find(k => k.toLowerCase().includes('centro') && k.toLowerCase().includes('custo'));
+
+      const categories = new Set<string>();
+      const costCenters = new Set<string>();
+
+      receberGeralData.forEach(item => {
+          if (catKey && item[catKey]) categories.add(String(item[catKey]));
+          if (ccKey && item[ccKey]) costCenters.add(String(item[ccKey]));
+      });
+
+      return {
+          categories: Array.from(categories).sort(),
+          costCenters: Array.from(costCenters).sort()
+      };
+  }, [receberGeralData]);
+
   const receberGeralStats = useMemo(() => {
-    if (!receberGeralData.length) return {
+    if (!filteredReceberGeral.length) return {
         totalRecords: 0, totalValue: 0, totalOverdueValue: 0, overdueCount: 0,
         totalPaidValue: 0, paidCount: 0, totalPendingValue: 0, pendingCount: 0
     };
 
-    const keys = Object.keys(receberGeralData[0]);
+    const keys = Object.keys(filteredReceberGeral[0]);
     
-    // Função auxiliar para tentar converter valores financeiros para número, tratando strings brasileiras
     const parseMoney = (val: any) => {
         if (typeof val === 'number') return val;
         if (!val) return 0;
@@ -279,21 +330,22 @@ function App() {
     };
 
     // Detecção dinâmica de colunas
-    const vKey = keys.find(k => k.toLowerCase().includes('valor')) || keys[0]; // Assume que se não tem 'valor' no nome, a coluna 0 pode ser o valor (conforme screenshot)
+    const vKey = keys.find(k => k.toLowerCase() === 'valor') || keys.find(k => k.toLowerCase().includes('valor')) || keys[0];
     const sKey = keys.find(k => k.toLowerCase().includes('status') || k.toLowerCase().includes('situacao') || k.toLowerCase().includes('situação'));
     const dKey = keys.find(k => k.toLowerCase().includes('vencimento') || k.toLowerCase().includes('venc'));
+    const vrKey = keys.find(k => k.toLowerCase().includes('recebido') || k.toLowerCase().includes('pago'));
 
-    const totalRecords = receberGeralData.length;
-    const totalValue = receberGeralData.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
+    const totalRecords = filteredReceberGeral.length;
+    const totalValue = filteredReceberGeral.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
     
     const now = new Date();
     now.setHours(0,0,0,0);
 
-    const overdue = receberGeralData.filter(item => {
+    const overdue = filteredReceberGeral.filter(item => {
         const status = String(sKey ? item[sKey] : '').toLowerCase();
         const dueDate = dKey ? item[dKey] : null;
         
-        // Se tem data de vencimento, compara com hoje. Caso contrário, confia no status "vencido/atrasado"
+        let isPast = false;
         if (dueDate) {
             let vDate: Date;
             if (typeof dueDate === 'string' && dueDate.includes('/')) {
@@ -302,22 +354,34 @@ function App() {
             } else {
                 vDate = new Date(dueDate);
             }
-            return vDate < now && (status.includes('atrasado') || status.includes('vencido'));
+            isPast = vDate < now;
         }
         
-        return status.includes('atrasado') || status.includes('vencido');
+        return isPast && (status.includes('atrasado') || status.includes('vencido') || status.includes('aberto') || status.includes('pendente'));
     });
     const totalOverdueValue = overdue.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
 
-    const paid = receberGeralData.filter(item => {
+    const paid = filteredReceberGeral.filter(item => {
         const status = String(sKey ? item[sKey] : '').toLowerCase();
         return status.includes('pago') || status.includes('liquidado');
     });
-    const totalPaidValue = paid.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
+    const totalPaidValue = paid.reduce((acc, curr) => acc + parseMoney(vrKey ? curr[vrKey] : (vKey ? curr[vKey] : 0)), 0);
 
-    const pending = receberGeralData.filter(item => {
+    const pending = filteredReceberGeral.filter(item => {
         const status = String(sKey ? item[sKey] : '').toLowerCase();
-        return status.includes('aberto') || status.includes('pendente');
+        const dueDate = dKey ? item[dKey] : null;
+        let isFuture = true;
+        if (dueDate) {
+            let vDate: Date;
+            if (typeof dueDate === 'string' && dueDate.includes('/')) {
+                const [d, m, y] = dueDate.split('/').map(Number);
+                vDate = new Date(y, m - 1, d);
+            } else {
+                vDate = new Date(dueDate);
+            }
+            isFuture = vDate >= now;
+        }
+        return isFuture && (status.includes('aberto') || status.includes('pendente'));
     });
     const totalPendingValue = pending.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
 
@@ -331,7 +395,7 @@ function App() {
         totalPendingValue,
         pendingCount: pending.length
     };
-  }, [receberGeralData]);
+  }, [filteredReceberGeral]);
 
   const fetchHrData = async () => {
       setIsHrLoading(true);
@@ -339,7 +403,7 @@ function App() {
           const { data, error } = await appBackend.client.from('crm_collaborators').select('*').order('full_name');
           if (data) {
               setAllCollaborators(data.map((d: any) => ({
-                id: d.id, fullName: d.full_name || '', socialName: d.social_name || '', birthDate: d.birth_date || '', maritalStatus: d.marital_status || '', spouseName: d.spouse_name || '', fatherName: d.father_name || '', motherName: d.mother_name || '', genderIdentity: d.gender_identity || '', racialIdentity: d.racial_identity || '', educationLevel: d.education_level || '', photoUrl: d.photo_url || '', email: d.email || '', phone: d.phone || '', cellphone: d.cellphone || '', corporatePhone: d.corporate_phone || '', operator: d.operator || '', address: d.address || '', cep: d.cep || '', complement: d.complement || '', birthState: d.birth_state || '', birthCity: d.birth_city || '', state: d.state || '', currentCity: d.current_city || '', emergencyName: d.emergency_name || '', emergencyPhone: d.emergency_phone || '', status: d.status || 'active', contractType: d.contract_type || '', cpf: d.cpf || '', rg: d.rg || '', rgIssuer: d.rg_issuer || '', rgIssueDate: d.rg_issue_date || '', rgState: d.rg_state || '', ctpsNumber: d.ctps_number || '', ctpsSeries: d.ctps_series || '', ctpsState: d.ctps_state || '', ctpsIssueDate: d.ctps_issue_date || '', pisNumber: d.pis_number || '', reservistNumber: d.reservist_number || '', docsFolderLink: d.docs_folder_link || '', legalAuth: !!d.legal_auth, bankAccountInfo: d.bank_account_info || '', hasInsalubrity: d.has_insalubrity || 'Não', insalubrityPercent: d.insalubrity_percent || '', hasDangerPay: d.has_danger_pay || 'Não', transportVoucherInfo: d.transport_voucher_info || '', busLineHomeWork: d.bus_line_home_work || '', busQtyHomeWork: d.bus_qty_home_work || '', busLineWorkHome: d.bus_line_work_home || '', busQtyWorkHome: d.bus_qty_work_home || '', ticketValue: d.ticket_value || '', fuelVoucherValue: d.fuel_voucher_value || '', hasMealVoucher: d.has_meal_voucher || 'Não', hasFoodVoucher: d.has_food_voucher || 'Não', hasHomeOfficeAid: d.has_home_office_aid || 'Não', hasHealthPlan: d.has_health_plan || 'Não', hasDentalPlan: d.has_dental_plan || 'Não', bonusInfo: d.bonus_info || '', bonusValue: d.bonus_value || '', commissionInfo: d.commission_info || '', commissionPercent: d.commission_percent || '', hasDependents: d.has_dependents || 'Não', dependentName: d.dependent_name || '', dependentDob: d.dependent_dob || '', dependentKinship: d.dependent_kinship || '', dependentCpf: d.dependent_kinship || '', resignationDate: d.resignation_date || '', demissionReason: d.demission_reason || '', demissionDocs: d.demission_docs || '', vacationPeriods: d.vacation_periods || '', observations: d.observations || '',
+                id: d.id, fullName: d.full_name || '', socialName: d.social_name || '', birthDate: d.birth_date || '', maritalStatus: d.marital_status || '', spouseName: d.spouse_name || '', fatherName: d.father_name || '', motherName: d.mother_name || '', genderIdentity: d.gender_identity || '', racialIdentity: d.racial_identity || '', educationLevel: d.education_level || '', photoUrl: d.photo_url || '', email: d.email || '', phone: d.phone || '', cellphone: d.cellphone || '', corporatePhone: d.corporate_phone || '', operator: d.operator || '', address: d.address || '', cep: d.cep || '', complement: d.complement || '', birthState: d.birth_state || '', birthCity: d.birth_city || '', state: d.state || '', currentCity: d.current_city || '', emergencyName: d.emergency_name || '', emergencyPhone: d.emergency_phone || '', status: d.status || 'active', contractType: d.contract_type || '', cpf: d.cpf || '', rg: d.rg || '', rgIssuer: d.rg_issuer || '', rgIssueDate: d.rg_issue_date || '', rgState: d.rg_state || '', ctpsNumber: d.ctps_number || '', ctpsSeries: d.ctps_series || '', ctpsState: d.ctps_state || '', ctpsIssueDate: d.ctps_issue_date || '', pisNumber: d.pis_number || '', reservistNumber: d.reservist_number || '', docsFolderLink: d.docs_folder_link || '', legalAuth: !!d.legal_auth, bankAccountInfo: d.bank_account_info || '', hasInsalubrity: d.has_insalubrity || 'Não', insalubrityPercent: d.insalubrity_percent || '', hasDangerPay: d.has_danger_pay || 'Não', transportVoucherInfo: d.transport_voucher_info || '', busLineHomeWork: d.bus_line_home_work || '', busQtyHomeWork: d.bus_qty_home_work || '', busLineWorkHome: d.bus_line_work_home || '', busQtyWorkHome: d.bus_qty_work_home || '', ticketValue: d.ticket_value || '', fuelVoucherValue: d.fuel_voucher_value || '', hasMealVoucher: d.has_meal_voucher || 'Não', hasFoodVoucher: d.has_food_voucher || 'Não', hasHomeOfficeAid: d.has_home_office_aid || 'Não', hasHealthPlan: d.has_health_plan || 'Não', hasDentalPlan: d.has_dental_plan || 'Não', bonusInfo: d.bonus_info || '', bonusValue: d.bonus_value || '', commissionInfo: d.commission_info || '', commissionPercent: d.commission_percent || '', hasDependents: d.has_dependents || 'Não', dependentName: d.dependent_name || '', dependentDob: d.dependent_dob || '', dependentKinship: d.dependent_kinship || '', dependentCpf: d.dependent_cpf || '', resignationDate: d.resignation_date || '', demissionReason: d.demission_reason || '', demissionDocs: d.demission_docs || '', vacationPeriods: d.vacation_periods || '', observations: d.observations || '',
                 admissionDate: d.admission_date || '', role: d.role || '', department: d.department || '', salary: d.salary || '', hiringMode: d.hiring_mode || '', superiorId: d.superior_id || ''
               })));
           }
@@ -859,12 +923,39 @@ function App() {
                                 <div className="flex-1 flex flex-col min-h-0">
                                     {contaAzulViewMode === 'dashboard' ? (
                                         <div className="space-y-6 animate-in slide-in-from-bottom-4">
+                                            {/* Filtros de Dashboard */}
+                                            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4">
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Início</label>
+                                                    <input type="date" value={caStartDate} onChange={e => setCaStartDate(e.target.value)} className="text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fim</label>
+                                                    <input type="date" value={caEndDate} onChange={e => setCaEndDate(e.target.value)} className="text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+                                                </div>
+                                                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</label>
+                                                    <select value={caCategory} onChange={e => setCaCategory(e.target.value)} className="flex-1 text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                                        <option value="">Todas</option>
+                                                        {caFilterOptions.categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Centro de Custo</label>
+                                                    <select value={caCostCenter} onChange={e => setCaCostCenter(e.target.value)} className="flex-1 text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                                        <option value="">Todos</option>
+                                                        {caFilterOptions.costCenters.map(cc => <option key={cc} value={cc}>{cc}</option>)}
+                                                    </select>
+                                                </div>
+                                                <button onClick={() => { setCaStartDate(''); setCaEndDate(''); setCaCategory(''); setCaCostCenter(''); }} className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Limpar Filtros"><Eraser size={18}/></button>
+                                            </div>
+
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                                 <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-5"><DollarSign size={64} className="text-blue-600" /></div>
                                                     <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor Total Geral</p>
                                                     <h3 className="text-3xl font-black text-slate-800">{formatCurrency(receberGeralStats.totalValue)}</h3>
-                                                    <p className="text-[10px] text-slate-500 mt-2">{receberGeralStats.totalRecords} registros totais</p>
+                                                    <p className="text-[10px] text-slate-500 mt-2">{receberGeralStats.totalRecords} registros filtrados</p>
                                                 </div>
                                                 <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
                                                     <div className="absolute right-0 top-0 p-4 opacity-5"><XCircle size={64} className="text-red-600" /></div>

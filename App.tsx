@@ -224,7 +224,6 @@ function App() {
 
       const matchesColumns = Object.entries(receberGeralColumnFilters).every(([key, value]) => {
         if (!value) return true;
-        /* Fix: Explicitly wrap 'value' in String() to resolve "Property 'toLowerCase' does not exist on type 'unknown'" error on line 227 (statement starting line) */
         return String(item[key] || '').toLowerCase().includes(String(value).toLowerCase());
       });
 
@@ -245,25 +244,66 @@ function App() {
   const totalReceberGeralPages = Math.ceil(filteredReceberGeral.length / rowsPerPage);
 
   const receberGeralStats = useMemo(() => {
-    const totalRecords = receberGeralData.length;
-    const totalValue = receberGeralData.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+    if (!receberGeralData.length) return {
+        totalRecords: 0, totalValue: 0, totalOverdueValue: 0, overdueCount: 0,
+        totalPaidValue: 0, paidCount: 0, totalPendingValue: 0, pendingCount: 0
+    };
+
+    const keys = Object.keys(receberGeralData[0]);
     
-    // Supondo que existam campos 'status' e 'vencimento'
+    // Função auxiliar para tentar converter valores financeiros para número, tratando strings brasileiras
+    const parseMoney = (val: any) => {
+        if (typeof val === 'number') return val;
+        if (!val) return 0;
+        let clean = String(val).replace('R$', '').replace(/\s/g, '');
+        if (clean.includes(',')) {
+            clean = clean.replace(/\./g, '').replace(',', '.');
+        }
+        return parseFloat(clean) || 0;
+    };
+
+    // Detecção dinâmica de colunas
+    const vKey = keys.find(k => k.toLowerCase().includes('valor')) || keys[0]; // Assume que se não tem 'valor' no nome, a coluna 0 pode ser o valor (conforme screenshot)
+    const sKey = keys.find(k => k.toLowerCase().includes('status') || k.toLowerCase().includes('situacao') || k.toLowerCase().includes('situação'));
+    const dKey = keys.find(k => k.toLowerCase().includes('vencimento') || k.toLowerCase().includes('venc'));
+
+    const totalRecords = receberGeralData.length;
+    const totalValue = receberGeralData.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
+    
     const now = new Date();
     now.setHours(0,0,0,0);
 
     const overdue = receberGeralData.filter(item => {
-        if (!item.vencimento) return false;
-        const vDate = new Date(item.vencimento);
-        return vDate < now && item.status?.toLowerCase().includes('atrasado');
+        const status = String(sKey ? item[sKey] : '').toLowerCase();
+        const dueDate = dKey ? item[dKey] : null;
+        
+        // Se tem data de vencimento, compara com hoje. Caso contrário, confia no status "vencido/atrasado"
+        if (dueDate) {
+            let vDate: Date;
+            if (typeof dueDate === 'string' && dueDate.includes('/')) {
+                const [d, m, y] = dueDate.split('/').map(Number);
+                vDate = new Date(y, m - 1, d);
+            } else {
+                vDate = new Date(dueDate);
+            }
+            return vDate < now && (status.includes('atrasado') || status.includes('vencido'));
+        }
+        
+        return status.includes('atrasado') || status.includes('vencido');
     });
-    const totalOverdueValue = overdue.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+    const totalOverdueValue = overdue.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
 
-    const paid = receberGeralData.filter(item => item.status?.toLowerCase().includes('pago'));
-    const totalPaidValue = paid.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+    const paid = receberGeralData.filter(item => {
+        const status = String(sKey ? item[sKey] : '').toLowerCase();
+        return status.includes('pago') || status.includes('liquidado');
+    });
+    const totalPaidValue = paid.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
 
-    const pending = receberGeralData.filter(item => item.status?.toLowerCase().includes('aberto') || item.status?.toLowerCase().includes('pendente'));
-    const totalPendingValue = pending.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+    const pending = receberGeralData.filter(item => {
+        const status = String(sKey ? item[sKey] : '').toLowerCase();
+        return status.includes('aberto') || status.includes('pendente');
+    });
+    const totalPendingValue = pending.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
 
     return {
         totalRecords,

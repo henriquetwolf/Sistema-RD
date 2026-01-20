@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -202,8 +201,7 @@ function App() {
     try {
       const { data, error } = await appBackend.client
         .from('visao_contas_a_receber_Geral')
-        .select('*')
-        .order('vencimento', { ascending: true });
+        .select('*');
       if (error) throw error;
       setReceberGeralData(data || []);
     } catch (e) {

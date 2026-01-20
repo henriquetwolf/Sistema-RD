@@ -217,12 +217,17 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO SQL COMPLETO V15
+-- SCRIPT DE REPARO SQL DEFINITIVO V16
+-- Garante extensões necessárias
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Tabela de Configurações Gerais
 CREATE TABLE IF NOT EXISTS public.crm_settings (
     key text PRIMARY KEY,
     value text
 );
 
+-- Tabela de Empresas
 CREATE TABLE IF NOT EXISTS public.crm_companies (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     legal_name text,
@@ -260,12 +265,27 @@ CREATE TABLE IF NOT EXISTS public.crm_sync_jobs (
     created_at timestamptz DEFAULT now()
 );
 
--- Habilitar RLS e Permissões
+-- Habilitar RLS em todas as tabelas críticas
 ALTER TABLE public.crm_presets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_sync_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crm_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crm_companies ENABLE ROW LEVEL SECURITY;
 
+-- Garantir acesso total aos roles anon e authenticated (Necessário para cache da API)
+GRANT ALL ON TABLE public.crm_presets TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.crm_sync_jobs TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.crm_settings TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.crm_companies TO anon, authenticated, service_role;
+
+-- Recriar Políticas de Acesso
+DROP POLICY IF EXISTS "Permitir acesso total crm_presets" ON public.crm_presets;
 CREATE POLICY "Permitir acesso total crm_presets" ON public.crm_presets FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs;
 CREATE POLICY "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs FOR ALL USING (true) WITH CHECK (true);
+
+-- COMANDO CRÍTICO: Forçar recarregamento do cache do schema para que a API reconheça as novas tabelas
+NOTIFY pgrst, 'reload schema';
 `.trim();
 
   const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
@@ -382,32 +402,6 @@ CREATE POLICY "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs FOR 
             </div>
         )}
 
-        {activeTab === 'connection_plug' && (
-            <div className="space-y-6 animate-in slide-in-from-left-2">
-                <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <div><h3 className="text-lg font-bold text-slate-800">Connection Plug (Automations)</h3><p className="text-xs text-slate-500">Gatilhos automáticos para disparar dados de negociação entre CRM e Empresas.</p></div>
-                    <button onClick={() => setEditingTrigger({ pipelineName: 'Padrão', stageId: 'closed' })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2"><Zap size={16}/> Novo Gatilho</button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {isLoadingTriggers ? <div className="col-span-full py-12 flex justify-center"><Loader2 className="animate-spin text-indigo-600" /></div> : webhookTriggers.map(trigger => (
-                        <div key={trigger.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm group">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600"><Zap size={24}/></div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => setEditingTrigger(trigger)} className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16}/></button>
-                                    <button onClick={() => { if(window.confirm("Excluir gatilho?")) appBackend.deleteWebhookTrigger(trigger.id).then(fetchWebhookTriggers); }} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <h4 className="font-bold text-slate-800">Ao atingir a etapa <span className="text-indigo-600">"{trigger.stageId}"</span></h4>
-                                <p className="text-[10px] font-black text-slate-400 uppercase">No Funil: {trigger.pipelineName}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
         {activeTab === 'roles' && (
             <div className="space-y-6 animate-in slide-in-from-left-2">
                 <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
@@ -422,115 +416,11 @@ CREATE POLICY "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs FOR 
                                 <span className="font-bold text-slate-700">{role.name}</span>
                             </div>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => setEditingRole(role)} className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16}/></button>
-                                <button onClick={() => { if(window.confirm("Excluir perfil?")) appBackend.deleteRole(role.id).then(fetchRoles); }} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
+                                <button onClick={() => setEditingRole(role)} className="p-1 text-slate-400 hover:text-indigo-600"><Edit2 size={16}/></button>
+                                <button onClick={() => { if(window.confirm("Excluir perfil?")) appBackend.deleteRole(role.id).then(fetchRoles); }} className="p-1 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
                             </div>
                         </div>
                     ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'instructor_levels' && (
-            <div className="space-y-6 animate-in slide-in-from-left-2">
-                <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <div><h3 className="text-lg font-bold text-slate-800">Níveis Docentes</h3><p className="text-xs text-slate-500">Definição técnica de hierarquia e honorários padrão.</p></div>
-                    <button onClick={() => setEditingLevel({ name: '', honorarium: 0 })} className="bg-rose-600 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2"><Plus size={16}/> Novo Nível</button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {isLoadingLevels ? <div className="col-span-full py-12 flex justify-center"><Loader2 className="animate-spin text-rose-600" /></div> : instructorLevels.map(lvl => (
-                        <div key={lvl.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm group">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="bg-rose-50 p-2 rounded-lg text-rose-600"><Award size={24}/></div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => setEditingLevel(lvl)} className="p-1.5 text-slate-400 hover:text-rose-600"><Edit2 size={16}/></button>
-                                    <button onClick={() => { if(window.confirm("Excluir nível?")) appBackend.deleteInstructorLevel(lvl.id).then(fetchInstructorLevels); }} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
-                                </div>
-                            </div>
-                            <h4 className="font-bold text-slate-800">{lvl.name}</h4>
-                            <p className="text-sm font-black text-emerald-600 mt-2">{formatCurrency(lvl.honorarium)} <span className="text-[10px] text-slate-400 font-bold">/ DIA</span></p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'course_info' && (
-            <div className="space-y-6 animate-in slide-in-from-left-2">
-                <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <div><h3 className="text-lg font-bold text-slate-800">Ementas Técnicas (Portal)</h3><p className="text-xs text-slate-500">Informações ricas exibidas para o aluno nos detalhes logísticos.</p></div>
-                    <button onClick={() => setEditingCourseInfo({ courseName: '', details: '', materials: '', requirements: '' })} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2"><Plus size={16}/> Novo Conteúdo</button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {isLoadingCourseInfo ? <div className="col-span-full py-12 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div> : courseInfos.map(info => (
-                        <div key={info.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm group">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Monitor size={24}/></div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => setEditingCourseInfo(info)} className="p-1.5 text-slate-400 hover:text-blue-600"><Edit2 size={16}/></button>
-                                    <button onClick={() => { if(window.confirm("Excluir conteúdo?")) appBackend.deleteCourseInfo(info.id).then(fetchCourseInfos); }} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
-                                </div>
-                            </div>
-                            <h4 className="font-bold text-slate-800">{info.courseName}</h4>
-                            <p className="text-xs text-slate-400 line-clamp-2 mt-2">{info.details}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'support_tags' && (
-            <div className="space-y-6 animate-in slide-in-from-left-2">
-                <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <div><h3 className="text-lg font-bold text-slate-800">Tags de Atendimento</h3><p className="text-xs text-slate-500">Categorias para classificar chamados de suporte.</p></div>
-                    <button onClick={() => setEditingTag({ name: '', role: 'all' })} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2"><Plus size={16}/> Nova Tag</button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {isLoadingTags ? <div className="col-span-full py-12 flex justify-center"><Loader2 className="animate-spin text-emerald-600" /></div> : supportTags.map(tag => (
-                        <div key={tag.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between group">
-                            <div className="flex flex-col">
-                                <span className="font-bold text-slate-700 text-xs">{tag.name}</span>
-                                <span className="text-[9px] text-slate-400 uppercase font-black">{tag.role}</span>
-                            </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => setEditingTag(tag)} className="p-1.5 text-slate-400 hover:text-emerald-600"><Edit2 size={14}/></button>
-                                <button onClick={() => { if(window.confirm("Excluir tag?")) appBackend.deleteSupportTag(tag.id).then(fetchSupportTags); }} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={14}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'logs' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in slide-in-from-left-2">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><History className="text-slate-400" /> Registro de Atividades</h3>
-                    <button onClick={fetchLogs} className="p-2 text-slate-400 hover:text-indigo-600 transition-all"><RefreshCw size={20} className={isLoadingLogs ? "animate-spin" : ""} /></button>
-                </div>
-                <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
-                    <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider sticky top-0 z-10 shadow-sm border-b">
-                            <tr>
-                                <th className="p-4">Data/Hora</th>
-                                <th className="p-4">Usuário</th>
-                                <th className="p-4">Ação</th>
-                                <th className="p-4">Módulo</th>
-                                <th className="p-4">Detalhes</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {isLoadingLogs ? <tr><td colSpan={5} className="p-20 text-center"><Loader2 className="animate-spin mx-auto" /></td></tr> : logs.map(log => (
-                                <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="p-4 font-mono text-slate-400 whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</td>
-                                    <td className="p-4 font-bold text-slate-700">{log.userName}</td>
-                                    <td className="p-4"><span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold uppercase", log.action === 'create' ? "bg-green-100 text-green-700" : log.action === 'delete' ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700")}>{log.action}</span></td>
-                                    <td className="p-4 font-bold uppercase text-slate-500">{log.module}</td>
-                                    <td className="p-4 text-slate-500 italic">{log.details}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
                 </div>
             </div>
         )}
@@ -567,8 +457,8 @@ CREATE POLICY "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs FOR 
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Terminal size={140}/></div>
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
-                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural</h3>
-                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script corrige o schema das tabelas para suportar as novas funcionalidades do ERP.</p>
+                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V16</h3>
+                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script corrige o schema das tabelas e as permissões de cache para suportar o salvamento de presets e conexões.</p>
                     </div>
                     <button onClick={copySql} className={clsx("px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg transition-all flex items-center gap-2 shrink-0 active:scale-95", sqlCopied ? "bg-green-600 text-white" : "bg-red-600 hover:bg-red-700 text-white")}>
                         {sqlCopied ? <><Check size={18}/> Copiado!</> : <><Copy size={18}/> Copiar SQL</>}
@@ -579,13 +469,13 @@ CREATE POLICY "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs FOR 
                 </div>
                 <div className="flex items-center gap-3 text-xs text-slate-500 bg-black/20 p-4 rounded-xl">
                     <Info size={18} className="text-red-500 shrink-0"/>
-                    <p>Copie o código acima e cole no <strong>SQL Editor</strong> do seu dashboard Supabase para aplicar as correções e recarregar o cache.</p>
+                    <p>Copie o código acima e cole no <strong>SQL Editor</strong> do seu dashboard Supabase para aplicar as correções e forçar a atualização do cache da API.</p>
                 </div>
             </div>
         )}
       </div>
 
-      {/* MODALS */}
+      {/* MODALS CRUD */}
       {editingRole && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
@@ -648,215 +538,6 @@ CREATE POLICY "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs FOR 
                       <div className="pt-4 border-t flex justify-end gap-3">
                           <button onClick={() => setEditingCompany(null)} className="px-6 py-2 text-slate-500 font-bold text-sm">Cancelar</button>
                           <button onClick={handleSaveCompany} disabled={isSavingItem} className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-xl active:scale-95 disabled:opacity-50">{isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Empresa</button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {editingBanner && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl animate-in zoom-in-95 overflow-hidden">
-                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="text-lg font-black text-slate-800">Gerenciar Banner</h3>
-                      <button onClick={() => setEditingBanner(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-6">
-                      <div className="space-y-4">
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Título Interno</label>
-                              <input type="text" className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={editingBanner.title || ''} onChange={e => setEditingBanner({...editingBanner, title: e.target.value})} />
-                          </div>
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Link de Destino</label>
-                              <input type="text" className="w-full px-4 py-2 border rounded-xl text-xs font-mono" value={editingBanner.linkUrl || ''} onChange={e => setEditingBanner({...editingBanner, linkUrl: e.target.value})} placeholder="https://..." />
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Portal Destino</label>
-                                  <select className="w-full px-4 py-2 border rounded-xl text-sm font-bold bg-white" value={editingBanner.targetAudience} onChange={e => setEditingBanner({...editingBanner, targetAudience: e.target.value as any})}>
-                                      <option value="student">Área do Aluno</option>
-                                      <option value="instructor">Área do Instrutor</option>
-                                  </select>
-                              </div>
-                              <div className="flex items-end pb-1">
-                                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 px-4 py-2 rounded-xl border w-full">
-                                      <input type="checkbox" checked={editingBanner.active} onChange={e => setEditingBanner({...editingBanner, active: e.target.checked})} className="w-4 h-4 rounded text-orange-600" />
-                                      <span className="text-[10px] font-black uppercase text-slate-700">Banner Ativo</span>
-                                  </label>
-                              </div>
-                          </div>
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Imagem (1200x300 recomendado)</label>
-                              <div className="flex gap-4 items-center bg-slate-50 p-4 rounded-2xl border-2 border-dashed border-slate-200">
-                                  {editingBanner.imageUrl ? (
-                                      <div className="w-32 h-12 rounded border bg-white overflow-hidden shadow-sm"><img src={editingBanner.imageUrl} className="w-full h-full object-cover" /></div>
-                                  ) : <div className="w-12 h-12 bg-white rounded border flex items-center justify-center text-slate-200"><ImageIcon size={24}/></div>}
-                                  <input type="file" ref={bannerFileInputRef} className="hidden" accept="image/*" onChange={(e) => {
-                                      if (e.target.files?.[0]) {
-                                          const reader = new FileReader();
-                                          reader.onloadend = () => setEditingBanner({...editingBanner, imageUrl: reader.result as string});
-                                          reader.readAsDataURL(e.target.files[0]);
-                                      }
-                                  }} />
-                                  <button onClick={() => bannerFileInputRef.current?.click()} className="px-4 py-2 bg-white border rounded-lg text-[10px] font-black uppercase shadow-sm">Escolher Arquivo</button>
-                              </div>
-                          </div>
-                      </div>
-                      <div className="pt-4 border-t flex justify-end gap-3">
-                          <button onClick={() => setEditingBanner(null)} className="px-6 py-2 text-slate-500 font-bold text-sm">Cancelar</button>
-                          <button onClick={handleSaveBanner} disabled={isSavingItem} className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-xl active:scale-95 disabled:opacity-50">{isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Banner</button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {editingLevel && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md animate-in zoom-in-95 overflow-hidden">
-                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="text-lg font-black text-slate-800">{editingLevel.id ? 'Editar Nível' : 'Novo Nível Docente'}</h3>
-                      <button onClick={() => setEditingLevel(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-6">
-                      <div className="space-y-4">
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome do Nível</label>
-                              <input type="text" className="w-full px-4 py-2 border rounded-xl text-sm font-bold" value={editingLevel.name || ''} onChange={e => setEditingLevel({...editingLevel, name: e.target.value})} placeholder="Ex: Master / Sênior" />
-                          </div>
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Valor do Honorário (Diária R$)</label>
-                              <input type="number" className="w-full px-4 py-2 border border-emerald-100 bg-emerald-50 rounded-xl text-sm font-black text-emerald-700" value={editingLevel.honorarium || 0} onChange={e => setEditingLevel({...editingLevel, honorarium: parseFloat(e.target.value) || 0})} />
-                          </div>
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Observações Técnicas</label>
-                              <textarea className="w-full px-4 py-2 border rounded-xl text-xs h-24 resize-none" value={editingLevel.observations || ''} onChange={e => setEditingLevel({...editingLevel, observations: e.target.value})} />
-                          </div>
-                      </div>
-                      <div className="pt-4 border-t flex justify-end gap-3">
-                          <button onClick={() => setEditingLevel(null)} className="px-6 py-2 text-slate-500 font-bold text-sm">Cancelar</button>
-                          <button onClick={handleSaveLevel} disabled={isSavingItem} className="bg-rose-600 hover:bg-rose-700 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-xl active:scale-95 disabled:opacity-50">{isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Nível</button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {editingTrigger && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl animate-in zoom-in-95 overflow-hidden">
-                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="text-lg font-black text-slate-800">Gatilho de Integração</h3>
-                      <button onClick={() => setEditingTrigger(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Funil de Origem</label>
-                              <select className="w-full px-4 py-2 border rounded-xl text-sm font-bold bg-white" value={editingTrigger.pipelineName || ''} onChange={e => setEditingTrigger({...editingTrigger, pipelineName: e.target.value})}>
-                                  {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                              </select>
-                          </div>
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Etapa Gatilho</label>
-                              <select className="w-full px-4 py-2 border rounded-xl text-sm font-bold bg-white" value={editingTrigger.stageId || ''} onChange={e => setEditingTrigger({...editingTrigger, stageId: e.target.value})}>
-                                  <option value="">Selecione...</option>
-                                  {(pipelines.find(p => p.name === editingTrigger.pipelineName)?.stages || []).map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
-                              </select>
-                          </div>
-                          <div className="md:col-span-2">
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Payload Customizado (JSON) - Opcional</label>
-                              <textarea className="w-full px-4 py-2 border rounded-xl text-[10px] font-mono h-48 bg-slate-50 resize-none outline-none focus:bg-white transition-all" value={editingTrigger.payloadJson || ''} onChange={e => setEditingTrigger({...editingTrigger, payloadJson: e.target.value})} placeholder='{"custom_id": "{{deal_number}}", "status": "approved"}' />
-                          </div>
-                      </div>
-                      <div className="pt-4 border-t flex justify-end gap-3">
-                          <button onClick={() => setEditingTrigger(null)} className="px-6 py-2 text-slate-500 font-bold text-sm">Cancelar</button>
-                          <button onClick={handleSaveTrigger} disabled={isSavingItem} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-xl active:scale-95 disabled:opacity-50">{isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Gatilho</button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {editingCourseInfo && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-                  <div className="px-10 py-8 border-b flex justify-between items-center bg-slate-50 shrink-0">
-                      <h3 className="text-xl font-black text-slate-800">Editor de Portal Técnico</h3>
-                      <button onClick={() => setEditingCourseInfo(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all"><X size={32}/></button>
-                  </div>
-                  <div className="p-10 overflow-y-auto custom-scrollbar flex-1 space-y-10">
-                      <div className="space-y-6">
-                          <div>
-                              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Vincular ao Curso (Nome Exato)</label>
-                              <input className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm font-bold outline-none" value={editingCourseInfo.courseName || ''} onChange={e => setEditingCourseInfo({...editingCourseInfo, courseName: e.target.value})} placeholder="Ex: Formação Completa em Pilates" />
-                          </div>
-                          <div>
-                              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Ementa e Detalhes Técnicos</label>
-                              <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-48 resize-none outline-none leading-relaxed" value={editingCourseInfo.details || ''} onChange={e => setEditingCourseInfo({...editingCourseInfo, details: e.target.value})} placeholder="Conteúdo programático que o aluno verá..." />
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              <div>
-                                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Materiais de Apoio (Texto)</label>
-                                  <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-32 resize-none outline-none leading-relaxed" value={editingCourseInfo.materials || ''} onChange={e => setEditingCourseInfo({...editingCourseInfo, materials: e.target.value})} />
-                              </div>
-                              <div>
-                                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Pré-requisitos e Preparação</label>
-                                  <textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white rounded-[1.5rem] text-sm h-32 resize-none outline-none leading-relaxed" value={editingCourseInfo.requirements || ''} onChange={e => setEditingCourseInfo({...editingCourseInfo, requirements: e.target.value})} />
-                              </div>
-                          </div>
-                      </div>
-                  </div>
-                  <div className="px-10 py-6 bg-slate-50 border-t flex justify-end gap-3 shrink-0 rounded-b-[2.5rem]">
-                      <button onClick={() => setEditingCourseInfo(null)} className="px-8 py-3 text-slate-500 font-bold text-sm">Cancelar</button>
-                      <button onClick={async () => {
-                          setIsSavingItem(true);
-                          await appBackend.saveCourseInfo(editingCourseInfo);
-                          await fetchCourseInfos();
-                          setEditingCourseInfo(null);
-                          setIsSavingItem(false);
-                      }} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-3 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center gap-2">
-                          {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar no Portal
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {editingTag && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm animate-in zoom-in-95 overflow-hidden">
-                  <div className="px-8 py-6 border-b flex justify-between items-center bg-slate-50">
-                      <h3 className="text-lg font-black text-slate-800">{editingTag.id ? 'Editar Tag' : 'Nova Tag Suporte'}</h3>
-                      <button onClick={() => setEditingTag(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-6">
-                      <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome da Categoria</label>
-                          <input type="text" className="w-full px-4 py-2 border rounded-xl text-sm font-bold bg-slate-50 outline-none focus:bg-white" value={editingTag.name || ''} onChange={e => setEditingTag({...editingTag, name: e.target.value})} placeholder="Ex: Financeiro / Técnico" />
-                      </div>
-                      <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Público da Tag</label>
-                          <select className="w-full px-4 py-2 border rounded-xl text-sm font-bold bg-white" value={editingTag.role} onChange={e => setEditingTag({...editingTag, role: e.target.value as any})}>
-                              <option value="all">Todos os Usuários</option>
-                              <option value="student">Somente Alunos</option>
-                              <option value="instructor">Somente Instrutores</option>
-                              <option value="studio">Somente Studios</option>
-                              <option value="admin">Somente Administrativo</option>
-                          </select>
-                      </div>
-                      <div className="pt-4 border-t flex justify-end gap-3">
-                          <button onClick={() => setEditingTag(null)} className="px-6 py-2 text-slate-500 font-bold text-sm">Cancelar</button>
-                          <button onClick={async () => {
-                              setIsSavingItem(true);
-                              await appBackend.saveSupportTag(editingTag);
-                              await fetchSupportTags();
-                              setEditingTag(null);
-                              setIsSavingItem(false);
-                          }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-xl active:scale-95 disabled:opacity-50">
-                              {isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Tag
-                          </button>
                       </div>
                   </div>
               </div>

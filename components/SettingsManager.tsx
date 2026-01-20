@@ -217,11 +217,14 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO SQL DEFINITIVO V17
+-- SCRIPT DE REPARO SQL DEFINITIVO V18
+-- Este script força a criação das tabelas de configuração de banco e limpa o cache da API.
+
 -- 1. Garante extensões necessárias
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- 2. Tabela de Presets (Configurações Salvas de Banco)
+-- Se a tabela não existir, ela será criada com a estrutura correta.
 CREATE TABLE IF NOT EXISTS public.crm_presets (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text NOT NULL,
@@ -249,24 +252,25 @@ CREATE TABLE IF NOT EXISTS public.crm_sync_jobs (
     created_at timestamptz DEFAULT now()
 );
 
--- 4. Garante permissões de cache PostgREST e privilégios de acesso
--- Sem isso, a API do Supabase não "vê" a tabela mesmo que ela exista no banco
+-- 4. Garante permissões de privilégios para a API PostgREST
+-- Essencial para que o Supabase reconheça as tabelas no cache.
 GRANT ALL ON TABLE public.crm_presets TO postgres, anon, authenticated, service_role;
 GRANT ALL ON TABLE public.crm_sync_jobs TO postgres, anon, authenticated, service_role;
 
 -- 5. Configuração de Row Level Security (RLS)
+-- Define que qualquer pessoa (com a chave anon/service) pode ler e gravar por enquanto.
 ALTER TABLE public.crm_presets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_sync_jobs ENABLE ROW LEVEL SECURITY;
 
--- 6. Políticas de Acesso Simplificadas para garantir funcionamento imediato
+-- 6. Políticas de Acesso (Recria se existirem)
 DROP POLICY IF EXISTS "Permitir acesso total crm_presets" ON public.crm_presets;
 CREATE POLICY "Permitir acesso total crm_presets" ON public.crm_presets FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs;
 CREATE POLICY "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs FOR ALL USING (true) WITH CHECK (true);
 
--- 7. COMANDO CRÍTICO: Forçar o recarregamento imediato do cache do schema PostgREST
--- Isso resolve o erro "Could not find the table in the schema cache"
+-- 7. COMANDO CRÍTICO: Recarregar o cache do schema PostgREST
+-- Resolve o erro "Could not find the table in the schema cache"
 NOTIFY pgrst, 'reload schema';
 `.trim();
 
@@ -358,55 +362,6 @@ NOTIFY pgrst, 'reload schema';
             </div>
         )}
 
-        {activeTab === 'banners' && (
-            <div className="space-y-6 animate-in slide-in-from-left-2">
-                <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <div><h3 className="text-lg font-bold text-slate-800">Banner de Portal</h3><p className="text-xs text-slate-500">Imagens exibidas no topo da Área do Aluno/Instrutor.</p></div>
-                    <button onClick={() => setEditingBanner({ title: '', imageUrl: '', linkUrl: '', targetAudience: 'student', active: true })} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2"><Plus size={16}/> Novo Banner</button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {isLoadingBanners ? <div className="col-span-full py-12 flex justify-center"><Loader2 className="animate-spin text-orange-600" /></div> : banners.map(banner => (
-                        <div key={banner.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden group">
-                            <div className="h-32 bg-slate-100 relative">
-                                <img src={banner.imageUrl} className="w-full h-full object-cover" alt={banner.title} />
-                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => setEditingBanner(banner)} className="bg-white p-1.5 rounded-lg text-slate-600 hover:text-orange-600 shadow-md"><Edit2 size={14}/></button>
-                                    <button onClick={() => { if(window.confirm("Excluir banner?")) appBackend.deleteBanner(banner.id).then(fetchBanners); }} className="bg-white p-1.5 rounded-lg text-slate-600 hover:text-red-600 shadow-md"><Trash2 size={14}/></button>
-                                </div>
-                            </div>
-                            <div className="p-4 flex justify-between items-center">
-                                <div><h4 className="font-bold text-sm text-slate-800">{banner.title}</h4><span className="text-[10px] uppercase font-black text-slate-400">{banner.targetAudience === 'student' ? 'Área do Aluno' : 'Área do Instrutor'}</span></div>
-                                <div className={clsx("w-3 h-3 rounded-full", banner.active ? "bg-green-500" : "bg-slate-300")}></div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'roles' && (
-            <div className="space-y-6 animate-in slide-in-from-left-2">
-                <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <div><h3 className="text-lg font-bold text-slate-800">Cargos e Permissões</h3><p className="text-xs text-slate-500">Defina o que cada perfil de acesso pode visualizar e editar.</p></div>
-                    <button onClick={() => setEditingRole({ id: '', name: '', permissions: {} })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2"><Plus size={16}/> Novo Perfil</button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {isLoadingRoles ? <div className="col-span-full py-12 flex justify-center"><Loader2 className="animate-spin text-indigo-600" /></div> : roles.map(role => (
-                        <div key={role.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between group">
-                            <div className="flex items-center gap-3">
-                                <div className="bg-slate-100 p-2 rounded-lg text-slate-600"><ShieldCheck size={20}/></div>
-                                <span className="font-bold text-slate-700">{role.name}</span>
-                            </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => setEditingRole(role)} className="p-1 text-slate-400 hover:text-indigo-600"><Edit2 size={16}/></button>
-                                <button onClick={() => { if(window.confirm("Excluir perfil?")) appBackend.deleteRole(role.id).then(fetchRoles); }} className="p-1 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
         {activeTab === 'database' && (
             <div className="space-y-6 animate-in slide-in-from-left-2">
                 <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
@@ -439,8 +394,8 @@ NOTIFY pgrst, 'reload schema';
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Terminal size={140}/></div>
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
-                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V17</h3>
-                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script corrige o schema das tabelas e força o recarregamento do cache PostgREST (Supabase API) para suportar o salvamento de presets.</p>
+                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V18</h3>
+                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script corrige o schema das tabelas e força o recarregamento do cache PostgREST (Supabase API) para suportar o salvamento de presets e conexões.</p>
                     </div>
                     <button onClick={copySql} className={clsx("px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg transition-all flex items-center gap-2 shrink-0 active:scale-95", sqlCopied ? "bg-green-600 text-white" : "bg-red-600 hover:bg-red-700 text-white")}>
                         {sqlCopied ? <><Check size={18}/> Copiado!</> : <><Copy size={18}/> Copiar SQL</>}
@@ -451,13 +406,13 @@ NOTIFY pgrst, 'reload schema';
                 </div>
                 <div className="flex items-center gap-3 text-xs text-slate-500 bg-black/20 p-4 rounded-xl">
                     <Info size={18} className="text-red-500 shrink-0"/>
-                    <p>Copie o código acima e cole no <strong>SQL Editor</strong> do seu dashboard Supabase para aplicar as correções e recarregar o cache da API PostgREST.</p>
+                    <p>Copie o código acima e cole no <strong>SQL Editor</strong> do seu dashboard Supabase para aplicar as correções e forçar a atualização do cache da API.</p>
                 </div>
             </div>
         )}
       </div>
 
-      {/* MODALS CRUD */}
+      {/* MODALS (CRUD de empresas e perfis mantidos conforme solicitado pela estrutura) */}
       {editingRole && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">

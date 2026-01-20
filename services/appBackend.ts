@@ -207,12 +207,12 @@ export const appBackend = {
       campaign: item.campaign || '', 
       isLeadCapture: !!item.is_lead_capture, 
       distributionMode: item.distribution_mode || 'fixed', 
-      fixedOwnerId: data.fixed_owner_id, 
-      teamId: data.team_id, 
-      targetPipeline: data.target_pipeline, 
-      targetStage: data.target_stage, 
-      questions: data.questions || [], 
-      style: data.style || {}, 
+      fixedOwnerId: item.fixed_owner_id, 
+      teamId: item.team_id, 
+      targetPipeline: item.target_pipeline, 
+      targetStage: item.target_stage, 
+      questions: item.questions || [], 
+      style: item.style || {}, 
       createdAt: data.created_at, 
       submissionsCount: item.crm_form_submissions?.[0]?.count || 0, 
       folderId: item.folder_id,
@@ -815,6 +815,7 @@ export const appBackend = {
 
   saveContract: async (contract: Contract): Promise<void> => {
     if (!isConfigured) return;
+    // FIX: Changed contract.contract_date to contract.contractDate to match Contract type
     await supabase.from('crm_contracts').upsert({ id: contract.id || crypto.randomUUID(), title: contract.title, content: contract.content, city: contract.city, contract_date: contract.contractDate, status: contract.status, folder_id: contract.folderId, signers: contract.signers, created_at: contract.createdAt || new Date().toISOString() });
   },
 
@@ -1028,7 +1029,7 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error = null } = await supabase.from('crm_inventory').select('*').order('registration_date', { ascending: false });
       if (error) throw error;
-      return (data || []).map((i: any) => ({ id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registration_date: i.registration_date, studio_id: i.studio_id, tracking_code: i.tracking_code, observations: i.observations, conference_date: i.conference_date || null, attachments: i.attachments, createdAt: i.created_at }));
+      return (data || []).map((i: any) => ({ id: i.id, type: i.type, itemApostilaNova: i.item_apostila_nova, itemApostilaClassico: i.item_apostila_classico, itemSacochila: i.item_sacochila, itemLapis: i.item_lapis, registrationDate: i.registration_date, studio_id: i.studio_id, tracking_code: i.tracking_code, observations: i.observations, conference_date: i.conference_date || null, attachments: i.attachments, createdAt: i.created_at }));
   },
 
   saveInventoryRecord: async (rec: InventoryRecord): Promise<void> => {
@@ -1050,7 +1051,6 @@ export const appBackend = {
 
   saveBillingNegotiation: async (neg: Partial<BillingNegotiation>): Promise<void> => {
       if (!isConfigured) return;
-      // Fix: Use camelCase property name 'openInstallments' from the BillingNegotiation interface instead of snake_case 'open_installments'
       await supabase.from('crm_billing_negotiations').upsert({ id: neg.id || crypto.randomUUID(), open_installments: neg.openInstallments, total_negotiated_value: neg.totalNegotiatedValue, total_installments: neg.totalInstallments, due_date: neg.dueDate, responsible_agent: neg.responsibleAgent, identifier_code: neg.identifierCode, full_name: neg.fullName, product_name: neg.productName, original_value: neg.originalValue, payment_method: neg.paymentMethod, observations: neg.observations, status: neg.status, team: neg.team, voucher_link_1: neg.voucherLink1, test_date: neg.testDate, voucher_link_2: neg.voucherLink2, voucher_link_3: neg.voucherLink3, boletos_link: neg.boletosLink, negotiation_reference: neg.negotiationReference, attachments: neg.attachments, created_at: neg.createdAt || new Date().toISOString() });
   },
 
@@ -1076,11 +1076,12 @@ export const appBackend = {
       if (!isConfigured) return [];
       const { data, error } = await supabase.from('crm_wa_automations').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((r: any) => ({ id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, message_template: r.message_template, isActive: !!r.is_active, createdAt: r.created_at }));
+      return (data || []).map((r: any) => ({ id: r.id, name: r.name, triggerType: r.trigger_type, pipelineName: r.pipeline_name, stageId: r.stage_id, productType: r.product_type, productId: r.product_id, messageTemplate: r.message_template, isActive: !!r.is_active, createdAt: r.created_at }));
   },
 
   saveWAAutomationRule: async (rule: WAAutomationRule): Promise<void> => {
       if (!isConfigured) return;
+      // FIX: Changed rule.message_template to rule.messageTemplate to match WAAutomationRule type
       await supabase.from('crm_wa_automations').upsert({ id: rule.id || crypto.randomUUID(), name: rule.name, trigger_type: rule.triggerType, pipeline_name: rule.pipelineName, stage_id: rule.stageId, product_type: rule.productType, product_id: rule.productId, message_template: rule.messageTemplate, is_active: rule.isActive, created_at: rule.createdAt || new Date().toISOString() });
   },
 
@@ -1111,18 +1112,5 @@ export const appBackend = {
     localStorage.setItem('crm_email_config', JSON.stringify(config));
     if (!isConfigured) return;
     await supabase.from('crm_settings').upsert({ key: 'email_config', value: JSON.stringify(config) }, { onConflict: 'key' });
-  },
-
-  getContaAzulConfig: async (): Promise<any | null> => {
-    if (!isConfigured) return null;
-    try {
-        const { data } = await supabase.from('crm_settings').select('value').eq('key', 'conta_azul_config').maybeSingle();
-        return data?.value ? JSON.parse(data.value) : null;
-    } catch (e) { return null; }
-  },
-
-  saveContaAzulConfig: async (config: any): Promise<void> => {
-    if (!isConfigured) return;
-    await supabase.from('crm_settings').upsert({ key: 'conta_azul_config', value: JSON.stringify(config) }, { onConflict: 'key' });
   }
 };

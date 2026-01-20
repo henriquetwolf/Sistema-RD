@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     Upload, Image as ImageIcon, CheckCircle, Save, Database, 
@@ -216,11 +217,12 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO SQL
+-- SCRIPT DE REPARO SQL COMPLETO V15
 CREATE TABLE IF NOT EXISTS public.crm_settings (
     key text PRIMARY KEY,
     value text
 );
+
 CREATE TABLE IF NOT EXISTS public.crm_companies (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     legal_name text,
@@ -229,6 +231,41 @@ CREATE TABLE IF NOT EXISTS public.crm_companies (
     product_types text[],
     product_ids text[]
 );
+
+-- Tabela de Presets (Configurações Salvas de Banco)
+CREATE TABLE IF NOT EXISTS public.crm_presets (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    name text NOT NULL,
+    url text NOT NULL,
+    key text NOT NULL,
+    table_name text,
+    primary_key text,
+    interval_minutes integer DEFAULT 5,
+    created_by_name text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- Tabela de Conexões de Sincronização Ativas
+CREATE TABLE IF NOT EXISTS public.crm_sync_jobs (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    name text,
+    sheet_url text,
+    config jsonb,
+    last_sync timestamptz,
+    status text DEFAULT 'idle',
+    last_message text,
+    active boolean DEFAULT true,
+    interval_minutes integer DEFAULT 5,
+    created_by text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- Habilitar RLS e Permissões
+ALTER TABLE public.crm_presets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crm_sync_jobs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Permitir acesso total crm_presets" ON public.crm_presets FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs FOR ALL USING (true) WITH CHECK (true);
 `.trim();
 
   const copySql = () => { navigator.clipboard.writeText(generateRepairSQL()); setSqlCopied(true); setTimeout(() => setSqlCopied(false), 2000); };
@@ -579,8 +616,8 @@ CREATE TABLE IF NOT EXISTS public.crm_companies (
                       </div>
                   </div>
                   <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3 shrink-0">
-                      <button onClick={() => setEditingRole(null)} className="px-6 py-2.5 text-slate-500 font-bold text-sm">Cancelar</button>
-                      <button onClick={handleSaveRole} disabled={isSavingItem} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-xl flex items-center gap-2 active:scale-95 disabled:opacity-50">{isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Perfil</button>
+                      <button onClick={() => setEditingRole(null)} className="px-6 py-2 text-slate-500 font-bold text-sm">Cancelar</button>
+                      <button onClick={handleSaveRole} disabled={isSavingItem} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-xl flex items-center gap-2 active:scale-95 disabled:opacity-50">{isSavingItem ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Salvar Perfil</button>
                   </div>
               </div>
           </div>

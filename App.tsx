@@ -204,11 +204,27 @@ function App() {
   const fetchReceberGeral = async () => {
     setIsReceberGeralLoading(true);
     try {
-      const { data, error } = await appBackend.client
-        .from('visao_contas_a_receber_Geral')
-        .select('*');
-      if (error) throw error;
-      setReceberGeralData(data || []);
+      let allData: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await appBackend.client
+          .from('visao_contas_a_receber_Geral')
+          .select('*')
+          .range(from, from + step - 1);
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          if (data.length < step) hasMore = false;
+          else from += step;
+        } else {
+          hasMore = false;
+        }
+      }
+      setReceberGeralData(allData);
     } catch (e) {
       console.error("Erro ao buscar Contas a Receber Geral:", e);
     } finally {
@@ -323,7 +339,7 @@ function App() {
           const { data, error } = await appBackend.client.from('crm_collaborators').select('*').order('full_name');
           if (data) {
               setAllCollaborators(data.map((d: any) => ({
-                id: d.id, fullName: d.full_name || '', socialName: d.social_name || '', birthDate: d.birth_date || '', maritalStatus: d.marital_status || '', spouseName: d.spouse_name || '', fatherName: d.father_name || '', motherName: d.mother_name || '', genderIdentity: d.gender_identity || '', racialIdentity: d.racial_identity || '', educationLevel: d.education_level || '', photoUrl: d.photo_url || '', email: d.email || '', phone: d.phone || '', cellphone: d.cellphone || '', corporatePhone: d.corporate_phone || '', operator: d.operator || '', address: d.address || '', cep: d.cep || '', complement: d.complement || '', birthState: d.birth_state || '', birthCity: d.birth_city || '', state: d.state || '', currentCity: d.current_city || '', emergencyName: d.emergency_name || '', emergencyPhone: d.emergency_phone || '', status: d.status || 'active', contractType: d.contract_type || '', cpf: d.cpf || '', rg: d.rg || '', rgIssuer: d.rg_issuer || '', rgIssueDate: d.rg_issue_date || '', rgState: d.rg_state || '', ctpsNumber: d.ctps_number || '', ctpsSeries: d.ctps_series || '', ctpsState: d.ctps_state || '', ctpsIssueDate: d.ctps_issue_date || '', pisNumber: d.pis_number || '', reservistNumber: d.reservist_number || '', docsFolderLink: d.docs_folder_link || '', legalAuth: !!d.legal_auth, bankAccountInfo: d.bank_account_info || '', hasInsalubrity: d.has_insalubrity || 'Não', insalubrityPercent: d.insalubrity_percent || '', hasDangerPay: d.has_danger_pay || 'Não', transportVoucherInfo: d.transport_voucher_info || '', busLineHomeWork: d.bus_line_home_work || '', busQtyHomeWork: d.bus_qty_home_work || '', busLineWorkHome: d.bus_line_work_home || '', busQtyWorkHome: d.bus_qty_work_home || '', ticketValue: d.ticket_value || '', fuelVoucherValue: d.fuel_voucher_value || '', hasMealVoucher: d.has_meal_voucher || 'Não', hasFoodVoucher: d.has_food_voucher || 'Não', hasHomeOfficeAid: d.has_home_office_aid || 'Não', hasHealthPlan: d.has_health_plan || 'Não', hasDentalPlan: d.has_dental_plan || 'Não', bonusInfo: d.bonus_info || '', bonusValue: d.bonus_value || '', commissionInfo: d.commission_info || '', commissionPercent: d.commission_percent || '', hasDependents: d.has_dependents || 'Não', dependentName: d.dependent_name || '', dependentDob: d.dependent_dob || '', dependentKinship: d.dependent_kinship || '', dependentCpf: d.dependent_cpf || '', resignationDate: d.resignation_date || '', demissionReason: d.demission_reason || '', demissionDocs: d.demission_docs || '', vacationPeriods: d.vacation_periods || '', observations: d.observations || '',
+                id: d.id, fullName: d.full_name || '', socialName: d.social_name || '', birthDate: d.birth_date || '', maritalStatus: d.marital_status || '', spouseName: d.spouse_name || '', fatherName: d.father_name || '', motherName: d.mother_name || '', genderIdentity: d.gender_identity || '', racialIdentity: d.racial_identity || '', educationLevel: d.education_level || '', photoUrl: d.photo_url || '', email: d.email || '', phone: d.phone || '', cellphone: d.cellphone || '', corporatePhone: d.corporate_phone || '', operator: d.operator || '', address: d.address || '', cep: d.cep || '', complement: d.complement || '', birthState: d.birth_state || '', birthCity: d.birth_city || '', state: d.state || '', currentCity: d.current_city || '', emergencyName: d.emergency_name || '', emergencyPhone: d.emergency_phone || '', status: d.status || 'active', contractType: d.contract_type || '', cpf: d.cpf || '', rg: d.rg || '', rgIssuer: d.rg_issuer || '', rgIssueDate: d.rg_issue_date || '', rgState: d.rg_state || '', ctpsNumber: d.ctps_number || '', ctpsSeries: d.ctps_series || '', ctpsState: d.ctps_state || '', ctpsIssueDate: d.ctps_issue_date || '', pisNumber: d.pis_number || '', reservistNumber: d.reservist_number || '', docsFolderLink: d.docs_folder_link || '', legalAuth: !!d.legal_auth, bankAccountInfo: d.bank_account_info || '', hasInsalubrity: d.has_insalubrity || 'Não', insalubrityPercent: d.insalubrity_percent || '', hasDangerPay: d.has_danger_pay || 'Não', transportVoucherInfo: d.transport_voucher_info || '', busLineHomeWork: d.bus_line_home_work || '', busQtyHomeWork: d.bus_qty_home_work || '', busLineWorkHome: d.bus_line_work_home || '', busQtyWorkHome: d.bus_qty_work_home || '', ticketValue: d.ticket_value || '', fuelVoucherValue: d.fuel_voucher_value || '', hasMealVoucher: d.has_meal_voucher || 'Não', hasFoodVoucher: d.has_food_voucher || 'Não', hasHomeOfficeAid: d.has_home_office_aid || 'Não', hasHealthPlan: d.has_health_plan || 'Não', hasDentalPlan: d.has_dental_plan || 'Não', bonusInfo: d.bonus_info || '', bonusValue: d.bonus_value || '', commissionInfo: d.commission_info || '', commissionPercent: d.commission_percent || '', hasDependents: d.has_dependents || 'Não', dependentName: d.dependent_name || '', dependentDob: d.dependent_dob || '', dependentKinship: d.dependent_kinship || '', dependentCpf: d.dependent_kinship || '', resignationDate: d.resignation_date || '', demissionReason: d.demission_reason || '', demissionDocs: d.demission_docs || '', vacationPeriods: d.vacation_periods || '', observations: d.observations || '',
                 admissionDate: d.admission_date || '', role: d.role || '', department: d.department || '', salary: d.salary || '', hiringMode: d.hiring_mode || '', superiorId: d.superior_id || ''
               })));
           }

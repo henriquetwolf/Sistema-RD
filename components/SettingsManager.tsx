@@ -217,27 +217,11 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   };
 
   const generateRepairSQL = () => `
--- SCRIPT DE REPARO SQL DEFINITIVO V16
--- Garante extensões necessárias
+-- SCRIPT DE REPARO SQL DEFINITIVO V17
+-- 1. Garante extensões necessárias
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Tabela de Configurações Gerais
-CREATE TABLE IF NOT EXISTS public.crm_settings (
-    key text PRIMARY KEY,
-    value text
-);
-
--- Tabela de Empresas
-CREATE TABLE IF NOT EXISTS public.crm_companies (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    legal_name text,
-    cnpj text UNIQUE,
-    webhook_url text,
-    product_types text[],
-    product_ids text[]
-);
-
--- Tabela de Presets (Configurações Salvas de Banco)
+-- 2. Tabela de Presets (Configurações Salvas de Banco)
 CREATE TABLE IF NOT EXISTS public.crm_presets (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text NOT NULL,
@@ -250,7 +234,7 @@ CREATE TABLE IF NOT EXISTS public.crm_presets (
     created_at timestamptz DEFAULT now()
 );
 
--- Tabela de Conexões de Sincronização Ativas
+-- 3. Tabela de Conexões de Sincronização Ativas
 CREATE TABLE IF NOT EXISTS public.crm_sync_jobs (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text,
@@ -265,26 +249,24 @@ CREATE TABLE IF NOT EXISTS public.crm_sync_jobs (
     created_at timestamptz DEFAULT now()
 );
 
--- Habilitar RLS em todas as tabelas críticas
+-- 4. Garante permissões de cache PostgREST e privilégios de acesso
+-- Sem isso, a API do Supabase não "vê" a tabela mesmo que ela exista no banco
+GRANT ALL ON TABLE public.crm_presets TO postgres, anon, authenticated, service_role;
+GRANT ALL ON TABLE public.crm_sync_jobs TO postgres, anon, authenticated, service_role;
+
+-- 5. Configuração de Row Level Security (RLS)
 ALTER TABLE public.crm_presets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crm_sync_jobs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.crm_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.crm_companies ENABLE ROW LEVEL SECURITY;
 
--- Garantir acesso total aos roles anon e authenticated (Necessário para cache da API)
-GRANT ALL ON TABLE public.crm_presets TO anon, authenticated, service_role;
-GRANT ALL ON TABLE public.crm_sync_jobs TO anon, authenticated, service_role;
-GRANT ALL ON TABLE public.crm_settings TO anon, authenticated, service_role;
-GRANT ALL ON TABLE public.crm_companies TO anon, authenticated, service_role;
-
--- Recriar Políticas de Acesso
+-- 6. Políticas de Acesso Simplificadas para garantir funcionamento imediato
 DROP POLICY IF EXISTS "Permitir acesso total crm_presets" ON public.crm_presets;
 CREATE POLICY "Permitir acesso total crm_presets" ON public.crm_presets FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs;
 CREATE POLICY "Permitir acesso total crm_sync_jobs" ON public.crm_sync_jobs FOR ALL USING (true) WITH CHECK (true);
 
--- COMANDO CRÍTICO: Forçar recarregamento do cache do schema para que a API reconheça as novas tabelas
+-- 7. COMANDO CRÍTICO: Forçar o recarregamento imediato do cache do schema PostgREST
+-- Isso resolve o erro "Could not find the table in the schema cache"
 NOTIFY pgrst, 'reload schema';
 `.trim();
 
@@ -457,8 +439,8 @@ NOTIFY pgrst, 'reload schema';
                 <div className="absolute top-0 right-0 p-8 opacity-5"><Terminal size={140}/></div>
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
-                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V16</h3>
-                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script corrige o schema das tabelas e as permissões de cache para suportar o salvamento de presets e conexões.</p>
+                        <h3 className="text-xl font-black text-white flex items-center gap-3"><Terminal size={24} className="text-red-500"/> Script de Reparo Estrutural V17</h3>
+                        <p className="text-slate-400 text-sm mt-2 max-w-xl font-medium leading-relaxed">Este script corrige o schema das tabelas e força o recarregamento do cache PostgREST (Supabase API) para suportar o salvamento de presets.</p>
                     </div>
                     <button onClick={copySql} className={clsx("px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg transition-all flex items-center gap-2 shrink-0 active:scale-95", sqlCopied ? "bg-green-600 text-white" : "bg-red-600 hover:bg-red-700 text-white")}>
                         {sqlCopied ? <><Check size={18}/> Copiado!</> : <><Copy size={18}/> Copiar SQL</>}
@@ -469,7 +451,7 @@ NOTIFY pgrst, 'reload schema';
                 </div>
                 <div className="flex items-center gap-3 text-xs text-slate-500 bg-black/20 p-4 rounded-xl">
                     <Info size={18} className="text-red-500 shrink-0"/>
-                    <p>Copie o código acima e cole no <strong>SQL Editor</strong> do seu dashboard Supabase para aplicar as correções e forçar a atualização do cache da API.</p>
+                    <p>Copie o código acima e cole no <strong>SQL Editor</strong> do seu dashboard Supabase para aplicar as correções e recarregar o cache da API PostgREST.</p>
                 </div>
             </div>
         )}

@@ -89,6 +89,8 @@ function App() {
   const [receberGeralData, setReceberGeralData] = useState<any[]>([]);
   const [isReceberGeralLoading, setIsReceberGeralLoading] = useState(false);
   const [receberGeralSearch, setReceberGeralSearch] = useState('');
+  const [receberGeralPage, setReceberGeralPage] = useState(1);
+  const rowsPerPage = 50;
 
   const [overviewStats, setOverviewStats] = useState({
       leadsToday: 0,
@@ -220,6 +222,18 @@ function App() {
       )
     );
   }, [receberGeralData, receberGeralSearch]);
+
+  // Reset page when search changes
+  useEffect(() => {
+    setReceberGeralPage(1);
+  }, [receberGeralSearch]);
+
+  const paginatedReceberGeral = useMemo(() => {
+    const start = (receberGeralPage - 1) * rowsPerPage;
+    return filteredReceberGeral.slice(start, start + rowsPerPage);
+  }, [filteredReceberGeral, receberGeralPage]);
+
+  const totalReceberGeralPages = Math.ceil(filteredReceberGeral.length / rowsPerPage);
 
   const receberGeralStats = useMemo(() => {
     const totalRecords = receberGeralData.length;
@@ -824,7 +838,7 @@ function App() {
                                             <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-50/50">
                                                 <div>
                                                     <h3 className="text-xl font-black text-slate-800 tracking-tight">Contas a Receber Geral</h3>
-                                                    <p className="text-sm text-slate-500 font-medium">Filtre e analise os registros da tabela.</p>
+                                                    <p className="text-sm text-slate-500 font-medium">Filtre e analise os registros da tabela (50 por página).</p>
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     <div className="relative">
@@ -853,7 +867,7 @@ function App() {
                                                         <Loader2 size={40} className="animate-spin text-blue-600" />
                                                         <p className="font-black uppercase text-xs tracking-widest">Sincronizando dados...</p>
                                                     </div>
-                                                ) : filteredReceberGeral.length === 0 ? (
+                                                ) : paginatedReceberGeral.length === 0 ? (
                                                     <div className="flex flex-col items-center justify-center h-full text-slate-300 italic py-20">
                                                         <Landmark size={64} className="opacity-10 mb-4" />
                                                         <p>Nenhum registro encontrado para esta busca.</p>
@@ -862,21 +876,24 @@ function App() {
                                                     <table className="w-full text-left text-sm border-collapse min-w-max">
                                                         <thead className="bg-slate-50 sticky top-0 z-10">
                                                             <tr className="border-b border-slate-200">
-                                                                {Object.keys(filteredReceberGeral[0]).map(key => (
+                                                                {Object.keys(paginatedReceberGeral[0]).map(key => (
                                                                     <th key={key} className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">{key.replace(/_/g, ' ')}</th>
                                                                 ))}
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-100">
-                                                            {filteredReceberGeral.map((item, idx) => (
+                                                            {paginatedReceberGeral.map((item, idx) => (
                                                                 <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-                                                                    {Object.values(item).map((val, vIdx) => (
-                                                                        <td key={vIdx} className="px-6 py-4 font-medium text-slate-700 whitespace-nowrap">
-                                                                            {val === null ? <span className="text-slate-300">--</span> : 
-                                                                            typeof val === 'number' && String(Object.keys(item)[vIdx]).toLowerCase().includes('valor') ? formatCurrency(val) :
-                                                                            String(val)}
-                                                                        </td>
-                                                                    ))}
+                                                                    {Object.entries(item).map(([key, val], vIdx) => {
+                                                                        const isMoney = key.toLowerCase().includes('valor') || typeof val === 'number';
+                                                                        return (
+                                                                            <td key={vIdx} className="px-6 py-4 font-medium text-slate-700 whitespace-nowrap">
+                                                                                {val === null ? <span className="text-slate-300">--</span> : 
+                                                                                 (typeof val === 'number' || (!isNaN(Number(val)) && isMoney)) ? formatCurrency(Number(val)) :
+                                                                                 String(val)}
+                                                                            </td>
+                                                                        );
+                                                                    })}
                                                                 </tr>
                                                             ))}
                                                         </tbody>
@@ -884,9 +901,31 @@ function App() {
                                                 )}
                                             </div>
                                             
-                                            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest shrink-0">
-                                                <span>Total de registros filtrados: {filteredReceberGeral.length}</span>
-                                                <div className="flex items-center gap-1.5"><Info size={12} className="text-blue-500"/> Sincronizado via Supabase</div>
+                                            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
+                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                    <span>Total: {filteredReceberGeral.length} registros</span>
+                                                    <span className="mx-2">|</span>
+                                                    <div className="flex items-center gap-1.5"><Info size={12} className="text-blue-500"/> Sincronizado via Supabase</div>
+                                                </div>
+                                                {totalReceberGeralPages > 1 && (
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            onClick={() => setReceberGeralPage(p => Math.max(1, p - 1))} 
+                                                            disabled={receberGeralPage === 1}
+                                                            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"
+                                                        >
+                                                            <ChevronLeft size={18} />
+                                                        </button>
+                                                        <span className="text-xs font-black text-slate-600 uppercase tracking-tighter">Página {receberGeralPage} de {totalReceberGeralPages}</span>
+                                                        <button 
+                                                            onClick={() => setReceberGeralPage(p => Math.min(totalReceberGeralPages, p + 1))} 
+                                                            disabled={receberGeralPage === totalReceberGeralPages}
+                                                            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"
+                                                        >
+                                                            <ChevronRight size={18} />
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )}

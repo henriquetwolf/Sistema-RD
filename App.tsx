@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
 import { UploadPanel } from './components/UploadPanel';
@@ -48,11 +48,11 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight, List, Eraser
+  LifeBuoy, Zap, Send, Bot, MonitorPlay
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages';
 
 function App() {
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
@@ -81,23 +81,7 @@ function App() {
   const jobsRef = useRef<SyncJob[]>([]); 
   
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
-  const [contaAzulSubTab, setContaAzulSubTab] = useState<'receber_geral'>('receber_geral');
-  const [contaAzulViewMode, setContaAzulViewMode] = useState<'dashboard' | 'table'>('dashboard');
   const [isAiOpen, setIsAiOpen] = useState(false);
-
-  // Conta Azul Data States
-  const [receberGeralData, setReceberGeralData] = useState<any[]>([]);
-  const [isReceberGeralLoading, setIsReceberGeralLoading] = useState(false);
-  const [receberGeralSearch, setReceberGeralSearch] = useState('');
-  const [receberGeralPage, setReceberGeralPage] = useState(1);
-  const [receberGeralColumnFilters, setReceberGeralColumnFilters] = useState<Record<string, string>>({});
-  const rowsPerPage = 50;
-
-  // Filtros Dashboard Conta Azul
-  const [caStartDate, setCaStartDate] = useState('');
-  const [caEndDate, setCaEndDate] = useState('');
-  const [caCategory, setCaCategory] = useState('');
-  const [caCostCenter, setCaCostCenter] = useState('');
 
   const [overviewStats, setOverviewStats] = useState({
       leadsToday: 0,
@@ -114,7 +98,7 @@ function App() {
   const [config, setConfig] = useState<SupabaseConfig>({ url: '', key: '', tableName: '', primaryKey: '', intervalMinutes: 5 });
   const [filesData, setFilesData] = useState<FileData[]>([]);
   const [tempSheetUrl, setTempSheetUrl] = useState<string | null>(null);
-  const [status, setUploadStatus] = useState<UploadStatus>('idle');
+  const [status, setStatus] = useState<UploadStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedEntity, setSelectedEntity] = useState<EntityImportType>('generic');
 
@@ -202,200 +186,7 @@ function App() {
     if (dashboardTab === 'hr' && (session || currentCollaborator)) {
         fetchHrData();
     }
-    if (dashboardTab === 'conta_azul' && (session || currentCollaborator)) {
-        fetchReceberGeral();
-    }
   }, [dashboardTab, session, currentCollaborator]);
-
-  const fetchReceberGeral = async () => {
-    setIsReceberGeralLoading(true);
-    try {
-      let allData: any[] = [];
-      let from = 0;
-      const step = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await appBackend.client
-          .from('visao_contas_a_receber_Geral')
-          .select('*')
-          .range(from, from + step - 1);
-
-        if (error) throw error;
-        if (data && data.length > 0) {
-          allData = [...allData, ...data];
-          if (data.length < step) hasMore = false;
-          else from += step;
-        } else {
-          hasMore = false;
-        }
-      }
-      setReceberGeralData(allData);
-    } catch (e) {
-      console.error("Erro ao buscar Contas a Receber Geral:", e);
-    } finally {
-      setIsReceberGeralLoading(false);
-    }
-  };
-
-  const filteredReceberGeral = useMemo(() => {
-    return receberGeralData.filter(item => {
-      // Filtros do Dashboard
-      const keys = Object.keys(item);
-      const catKey = keys.find(k => k.toLowerCase().includes('categoria'));
-      const ccKey = keys.find(k => k.toLowerCase().includes('centro') && k.toLowerCase().includes('custo'));
-      const dKey = keys.find(k => k.toLowerCase().includes('vencimento') || k.toLowerCase().includes('venc'));
-
-      if (caCategory && catKey && String(item[catKey] || '').toLowerCase() !== caCategory.toLowerCase()) return false;
-      if (caCostCenter && ccKey && String(item[ccKey] || '').toLowerCase() !== caCostCenter.toLowerCase()) return false;
-      
-      if (caStartDate || caEndDate) {
-          const dueDate = dKey ? item[dKey] : null;
-          if (dueDate) {
-              let vDate: Date;
-              if (typeof dueDate === 'string' && dueDate.includes('/')) {
-                  const [d, m, y] = dueDate.split('/').map(Number);
-                  vDate = new Date(y, m - 1, d);
-              } else {
-                  vDate = new Date(dueDate);
-              }
-              const isoDate = vDate.toISOString().split('T')[0];
-              if (caStartDate && isoDate < caStartDate) return false;
-              if (caEndDate && isoDate > caEndDate) return false;
-          }
-      }
-
-      // Filtros da Tabela
-      const matchesGlobal = Object.values(item).some(val => 
-        String(val).toLowerCase().includes(receberGeralSearch.toLowerCase())
-      );
-
-      const matchesColumns = Object.entries(receberGeralColumnFilters).every(([key, value]) => {
-        if (!value) return true;
-        return String(item[key] || '').toLowerCase().includes(String(value).toLowerCase());
-      });
-
-      return matchesGlobal && matchesColumns;
-    });
-  }, [receberGeralData, receberGeralSearch, receberGeralColumnFilters, caStartDate, caEndDate, caCategory, caCostCenter]);
-
-  // Reset page when filters change
-  useEffect(() => {
-    setReceberGeralPage(1);
-  }, [receberGeralSearch, receberGeralColumnFilters, caStartDate, caEndDate, caCategory, caCostCenter]);
-
-  const paginatedReceberGeral = useMemo(() => {
-    const start = (receberGeralPage - 1) * rowsPerPage;
-    return filteredReceberGeral.slice(start, start + rowsPerPage);
-  }, [filteredReceberGeral, receberGeralPage]);
-
-  const totalReceberGeralPages = Math.ceil(filteredReceberGeral.length / rowsPerPage);
-
-  const caFilterOptions = useMemo(() => {
-      if (!receberGeralData.length) return { categories: [], costCenters: [] };
-      const keys = Object.keys(receberGeralData[0]);
-      const catKey = keys.find(k => k.toLowerCase().includes('categoria'));
-      const ccKey = keys.find(k => k.toLowerCase().includes('centro') && k.toLowerCase().includes('custo'));
-
-      const categories = new Set<string>();
-      const costCenters = new Set<string>();
-
-      receberGeralData.forEach(item => {
-          if (catKey && item[catKey]) categories.add(String(item[catKey]));
-          if (ccKey && item[ccKey]) costCenters.add(String(item[ccKey]));
-      });
-
-      return {
-          categories: Array.from(categories).sort(),
-          costCenters: Array.from(costCenters).sort()
-      };
-  }, [receberGeralData]);
-
-  const receberGeralStats = useMemo(() => {
-    if (!filteredReceberGeral.length) return {
-        totalRecords: 0, totalValue: 0, totalOverdueValue: 0, overdueCount: 0,
-        totalPaidValue: 0, paidCount: 0, totalPendingValue: 0, pendingCount: 0
-    };
-
-    const keys = Object.keys(filteredReceberGeral[0]);
-    
-    const parseMoney = (val: any) => {
-        if (typeof val === 'number') return val;
-        if (!val) return 0;
-        let clean = String(val).replace('R$', '').replace(/\s/g, '');
-        if (clean.includes(',')) {
-            clean = clean.replace(/\./g, '').replace(',', '.');
-        }
-        return parseFloat(clean) || 0;
-    };
-
-    // Detecção dinâmica de colunas
-    const vKey = keys.find(k => k.toLowerCase() === 'valor') || keys.find(k => k.toLowerCase().includes('valor')) || keys[0];
-    const sKey = keys.find(k => k.toLowerCase().includes('status') || k.toLowerCase().includes('situacao') || k.toLowerCase().includes('situação'));
-    const dKey = keys.find(k => k.toLowerCase().includes('vencimento') || k.toLowerCase().includes('venc'));
-    const vrKey = keys.find(k => k.toLowerCase().includes('recebido') || k.toLowerCase().includes('pago'));
-
-    const totalRecords = filteredReceberGeral.length;
-    const totalValue = filteredReceberGeral.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
-    
-    const now = new Date();
-    now.setHours(0,0,0,0);
-
-    const overdue = filteredReceberGeral.filter(item => {
-        const status = String(sKey ? item[sKey] : '').toLowerCase();
-        const dueDate = dKey ? item[dKey] : null;
-        
-        let isPast = false;
-        if (dueDate) {
-            let vDate: Date;
-            if (typeof dueDate === 'string' && dueDate.includes('/')) {
-                const [d, m, y] = dueDate.split('/').map(Number);
-                vDate = new Date(y, m - 1, d);
-            } else {
-                vDate = new Date(dueDate);
-            }
-            isPast = vDate < now;
-        }
-        
-        return isPast && (status.includes('atrasado') || status.includes('vencido') || status.includes('aberto') || status.includes('pendente'));
-    });
-    const totalOverdueValue = overdue.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
-
-    const paid = filteredReceberGeral.filter(item => {
-        const status = String(sKey ? item[sKey] : '').toLowerCase();
-        return status.includes('pago') || status.includes('liquidado');
-    });
-    const totalPaidValue = paid.reduce((acc, curr) => acc + parseMoney(vrKey ? curr[vrKey] : (vKey ? curr[vKey] : 0)), 0);
-
-    const pending = filteredReceberGeral.filter(item => {
-        const status = String(sKey ? item[sKey] : '').toLowerCase();
-        const dueDate = dKey ? item[dKey] : null;
-        let isFuture = true;
-        if (dueDate) {
-            let vDate: Date;
-            if (typeof dueDate === 'string' && dueDate.includes('/')) {
-                const [d, m, y] = dueDate.split('/').map(Number);
-                vDate = new Date(y, m - 1, d);
-            } else {
-                vDate = new Date(dueDate);
-            }
-            isFuture = vDate >= now;
-        }
-        return isFuture && (status.includes('aberto') || status.includes('pendente'));
-    });
-    const totalPendingValue = pending.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
-
-    return {
-        totalRecords,
-        totalValue,
-        totalOverdueValue,
-        overdueCount: overdue.length,
-        totalPaidValue,
-        paidCount: paid.length,
-        totalPendingValue,
-        pendingCount: pending.length
-    };
-  }, [filteredReceberGeral]);
 
   const fetchHrData = async () => {
       setIsHrLoading(true);
@@ -528,11 +319,11 @@ function App() {
     setTempSheetUrl(null);
     setErrorMessage(null);
     setSelectedEntity('generic');
-    setUploadStatus('idle');
+    setStatus('idle');
   };
 
   const handleFilesSelected = async (files: File[]) => {
-    setUploadStatus('parsing');
+    setStatus('parsing');
     setErrorMessage(null);
     try {
       const parsedFiles = await Promise.all(files.map(file => file.name.endsWith('.xlsx') ? parseExcelFile(file) : parseCsvFile(file)));
@@ -562,10 +353,10 @@ function App() {
       }
 
       setStep(AppStep.CONFIG);
-      setUploadStatus('idle');
+      setStatus('idle');
     } catch (e: any) { 
         setErrorMessage(e.message); 
-        setUploadStatus('error'); 
+        setStatus('error'); 
     }
   };
 
@@ -576,7 +367,7 @@ function App() {
       
       try {
           if (!isAutoSync) {
-              setUploadStatus('uploading');
+              setStatus('uploading');
               const client = createSupabaseClient(config.url, config.key);
               const allData = filesData.flatMap(f => f.data);
               if (allData.length > 0) {
@@ -606,12 +397,12 @@ function App() {
           }
           setStep(AppStep.DASHBOARD);
           setDashboardTab('global_settings'); 
-          setUploadStatus('idle');
+          setStatus('idle');
           if (isAutoSync) setTimeout(() => performJobSync(newJob), 500);
       } catch (e: any) { 
           console.error("Erro no processo de conexão:", e);
           setErrorMessage(`Falha no processamento: ${e.message}`); 
-          setUploadStatus('error'); 
+          setStatus('error'); 
           window.scrollTo({ top: 0, behavior: 'smooth' });
       }
   };
@@ -740,7 +531,7 @@ function App() {
                 </div>
             </header>
 
-            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul') && "max-w-full")}>
+            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk') && "max-w-full")}>
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                     <aside className="w-full md:w-64 flex-shrink-0">
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
@@ -767,7 +558,6 @@ function App() {
                                 {canAccess('partner_studios') && <button onClick={() => setDashboardTab('partner_studios')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'partner_studios' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Building2 size={18} /> Studios Parceiros</button>}
                                 {canAccess('classes') && <button onClick={() => setDashboardTab('classes')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'classes' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><GraduationCap size={18} /> Turmas</button>}
                                 {canAccess('teachers') && <button onClick={() => setDashboardTab('teachers')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'teachers' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><School size={18} /> Professores</button>}
-                                <button onClick={() => setDashboardTab('conta_azul')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'conta_azul' ? "bg-blue-50 text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Landmark size={18} /> Conta Azul</button>
                             </nav>
                             {canAccess('global_settings') && <div className="mt-4 pt-4 border-t border-slate-100"><button onClick={() => setDashboardTab('global_settings')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'global_settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Cog size={18} /> Configurações</button></div>}
                         </div>
@@ -884,225 +674,6 @@ function App() {
                         {dashboardTab === 'whatsapp_automation' && <WhatsAppAutomation />}
                         {dashboardTab === 'whatsapp_bulk' && <BulkWhatsAppSender />}
                         {dashboardTab === 'landing_pages' && <LandingPageManager onBack={() => setDashboardTab('overview')} />}
-                        {dashboardTab === 'conta_azul' && (
-                            <div className="flex flex-col h-full animate-in fade-in duration-500">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-                                    <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit shrink-0">
-                                        <button 
-                                            onClick={() => setContaAzulSubTab('receber_geral')} 
-                                            className={clsx(
-                                                "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2", 
-                                                contaAzulSubTab === 'receber_geral' ? "bg-blue-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-50"
-                                            )}
-                                        >
-                                            <Landmark size={18}/> Contas a Receber Geral
-                                        </button>
-                                    </div>
-                                    <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
-                                        <button 
-                                            onClick={() => setContaAzulViewMode('dashboard')} 
-                                            className={clsx(
-                                                "px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2", 
-                                                contaAzulViewMode === 'dashboard' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                                            )}
-                                        >
-                                            <PieChart size={16}/> Dashboard
-                                        </button>
-                                        <button 
-                                            onClick={() => setContaAzulViewMode('table')} 
-                                            className={clsx(
-                                                "px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2", 
-                                                contaAzulViewMode === 'table' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                                            )}
-                                        >
-                                            <Table size={16}/> Tabela
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="flex-1 flex flex-col min-h-0">
-                                    {contaAzulViewMode === 'dashboard' ? (
-                                        <div className="space-y-6 animate-in slide-in-from-bottom-4">
-                                            {/* Filtros de Dashboard */}
-                                            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4">
-                                                <div className="flex items-center gap-2">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Início</label>
-                                                    <input type="date" value={caStartDate} onChange={e => setCaStartDate(e.target.value)} className="text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fim</label>
-                                                    <input type="date" value={caEndDate} onChange={e => setCaEndDate(e.target.value)} className="text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-                                                </div>
-                                                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</label>
-                                                    <select value={caCategory} onChange={e => setCaCategory(e.target.value)} className="flex-1 text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                                                        <option value="">Todas</option>
-                                                        {caFilterOptions.categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Centro de Custo</label>
-                                                    <select value={caCostCenter} onChange={e => setCaCostCenter(e.target.value)} className="flex-1 text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                                                        <option value="">Todos</option>
-                                                        {caFilterOptions.costCenters.map(cc => <option key={cc} value={cc}>{cc}</option>)}
-                                                    </select>
-                                                </div>
-                                                <button onClick={() => { setCaStartDate(''); setCaEndDate(''); setCaCategory(''); setCaCostCenter(''); }} className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Limpar Filtros"><Eraser size={18}/></button>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                                                    <div className="absolute right-0 top-0 p-4 opacity-5"><DollarSign size={64} className="text-blue-600" /></div>
-                                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor Total Geral</p>
-                                                    <h3 className="text-3xl font-black text-slate-800">{formatCurrency(receberGeralStats.totalValue)}</h3>
-                                                    <p className="text-[10px] text-slate-500 mt-2">{receberGeralStats.totalRecords} registros filtrados</p>
-                                                </div>
-                                                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                                                    <div className="absolute right-0 top-0 p-4 opacity-5"><XCircle size={64} className="text-red-600" /></div>
-                                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total em Atraso</p>
-                                                    <h3 className="text-3xl font-black text-red-600">{formatCurrency(receberGeralStats.totalOverdueValue)}</h3>
-                                                    <p className="text-[10px] text-red-400 mt-2 font-bold uppercase">{receberGeralStats.overdueCount} títulos vencidos</p>
-                                                </div>
-                                                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                                                    <div className="absolute right-0 top-0 p-4 opacity-5"><CheckCircle size={64} className="text-green-600" /></div>
-                                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Recebido</p>
-                                                    <h3 className="text-3xl font-black text-green-600">{formatCurrency(receberGeralStats.totalPaidValue)}</h3>
-                                                    <p className="text-[10px] text-green-500 mt-2 font-bold uppercase">{receberGeralStats.paidCount} títulos liquidados</p>
-                                                </div>
-                                                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                                                    <div className="absolute right-0 top-0 p-4 opacity-5"><Clock size={64} className="text-blue-600" /></div>
-                                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Pendente</p>
-                                                    <h3 className="text-3xl font-black text-blue-600">{formatCurrency(receberGeralStats.totalPendingValue)}</h3>
-                                                    <p className="text-[10px] text-blue-400 mt-2 font-bold uppercase">{receberGeralStats.pendingCount} títulos em aberto</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="bg-white rounded-3xl border border-slate-200 p-10 flex flex-col items-center justify-center text-center space-y-4 shadow-sm border-t-8 border-t-blue-600">
-                                                <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mb-2 shadow-inner"><Landmark size={40}/></div>
-                                                <h3 className="text-2xl font-black text-slate-800">Pronto para detalhar?</h3>
-                                                <p className="text-slate-500 max-w-sm font-medium">Acesse a tabela completa para filtrar, buscar e analisar cada título individualmente.</p>
-                                                <button 
-                                                    onClick={() => setContaAzulViewMode('table')}
-                                                    className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-3"
-                                                >
-                                                    Ver Tabela Completa com Filtros <ArrowRight size={20}/>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden animate-in slide-in-from-right-4">
-                                            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-50/50">
-                                                <div>
-                                                    <h3 className="text-xl font-black text-slate-800 tracking-tight">Contas a Receber Geral</h3>
-                                                    <p className="text-sm text-slate-500 font-medium">Filtre e analise os registros da tabela (50 por página).</p>
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="relative">
-                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                                        <input 
-                                                            type="text" 
-                                                            placeholder="Buscar em todas as colunas..." 
-                                                            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all min-w-[280px]"
-                                                            value={receberGeralSearch}
-                                                            onChange={e => setReceberGeralSearch(e.target.value)}
-                                                        />
-                                                    </div>
-                                                    <button 
-                                                        onClick={() => { setReceberGeralColumnFilters({}); setReceberGeralSearch(''); fetchReceberGeral(); }}
-                                                        className="p-2.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-xl transition-all"
-                                                        title="Limpar e Atualizar"
-                                                    >
-                                                        <RefreshCw size={18} className={isReceberGeralLoading ? "animate-spin" : ""} />
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex-1 overflow-auto custom-scrollbar">
-                                                {isReceberGeralLoading ? (
-                                                    <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400">
-                                                        <Loader2 size={40} className="animate-spin text-blue-600" />
-                                                        <p className="font-black uppercase text-xs tracking-widest">Sincronizando dados...</p>
-                                                    </div>
-                                                ) : paginatedReceberGeral.length === 0 ? (
-                                                    <div className="flex flex-col items-center justify-center h-full text-slate-300 italic py-20">
-                                                        <Landmark size={64} className="opacity-10 mb-4" />
-                                                        <p>Nenhum registro encontrado para esta busca.</p>
-                                                    </div>
-                                                ) : (
-                                                    <table className="w-full text-left text-sm border-collapse min-w-max">
-                                                        <thead className="bg-slate-50 sticky top-0 z-10">
-                                                            <tr className="border-b border-slate-200">
-                                                                {Object.keys(paginatedReceberGeral[0]).map(key => (
-                                                                    <th key={key} className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">{key.replace(/_/g, ' ')}</th>
-                                                                ))}
-                                                            </tr>
-                                                            {/* Filter Row */}
-                                                            <tr className="bg-slate-50 border-b border-slate-200">
-                                                                {Object.keys(paginatedReceberGeral[0]).map(key => (
-                                                                    <th key={`filter-${key}`} className="px-2 py-1">
-                                                                        <input 
-                                                                            className="w-full text-[10px] p-1 border border-slate-200 rounded outline-none focus:ring-1 focus:ring-blue-400 bg-white font-medium" 
-                                                                            placeholder={`Filtrar...`}
-                                                                            value={receberGeralColumnFilters[key] || ''}
-                                                                            onChange={e => setReceberGeralColumnFilters(prev => ({...prev, [key]: e.target.value}))}
-                                                                        />
-                                                                    </th>
-                                                                ))}
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y divide-slate-100">
-                                                            {paginatedReceberGeral.map((item, idx) => (
-                                                                <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-                                                                    {Object.entries(item).map(([key, val], vIdx) => {
-                                                                        // ID column should always be text as requested
-                                                                        const isIdColumn = key.toLowerCase() === 'id';
-                                                                        const isMoney = !isIdColumn && (key.toLowerCase().includes('valor') || typeof val === 'number');
-                                                                        return (
-                                                                            <td key={vIdx} className="px-6 py-4 font-medium text-slate-700 whitespace-nowrap">
-                                                                                {val === null ? <span className="text-slate-300">--</span> : 
-                                                                                 (typeof val === 'number' || (!isNaN(Number(val)) && isMoney)) ? formatCurrency(Number(val)) :
-                                                                                 String(val)}
-                                                                            </td>
-                                                                        );
-                                                                    })}
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                )}
-                                            </div>
-                                            
-                                            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
-                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                                    <span>Total: {filteredReceberGeral.length} registros</span>
-                                                    <span className="mx-2">|</span>
-                                                    <div className="flex items-center gap-1.5"><Info size={12} className="text-blue-500"/> Sincronizado via Supabase</div>
-                                                </div>
-                                                {totalReceberGeralPages > 1 && (
-                                                    <div className="flex items-center gap-2">
-                                                        <button 
-                                                            onClick={() => setReceberGeralPage(p => Math.max(1, p - 1))} 
-                                                            disabled={receberGeralPage === 1}
-                                                            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"
-                                                        >
-                                                            <ChevronLeft size={18} />
-                                                        </button>
-                                                        <span className="text-xs font-black text-slate-600 uppercase tracking-tighter">Página {receberGeralPage} de {totalReceberGeralPages}</span>
-                                                        <button 
-                                                            onClick={() => setReceberGeralPage(p => Math.min(totalReceberGeralPages, p + 1))} 
-                                                            disabled={receberGeralPage === totalReceberGeralPages}
-                                                            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"
-                                                        >
-                                                            <ChevronRight size={18} />
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             </main>

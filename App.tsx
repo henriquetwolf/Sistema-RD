@@ -48,7 +48,7 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight, List
+  LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight, List, Eraser
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -90,6 +90,7 @@ function App() {
   const [isReceberGeralLoading, setIsReceberGeralLoading] = useState(false);
   const [receberGeralSearch, setReceberGeralSearch] = useState('');
   const [receberGeralPage, setReceberGeralPage] = useState(1);
+  const [receberGeralColumnFilters, setReceberGeralColumnFilters] = useState<Record<string, string>>({});
   const rowsPerPage = 50;
 
   const [overviewStats, setOverviewStats] = useState({
@@ -216,17 +217,25 @@ function App() {
   };
 
   const filteredReceberGeral = useMemo(() => {
-    return receberGeralData.filter(item => 
-      Object.values(item).some(val => 
+    return receberGeralData.filter(item => {
+      const matchesGlobal = Object.values(item).some(val => 
         String(val).toLowerCase().includes(receberGeralSearch.toLowerCase())
-      )
-    );
-  }, [receberGeralData, receberGeralSearch]);
+      );
 
-  // Reset page when search changes
+      const matchesColumns = Object.entries(receberGeralColumnFilters).every(([key, value]) => {
+        if (!value) return true;
+        /* Fix: Explicitly wrap 'value' in String() to resolve "Property 'toLowerCase' does not exist on type 'unknown'" error on line 227 (statement starting line) */
+        return String(item[key] || '').toLowerCase().includes(String(value).toLowerCase());
+      });
+
+      return matchesGlobal && matchesColumns;
+    });
+  }, [receberGeralData, receberGeralSearch, receberGeralColumnFilters]);
+
+  // Reset page when filters change
   useEffect(() => {
     setReceberGeralPage(1);
-  }, [receberGeralSearch]);
+  }, [receberGeralSearch, receberGeralColumnFilters]);
 
   const paginatedReceberGeral = useMemo(() => {
     const start = (receberGeralPage - 1) * rowsPerPage;
@@ -852,9 +861,9 @@ function App() {
                                                         />
                                                     </div>
                                                     <button 
-                                                        onClick={fetchReceberGeral}
+                                                        onClick={() => { setReceberGeralColumnFilters({}); setReceberGeralSearch(''); fetchReceberGeral(); }}
                                                         className="p-2.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-xl transition-all"
-                                                        title="Atualizar"
+                                                        title="Limpar e Atualizar"
                                                     >
                                                         <RefreshCw size={18} className={isReceberGeralLoading ? "animate-spin" : ""} />
                                                     </button>
@@ -880,12 +889,27 @@ function App() {
                                                                     <th key={key} className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">{key.replace(/_/g, ' ')}</th>
                                                                 ))}
                                                             </tr>
+                                                            {/* Filter Row */}
+                                                            <tr className="bg-slate-50 border-b border-slate-200">
+                                                                {Object.keys(paginatedReceberGeral[0]).map(key => (
+                                                                    <th key={`filter-${key}`} className="px-2 py-1">
+                                                                        <input 
+                                                                            className="w-full text-[10px] p-1 border border-slate-200 rounded outline-none focus:ring-1 focus:ring-blue-400 bg-white font-medium" 
+                                                                            placeholder={`Filtrar...`}
+                                                                            value={receberGeralColumnFilters[key] || ''}
+                                                                            onChange={e => setReceberGeralColumnFilters(prev => ({...prev, [key]: e.target.value}))}
+                                                                        />
+                                                                    </th>
+                                                                ))}
+                                                            </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-100">
                                                             {paginatedReceberGeral.map((item, idx) => (
                                                                 <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
                                                                     {Object.entries(item).map(([key, val], vIdx) => {
-                                                                        const isMoney = key.toLowerCase().includes('valor') || typeof val === 'number';
+                                                                        // ID column should always be text as requested
+                                                                        const isIdColumn = key.toLowerCase() === 'id';
+                                                                        const isMoney = !isIdColumn && (key.toLowerCase().includes('valor') || typeof val === 'number');
                                                                         return (
                                                                             <td key={vIdx} className="px-6 py-4 font-medium text-slate-700 whitespace-nowrap">
                                                                                 {val === null ? <span className="text-slate-300">--</span> : 

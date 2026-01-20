@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -47,7 +48,7 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight
+  LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight, List
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -81,6 +82,7 @@ function App() {
   
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
   const [contaAzulSubTab, setContaAzulSubTab] = useState<'receber_geral'>('receber_geral');
+  const [contaAzulViewMode, setContaAzulViewMode] = useState<'dashboard' | 'table'>('dashboard');
   const [isAiOpen, setIsAiOpen] = useState(false);
 
   // Conta Azul Data States
@@ -218,6 +220,39 @@ function App() {
       )
     );
   }, [receberGeralData, receberGeralSearch]);
+
+  const receberGeralStats = useMemo(() => {
+    const totalRecords = receberGeralData.length;
+    const totalValue = receberGeralData.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+    
+    // Supondo que existam campos 'status' e 'vencimento'
+    const now = new Date();
+    now.setHours(0,0,0,0);
+
+    const overdue = receberGeralData.filter(item => {
+        if (!item.vencimento) return false;
+        const vDate = new Date(item.vencimento);
+        return vDate < now && item.status?.toLowerCase().includes('atrasado');
+    });
+    const totalOverdueValue = overdue.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+
+    const paid = receberGeralData.filter(item => item.status?.toLowerCase().includes('pago'));
+    const totalPaidValue = paid.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+
+    const pending = receberGeralData.filter(item => item.status?.toLowerCase().includes('aberto') || item.status?.toLowerCase().includes('pendente'));
+    const totalPendingValue = pending.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+
+    return {
+        totalRecords,
+        totalValue,
+        totalOverdueValue,
+        overdueCount: overdue.length,
+        totalPaidValue,
+        paidCount: paid.length,
+        totalPendingValue,
+        pendingCount: pending.length
+    };
+  }, [receberGeralData]);
 
   const fetchHrData = async () => {
       setIsHrLoading(true);
@@ -708,86 +743,153 @@ function App() {
                         {dashboardTab === 'landing_pages' && <LandingPageManager onBack={() => setDashboardTab('overview')} />}
                         {dashboardTab === 'conta_azul' && (
                             <div className="flex flex-col h-full animate-in fade-in duration-500">
-                                <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit mb-6 shrink-0">
-                                    <button 
-                                        onClick={() => setContaAzulSubTab('receber_geral')} 
-                                        className={clsx(
-                                            "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2", 
-                                            contaAzulSubTab === 'receber_geral' ? "bg-blue-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-50"
-                                        )}
-                                    >
-                                        <Landmark size={18}/> Contas a Receber Geral
-                                    </button>
+                                <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                                    <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit shrink-0">
+                                        <button 
+                                            onClick={() => setContaAzulSubTab('receber_geral')} 
+                                            className={clsx(
+                                                "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2", 
+                                                contaAzulSubTab === 'receber_geral' ? "bg-blue-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-50"
+                                            )}
+                                        >
+                                            <Landmark size={18}/> Contas a Receber Geral
+                                        </button>
+                                    </div>
+                                    <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
+                                        <button 
+                                            onClick={() => setContaAzulViewMode('dashboard')} 
+                                            className={clsx(
+                                                "px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2", 
+                                                contaAzulViewMode === 'dashboard' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                                            )}
+                                        >
+                                            <PieChart size={16}/> Dashboard
+                                        </button>
+                                        <button 
+                                            onClick={() => setContaAzulViewMode('table')} 
+                                            className={clsx(
+                                                "px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2", 
+                                                contaAzulViewMode === 'table' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                                            )}
+                                        >
+                                            <Table size={16}/> Tabela
+                                        </button>
+                                    </div>
                                 </div>
 
-                                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
-                                    <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-50/50">
-                                        <div>
-                                            <h3 className="text-xl font-black text-slate-800 tracking-tight">Contas a Receber Geral</h3>
-                                            <p className="text-sm text-slate-500 font-medium">Visualização completa de títulos integrada via Conta Azul.</p>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <div className="relative">
-                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="Filtrar dados..." 
-                                                    className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all min-w-[250px]"
-                                                    value={receberGeralSearch}
-                                                    onChange={e => setReceberGeralSearch(e.target.value)}
-                                                />
+                                <div className="flex-1 flex flex-col min-h-0">
+                                    {contaAzulViewMode === 'dashboard' ? (
+                                        <div className="space-y-6 animate-in slide-in-from-bottom-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                                                    <div className="absolute right-0 top-0 p-4 opacity-5"><DollarSign size={64} className="text-blue-600" /></div>
+                                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor Total Geral</p>
+                                                    <h3 className="text-3xl font-black text-slate-800">{formatCurrency(receberGeralStats.totalValue)}</h3>
+                                                    <p className="text-[10px] text-slate-500 mt-2">{receberGeralStats.totalRecords} registros totais</p>
+                                                </div>
+                                                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                                                    <div className="absolute right-0 top-0 p-4 opacity-5"><XCircle size={64} className="text-red-600" /></div>
+                                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total em Atraso</p>
+                                                    <h3 className="text-3xl font-black text-red-600">{formatCurrency(receberGeralStats.totalOverdueValue)}</h3>
+                                                    <p className="text-[10px] text-red-400 mt-2 font-bold uppercase">{receberGeralStats.overdueCount} títulos vencidos</p>
+                                                </div>
+                                                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                                                    <div className="absolute right-0 top-0 p-4 opacity-5"><CheckCircle size={64} className="text-green-600" /></div>
+                                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Recebido</p>
+                                                    <h3 className="text-3xl font-black text-green-600">{formatCurrency(receberGeralStats.totalPaidValue)}</h3>
+                                                    <p className="text-[10px] text-green-500 mt-2 font-bold uppercase">{receberGeralStats.paidCount} títulos liquidados</p>
+                                                </div>
+                                                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                                                    <div className="absolute right-0 top-0 p-4 opacity-5"><Clock size={64} className="text-blue-600" /></div>
+                                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Pendente</p>
+                                                    <h3 className="text-3xl font-black text-blue-600">{formatCurrency(receberGeralStats.totalPendingValue)}</h3>
+                                                    <p className="text-[10px] text-blue-400 mt-2 font-bold uppercase">{receberGeralStats.pendingCount} títulos em aberto</p>
+                                                </div>
                                             </div>
-                                            <button 
-                                                onClick={fetchReceberGeral}
-                                                className="p-2.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-xl transition-all"
-                                                title="Atualizar"
-                                            >
-                                                <RefreshCw size={18} className={isReceberGeralLoading ? "animate-spin" : ""} />
-                                            </button>
-                                        </div>
-                                    </div>
 
-                                    <div className="flex-1 overflow-auto custom-scrollbar">
-                                        {isReceberGeralLoading ? (
-                                            <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400">
-                                                <Loader2 size={40} className="animate-spin text-blue-600" />
-                                                <p className="font-black uppercase text-xs tracking-widest">Sincronizando dados...</p>
+                                            <div className="bg-white rounded-3xl border border-slate-200 p-10 flex flex-col items-center justify-center text-center space-y-4 shadow-sm border-t-8 border-t-blue-600">
+                                                <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mb-2 shadow-inner"><Landmark size={40}/></div>
+                                                <h3 className="text-2xl font-black text-slate-800">Pronto para detalhar?</h3>
+                                                <p className="text-slate-500 max-w-sm font-medium">Acesse a tabela completa para filtrar, buscar e analisar cada título individualmente.</p>
+                                                <button 
+                                                    onClick={() => setContaAzulViewMode('table')}
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-3"
+                                                >
+                                                    Ver Tabela Completa com Filtros <ArrowRight size={20}/>
+                                                </button>
                                             </div>
-                                        ) : filteredReceberGeral.length === 0 ? (
-                                            <div className="flex flex-col items-center justify-center h-full text-slate-300 italic py-20">
-                                                <Landmark size={64} className="opacity-10 mb-4" />
-                                                <p>Nenhum registro encontrado na tabela visao_contas_a_receber_Geral.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden animate-in slide-in-from-right-4">
+                                            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-50/50">
+                                                <div>
+                                                    <h3 className="text-xl font-black text-slate-800 tracking-tight">Contas a Receber Geral</h3>
+                                                    <p className="text-sm text-slate-500 font-medium">Filtre e analise os registros da tabela.</p>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                                        <input 
+                                                            type="text" 
+                                                            placeholder="Buscar em todas as colunas..." 
+                                                            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all min-w-[280px]"
+                                                            value={receberGeralSearch}
+                                                            onChange={e => setReceberGeralSearch(e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <button 
+                                                        onClick={fetchReceberGeral}
+                                                        className="p-2.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-xl transition-all"
+                                                        title="Atualizar"
+                                                    >
+                                                        <RefreshCw size={18} className={isReceberGeralLoading ? "animate-spin" : ""} />
+                                                    </button>
+                                                </div>
                                             </div>
-                                        ) : (
-                                            <table className="w-full text-left text-sm border-collapse min-w-max">
-                                                <thead className="bg-slate-50 sticky top-0 z-10">
-                                                    <tr className="border-b border-slate-200">
-                                                        {Object.keys(filteredReceberGeral[0]).map(key => (
-                                                            <th key={key} className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">{key.replace(/_/g, ' ')}</th>
-                                                        ))}
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {filteredReceberGeral.map((item, idx) => (
-                                                        <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-                                                            {Object.values(item).map((val, vIdx) => (
-                                                                <td key={vIdx} className="px-6 py-4 font-medium text-slate-700 whitespace-nowrap">
-                                                                    {val === null ? <span className="text-slate-300">--</span> : 
-                                                                     typeof val === 'number' && String(Object.keys(item)[vIdx]).toLowerCase().includes('valor') ? formatCurrency(val) :
-                                                                     String(val)}
-                                                                </td>
+
+                                            <div className="flex-1 overflow-auto custom-scrollbar">
+                                                {isReceberGeralLoading ? (
+                                                    <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400">
+                                                        <Loader2 size={40} className="animate-spin text-blue-600" />
+                                                        <p className="font-black uppercase text-xs tracking-widest">Sincronizando dados...</p>
+                                                    </div>
+                                                ) : filteredReceberGeral.length === 0 ? (
+                                                    <div className="flex flex-col items-center justify-center h-full text-slate-300 italic py-20">
+                                                        <Landmark size={64} className="opacity-10 mb-4" />
+                                                        <p>Nenhum registro encontrado para esta busca.</p>
+                                                    </div>
+                                                ) : (
+                                                    <table className="w-full text-left text-sm border-collapse min-w-max">
+                                                        <thead className="bg-slate-50 sticky top-0 z-10">
+                                                            <tr className="border-b border-slate-200">
+                                                                {Object.keys(filteredReceberGeral[0]).map(key => (
+                                                                    <th key={key} className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">{key.replace(/_/g, ' ')}</th>
+                                                                ))}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100">
+                                                            {filteredReceberGeral.map((item, idx) => (
+                                                                <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
+                                                                    {Object.values(item).map((val, vIdx) => (
+                                                                        <td key={vIdx} className="px-6 py-4 font-medium text-slate-700 whitespace-nowrap">
+                                                                            {val === null ? <span className="text-slate-300">--</span> : 
+                                                                            typeof val === 'number' && String(Object.keys(item)[vIdx]).toLowerCase().includes('valor') ? formatCurrency(val) :
+                                                                            String(val)}
+                                                                        </td>
+                                                                    ))}
+                                                                </tr>
                                                             ))}
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        )}
-                                    </div>
-                                    
-                                    <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest shrink-0">
-                                        <span>Total de registros: {filteredReceberGeral.length}</span>
-                                        <div className="flex items-center gap-1.5"><Info size={12} className="text-blue-500"/> Sincronizado via Supabase</div>
-                                    </div>
+                                                        </tbody>
+                                                    </table>
+                                                )}
+                                            </div>
+                                            
+                                            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest shrink-0">
+                                                <span>Total de registros filtrados: {filteredReceberGeral.length}</span>
+                                                <div className="flex items-center gap-1.5"><Info size={12} className="text-blue-500"/> Sincronizado via Supabase</div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}

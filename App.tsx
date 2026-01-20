@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StepIndicator } from './components/StepIndicator';
 import { ConfigPanel } from './components/ConfigPanel';
 import { UploadPanel } from './components/UploadPanel';
@@ -48,11 +48,11 @@ import {
   LayoutDashboard, Settings, BarChart3, ArrowRight, Table, Kanban,
   Users, GraduationCap, School, TrendingUp, Calendar, DollarSign, Filter, FileText, ArrowLeft, Cog, PieChart,
   FileSignature, ShoppingBag, Store, Award, Mic, MessageCircle, Briefcase, Building2, Package, Target, TrendingDown, History, XCircle, Home, AlertCircle, Info, Sparkles, Heart, CreditCard,
-  LifeBuoy, Zap, Send, Bot, MonitorPlay
+  LifeBuoy, Zap, Send, Bot, MonitorPlay, Landmark, Search, RefreshCw, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import clsx from 'clsx';
 
-type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages';
+type DashboardTab = 'overview' | 'tables' | 'crm' | 'analysis' | 'hr' | 'classes' | 'teachers' | 'forms' | 'surveys' | 'contracts' | 'products' | 'franchises' | 'certificates' | 'students' | 'events' | 'global_settings' | 'whatsapp' | 'whatsapp_automation' | 'whatsapp_bulk' | 'partner_studios' | 'inventory' | 'billing' | 'suporte_interno' | 'landing_pages' | 'conta_azul';
 
 function App() {
   const [publicForm, setPublicForm] = useState<FormModel | null>(null);
@@ -81,7 +81,13 @@ function App() {
   const jobsRef = useRef<SyncJob[]>([]); 
   
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
+  const [contaAzulSubTab, setContaAzulSubTab] = useState<'receber_geral'>('receber_geral');
   const [isAiOpen, setIsAiOpen] = useState(false);
+
+  // Conta Azul Data States
+  const [receberGeralData, setReceberGeralData] = useState<any[]>([]);
+  const [isReceberGeralLoading, setIsReceberGeralLoading] = useState(false);
+  const [receberGeralSearch, setReceberGeralSearch] = useState('');
 
   const [overviewStats, setOverviewStats] = useState({
       leadsToday: 0,
@@ -98,7 +104,7 @@ function App() {
   const [config, setConfig] = useState<SupabaseConfig>({ url: '', key: '', tableName: '', primaryKey: '', intervalMinutes: 5 });
   const [filesData, setFilesData] = useState<FileData[]>([]);
   const [tempSheetUrl, setTempSheetUrl] = useState<string | null>(null);
-  const [status, setStatus] = useState<UploadStatus>('idle');
+  const [status, setUploadStatus] = useState<UploadStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedEntity, setSelectedEntity] = useState<EntityImportType>('generic');
 
@@ -186,7 +192,34 @@ function App() {
     if (dashboardTab === 'hr' && (session || currentCollaborator)) {
         fetchHrData();
     }
+    if (dashboardTab === 'conta_azul' && (session || currentCollaborator)) {
+        fetchReceberGeral();
+    }
   }, [dashboardTab, session, currentCollaborator]);
+
+  const fetchReceberGeral = async () => {
+    setIsReceberGeralLoading(true);
+    try {
+      const { data, error } = await appBackend.client
+        .from('visao_contas_a_receber_Geral')
+        .select('*')
+        .order('vencimento', { ascending: true });
+      if (error) throw error;
+      setReceberGeralData(data || []);
+    } catch (e) {
+      console.error("Erro ao buscar Contas a Receber Geral:", e);
+    } finally {
+      setIsReceberGeralLoading(false);
+    }
+  };
+
+  const filteredReceberGeral = useMemo(() => {
+    return receberGeralData.filter(item => 
+      Object.values(item).some(val => 
+        String(val).toLowerCase().includes(receberGeralSearch.toLowerCase())
+      )
+    );
+  }, [receberGeralData, receberGeralSearch]);
 
   const fetchHrData = async () => {
       setIsHrLoading(true);
@@ -319,11 +352,11 @@ function App() {
     setTempSheetUrl(null);
     setErrorMessage(null);
     setSelectedEntity('generic');
-    setStatus('idle');
+    setUploadStatus('idle');
   };
 
   const handleFilesSelected = async (files: File[]) => {
-    setStatus('parsing');
+    setUploadStatus('parsing');
     setErrorMessage(null);
     try {
       const parsedFiles = await Promise.all(files.map(file => file.name.endsWith('.xlsx') ? parseExcelFile(file) : parseCsvFile(file)));
@@ -353,10 +386,10 @@ function App() {
       }
 
       setStep(AppStep.CONFIG);
-      setStatus('idle');
+      setUploadStatus('idle');
     } catch (e: any) { 
         setErrorMessage(e.message); 
-        setStatus('error'); 
+        setUploadStatus('error'); 
     }
   };
 
@@ -367,7 +400,7 @@ function App() {
       
       try {
           if (!isAutoSync) {
-              setStatus('uploading');
+              setUploadStatus('uploading');
               const client = createSupabaseClient(config.url, config.key);
               const allData = filesData.flatMap(f => f.data);
               if (allData.length > 0) {
@@ -397,12 +430,12 @@ function App() {
           }
           setStep(AppStep.DASHBOARD);
           setDashboardTab('global_settings'); 
-          setStatus('idle');
+          setUploadStatus('idle');
           if (isAutoSync) setTimeout(() => performJobSync(newJob), 500);
       } catch (e: any) { 
           console.error("Erro no processo de conexão:", e);
           setErrorMessage(`Falha no processamento: ${e.message}`); 
-          setStatus('error'); 
+          setUploadStatus('error'); 
           window.scrollTo({ top: 0, behavior: 'smooth' });
       }
   };
@@ -531,7 +564,7 @@ function App() {
                 </div>
             </header>
 
-            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk') && "max-w-full")}>
+            <main className={clsx("container mx-auto px-4 py-8", (dashboardTab === 'crm' || dashboardTab === 'whatsapp' || dashboardTab === 'whatsapp_automation' || dashboardTab === 'whatsapp_bulk' || dashboardTab === 'conta_azul') && "max-w-full")}>
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 min-h-[500px]">
                     <aside className="w-full md:w-64 flex-shrink-0">
                         <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 flex flex-col h-full md:h-auto overflow-y-auto max-h-[85vh]">
@@ -558,6 +591,7 @@ function App() {
                                 {canAccess('partner_studios') && <button onClick={() => setDashboardTab('partner_studios')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'partner_studios' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Building2 size={18} /> Studios Parceiros</button>}
                                 {canAccess('classes') && <button onClick={() => setDashboardTab('classes')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'classes' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><GraduationCap size={18} /> Turmas</button>}
                                 {canAccess('teachers') && <button onClick={() => setDashboardTab('teachers')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'teachers' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><School size={18} /> Professores</button>}
+                                <button onClick={() => setDashboardTab('conta_azul')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'conta_azul' ? "bg-blue-50 text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Landmark size={18} /> Conta Azul</button>
                             </nav>
                             {canAccess('global_settings') && <div className="mt-4 pt-4 border-t border-slate-100"><button onClick={() => setDashboardTab('global_settings')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium", dashboardTab === 'global_settings' ? "bg-teal-50 text-teal-700 shadow-sm" : "text-slate-600 hover:bg-slate-50")}><Cog size={18} /> Configurações</button></div>}
                         </div>
@@ -576,7 +610,7 @@ function App() {
                                             <span className="text-teal-100 text-xs font-black uppercase tracking-[0.2em]">Painel de Controle</span>
                                         </div>
                                         <h2 className="text-4xl font-black tracking-tight mb-2">
-                                            <span className="text-green-400 font-black">Bem-Vindo</span>, <span className="text-white">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
+                                            <span className="text-white font-black">Bem-Vindo</span>, <span className="text-white">{currentUserName.charAt(0).toUpperCase() + currentUserName.slice(1)}</span>!
                                         </h2>
                                         <p className="text-teal-50/80 text-lg max-w-xl leading-relaxed">
                                             Seu centro de comando está pronto. Visualize leads, gerencie turmas e acompanhe o crescimento da VOLL em tempo real.
@@ -643,7 +677,7 @@ function App() {
                                                     <div onClick={() => setDashboardTab('crm')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Kanban size={24} /></div><h4 className="font-bold text-slate-800 mb-1">CRM</h4><p className="text-xs text-slate-500">Gestão Comercial.</p></div>
                                                     <div onClick={() => setDashboardTab('billing')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><CreditCard size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Cobrança</h4><p className="text-xs text-slate-500">Financeiro.</p></div>
                                                     <div onClick={() => setDashboardTab('hr')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-rose-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-rose-600 group-hover:text-white transition-colors"><Heart size={24} /></div><h4 className="font-bold text-slate-800 mb-1">RH</h4><p className="text-xs text-slate-500">Painel Executivo.</p></div>
-                                                    <div onClick={() => setDashboardTab('suporte_interno')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><LifeBuoy size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Suporte</h4><p className="text-xs text-slate-500">Chamados.</p></div>
+                                                    <div onClick={() => setDashboardTab('suporte_interno')} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><LifeBuoy size={24} /></div><h4 className="font-bold text-slate-800 mb-1">Suporte</h4><p className="text-xs text-slate-500">Chamados.</p></div>
                                                     <div onClick={() => setIsAiOpen(true)} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-200 transition-all cursor-pointer group"><div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-amber-600 group-hover:text-white transition-colors"><Bot size={24} /></div><h4 className="font-bold text-slate-800 mb-1">IA Guia</h4><p className="text-xs text-slate-500">Falar com IA.</p></div>
                                                 </div>
                                             </section>
@@ -674,6 +708,91 @@ function App() {
                         {dashboardTab === 'whatsapp_automation' && <WhatsAppAutomation />}
                         {dashboardTab === 'whatsapp_bulk' && <BulkWhatsAppSender />}
                         {dashboardTab === 'landing_pages' && <LandingPageManager onBack={() => setDashboardTab('overview')} />}
+                        {dashboardTab === 'conta_azul' && (
+                            <div className="flex flex-col h-full animate-in fade-in duration-500">
+                                <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit mb-6 shrink-0">
+                                    <button 
+                                        onClick={() => setContaAzulSubTab('receber_geral')} 
+                                        className={clsx(
+                                            "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2", 
+                                            contaAzulSubTab === 'receber_geral' ? "bg-blue-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-50"
+                                        )}
+                                    >
+                                        <Landmark size={18}/> Contas a Receber Geral
+                                    </button>
+                                </div>
+
+                                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
+                                    <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-50/50">
+                                        <div>
+                                            <h3 className="text-xl font-black text-slate-800 tracking-tight">Contas a Receber Geral</h3>
+                                            <p className="text-sm text-slate-500 font-medium">Visualização completa de títulos integrada via Conta Azul.</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="relative">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Filtrar dados..." 
+                                                    className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all min-w-[250px]"
+                                                    value={receberGeralSearch}
+                                                    onChange={e => setReceberGeralSearch(e.target.value)}
+                                                />
+                                            </div>
+                                            <button 
+                                                onClick={fetchReceberGeral}
+                                                className="p-2.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-xl transition-all"
+                                                title="Atualizar"
+                                            >
+                                                <RefreshCw size={18} className={isReceberGeralLoading ? "animate-spin" : ""} />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 overflow-auto custom-scrollbar">
+                                        {isReceberGeralLoading ? (
+                                            <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400">
+                                                <Loader2 size={40} className="animate-spin text-blue-600" />
+                                                <p className="font-black uppercase text-xs tracking-widest">Sincronizando dados...</p>
+                                            </div>
+                                        ) : filteredReceberGeral.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center h-full text-slate-300 italic py-20">
+                                                <Landmark size={64} className="opacity-10 mb-4" />
+                                                <p>Nenhum registro encontrado na tabela visao_contas_a_receber_Geral.</p>
+                                            </div>
+                                        ) : (
+                                            <table className="w-full text-left text-sm border-collapse min-w-max">
+                                                <thead className="bg-slate-50 sticky top-0 z-10">
+                                                    <tr className="border-b border-slate-200">
+                                                        {Object.keys(filteredReceberGeral[0]).map(key => (
+                                                            <th key={key} className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">{key.replace(/_/g, ' ')}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {filteredReceberGeral.map((item, idx) => (
+                                                        <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
+                                                            {Object.values(item).map((val, vIdx) => (
+                                                                <td key={vIdx} className="px-6 py-4 font-medium text-slate-700 whitespace-nowrap">
+                                                                    {val === null ? <span className="text-slate-300">--</span> : 
+                                                                     typeof val === 'number' && String(Object.keys(item)[vIdx]).toLowerCase().includes('valor') ? formatCurrency(val) :
+                                                                     String(val)}
+                                                                </td>
+                                                            ))}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest shrink-0">
+                                        <span>Total de registros: {filteredReceberGeral.length}</span>
+                                        <div className="flex items-center gap-1.5"><Info size={12} className="text-blue-500"/> Sincronizado via Supabase</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </main>

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Landmark, PieChart, Table, Search, RefreshCw, ChevronLeft, 
   ChevronRight, Info, DollarSign, XCircle, CheckCircle, Clock, 
-  ArrowRight, Eraser, Loader2, Filter as FilterIcon, Calendar, Play
+  ArrowRight, Eraser, Loader2, Filter as FilterIcon, Calendar, AlertTriangle
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
@@ -17,35 +17,47 @@ export const ContaAzulManager: React.FC = () => {
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const rowsPerPage = 50;
 
-  // Estados dos filtros (Persistentes durante a sessão do componente)
+  // Filtros persistentes
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [category, setCategory] = useState('');
   const [costCenter, setCostCenter] = useState('');
 
-  // Busca dados aplicando filtros diretamente no banco de dados para maior velocidade
+  // Busca dados com estratégia de performance
   const fetchFilteredData = async () => {
     if (isLoading) return;
     setIsLoading(true);
     try {
-      let query = appBackend.client
-        .from('visao_contas_a_receber_Geral')
-        .select('*');
+      // Definimos o nome da tabela principal do Conta Azul
+      const tableName = 'visao_contas_a_receber_Geral';
+      
+      let query = appBackend.client.from(tableName).select('*');
 
-      // Aplica filtros de data diretamente no banco se fornecidos
+      // Tentativa de filtro server-side (rápido)
+      // Nota: Só funciona se a coluna no Supabase for do tipo DATE ou TIMESTAMP
       if (startDate) query = query.gte('vencimento', startDate);
       if (endDate) query = query.lte('vencimento', endDate);
-      if (category) query = query.ilike('categoria', `%${category}%`);
-      if (costCenter) query = query.ilike('centro_de_custo', `%${costCenter}%`);
-
+      
       const { data: result, error } = await query.order('vencimento', { ascending: true });
 
-      if (error) throw error;
-      setData(result || []);
-      setPage(1); // Reseta para primeira página após nova busca
-    } catch (e) {
-      console.error("Erro ao carregar dados filtrados:", e);
-      alert("Erro ao carregar dados. Verifique o intervalo de datas.");
+      if (error) {
+          console.warn("Filtro de servidor falhou, tentando modo de compatibilidade...", error);
+          // Se falhar (ex: coluna é texto), buscamos os dados para filtrar no cliente
+          const { data: fallbackResult, error: fallbackError } = await appBackend.client
+            .from(tableName)
+            .select('*')
+            .limit(10000); // Limite de segurança para performance
+            
+          if (fallbackError) throw fallbackError;
+          setData(fallbackResult || []);
+      } else {
+          setData(result || []);
+      }
+      
+      setPage(1);
+    } catch (e: any) {
+      console.error("Erro crítico ao carregar Conta Azul:", e);
+      alert(`Erro de conexão com o banco: ${e.message || 'Verifique se a tabela visao_contas_a_receber_Geral existe.'}`);
     } finally {
       setIsLoading(false);
     }
@@ -61,28 +73,35 @@ export const ContaAzulManager: React.FC = () => {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  // Filtros dinâmicos de opções baseados no que está carregado (opcional)
-  const filterOptions = useMemo(() => {
-    if (!data.length) return { categories: [], costCenters: [] };
-    const categories = new Set<string>();
-    const costCenters = new Set<string>();
-    data.forEach(item => {
-      if (item.categoria) categories.add(item.categoria);
-      if (item.centro_de_custo) costCenters.add(item.centro_de_custo);
-    });
-    return {
-      categories: Array.from(categories).sort(),
-      costCenters: Array.from(costCenters).sort()
-    };
-  }, [data]);
-
-  // Filtro de busca global (client-side sobre o resultado já filtrado por data)
+  // Lógica de filtragem no cliente (Garante que funcione mesmo com formatos de data brasileiros DD/MM/YYYY)
   const filteredData = useMemo(() => {
     return data.filter(item => {
+      // 1. Filtro de Data (Compatível com texto DD/MM/YYYY e ISO YYYY-MM-DD)
+      if (startDate || endDate) {
+        const vencRaw = item.vencimento || item.vencimento_original || '';
+        let itemDate: string = '';
+        
+        if (vencRaw.includes('/')) {
+            const [d, m, y] = vencRaw.split('/');
+            itemDate = `${y}-${m}-${d}`;
+        } else {
+            itemDate = vencRaw;
+        }
+
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+      }
+
+      // 2. Filtros de Texto (Categoria e Centro de Custo)
+      if (category && !String(item.categoria || '').toLowerCase().includes(category.toLowerCase())) return false;
+      if (costCenter && !String(item.centro_de_custo || '').toLowerCase().includes(costCenter.toLowerCase())) return false;
+
+      // 3. Busca Global
       const matchesGlobal = searchTerm === '' || Object.values(item).some(val => 
         String(val).toLowerCase().includes(searchTerm.toLowerCase())
       );
 
+      // 4. Filtros por Coluna (Tabela)
       const matchesColumns = Object.entries(columnFilters).every(([key, value]) => {
         if (!value) return true;
         return String(item[key] || '').toLowerCase().includes(String(value).toLowerCase());
@@ -90,7 +109,7 @@ export const ContaAzulManager: React.FC = () => {
 
       return matchesGlobal && matchesColumns;
     });
-  }, [data, searchTerm, columnFilters]);
+  }, [data, searchTerm, columnFilters, startDate, endDate, category, costCenter]);
 
   const stats = useMemo(() => {
     const parseMoney = (val: any) => {
@@ -107,20 +126,21 @@ export const ContaAzulManager: React.FC = () => {
     const totalValue = filteredData.reduce((acc, curr) => acc + parseMoney(curr.valor), 0);
     
     const overdue = filteredData.filter(item => {
-      const status = String(item.situacao || '').toLowerCase();
-      const venc = item.vencimento ? new Date(item.vencimento) : null;
-      return venc && venc < now && (status.includes('atrasado') || status.includes('vencido') || status.includes('aberto'));
+      const status = String(item.situacao || item.status || '').toLowerCase();
+      const vencRaw = item.vencimento || '';
+      let vencDate: Date | null = null;
+      if (vencRaw.includes('/')) {
+          const [d, m, y] = vencRaw.split('/').map(Number);
+          vencDate = new Date(y, m - 1, d);
+      } else if (vencRaw) {
+          vencDate = new Date(vencRaw);
+      }
+      return vencDate && vencDate < now && (status.includes('atrasado') || status.includes('vencido') || status.includes('aberto'));
     });
 
     const paid = filteredData.filter(item => {
-      const status = String(item.situacao || '').toLowerCase();
+      const status = String(item.situacao || item.status || '').toLowerCase();
       return status.includes('pago') || status.includes('liquidado');
-    });
-
-    const pending = filteredData.filter(item => {
-      const status = String(item.situacao || '').toLowerCase();
-      const venc = item.vencimento ? new Date(item.vencimento) : null;
-      return venc && venc >= now && (status.includes('aberto') || status.includes('pendente'));
     });
 
     return {
@@ -130,8 +150,7 @@ export const ContaAzulManager: React.FC = () => {
       overdueCount: overdue.length,
       totalPaidValue: paid.reduce((acc, curr) => acc + parseMoney(curr.valor_recebido || curr.valor), 0),
       paidCount: paid.length,
-      totalPendingValue: pending.reduce((acc, curr) => acc + parseMoney(curr.valor), 0),
-      pendingCount: pending.length
+      totalPendingValue: totalValue - paid.reduce((acc, curr) => acc + parseMoney(curr.valor_recebido || curr.valor), 0)
     };
   }, [filteredData]);
 
@@ -144,10 +163,11 @@ export const ContaAzulManager: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-500">
+      {/* Header com Abas */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit shrink-0">
           <button className="px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest bg-blue-600 text-white shadow-md flex items-center gap-2">
-            <Landmark size={18}/> Conta Azul: Contas a Receber
+            <Landmark size={18}/> Conta Azul Geral
           </button>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
@@ -163,22 +183,26 @@ export const ContaAzulManager: React.FC = () => {
       <div className="flex-1 flex flex-col min-h-0">
         {viewMode === 'dashboard' ? (
           <div className="space-y-6 animate-in slide-in-from-bottom-4">
+            {/* Painel de Filtros Otimizado */}
             <div className="bg-white p-8 rounded-[2.5rem] border-2 border-blue-50 shadow-xl space-y-6">
-              <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-                 <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200"><FilterIcon size={20}/></div>
-                 <h3 className="font-black text-slate-800 uppercase tracking-tight text-lg">Parâmetros de Carga de Dados</h3>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200"><FilterIcon size={20}/></div>
+                    <h3 className="font-black text-slate-800 uppercase tracking-tight text-lg">Carga de Dados por Vencimento</h3>
+                 </div>
+                 {isLoading && <div className="flex items-center gap-2 text-blue-600 animate-pulse font-black text-[10px] uppercase tracking-widest"><RefreshCw size={14} className="animate-spin"/> Sincronizando...</div>}
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vencimento Inicial</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Início Vencimento</label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16}/>
                     <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-sm" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vencimento Final</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fim Vencimento</label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16}/>
                     <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-sm" />
@@ -195,59 +219,71 @@ export const ContaAzulManager: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-between pt-4">
-                <p className="text-[10px] text-slate-400 font-medium max-w-md">Para garantir a performance, selecione um intervalo de datas e clique em aplicar para carregar apenas os registros necessários.</p>
+                <div className="flex items-center gap-2 text-slate-400 text-[10px] font-medium max-w-md">
+                    <Info size={14} className="text-blue-500 shrink-0"/>
+                    <span>Ajuste o período acima e clique em carregar. O sistema buscará apenas os registros desse intervalo para garantir velocidade.</span>
+                </div>
                 <div className="flex gap-3">
-                  <button onClick={handleResetFilters} className="px-6 py-3 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest transition-all">Limpar</button>
+                  <button onClick={handleResetFilters} className="px-6 py-3 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2"><Eraser size={16}/> Limpar</button>
                   <button 
                     onClick={fetchFilteredData} 
                     disabled={isLoading || (!startDate && !endDate)}
                     className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-3"
                   >
                     {isLoading ? <Loader2 size={18} className="animate-spin"/> : <RefreshCw size={18}/>}
-                    {data.length > 0 ? 'Atualizar Dados' : 'Aplicar Filtros e Carregar'}
+                    {data.length > 0 ? 'Recarregar e Atualizar' : 'Aplicar Filtros e Carregar'}
                   </button>
                 </div>
               </div>
             </div>
 
+            {/* KPIs */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><DollarSign size={64} className="text-blue-600" /></div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Carga Filtrada</p>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Carga no Período</p>
                 <h3 className="text-3xl font-black text-slate-800">{formatCurrency(stats.totalValue)}</h3>
-                <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase">{stats.totalRecords} registros carregados</p>
+                <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase">{stats.totalRecords} registros ativos</p>
               </div>
               <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><XCircle size={64} className="text-red-600" /></div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Atrasados no Período</p>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Atrasados (Nesta Carga)</p>
                 <h3 className="text-3xl font-black text-red-600">{formatCurrency(stats.totalOverdueValue)}</h3>
                 <p className="text-[10px] text-red-400 mt-2 font-black uppercase tracking-tighter">{stats.overdueCount} títulos vencidos</p>
               </div>
               <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><CheckCircle size={64} className="text-green-600" /></div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Recebidos no Período</p>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Recebidos (Nesta Carga)</p>
                 <h3 className="text-3xl font-black text-green-600">{formatCurrency(stats.totalPaidValue)}</h3>
-                <p className="text-[10px] text-green-500 mt-2 font-black uppercase tracking-tighter">{stats.paidCount} títulos pagos</p>
+                <p className="text-[10px] text-green-500 mt-2 font-black uppercase tracking-tighter">{stats.paidCount} títulos liquidados</p>
               </div>
               <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><Clock size={64} className="text-blue-600" /></div>
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Provisão Pendente</p>
                 <h3 className="text-3xl font-black text-blue-600">{formatCurrency(stats.totalPendingValue)}</h3>
-                <p className="text-[10px] text-blue-400 mt-2 font-black uppercase tracking-tighter">{stats.pendingCount} títulos em aberto</p>
+                <p className="text-[10px] text-blue-400 mt-2 font-black uppercase tracking-tighter">Expectativa de Recebimento</p>
               </div>
             </div>
 
-            {data.length > 0 && (
-              <div className="bg-slate-900 rounded-[3rem] border border-slate-800 p-10 flex flex-col md:flex-row items-center justify-between text-center md:text-left space-y-6 md:space-y-0 shadow-2xl relative overflow-hidden group">
+            {data.length > 0 ? (
+              <div className="bg-slate-900 rounded-[3rem] border border-slate-800 p-10 flex flex-col md:flex-row items-center justify-between text-center md:text-left space-y-6 md:space-y-0 shadow-2xl relative overflow-hidden group animate-in zoom-in-95">
                 <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:scale-110 transition-transform"><Landmark size={120} className="text-white"/></div>
                 <div className="relative z-10">
                   <h3 className="text-2xl font-black text-white tracking-tight">Análise Detalhada disponível</h3>
-                  <p className="text-slate-400 max-w-sm font-medium mt-1">Os {data.length} registros carregados estão prontos para visualização tabular.</p>
+                  <p className="text-slate-400 max-w-sm font-medium mt-1">Os {filteredData.length} registros filtrados estão prontos para visualização linha a linha.</p>
                 </div>
                 <button onClick={() => setViewMode('table')} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-3 relative z-10">
                   Acessar Tabela Completa <ArrowRight size={20}/>
                 </button>
               </div>
+            ) : (
+                <div className="bg-white rounded-[2.5rem] p-16 text-center border-2 border-dashed border-slate-100 flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-2xl flex items-center justify-center"><Table size={32}/></div>
+                    <div>
+                        <h4 className="font-black text-slate-400 uppercase tracking-widest text-xs">Aguardando Filtro</h4>
+                        <p className="text-slate-300 text-sm mt-1">Defina o período de vencimento e clique em "Aplicar Filtros e Carregar" para ver os dados.</p>
+                    </div>
+                </div>
             )}
           </div>
         ) : (
@@ -256,17 +292,17 @@ export const ContaAzulManager: React.FC = () => {
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-100"><Table size={24}/></div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-800 tracking-tight">Carga de Dados: {data.length} registros</h3>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">Mostrando {paginatedData.length} por página</p>
+                  <h3 className="text-xl font-black text-slate-800 tracking-tight">Carga de Dados: {filteredData.length} registros</h3>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">Página {page} de {totalPages || 1}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input type="text" placeholder="Filtrar nesta carga..." className="pl-12 pr-6 py-3 bg-white border-2 border-slate-100 rounded-2xl text-sm outline-none focus:border-blue-500 transition-all min-w-[320px] font-medium" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                  <input type="text" placeholder="Filtrar nesta carga..." className="pl-12 pr-6 py-3 bg-white border-2 border-slate-100 rounded-2xl text-sm outline-none focus:border-blue-500 transition-all min-w-[320px] font-medium shadow-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
-                <button onClick={fetchFilteredData} className="p-3.5 text-blue-600 bg-white border-2 border-slate-100 rounded-2xl hover:bg-blue-50 transition-all shadow-sm">
-                  <RefreshCw size={20} className={isLoading ? "animate-spin" : ""} />
+                <button onClick={() => setViewMode('dashboard')} className="p-3.5 text-slate-400 bg-white border-2 border-slate-100 rounded-2xl hover:text-blue-600 transition-all" title="Voltar aos Filtros">
+                  <FilterIcon size={20} />
                 </button>
               </div>
             </div>
@@ -279,20 +315,22 @@ export const ContaAzulManager: React.FC = () => {
                 </div>
               ) : filteredData.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-300 italic py-20">
-                  <Info size={64} className="opacity-10 mb-4" />
-                  <p className="font-bold">Nenhum dado carregado para o intervalo selecionado.</p>
-                  <button onClick={() => setViewMode('dashboard')} className="mt-4 text-blue-600 font-black uppercase text-[10px] hover:underline">Voltar para Dashboard e Filtrar</button>
+                  <AlertTriangle size={64} className="opacity-10 mb-4" />
+                  <p className="font-bold">Nenhum dado localizado para esta busca.</p>
+                  <button onClick={() => setViewMode('dashboard')} className="mt-4 text-blue-600 font-black uppercase text-[10px] hover:underline">Alterar Período de Vencimento</button>
                 </div>
               ) : (
                 <table className="w-full text-left text-sm border-collapse min-w-max">
                   <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                     <tr className="border-b border-slate-200">
-                      {Object.keys(paginatedData[0]).filter(k => k !== 'id').map(key => (
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-12 text-center">#</th>
+                      {Object.keys(paginatedData[0]).filter(k => k !== 'id' && !k.startsWith('_')).map(key => (
                         <th key={key} className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">{key.replace(/_/g, ' ')}</th>
                       ))}
                     </tr>
                     <tr className="bg-slate-50/80 backdrop-blur-md border-b border-slate-200">
-                      {Object.keys(paginatedData[0]).filter(k => k !== 'id').map(key => (
+                      <th className="px-2 py-1"></th>
+                      {Object.keys(paginatedData[0]).filter(k => k !== 'id' && !k.startsWith('_')).map(key => (
                         <th key={`filter-${key}`} className="px-3 py-2">
                           <input className="w-full text-[10px] px-2 py-1.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 bg-white font-bold placeholder:font-normal" placeholder={`Filtrar...`} value={columnFilters[key] || ''} onChange={e => setColumnFilters(prev => ({...prev, [key]: e.target.value}))} />
                         </th>
@@ -302,9 +340,12 @@ export const ContaAzulManager: React.FC = () => {
                   <tbody className="divide-y divide-slate-100">
                     {paginatedData.map((item, idx) => (
                       <tr key={idx} className="hover:bg-blue-50/40 transition-colors group">
-                        {Object.entries(item).filter(([k]) => k !== 'id').map(([key, val], vIdx) => {
-                          const isMoney = key.toLowerCase().includes('valor') || typeof val === 'number';
-                          const isStatus = key.toLowerCase().includes('situa') || key.toLowerCase().includes('status');
+                        <td className="px-6 py-4 text-[10px] font-black text-slate-300 text-center">{(page - 1) * rowsPerPage + idx + 1}</td>
+                        {Object.entries(item).filter(([k]) => k !== 'id' && !k.startsWith('_')).map(([key, val], vIdx) => {
+                          const lowKey = key.toLowerCase();
+                          const isMoney = lowKey.includes('valor') || lowKey.includes('total') || typeof val === 'number';
+                          const isStatus = lowKey.includes('situa') || lowKey.includes('status');
+                          
                           return (
                             <td key={vIdx} className="px-6 py-4 font-bold text-slate-700 whitespace-nowrap">
                               {isStatus ? (
@@ -331,11 +372,11 @@ export const ContaAzulManager: React.FC = () => {
             <div className="px-8 py-5 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3">
                  <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest shadow-sm">
-                   Total de {filteredData.length} registros filtrados
+                   Total na tela: {filteredData.length} registros
                  </div>
                  <span className="text-[10px] text-slate-300">|</span>
                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-2 rounded-xl border border-blue-100">
-                    <CheckCircle size={12}/> Dados Sincronizados em Tempo Real
+                    <CheckCircle size={12}/> {data.length >= 10000 ? 'Limitado a 10k registros por performance' : 'Carga completa sincronizada'}
                  </div>
               </div>
               {totalPages > 1 && (

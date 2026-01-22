@@ -3,17 +3,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Landmark, PieChart, Table, Search, RefreshCw, ChevronLeft, 
   ChevronRight, Info, DollarSign, XCircle, CheckCircle, Clock, 
-  ArrowRight, Eraser, Loader2, Filter as FilterIcon 
+  ArrowRight, Eraser, Loader2, Filter as FilterIcon, Calendar, Play
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
-
-interface AppliedFilters {
-  startDate: string;
-  endDate: string;
-  category: string;
-  costCenter: string;
-}
 
 export const ContaAzulManager: React.FC = () => {
   const [viewMode, setViewMode] = useState<'dashboard' | 'table'>('dashboard');
@@ -24,65 +17,38 @@ export const ContaAzulManager: React.FC = () => {
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const rowsPerPage = 50;
 
-  // Estados dos inputs de filtro (locais)
+  // Estados dos filtros (Persistentes durante a sessão do componente)
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [category, setCategory] = useState('');
   const [costCenter, setCostCenter] = useState('');
 
-  // Filtros efetivamente aplicados para evitar re-processamento constante
-  const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>({
-    startDate: '',
-    endDate: '',
-    category: '',
-    costCenter: ''
-  });
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  // Busca dados aplicando filtros diretamente no banco de dados para maior velocidade
+  const fetchFilteredData = async () => {
     if (isLoading) return;
     setIsLoading(true);
     try {
-      let allData: any[] = [];
-      let from = 0;
-      const step = 1000;
-      let hasMore = true;
+      let query = appBackend.client
+        .from('visao_contas_a_receber_Geral')
+        .select('*');
 
-      // Busca otimizada com range direto no banco
-      while (hasMore) {
-        const { data: batch, error } = await appBackend.client
-          .from('visao_contas_a_receber_Geral')
-          .select('*')
-          .range(from, from + step - 1);
+      // Aplica filtros de data diretamente no banco se fornecidos
+      if (startDate) query = query.gte('vencimento', startDate);
+      if (endDate) query = query.lte('vencimento', endDate);
+      if (category) query = query.ilike('categoria', `%${category}%`);
+      if (costCenter) query = query.ilike('centro_de_custo', `%${costCenter}%`);
 
-        if (error) throw error;
-        if (batch && batch.length > 0) {
-          allData = [...allData, ...batch];
-          if (batch.length < step) hasMore = false;
-          else from += step;
-        } else {
-          hasMore = false;
-        }
-      }
-      setData(allData);
+      const { data: result, error } = await query.order('vencimento', { ascending: true });
+
+      if (error) throw error;
+      setData(result || []);
+      setPage(1); // Reseta para primeira página após nova busca
     } catch (e) {
-      console.error("Erro ao buscar dados do Conta Azul:", e);
+      console.error("Erro ao carregar dados filtrados:", e);
+      alert("Erro ao carregar dados. Verifique o intervalo de datas.");
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleApplyFilters = () => {
-    setAppliedFilters({
-      startDate,
-      endDate,
-      category,
-      costCenter
-    });
-    // Se estiver no dashboard, não muda a visão automaticamente, mas se clicar no botão de detalhar, a tabela já estará filtrada
   };
 
   const handleResetFilters = () => {
@@ -90,63 +56,29 @@ export const ContaAzulManager: React.FC = () => {
     setEndDate('');
     setCategory('');
     setCostCenter('');
-    setAppliedFilters({
-      startDate: '',
-      endDate: '',
-      category: '',
-      costCenter: ''
-    });
+    setData([]);
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+  // Filtros dinâmicos de opções baseados no que está carregado (opcional)
   const filterOptions = useMemo(() => {
     if (!data.length) return { categories: [], costCenters: [] };
-    const keys = Object.keys(data[0]);
-    const catKey = keys.find(k => k.toLowerCase().includes('categoria'));
-    const ccKey = keys.find(k => k.toLowerCase().includes('centro') && k.toLowerCase().includes('custo'));
-
     const categories = new Set<string>();
     const costCenters = new Set<string>();
-
     data.forEach(item => {
-      if (catKey && item[catKey]) categories.add(String(item[catKey]));
-      if (ccKey && item[ccKey]) costCenters.add(String(item[ccKey]));
+      if (item.categoria) categories.add(item.categoria);
+      if (item.centro_de_custo) costCenters.add(item.centro_de_custo);
     });
-
     return {
       categories: Array.from(categories).sort(),
       costCenters: Array.from(costCenters).sort()
     };
   }, [data]);
 
+  // Filtro de busca global (client-side sobre o resultado já filtrado por data)
   const filteredData = useMemo(() => {
-    // Usamos appliedFilters para processar apenas quando o botão for clicado
     return data.filter(item => {
-      const keys = Object.keys(item);
-      const catKey = keys.find(k => k.toLowerCase().includes('categoria'));
-      const ccKey = keys.find(k => k.toLowerCase().includes('centro') && k.toLowerCase().includes('custo'));
-      const dKey = keys.find(k => k.toLowerCase().includes('vencimento') || k.toLowerCase().includes('venc'));
-
-      if (appliedFilters.category && catKey && String(item[catKey] || '').toLowerCase() !== appliedFilters.category.toLowerCase()) return false;
-      if (appliedFilters.costCenter && ccKey && String(item[ccKey] || '').toLowerCase() !== appliedFilters.costCenter.toLowerCase()) return false;
-      
-      if (appliedFilters.startDate || appliedFilters.endDate) {
-        const dueDate = dKey ? item[dKey] : null;
-        if (dueDate) {
-          let vDate: Date;
-          if (typeof dueDate === 'string' && dueDate.includes('/')) {
-            const [d, m, y] = dueDate.split('/').map(Number);
-            vDate = new Date(y, m - 1, d);
-          } else {
-            vDate = new Date(dueDate);
-          }
-          const isoDate = vDate.toISOString().split('T')[0];
-          if (appliedFilters.startDate && isoDate < appliedFilters.startDate) return false;
-          if (appliedFilters.endDate && isoDate > appliedFilters.endDate) return false;
-        }
-      }
-
       const matchesGlobal = searchTerm === '' || Object.values(item).some(val => 
         String(val).toLowerCase().includes(searchTerm.toLowerCase())
       );
@@ -158,15 +90,9 @@ export const ContaAzulManager: React.FC = () => {
 
       return matchesGlobal && matchesColumns;
     });
-  }, [data, searchTerm, columnFilters, appliedFilters]);
+  }, [data, searchTerm, columnFilters]);
 
   const stats = useMemo(() => {
-    if (!filteredData.length) return {
-      totalRecords: 0, totalValue: 0, totalOverdueValue: 0, overdueCount: 0,
-      totalPaidValue: 0, paidCount: 0, totalPendingValue: 0, pendingCount: 0
-    };
-
-    const keys = Object.keys(filteredData[0]);
     const parseMoney = (val: any) => {
       if (typeof val === 'number') return val;
       if (!val) return 0;
@@ -175,59 +101,36 @@ export const ContaAzulManager: React.FC = () => {
       return parseFloat(clean) || 0;
     };
 
-    const vKey = keys.find(k => k.toLowerCase() === 'valor') || keys.find(k => k.toLowerCase().includes('valor')) || keys[0];
-    const sKey = keys.find(k => k.toLowerCase().includes('status') || k.toLowerCase().includes('situacao') || k.toLowerCase().includes('situação'));
-    const dKey = keys.find(k => k.toLowerCase().includes('vencimento') || k.toLowerCase().includes('venc'));
-    const vrKey = keys.find(k => k.toLowerCase().includes('recebido') || k.toLowerCase().includes('pago'));
-
     const now = new Date();
     now.setHours(0,0,0,0);
 
-    const totalValue = filteredData.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0);
+    const totalValue = filteredData.reduce((acc, curr) => acc + parseMoney(curr.valor), 0);
     
     const overdue = filteredData.filter(item => {
-      const status = String(sKey ? item[sKey] : '').toLowerCase();
-      const dueDate = dKey ? item[dKey] : null;
-      let isPast = false;
-      if (dueDate) {
-        let vDate: Date;
-        if (typeof dueDate === 'string' && dueDate.includes('/')) {
-          const [d, m, y] = dueDate.split('/').map(Number);
-          vDate = new Date(y, m - 1, d);
-        } else vDate = new Date(dueDate);
-        isPast = vDate < now;
-      }
-      return isPast && (status.includes('atrasado') || status.includes('vencido') || status.includes('aberto') || status.includes('pendente'));
+      const status = String(item.situacao || '').toLowerCase();
+      const venc = item.vencimento ? new Date(item.vencimento) : null;
+      return venc && venc < now && (status.includes('atrasado') || status.includes('vencido') || status.includes('aberto'));
     });
 
     const paid = filteredData.filter(item => {
-      const status = String(sKey ? item[sKey] : '').toLowerCase();
+      const status = String(item.situacao || '').toLowerCase();
       return status.includes('pago') || status.includes('liquidado');
     });
 
     const pending = filteredData.filter(item => {
-      const status = String(sKey ? item[sKey] : '').toLowerCase();
-      const dueDate = dKey ? item[dKey] : null;
-      let isFuture = true;
-      if (dueDate) {
-        let vDate: Date;
-        if (typeof dueDate === 'string' && dueDate.includes('/')) {
-          const [d, m, y] = dueDate.split('/').map(Number);
-          vDate = new Date(y, m - 1, d);
-        } else vDate = new Date(dueDate);
-        isFuture = vDate >= now;
-      }
-      return isFuture && (status.includes('aberto') || status.includes('pendente'));
+      const status = String(item.situacao || '').toLowerCase();
+      const venc = item.vencimento ? new Date(item.vencimento) : null;
+      return venc && venc >= now && (status.includes('aberto') || status.includes('pendente'));
     });
 
     return {
       totalRecords: filteredData.length,
       totalValue,
-      totalOverdueValue: overdue.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0),
+      totalOverdueValue: overdue.reduce((acc, curr) => acc + parseMoney(curr.valor), 0),
       overdueCount: overdue.length,
-      totalPaidValue: paid.reduce((acc, curr) => acc + parseMoney(vrKey ? curr[vrKey] : (vKey ? curr[vKey] : 0)), 0),
+      totalPaidValue: paid.reduce((acc, curr) => acc + parseMoney(curr.valor_recebido || curr.valor), 0),
       paidCount: paid.length,
-      totalPendingValue: pending.reduce((acc, curr) => acc + parseMoney(vKey ? curr[vKey] : 0), 0),
+      totalPendingValue: pending.reduce((acc, curr) => acc + parseMoney(curr.valor), 0),
       pendingCount: pending.length
     };
   }, [filteredData]);
@@ -244,7 +147,7 @@ export const ContaAzulManager: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit shrink-0">
           <button className="px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest bg-blue-600 text-white shadow-md flex items-center gap-2">
-            <Landmark size={18}/> Contas a Receber Geral
+            <Landmark size={18}/> Conta Azul: Contas a Receber
           </button>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
@@ -252,7 +155,7 @@ export const ContaAzulManager: React.FC = () => {
             <PieChart size={16}/> Dashboard
           </button>
           <button onClick={() => setViewMode('table')} className={clsx("px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2", viewMode === 'table' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
-            <Table size={16}/> Tabela
+            <Table size={16}/> Tabela Detalhada
           </button>
         </div>
       </div>
@@ -260,97 +163,110 @@ export const ContaAzulManager: React.FC = () => {
       <div className="flex-1 flex flex-col min-h-0">
         {viewMode === 'dashboard' ? (
           <div className="space-y-6 animate-in slide-in-from-bottom-4">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Início</label>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fim</label>
-                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div className="flex items-center gap-2 flex-1 min-w-[150px]">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</label>
-                <select value={category} onChange={e => setCategory(e.target.value)} className="flex-1 text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                  <option value="">Todas</option>
-                  {filterOptions.categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                </select>
-              </div>
-              <div className="flex items-center gap-2 flex-1 min-w-[150px]">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Centro de Custo</label>
-                <select value={costCenter} onChange={e => setCostCenter(e.target.value)} className="flex-1 text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                  <option value="">Todos</option>
-                  {filterOptions.costCenters.map(cc => <option key={cc} value={cc}>{cc}</option>)}
-                </select>
+            <div className="bg-white p-8 rounded-[2.5rem] border-2 border-blue-50 shadow-xl space-y-6">
+              <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+                 <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200"><FilterIcon size={20}/></div>
+                 <h3 className="font-black text-slate-800 uppercase tracking-tight text-lg">Parâmetros de Carga de Dados</h3>
               </div>
               
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={handleApplyFilters} 
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-md transition-all active:scale-95 flex items-center gap-2"
-                >
-                  <FilterIcon size={14}/> Aplicar Filtros
-                </button>
-                <button 
-                  onClick={handleResetFilters} 
-                  className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-all" 
-                  title="Limpar Filtros"
-                >
-                  <Eraser size={18}/>
-                </button>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vencimento Inicial</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16}/>
+                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-sm" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vencimento Final</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16}/>
+                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-sm" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
+                  <input type="text" placeholder="Ex: Cursos" value={category} onChange={e => setCategory(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-sm" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Centro de Custo</label>
+                  <input type="text" placeholder="Ex: Matriz" value={costCenter} onChange={e => setCostCenter(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-sm" />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4">
+                <p className="text-[10px] text-slate-400 font-medium max-w-md">Para garantir a performance, selecione um intervalo de datas e clique em aplicar para carregar apenas os registros necessários.</p>
+                <div className="flex gap-3">
+                  <button onClick={handleResetFilters} className="px-6 py-3 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest transition-all">Limpar</button>
+                  <button 
+                    onClick={fetchFilteredData} 
+                    disabled={isLoading || (!startDate && !endDate)}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-3"
+                  >
+                    {isLoading ? <Loader2 size={18} className="animate-spin"/> : <RefreshCw size={18}/>}
+                    {data.length > 0 ? 'Atualizar Dados' : 'Aplicar Filtros e Carregar'}
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><DollarSign size={64} className="text-blue-600" /></div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor Total Geral</p>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Carga Filtrada</p>
                 <h3 className="text-3xl font-black text-slate-800">{formatCurrency(stats.totalValue)}</h3>
-                <p className="text-[10px] text-slate-500 mt-2">{stats.totalRecords} registros filtrados</p>
+                <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase">{stats.totalRecords} registros carregados</p>
               </div>
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><XCircle size={64} className="text-red-600" /></div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total em Atraso</p>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Atrasados no Período</p>
                 <h3 className="text-3xl font-black text-red-600">{formatCurrency(stats.totalOverdueValue)}</h3>
-                <p className="text-[10px] text-red-400 mt-2 font-bold uppercase">{stats.overdueCount} títulos vencidos</p>
+                <p className="text-[10px] text-red-400 mt-2 font-black uppercase tracking-tighter">{stats.overdueCount} títulos vencidos</p>
               </div>
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><CheckCircle size={64} className="text-green-600" /></div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Recebido</p>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Recebidos no Período</p>
                 <h3 className="text-3xl font-black text-green-600">{formatCurrency(stats.totalPaidValue)}</h3>
-                <p className="text-[10px] text-green-500 mt-2 font-bold uppercase">{stats.paidCount} títulos liquidados</p>
+                <p className="text-[10px] text-green-500 mt-2 font-black uppercase tracking-tighter">{stats.paidCount} títulos pagos</p>
               </div>
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><Clock size={64} className="text-blue-600" /></div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Pendente</p>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Provisão Pendente</p>
                 <h3 className="text-3xl font-black text-blue-600">{formatCurrency(stats.totalPendingValue)}</h3>
-                <p className="text-[10px] text-blue-400 mt-2 font-bold uppercase">{stats.pendingCount} títulos em aberto</p>
+                <p className="text-[10px] text-blue-400 mt-2 font-black uppercase tracking-tighter">{stats.pendingCount} títulos em aberto</p>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl border border-slate-200 p-10 flex flex-col items-center justify-center text-center space-y-4 shadow-sm border-t-8 border-t-blue-600">
-              <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mb-2 shadow-inner"><Landmark size={40}/></div>
-              <h3 className="text-2xl font-black text-slate-800">Pronto para detalhar?</h3>
-              <p className="text-slate-500 max-w-sm font-medium">Acesse a tabela completa para filtrar, buscar e analisar cada título individualmente.</p>
-              <button onClick={() => setViewMode('table')} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-3">
-                Ver Tabela Completa com Filtros <ArrowRight size={20}/>
-              </button>
-            </div>
+            {data.length > 0 && (
+              <div className="bg-slate-900 rounded-[3rem] border border-slate-800 p-10 flex flex-col md:flex-row items-center justify-between text-center md:text-left space-y-6 md:space-y-0 shadow-2xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:scale-110 transition-transform"><Landmark size={120} className="text-white"/></div>
+                <div className="relative z-10">
+                  <h3 className="text-2xl font-black text-white tracking-tight">Análise Detalhada disponível</h3>
+                  <p className="text-slate-400 max-w-sm font-medium mt-1">Os {data.length} registros carregados estão prontos para visualização tabular.</p>
+                </div>
+                <button onClick={() => setViewMode('table')} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-3 relative z-10">
+                  Acessar Tabela Completa <ArrowRight size={20}/>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden animate-in slide-in-from-right-4">
-            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-50/50">
-              <div>
-                <h3 className="text-xl font-black text-slate-800 tracking-tight">Contas a Receber Geral</h3>
-                <p className="text-sm text-slate-500 font-medium">Filtre e analise os registros da tabela (50 por página).</p>
+          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl flex-1 flex flex-col overflow-hidden animate-in slide-in-from-right-4">
+            <div className="p-8 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-6 shrink-0 bg-slate-50/50">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-100"><Table size={24}/></div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 tracking-tight">Carga de Dados: {data.length} registros</h3>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">Mostrando {paginatedData.length} por página</p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input type="text" placeholder="Buscar em todas as colunas..." className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all min-w-[280px]" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" placeholder="Filtrar nesta carga..." className="pl-12 pr-6 py-3 bg-white border-2 border-slate-100 rounded-2xl text-sm outline-none focus:border-blue-500 transition-all min-w-[320px] font-medium" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
-                <button onClick={() => { setColumnFilters({}); setSearchTerm(''); fetchData(); }} className="p-2.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-xl transition-all" title="Limpar e Atualizar">
-                  <RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />
+                <button onClick={fetchFilteredData} className="p-3.5 text-blue-600 bg-white border-2 border-slate-100 rounded-2xl hover:bg-blue-50 transition-all shadow-sm">
+                  <RefreshCw size={20} className={isLoading ? "animate-spin" : ""} />
                 </button>
               </div>
             </div>
@@ -358,42 +274,50 @@ export const ContaAzulManager: React.FC = () => {
             <div className="flex-1 overflow-auto custom-scrollbar">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400">
-                  <Loader2 size={40} className="animate-spin text-blue-600" />
-                  <p className="font-black uppercase text-xs tracking-widest">Sincronizando dados...</p>
+                  <Loader2 size={64} className="animate-spin text-blue-600" />
+                  <p className="font-black uppercase text-xs tracking-[0.2em]">Otimizando consulta no banco...</p>
                 </div>
-              ) : paginatedData.length === 0 ? (
+              ) : filteredData.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-300 italic py-20">
-                  <Landmark size={64} className="opacity-10 mb-4" />
-                  <p>Nenhum registro encontrado para esta busca.</p>
+                  <Info size={64} className="opacity-10 mb-4" />
+                  <p className="font-bold">Nenhum dado carregado para o intervalo selecionado.</p>
+                  <button onClick={() => setViewMode('dashboard')} className="mt-4 text-blue-600 font-black uppercase text-[10px] hover:underline">Voltar para Dashboard e Filtrar</button>
                 </div>
               ) : (
                 <table className="w-full text-left text-sm border-collapse min-w-max">
-                  <thead className="bg-slate-50 sticky top-0 z-10">
+                  <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                     <tr className="border-b border-slate-200">
-                      {Object.keys(paginatedData[0]).map(key => (
+                      {Object.keys(paginatedData[0]).filter(k => k !== 'id').map(key => (
                         <th key={key} className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">{key.replace(/_/g, ' ')}</th>
                       ))}
                     </tr>
-                    <tr className="bg-slate-50 border-b border-slate-200">
-                      {Object.keys(paginatedData[0]).map(key => (
-                        <th key={`filter-${key}`} className="px-2 py-1">
-                          <input className="w-full text-[10px] p-1 border border-slate-200 rounded outline-none focus:ring-1 focus:ring-blue-400 bg-white font-medium" placeholder={`Filtrar...`} value={columnFilters[key] || ''} onChange={e => setColumnFilters(prev => ({...prev, [key]: e.target.value}))} />
+                    <tr className="bg-slate-50/80 backdrop-blur-md border-b border-slate-200">
+                      {Object.keys(paginatedData[0]).filter(k => k !== 'id').map(key => (
+                        <th key={`filter-${key}`} className="px-3 py-2">
+                          <input className="w-full text-[10px] px-2 py-1.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 bg-white font-bold placeholder:font-normal" placeholder={`Filtrar...`} value={columnFilters[key] || ''} onChange={e => setColumnFilters(prev => ({...prev, [key]: e.target.value}))} />
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {paginatedData.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-                        {Object.entries(item).map(([key, val], vIdx) => {
-                          const isIdColumn = key.toLowerCase() === 'id';
-                          const isMoney = !isIdColumn && (key.toLowerCase().includes('valor') || typeof val === 'number');
+                      <tr key={idx} className="hover:bg-blue-50/40 transition-colors group">
+                        {Object.entries(item).filter(([k]) => k !== 'id').map(([key, val], vIdx) => {
+                          const isMoney = key.toLowerCase().includes('valor') || typeof val === 'number';
+                          const isStatus = key.toLowerCase().includes('situa') || key.toLowerCase().includes('status');
                           return (
-                            <td key={vIdx} className="px-6 py-4 font-medium text-slate-700 whitespace-nowrap">
-                              {val === null ? <span className="text-slate-300">--</span> : 
-                               isIdColumn ? String(val) :
-                               (typeof val === 'number' || (!isNaN(Number(val)) && isMoney)) ? formatCurrency(Number(val)) :
-                               String(val)}
+                            <td key={vIdx} className="px-6 py-4 font-bold text-slate-700 whitespace-nowrap">
+                              {isStatus ? (
+                                  <span className={clsx("text-[9px] font-black px-2 py-1 rounded border uppercase", 
+                                    String(val).toLowerCase().includes('pago') ? "bg-green-50 text-green-700 border-green-100" :
+                                    String(val).toLowerCase().includes('atrasa') ? "bg-red-50 text-red-700 border-red-100" : "bg-amber-50 text-amber-700 border-amber-100")}>
+                                      {String(val)}
+                                  </span>
+                              ) : (
+                                val === null ? <span className="text-slate-300">--</span> : 
+                                (typeof val === 'number' || (!isNaN(Number(val)) && isMoney)) ? formatCurrency(Number(val)) :
+                                String(val)
+                              )}
                             </td>
                           );
                         })}
@@ -403,17 +327,22 @@ export const ContaAzulManager: React.FC = () => {
                 </table>
               )}
             </div>
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                <span>Total: {filteredData.length} registros</span>
-                <span className="mx-2">|</span>
-                <div className="flex items-center gap-1.5"><Info size={12} className="text-blue-500"/> Sincronizado via Supabase</div>
+            
+            <div className="px-8 py-5 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                 <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest shadow-sm">
+                   Total de {filteredData.length} registros filtrados
+                 </div>
+                 <span className="text-[10px] text-slate-300">|</span>
+                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-2 rounded-xl border border-blue-100">
+                    <CheckCircle size={12}/> Dados Sincronizados em Tempo Real
+                 </div>
               </div>
               {totalPages > 1 && (
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"><ChevronLeft size={18} /></button>
-                  <span className="text-xs font-black text-slate-600 uppercase tracking-tighter">Página {page} de {totalPages}</span>
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"><ChevronRight size={18} /></button>
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all shadow-sm"><ChevronLeft size={20} /></button>
+                  <div className="px-5 py-2 bg-white border border-slate-200 rounded-xl font-black text-xs text-slate-600 shadow-sm uppercase tracking-tighter">Página {page} de {totalPages}</div>
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all shadow-sm"><ChevronRight size={20} /></button>
                 </div>
               )}
             </div>

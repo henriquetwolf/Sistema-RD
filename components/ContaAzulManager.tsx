@@ -23,41 +23,62 @@ export const ContaAzulManager: React.FC = () => {
   const [category, setCategory] = useState('');
   const [costCenter, setCostCenter] = useState('');
 
-  // Busca dados com estratégia de performance
-  const fetchFilteredData = async () => {
+  // Busca inicial ao montar o componente
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  const fetchInitialData = async () => {
+    // Carrega dados iniciais sem filtros para não deixar a tela vazia
+    await fetchFilteredData(true);
+  };
+
+  const fetchFilteredData = async (isInitial = false) => {
     if (isLoading) return;
     setIsLoading(true);
     try {
-      // Definimos o nome da tabela principal do Conta Azul
-      const tableName = 'visao_contas_a_receber_Geral';
-      
-      let query = appBackend.client.from(tableName).select('*');
+      // Lista de possíveis nomes para a tabela/visão do Conta Azul
+      const tableCandidates = ['visao_contas_a_receber_Geral', 'Conta_Azul_Receber'];
+      let resultData: any[] = [];
+      let success = false;
+      let lastError = null;
 
-      // Tentativa de filtro server-side (rápido)
-      // Nota: Só funciona se a coluna no Supabase for do tipo DATE ou TIMESTAMP
-      if (startDate) query = query.gte('vencimento', startDate);
-      if (endDate) query = query.lte('vencimento', endDate);
-      
-      const { data: result, error } = await query.order('vencimento', { ascending: true });
+      for (const tableName of tableCandidates) {
+        try {
+          let query = appBackend.client.from(tableName).select('*');
 
-      if (error) {
-          console.warn("Filtro de servidor falhou, tentando modo de compatibilidade...", error);
-          // Se falhar (ex: coluna é texto), buscamos os dados para filtrar no cliente
-          const { data: fallbackResult, error: fallbackError } = await appBackend.client
-            .from(tableName)
-            .select('*')
-            .limit(10000); // Limite de segurança para performance
-            
-          if (fallbackError) throw fallbackError;
-          setData(fallbackResult || []);
-      } else {
-          setData(result || []);
+          // Se não for a carga inicial e houver filtros, tenta aplicar no servidor
+          if (!isInitial) {
+            // Tenta identificar o nome da coluna de data (vencimento é o padrão)
+            if (startDate) query = query.gte('vencimento', startDate);
+            if (endDate) query = query.lte('vencimento', endDate);
+            if (category) query = query.ilike('categoria', `%${category}%`);
+          }
+
+          const { data: result, error } = await query.order('id', { ascending: false }).limit(isInitial ? 200 : 5000);
+
+          if (!error) {
+            resultData = result || [];
+            success = true;
+            console.log(`Dados carregados com sucesso da tabela: ${tableName}`);
+            break; 
+          } else {
+            lastError = error;
+          }
+        } catch (e) {
+          lastError = e;
+        }
       }
-      
+
+      if (!success && lastError) {
+        throw lastError;
+      }
+
+      setData(resultData);
       setPage(1);
     } catch (e: any) {
       console.error("Erro crítico ao carregar Conta Azul:", e);
-      alert(`Erro de conexão com o banco: ${e.message || 'Verifique se a tabela visao_contas_a_receber_Geral existe.'}`);
+      alert(`Não foi possível carregar os dados: ${e.message || 'Verifique a conexão com o banco de dados.'}`);
     } finally {
       setIsLoading(false);
     }
@@ -68,24 +89,31 @@ export const ContaAzulManager: React.FC = () => {
     setEndDate('');
     setCategory('');
     setCostCenter('');
-    setData([]);
+    fetchInitialData();
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  // Lógica de filtragem no cliente (Garante que funcione mesmo com formatos de data brasileiros DD/MM/YYYY)
+  // Lógica de filtragem no cliente para garantir funcionamento híbrido
   const filteredData = useMemo(() => {
     return data.filter(item => {
       // 1. Filtro de Data (Compatível com texto DD/MM/YYYY e ISO YYYY-MM-DD)
       if (startDate || endDate) {
-        const vencRaw = item.vencimento || item.vencimento_original || '';
+        // Tenta achar a coluna de data idependente do nome exato
+        const dateKey = Object.keys(item).find(k => 
+            k.toLowerCase() === 'vencimento' || 
+            k.toLowerCase() === 'data_vencimento' || 
+            k.toLowerCase() === 'vencimento_original'
+        );
+        
+        const vencRaw = dateKey ? String(item[dateKey]) : '';
         let itemDate: string = '';
         
         if (vencRaw.includes('/')) {
             const [d, m, y] = vencRaw.split('/');
-            itemDate = `${y}-${m}-${d}`;
+            itemDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
         } else {
-            itemDate = vencRaw;
+            itemDate = vencRaw.split('T')[0];
         }
 
         if (startDate && itemDate < startDate) return false;
@@ -93,8 +121,11 @@ export const ContaAzulManager: React.FC = () => {
       }
 
       // 2. Filtros de Texto (Categoria e Centro de Custo)
-      if (category && !String(item.categoria || '').toLowerCase().includes(category.toLowerCase())) return false;
-      if (costCenter && !String(item.centro_de_custo || '').toLowerCase().includes(costCenter.toLowerCase())) return false;
+      const catKey = Object.keys(item).find(k => k.toLowerCase().includes('categoria'));
+      const costKey = Object.keys(item).find(k => k.toLowerCase().includes('centro') && k.toLowerCase().includes('custo'));
+
+      if (category && catKey && !String(item[catKey] || '').toLowerCase().includes(category.toLowerCase())) return false;
+      if (costCenter && costKey && !String(item[costKey] || '').toLowerCase().includes(costCenter.toLowerCase())) return false;
 
       // 3. Busca Global
       const matchesGlobal = searchTerm === '' || Object.values(item).some(val => 
@@ -123,11 +154,18 @@ export const ContaAzulManager: React.FC = () => {
     const now = new Date();
     now.setHours(0,0,0,0);
 
-    const totalValue = filteredData.reduce((acc, curr) => acc + parseMoney(curr.valor), 0);
+    // Tenta achar chaves de valor e situação
+    const firstRow = filteredData[0] || {};
+    const vKey = Object.keys(firstRow).find(k => k.toLowerCase() === 'valor' || k.toLowerCase().includes('valor_original')) || 'valor';
+    const sKey = Object.keys(firstRow).find(k => k.toLowerCase().includes('situa') || k.toLowerCase() === 'status') || 'situacao';
+    const dKey = Object.keys(firstRow).find(k => k.toLowerCase() === 'vencimento' || k.toLowerCase().includes('data_venc')) || 'vencimento';
+    const vrKey = Object.keys(firstRow).find(k => k.toLowerCase().includes('recebido') || k.toLowerCase().includes('pago')) || 'valor_recebido';
+
+    const totalValue = filteredData.reduce((acc, curr) => acc + parseMoney(curr[vKey]), 0);
     
     const overdue = filteredData.filter(item => {
-      const status = String(item.situacao || item.status || '').toLowerCase();
-      const vencRaw = item.vencimento || '';
+      const status = String(item[sKey] || '').toLowerCase();
+      const vencRaw = String(item[dKey] || '');
       let vencDate: Date | null = null;
       if (vencRaw.includes('/')) {
           const [d, m, y] = vencRaw.split('/').map(Number);
@@ -139,18 +177,18 @@ export const ContaAzulManager: React.FC = () => {
     });
 
     const paid = filteredData.filter(item => {
-      const status = String(item.situacao || item.status || '').toLowerCase();
+      const status = String(item[sKey] || '').toLowerCase();
       return status.includes('pago') || status.includes('liquidado');
     });
 
     return {
       totalRecords: filteredData.length,
       totalValue,
-      totalOverdueValue: overdue.reduce((acc, curr) => acc + parseMoney(curr.valor), 0),
+      totalOverdueValue: overdue.reduce((acc, curr) => acc + parseMoney(curr[vKey]), 0),
       overdueCount: overdue.length,
-      totalPaidValue: paid.reduce((acc, curr) => acc + parseMoney(curr.valor_recebido || curr.valor), 0),
+      totalPaidValue: paid.reduce((acc, curr) => acc + parseMoney(curr[vrKey] || curr[vKey]), 0),
       paidCount: paid.length,
-      totalPendingValue: totalValue - paid.reduce((acc, curr) => acc + parseMoney(curr.valor_recebido || curr.valor), 0)
+      totalPendingValue: totalValue - paid.reduce((acc, curr) => acc + parseMoney(curr[vrKey] || curr[vKey]), 0)
     };
   }, [filteredData]);
 
@@ -226,8 +264,8 @@ export const ContaAzulManager: React.FC = () => {
                 <div className="flex gap-3">
                   <button onClick={handleResetFilters} className="px-6 py-3 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2"><Eraser size={16}/> Limpar</button>
                   <button 
-                    onClick={fetchFilteredData} 
-                    disabled={isLoading || (!startDate && !endDate)}
+                    onClick={() => fetchFilteredData()} 
+                    disabled={isLoading}
                     className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-10 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-3"
                   >
                     {isLoading ? <Loader2 size={18} className="animate-spin"/> : <RefreshCw size={18}/>}
@@ -240,25 +278,25 @@ export const ContaAzulManager: React.FC = () => {
             {/* KPIs */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
-                <div className="absolute right-0 top-0 p-4 opacity-5"><DollarSign size={64} className="text-blue-600" /></div>
+                <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><DollarSign size={64} className="text-blue-600" /></div>
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Carga no Período</p>
                 <h3 className="text-3xl font-black text-slate-800">{formatCurrency(stats.totalValue)}</h3>
                 <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase">{stats.totalRecords} registros ativos</p>
               </div>
               <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
-                <div className="absolute right-0 top-0 p-4 opacity-5"><XCircle size={64} className="text-red-600" /></div>
+                <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><XCircle size={64} className="text-red-600" /></div>
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Atrasados (Nesta Carga)</p>
                 <h3 className="text-3xl font-black text-red-600">{formatCurrency(stats.totalOverdueValue)}</h3>
                 <p className="text-[10px] text-red-400 mt-2 font-black uppercase tracking-tighter">{stats.overdueCount} títulos vencidos</p>
               </div>
               <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
-                <div className="absolute right-0 top-0 p-4 opacity-5"><CheckCircle size={64} className="text-green-600" /></div>
+                <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><CheckCircle size={64} className="text-green-600" /></div>
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Recebidos (Nesta Carga)</p>
                 <h3 className="text-3xl font-black text-green-600">{formatCurrency(stats.totalPaidValue)}</h3>
                 <p className="text-[10px] text-green-500 mt-2 font-black uppercase tracking-tighter">{stats.paidCount} títulos liquidados</p>
               </div>
               <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
-                <div className="absolute right-0 top-0 p-4 opacity-5"><Clock size={64} className="text-blue-600" /></div>
+                <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Clock size={64} className="text-blue-600" /></div>
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Provisão Pendente</p>
                 <h3 className="text-3xl font-black text-blue-600">{formatCurrency(stats.totalPendingValue)}</h3>
                 <p className="text-[10px] text-blue-400 mt-2 font-black uppercase tracking-tighter">Expectativa de Recebimento</p>
@@ -280,8 +318,8 @@ export const ContaAzulManager: React.FC = () => {
                 <div className="bg-white rounded-[2.5rem] p-16 text-center border-2 border-dashed border-slate-100 flex flex-col items-center gap-4">
                     <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-2xl flex items-center justify-center"><Table size={32}/></div>
                     <div>
-                        <h4 className="font-black text-slate-400 uppercase tracking-widest text-xs">Aguardando Filtro</h4>
-                        <p className="text-slate-300 text-sm mt-1">Defina o período de vencimento e clique em "Aplicar Filtros e Carregar" para ver os dados.</p>
+                        <h4 className="font-black text-slate-400 uppercase tracking-widest text-xs">Aguardando Carga</h4>
+                        <p className="text-slate-300 text-sm mt-1">Clique em "Aplicar Filtros e Carregar" ou verifique os filtros acima para visualizar os dados.</p>
                     </div>
                 </div>
             )}
@@ -376,7 +414,7 @@ export const ContaAzulManager: React.FC = () => {
                  </div>
                  <span className="text-[10px] text-slate-300">|</span>
                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-2 rounded-xl border border-blue-100">
-                    <CheckCircle size={12}/> {data.length >= 10000 ? 'Limitado a 10k registros por performance' : 'Carga completa sincronizada'}
+                    <CheckCircle size={12}/> {data.length >= 5000 ? 'Limitado a 5k registros por performance' : 'Carga completa sincronizada'}
                  </div>
               </div>
               {totalPages > 1 && (

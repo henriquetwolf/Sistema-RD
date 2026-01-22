@@ -3,10 +3,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Landmark, PieChart, Table, Search, RefreshCw, ChevronLeft, 
   ChevronRight, Info, DollarSign, XCircle, CheckCircle, Clock, 
-  ArrowRight, Eraser, Loader2 
+  ArrowRight, Eraser, Loader2, Filter as FilterIcon 
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import clsx from 'clsx';
+
+interface AppliedFilters {
+  startDate: string;
+  endDate: string;
+  category: string;
+  costCenter: string;
+}
 
 export const ContaAzulManager: React.FC = () => {
   const [viewMode, setViewMode] = useState<'dashboard' | 'table'>('dashboard');
@@ -17,17 +24,26 @@ export const ContaAzulManager: React.FC = () => {
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const rowsPerPage = 50;
 
-  // Filtros Dashboard
+  // Estados dos inputs de filtro (locais)
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [category, setCategory] = useState('');
   const [costCenter, setCostCenter] = useState('');
+
+  // Filtros efetivamente aplicados para evitar re-processamento constante
+  const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>({
+    startDate: '',
+    endDate: '',
+    category: '',
+    costCenter: ''
+  });
 
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
+    if (isLoading) return;
     setIsLoading(true);
     try {
       let allData: any[] = [];
@@ -35,6 +51,7 @@ export const ContaAzulManager: React.FC = () => {
       const step = 1000;
       let hasMore = true;
 
+      // Busca otimizada com range direto no banco
       while (hasMore) {
         const { data: batch, error } = await appBackend.client
           .from('visao_contas_a_receber_Geral')
@@ -56,6 +73,29 @@ export const ContaAzulManager: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleApplyFilters = () => {
+    setAppliedFilters({
+      startDate,
+      endDate,
+      category,
+      costCenter
+    });
+    // Se estiver no dashboard, não muda a visão automaticamente, mas se clicar no botão de detalhar, a tabela já estará filtrada
+  };
+
+  const handleResetFilters = () => {
+    setStartDate('');
+    setEndDate('');
+    setCategory('');
+    setCostCenter('');
+    setAppliedFilters({
+      startDate: '',
+      endDate: '',
+      category: '',
+      costCenter: ''
+    });
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -81,16 +121,17 @@ export const ContaAzulManager: React.FC = () => {
   }, [data]);
 
   const filteredData = useMemo(() => {
+    // Usamos appliedFilters para processar apenas quando o botão for clicado
     return data.filter(item => {
       const keys = Object.keys(item);
       const catKey = keys.find(k => k.toLowerCase().includes('categoria'));
       const ccKey = keys.find(k => k.toLowerCase().includes('centro') && k.toLowerCase().includes('custo'));
       const dKey = keys.find(k => k.toLowerCase().includes('vencimento') || k.toLowerCase().includes('venc'));
 
-      if (category && catKey && String(item[catKey] || '').toLowerCase() !== category.toLowerCase()) return false;
-      if (costCenter && ccKey && String(item[ccKey] || '').toLowerCase() !== costCenter.toLowerCase()) return false;
+      if (appliedFilters.category && catKey && String(item[catKey] || '').toLowerCase() !== appliedFilters.category.toLowerCase()) return false;
+      if (appliedFilters.costCenter && ccKey && String(item[ccKey] || '').toLowerCase() !== appliedFilters.costCenter.toLowerCase()) return false;
       
-      if (startDate || endDate) {
+      if (appliedFilters.startDate || appliedFilters.endDate) {
         const dueDate = dKey ? item[dKey] : null;
         if (dueDate) {
           let vDate: Date;
@@ -101,12 +142,12 @@ export const ContaAzulManager: React.FC = () => {
             vDate = new Date(dueDate);
           }
           const isoDate = vDate.toISOString().split('T')[0];
-          if (startDate && isoDate < startDate) return false;
-          if (endDate && isoDate > endDate) return false;
+          if (appliedFilters.startDate && isoDate < appliedFilters.startDate) return false;
+          if (appliedFilters.endDate && isoDate > appliedFilters.endDate) return false;
         }
       }
 
-      const matchesGlobal = Object.values(item).some(val => 
+      const matchesGlobal = searchTerm === '' || Object.values(item).some(val => 
         String(val).toLowerCase().includes(searchTerm.toLowerCase())
       );
 
@@ -117,9 +158,7 @@ export const ContaAzulManager: React.FC = () => {
 
       return matchesGlobal && matchesColumns;
     });
-  }, [data, searchTerm, columnFilters, startDate, endDate, category, costCenter]);
-
-  useEffect(() => { setPage(1); }, [searchTerm, columnFilters, startDate, endDate, category, costCenter]);
+  }, [data, searchTerm, columnFilters, appliedFilters]);
 
   const stats = useMemo(() => {
     if (!filteredData.length) return {
@@ -230,43 +269,58 @@ export const ContaAzulManager: React.FC = () => {
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fim</label>
                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+              <div className="flex items-center gap-2 flex-1 min-w-[150px]">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</label>
                 <select value={category} onChange={e => setCategory(e.target.value)} className="flex-1 text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                   <option value="">Todas</option>
                   {filterOptions.categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
-              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+              <div className="flex items-center gap-2 flex-1 min-w-[150px]">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Centro de Custo</label>
                 <select value={costCenter} onChange={e => setCostCenter(e.target.value)} className="flex-1 text-xs p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                   <option value="">Todos</option>
                   {filterOptions.costCenters.map(cc => <option key={cc} value={cc}>{cc}</option>)}
                 </select>
               </div>
-              <button onClick={() => { setStartDate(''); setEndDate(''); setCategory(''); setCostCenter(''); }} className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Limpar Filtros"><Eraser size={18}/></button>
+              
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleApplyFilters} 
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-md transition-all active:scale-95 flex items-center gap-2"
+                >
+                  <FilterIcon size={14}/> Aplicar Filtros
+                </button>
+                <button 
+                  onClick={handleResetFilters} 
+                  className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-all" 
+                  title="Limpar Filtros"
+                >
+                  <Eraser size={18}/>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><DollarSign size={64} className="text-blue-600" /></div>
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor Total Geral</p>
                 <h3 className="text-3xl font-black text-slate-800">{formatCurrency(stats.totalValue)}</h3>
                 <p className="text-[10px] text-slate-500 mt-2">{stats.totalRecords} registros filtrados</p>
               </div>
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><XCircle size={64} className="text-red-600" /></div>
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total em Atraso</p>
                 <h3 className="text-3xl font-black text-red-600">{formatCurrency(stats.totalOverdueValue)}</h3>
                 <p className="text-[10px] text-red-400 mt-2 font-bold uppercase">{stats.overdueCount} títulos vencidos</p>
               </div>
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><CheckCircle size={64} className="text-green-600" /></div>
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Recebido</p>
                 <h3 className="text-3xl font-black text-green-600">{formatCurrency(stats.totalPaidValue)}</h3>
                 <p className="text-[10px] text-green-500 mt-2 font-bold uppercase">{stats.paidCount} títulos liquidados</p>
               </div>
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5"><Clock size={64} className="text-blue-600" /></div>
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Pendente</p>
                 <h3 className="text-3xl font-black text-blue-600">{formatCurrency(stats.totalPendingValue)}</h3>

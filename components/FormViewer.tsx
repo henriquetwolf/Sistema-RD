@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { FormModel, FormAnswer } from '../types';
 import { CheckCircle, ArrowLeft, Loader2, Send, Lock, AlertTriangle } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
+import { VOLL_LOGO_BASE64 } from '../utils/constants';
 import clsx from 'clsx';
 
 interface FormViewerProps {
@@ -232,7 +233,7 @@ export const FormViewer: React.FC<FormViewerProps> = ({ form, onBack, isPublic =
                     </div>
                 ) : (
                     <div className={clsx("flex mb-6 opacity-20", style.titleAlignment === 'center' ? 'justify-center' : 'justify-start')}>
-                        <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-8 grayscale" />
+                        <img src={VOLL_LOGO_BASE64} alt="VOLL" className="h-8 grayscale" />
                     </div>
                 )}
                 <h1 className="text-4xl font-black mb-3 tracking-tight">{form.title}</h1>

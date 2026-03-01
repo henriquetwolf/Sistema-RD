@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { appBackend } from '../services/appBackend';
 import { FormViewer } from './FormViewer';
+import { VOLL_LOGO_BASE64 } from '../utils/constants';
 import clsx from 'clsx';
 
 interface LandingPagePublicViewerProps {
@@ -398,7 +399,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
       case 'footer':
         return (
             <footer key={section.id} id={section.id} className="py-16 px-6 bg-slate-900 text-center text-white">
-                <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="Logo" className="h-8 mx-auto mb-8 invert opacity-50" />
+                <img src={VOLL_LOGO_BASE64} alt="Logo" className="h-8 mx-auto mb-8 invert opacity-50" />
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mt-8">
                     &copy; {new Date().getFullYear()} {content.theme.brand_name} • Todos os Direitos Reservados
                 </p>
@@ -425,7 +426,7 @@ export const LandingPagePublicViewer: React.FC<LandingPagePublicViewerProps> = (
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 overflow-x-hidden selection:bg-indigo-100 selection:text-indigo-900" style={{ backgroundColor: content.theme?.bg_color }}>
       <nav className="fixed top-0 left-0 right-0 z-[100] bg-white/80 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex justify-between items-center shadow-sm">
-          <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-6 object-contain" />
+          <img src={VOLL_LOGO_BASE64} alt="VOLL" className="h-6 object-contain" />
           <div className="flex gap-4">
              {sections.map(s => (
                 <a key={s.id} href={`#${s.id}`} className="hidden lg:block text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors">{s.type}</a>

@@ -13,6 +13,7 @@ import { Teacher } from './TeachersManager';
 import { Banner, TeacherNews, Contract, SupportTicket, OnlineCourse, CourseModule, CourseLesson } from '../types';
 import { SupportTicketModal } from './SupportTicketModal';
 import { ContractSigning } from './ContractSigning';
+import { VOLL_LOGO_BASE64 } from '../utils/constants';
 import clsx from 'clsx';
 
 interface InstructorAreaProps {
@@ -912,7 +913,7 @@ export const InstructorArea: React.FC<InstructorAreaProps> = ({ instructor, onLo
       <footer className="py-12 text-center text-slate-400 bg-white/40 border-t border-slate-200 mt-12">
           <p className="text-[10px] font-black uppercase tracking-[0.4em] mb-4">VOLL Pilates Group &copy; {new Date().getFullYear()}</p>
           <div className="flex justify-center gap-6">
-              <img src="https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png" alt="VOLL" className="h-6 grayscale opacity-30" />
+              <img src={VOLL_LOGO_BASE64} alt="VOLL" className="h-6 grayscale opacity-30" />
           </div>
       </footer>
     </div>

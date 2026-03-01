@@ -92,6 +92,9 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
       briefFileName: '' as string | null
   });
 
+  const [isFetchingRef, setIsFetchingRef] = useState(false);
+  const [fetchedRefContent, setFetchedRefContent] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const htmlEditorRef = useRef<HTMLDivElement>(null);
 
@@ -99,6 +102,104 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     fetchPages();
     fetchForms();
   }, []);
+
+  const fetchReferenceUrl = async (url: string): Promise<string | null> => {
+    if (!url || !url.startsWith('http')) return null;
+    setIsFetchingRef(true);
+    try {
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+      const response = await fetch(proxyUrl, { 
+        headers: { 'Accept': 'text/html' },
+        signal: AbortSignal.timeout(15000) 
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const html = await response.text();
+
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      
+      doc.querySelectorAll('script, style, noscript, svg, iframe, link[rel="stylesheet"]').forEach(el => el.remove());
+      
+      const extractedData: string[] = [];
+      
+      const metaDesc = doc.querySelector('meta[name="description"]')?.getAttribute('content');
+      if (metaDesc) extractedData.push(`META DESCRIPTION: ${metaDesc}`);
+      const title = doc.querySelector('title')?.textContent;
+      if (title) extractedData.push(`TÍTULO DA PÁGINA: ${title}`);
+
+      const headings = doc.querySelectorAll('h1, h2, h3');
+      if (headings.length > 0) {
+        extractedData.push('\nESTRUTURA DE TÍTULOS:');
+        headings.forEach((h, i) => {
+          if (i < 20 && h.textContent?.trim()) {
+            extractedData.push(`  ${h.tagName}: ${h.textContent.trim().substring(0, 200)}`);
+          }
+        });
+      }
+
+      const buttons = doc.querySelectorAll('button, a[class*="btn"], a[class*="cta"], a[class*="button"], [role="button"]');
+      if (buttons.length > 0) {
+        extractedData.push('\nBOTÕES E CTAs:');
+        const seen = new Set<string>();
+        buttons.forEach(b => {
+          const text = b.textContent?.trim().substring(0, 100);
+          if (text && text.length > 1 && !seen.has(text)) {
+            seen.add(text);
+            extractedData.push(`  - ${text}`);
+          }
+        });
+      }
+
+      const sections = doc.querySelectorAll('section, [class*="section"], [class*="hero"], [class*="banner"], [class*="pricing"], [class*="testimonial"], [class*="faq"], [class*="footer"], main, header, footer');
+      if (sections.length > 0) {
+        extractedData.push('\nSEÇÕES IDENTIFICADAS:');
+        const seen = new Set<string>();
+        sections.forEach(s => {
+          const classes = s.className?.toString() || '';
+          const tag = s.tagName.toLowerCase();
+          const id = s.id || '';
+          const identifier = `${tag}${id ? '#' + id : ''}${classes ? '.' + classes.split(' ').slice(0, 3).join('.') : ''}`;
+          if (!seen.has(identifier)) {
+            seen.add(identifier);
+            extractedData.push(`  - <${identifier}>`);
+          }
+        });
+      }
+      
+      const bodyText = doc.body?.textContent?.replace(/\s+/g, ' ').trim().substring(0, 3000);
+      if (bodyText) extractedData.push(`\nCONTEÚDO TEXTUAL (primeiros 3000 chars):\n${bodyText}`);
+
+      const inlineStyles = doc.querySelectorAll('[style]');
+      const colorSet = new Set<string>();
+      inlineStyles.forEach(el => {
+        const style = el.getAttribute('style') || '';
+        const colorMatches = style.match(/#[0-9a-fA-F]{3,8}|rgb[a]?\([^)]+\)/g);
+        colorMatches?.forEach(c => colorSet.add(c));
+      });
+      if (colorSet.size > 0) {
+        extractedData.push(`\nCORES DETECTADAS: ${Array.from(colorSet).slice(0, 15).join(', ')}`);
+      }
+
+      const fullBodyHtml = doc.body?.innerHTML
+        ?.replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+        .substring(0, 8000);
+      if (fullBodyHtml) {
+        extractedData.push(`\nESTRUTURA HTML (primeiros 8000 chars):\n${fullBodyHtml}`);
+      }
+
+      const result = extractedData.join('\n');
+      setFetchedRefContent(result);
+      return result;
+    } catch (e: any) {
+      console.warn("Falha ao buscar URL de referência:", e.message);
+      setFetchedRefContent(null);
+      return null;
+    } finally {
+      setIsFetchingRef(false);
+    }
+  };
 
   const fetchPages = async () => {
     setIsLoading(true);
@@ -191,25 +292,202 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
     setIsGenerating(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+      let referenceAnalysis = fetchedRefContent || '';
+      if (!referenceAnalysis && aiPrompt.referenceUrl) {
+        referenceAnalysis = (await fetchReferenceUrl(aiPrompt.referenceUrl)) || '';
+      }
       
       if (creationMode === 'prompt') {
-          let htmlPrompt = `Você é um mestre em design de conversão e copywriting.
-          Sua missão é criar o CÓDIGO HTML COMPLETO de uma Landing Page de Alta Performance.
-          
-          REQUISITOS TÉCNICOS:
-          1. Use Tailwind CSS via CDN para estilização.
-          2. A página deve ser responsiva e moderna.
-          3. Use a tag {{form}} no local onde deve aparecer o formulário de captura.
-          4. Use a tag {{cta_link}} nos links dos botões de compra/CTA.
-          
-          REFERÊNCIAS:
-          - Site de Referência Visual: ${aiPrompt.referenceUrl || 'Nenhum informado. Use um estilo moderno e limpo.'}
+          const referenceBlock = referenceAnalysis 
+            ? `
+          ═══════════════════════════════════════
+          ANÁLISE REAL DO SITE DE REFERÊNCIA (${aiPrompt.referenceUrl})
+          ═══════════════════════════════════════
+          O conteúdo abaixo foi EXTRAÍDO DIRETAMENTE do site de referência.
+          Você DEVE usar isso como base de inspiração para o layout, estrutura,
+          tom de voz, paleta de cores, hierarquia visual e padrões de seção.
+
+          ${referenceAnalysis}
+          ═══════════════════════════════════════
+          FIM DA ANÁLISE DO SITE DE REFERÊNCIA
+          ═══════════════════════════════════════`
+            : '';
+
+          let htmlPrompt = `Você é um ARQUITETO DE CONVERSÃO de classe mundial e EXPERT EM COPYWRITING DIRETO.
+          Você combina as habilidades de:
+          - David Ogilvy (copywriting persuasivo)
+          - Joanna Wiebe (microcopy de conversão)
+          - Aarron Walter (design emocional)
+          - Peep Laja (otimização de conversão)
+
+          SUA MISSÃO: Criar o CÓDIGO HTML COMPLETO de uma Landing Page de ALTÍSSIMA PERFORMANCE
+          que converte visitantes em compradores usando os princípios mais avançados de persuasão.
+
+          ═══════════════════════════════════════
+          REQUISITOS TÉCNICOS OBRIGATÓRIOS:
+          ═══════════════════════════════════════
+          1. Use Tailwind CSS via CDN (<script src="https://cdn.tailwindcss.com"></script>)
+          2. A página DEVE ser 100% responsiva (mobile-first)
+          3. Use a tag {{form}} EXATAMENTE onde deve aparecer o formulário de captura
+          4. Use a tag {{cta_link}} em TODOS os links/botões de compra/CTA
+          5. Use Google Fonts via CDN para tipografia premium (Inter, Plus Jakarta Sans, ou similar)
+          6. Inclua animações CSS suaves (fade-in, slide-up) para engagement
+          7. Mínimo de 2000 linhas de código - a página deve ser COMPLETA e DETALHADA
+          8. Use ícones via SVG inline ou Heroicons CDN
+          9. Implemente seções com gradientes sofisticados e espaçamento generoso
+          10. Adicione micro-interações (hover effects elegantes, transições suaves)
+          ${referenceBlock}
+
+          ═══════════════════════════════════════
+          ESTRUTURA OBRIGATÓRIA DA PÁGINA (todas as seções):
+          ═══════════════════════════════════════
+
+          1. **BARRA DE URGÊNCIA (sticky top)**: Contador de escassez no topo
+             - Use animação pulsante, cores contrastantes
+             - Texto tipo: "🔥 OFERTA ESPECIAL: Últimas X vagas com Y% de desconto"
+
+          2. **HERO SECTION (above the fold)**:
+             - Headline principal MAGNÉTICA (max 12 palavras) com palavras-chave em destaque
+             - Sub-headline que amplia a promessa (2-3 linhas)
+             - Bullet points com ícones ✓ mostrando 3-4 benefícios-chave
+             - Botão CTA ENORME com microcopy abaixo ("Sem compromisso • Cancele quando quiser")
+             - Badge de credibilidade ("⭐ +5.000 alunos satisfeitos")
+             - Imagem/visual de impacto ou vídeo placeholder
+             - Background com gradiente sofisticado
+
+          3. **BARRA DE LOGOS / PROVA SOCIAL**:
+             - "Visto em:" ou "Reconhecido por:" com logos de parceiros (placeholder)
+             - Design limpo em tons de cinza
+
+          4. **SEÇÃO DE DOR / PROBLEMA**:
+             - Headline empática ("Você já se sentiu assim?")
+             - 4-6 bullet points descrevendo frustrações do público
+             - Use ❌ nos pontos de dor
+             - Texto que demonstra compreensão profunda do problema
+             - Transição emocional para a solução
+
+          5. **SEÇÃO DE TRANSFORMAÇÃO / SOLUÇÃO**:
+             - Headline de virada ("Agora imagine...")
+             - Antes vs Depois visual (2 colunas comparativas)
+             - Use ✅ nos pontos positivos
+             - Descrição da metodologia/abordagem única
+
+          6. **SEÇÃO DO MÉTODO / COMO FUNCIONA**:
+             - 3-5 passos numerados em cards visuais
+             - Cada passo com ícone, título e descrição
+             - Timeline ou flowchart visual
+             - CTA intermediário
+
+          7. **SEÇÃO DE BENEFÍCIOS DETALHADOS**:
+             - Grid 2x3 ou 3x3 com cards de benefícios
+             - Cada card: ícone grande, título impactante, descrição curta
+             - Destaque visual no benefício principal
+             - Background diferenciado
+
+          8. **SEÇÃO DE MÓDULOS / CONTEÚDO (se aplicável)**:
+             - Accordion ou cards expandíveis
+             - Cada módulo com número, título, descrição e itens
+             - Badge "Mais Popular" em um módulo
+             - Cálculo do valor total ("Valor real: R$X.XXX")
+
+          9. **SEÇÃO DE BÔNUS**:
+             - Cards com efeito "glow" ou borda dourada
+             - Cada bônus: imagem, título, valor original riscado, "GRÁTIS"
+             - Soma total dos bônus
+             - Headline tipo "E não é só isso..."
+
+          10. **SEÇÃO DE DEPOIMENTOS / PROVA SOCIAL**:
+              - Mínimo 6 depoimentos em grid ou carrossel
+              - Foto (placeholder), nome, cargo/contexto
+              - Citação com aspas estilizadas
+              - Rating com estrelas
+              - Destaque para resultados específicos (números)
+
+          11. **SEÇÃO DE GARANTIA**:
+              - Selo de garantia visual grande
+              - Headline confiante ("Garantia Incondicional de X Dias")
+              - Texto que elimina risco ("Se não gostar, devolvemos 100%")
+              - Ícone de escudo/proteção
+              - Background suave diferenciado
+
+          12. **SEÇÃO DE OFERTA / PREÇO**:
+              - Card de preço centralizado com destaque visual
+              - Preço original riscado + preço promocional grande
+              - Lista de tudo incluído (com checks ✓)
+              - Valor total sumarizado
+              - Botão CTA PRINCIPAL (maior da página)
+              - Microcopy de segurança abaixo do botão
+              - Badges de pagamento (Visa, Master, Pix, etc.)
+              - Opções de parcelamento
+              - Banner de escassez dentro do card
+
+          13. **SEÇÃO FAQ**:
+              - Mínimo 8 perguntas frequentes
+              - Design accordion expansível
+              - Perguntas que lidam com objeções reais
+              - Última pergunta direcionando para ação
+
+          14. **SEÇÃO FINAL / LAST CALL**:
+              - Headline de urgência final
+              - Resumo da oferta em bullets
+              - CTA final com countdown visual
+              - Frase de fechamento emocional
+
+          15. **RODAPÉ**:
+              - Links legais (Termos, Privacidade)
+              - Dados da empresa
+              - Copyright
+              - Design minimalista e escuro
+
+          ═══════════════════════════════════════
+          TÉCNICAS DE COPYWRITING OBRIGATÓRIAS:
+          ═══════════════════════════════════════
+          - Use números específicos (não "muitos alunos" → "5.847 alunos")
+          - Aplique power words em headlines (Descubra, Domine, Transforme, Garantido, Exclusivo, Comprovado)
+          - Use pattern interrupt a cada 2-3 seções (elementos visuais que quebram monotonia)
+          - Microcopy em TODOS os botões CTA (texto pequeno abaixo gerando confiança)
+          - Aplique ancoragem de preço (mostre valor alto, risque, revele preço real)
+          - Use prova social específica com números concretos
+          - Headlines com benefício + curiosidade + urgência
+          - Verbos de ação no imperativo nos CTAs
+
+          ═══════════════════════════════════════
+          DESIGN E UX OBRIGATÓRIOS:
+          ═══════════════════════════════════════
+          - Espaçamento generoso entre seções (py-20 a py-32)
+          - Tipografia premium com hierarquia clara (títulos grandes, corpo legível)
+          - Paleta de cores coerente com máx. 3 cores + neutros
+          - Contraste forte nos CTAs (cor vibrante que se destaca do resto)
+          - Cards com bordas arredondadas (rounded-2xl ou rounded-3xl)
+          - Sombras sutis mas elegantes (shadow-xl, shadow-2xl)
+          - Gradientes sofisticados (não genéricos)
+          - Imagens placeholder via Unsplash com URLs reais
+          - Seções alternando backgrounds (branco, cinza claro, colorido sutil)
+          - Mobile: stack vertical, padding adequado, fonte legível
+          - Linha de progressão visual fluida do topo ao fundo
+          - Whitespace generoso - a página deve respirar
+
+          ═══════════════════════════════════════
+          DADOS DO PROJETO:
+          ═══════════════════════════════════════
           - Link do CTA: ${aiPrompt.ctaLink || '#'}
           
-          INSTRUÇÕES ADICIONAIS:
-          ${aiPrompt.customPrompt || 'Crie uma página persuasiva baseada no briefing anexado.'}
+          INSTRUÇÕES DO USUÁRIO:
+          ${aiPrompt.customPrompt || 'Crie uma página de vendas persuasiva e completa baseada no briefing anexado.'}
           
-          Retorne APENAS o código HTML completo dentro de uma estrutura básica HTML5. Não inclua explicações fora do código.`;
+          ═══════════════════════════════════════
+          REGRAS FINAIS:
+          ═══════════════════════════════════════
+          - Retorne APENAS o código HTML completo. NENHUMA explicação ou markdown.
+          - O HTML deve começar com <!DOCTYPE html> e terminar com </html>
+          - A página deve ter NO MÍNIMO 15 seções visuais distintas
+          - Todo texto deve ser em PORTUGUÊS do Brasil
+          - Seja EXTREMAMENTE detalhado - esta é uma página profissional de vendas
+          - NÃO use lorem ipsum - crie copy REAL e persuasivo baseado nas instruções
+          - Cada seção deve ter pelo menos 3-5 elementos visuais
+          - Use ${aiPrompt.referenceUrl ? 'o site de referência analisado acima como inspiração principal de design e estrutura' : 'um estilo moderno, premium e sofisticado como referência'}`;
+
 
           const contentsParts: any[] = [{ text: htmlPrompt }];
           if (aiPrompt.briefFileBase64) {
@@ -252,23 +530,53 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
           return;
       }
 
-      let basePrompt = `Você é um arquiteto sênior de design de conversão e expert em copywriting.
-      Sua missão é criar uma Landing Page Premium em formato JSON.
+      let basePrompt = `Você é um ARQUITETO DE CONVERSÃO de classe mundial e EXPERT EM COPYWRITING DIRETO.
+      Sua missão é criar uma Landing Page PREMIUM de ALTA CONVERSÃO em formato JSON.
       
-      INFORMAÇÕES DA NOVA OFERTA:
-      Nome: ${aiPrompt.productName}
+      ═══════════════════════════════════════
+      INFORMAÇÕES DA OFERTA:
+      ═══════════════════════════════════════
+      Nome do Produto: ${aiPrompt.productName}
       Marca: ${aiPrompt.brandName}
-      Público: ${aiPrompt.targetAudience}
+      Público-Alvo: ${aiPrompt.targetAudience}
       Descrição: ${aiPrompt.productDescription}
       Preço: ${aiPrompt.price}
       Garantia: ${aiPrompt.guarantee}
       Tom de Voz: ${aiPrompt.tone}
       Link de destino (CTA): ${aiPrompt.ctaLink}
+
+      ═══════════════════════════════════════
+      DIRETRIZES DE COPYWRITING:
+      ═══════════════════════════════════════
+      - Headlines MAGNÉTICAS com power words (Descubra, Domine, Transforme, Garantido)
+      - Números específicos (não "muitos" → "5.847 alunos")
+      - Bullets com benefícios concretos e mensuráveis
+      - CTAs no imperativo com microcopy de segurança
+      - Ancoragem de preço com valor riscado
+      - Depoimentos com nome, cargo e resultado específico
+      - FAQ abordando objeções reais de compra
+      - Tom ${aiPrompt.tone} consistente em toda a página
       
-      ESTRUTURA SUGERIDA: Hero, Dor, Método, Benefícios, Módulos, Bônus, Depoimentos, Oferta, Garantia, FAQ e Rodapé.`;
+      ESTRUTURA OBRIGATÓRIA: Hero (headline magnética + CTA), Dor/Problema (bullets com ❌), 
+      Transformação (Antes vs Depois), Método (passos numerados), Benefícios (grid de cards), 
+      Módulos (conteúdo detalhado), Bônus (cards com valor riscado), 
+      Depoimentos (mín. 4 com estrelas), Oferta/Preço (card de destaque com ancoragem), 
+      Garantia (selo visual), FAQ (mín. 6 perguntas) e Rodapé.
+      
+      Todo texto DEVE ser em Português do Brasil. NÃO use lorem ipsum.
+      Crie copy REAL, persuasivo e específico para "${aiPrompt.productName}".`;
 
       if (aiPrompt.referenceTemplate) {
-          basePrompt += `\n\nInspire-se no estilo visual do site: ${aiPrompt.referenceTemplate}.`;
+          basePrompt += `\n\nInspire-se no estilo visual do site: ${aiPrompt.referenceTemplate}. Replique sua estrutura de seções, hierarquia visual e tom de voz.`;
+      }
+      
+      if (referenceAnalysis) {
+          basePrompt += `\n\n═══════════════════════════════════════
+ANÁLISE REAL DO SITE DE REFERÊNCIA (${aiPrompt.referenceUrl || aiPrompt.referenceTemplate}):
+═══════════════════════════════════════
+${referenceAnalysis.substring(0, 4000)}
+═══════════════════════════════════════
+Use esta análise como inspiração para estrutura, tom e design.`;
       }
 
       const fieldSchema = {
@@ -1374,20 +1682,49 @@ export const LandingPageManager: React.FC<LandingPageManagerProps> = ({ onBack }
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="md:col-span-2 space-y-6">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Globe size={14} className="text-orange-500"/> Link do Site de Referência Visual</label><input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" value={aiPrompt.referenceUrl} onChange={e => setAiPrompt({...aiPrompt, referenceUrl: e.target.value})} placeholder="https://..." /></div>
+                                <div>
+                                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Globe size={14} className="text-orange-500"/> Link do Site de Referência Visual</label>
+                                  <div className="flex gap-2">
+                                    <input type="text" className="flex-1 px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" value={aiPrompt.referenceUrl} onChange={e => { setAiPrompt({...aiPrompt, referenceUrl: e.target.value}); setFetchedRefContent(null); }} placeholder="https://site-de-referencia.com.br" />
+                                    {aiPrompt.referenceUrl && (
+                                      <button 
+                                        type="button" 
+                                        onClick={() => fetchReferenceUrl(aiPrompt.referenceUrl)} 
+                                        disabled={isFetchingRef}
+                                        className={clsx(
+                                          "px-4 py-4 rounded-[1.5rem] text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shrink-0",
+                                          fetchedRefContent ? "bg-green-50 border-2 border-green-300 text-green-700" : "bg-indigo-50 border-2 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                                        )}
+                                      >
+                                        {isFetchingRef ? <Loader2 size={16} className="animate-spin"/> : fetchedRefContent ? <CheckCircle size={16}/> : <Search size={16}/>}
+                                        {isFetchingRef ? 'Analisando...' : fetchedRefContent ? 'Analisado!' : 'Analisar'}
+                                      </button>
+                                    )}
+                                  </div>
+                                  {fetchedRefContent && (
+                                    <p className="text-[10px] text-green-600 mt-2 ml-1 font-bold flex items-center gap-1.5">
+                                      <CheckCircle size={12}/> Site analisado com sucesso! A IA usará a estrutura, cores, copy e layout como referência real.
+                                    </p>
+                                  )}
+                                  {!fetchedRefContent && aiPrompt.referenceUrl && !isFetchingRef && (
+                                    <p className="text-[10px] text-amber-600 mt-2 ml-1 italic flex items-center gap-1.5">
+                                      <Info size={12}/> Clique em "Analisar" para buscar o conteúdo real do site, ou ele será buscado automaticamente ao gerar.
+                                    </p>
+                                  )}
+                                </div>
                                 <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><FileUp size={14} className="text-orange-500"/> PDF do Briefing do Produto</label><div className="flex gap-2"><button type="button" onClick={() => fileInputRef.current?.click()} className={clsx("flex-1 px-6 py-4 border-2 border-dashed rounded-[1.5rem] text-xs font-bold transition-all flex items-center justify-center gap-3", aiPrompt.briefFileBase64 ? "bg-orange-50 border-orange-500 text-orange-700" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-white hover:border-orange-300")}>{aiPrompt.briefFileBase64 ? <><Check size={18}/> {aiPrompt.briefFileName}</> : <><FileText size={18}/> Selecionar PDF</>}</button>{aiPrompt.briefFileBase64 && (<button onClick={() => setAiPrompt({...aiPrompt, briefFileBase64: null, briefFileName: null})} className="p-4 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100"><X size={20}/></button>)}</div><input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" onChange={handleFileChange} /></div>
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><Link2 size={14} className="text-orange-500"/> Link do Botão CTA (Destino de Compra)</label><input type="text" className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all" value={aiPrompt.ctaLink} onChange={e => setAiPrompt({...aiPrompt, ctaLink: e.target.value})} placeholder="https://..." /></div>
                                 <div><label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1 flex items-center gap-2"><FormInput size={14} className="text-orange-500"/> Formulário de Captura (Injetado via {"{{form}}"})</label><select className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-sm font-bold outline-none transition-all appearance-none cursor-pointer" value={aiPrompt.selectedFormId} onChange={e => setAiPrompt({...aiPrompt, selectedFormId: e.target.value})}><option value="">Não incluir formulário</option>{availableForms.map(f => (<option key={f.id} value={f.id}>{f.title}</option>))}</select></div>
                               </div>
-                              <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1 flex items-center gap-2"><Code size={14} className="text-orange-500"/> Instruções Adicionais para o Layout</label><textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-xs font-medium h-32 resize-none outline-none transition-all leading-relaxed" value={aiPrompt.customPrompt} onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} placeholder="Ex: Use tons de azul escuro e branco, destaque a garantia de 30 dias, coloque o vídeo no topo..." /><p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA usará o PDF e o link de referência para estruturar o código final.</p></div>
+                              <div><label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1 flex items-center gap-2"><Code size={14} className="text-orange-500"/> Instruções Adicionais para o Layout</label><textarea className="w-full px-6 py-4 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-orange-500 rounded-[1.5rem] text-xs font-medium h-32 resize-none outline-none transition-all leading-relaxed" value={aiPrompt.customPrompt} onChange={e => setAiPrompt({...aiPrompt, customPrompt: e.target.value})} placeholder="Ex: Use tons de azul escuro e branco, destaque a garantia de 30 dias, coloque o vídeo no topo..." /><p className="text-[10px] text-slate-400 mt-2 ml-1 italic">* A IA irá BUSCAR e ANALISAR o site de referência em tempo real, extraindo estrutura, copy, cores e layout. O PDF e as instruções serão combinados para gerar uma página de vendas profissional e de alta conversão.</p></div>
                           </div>
                      </div>
-                     <button onClick={handleCreateWithAi} disabled={isGenerating || (creationMode === 'prompt' && !aiPrompt.customPrompt && !aiPrompt.briefFileBase64)} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">{isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Zap size={24} />}{isGenerating ? 'Criando Código e Estrutura...' : 'Gerar Página com IA'}</button>
+                     <button onClick={handleCreateWithAi} disabled={isGenerating || (creationMode === 'prompt' && !aiPrompt.customPrompt && !aiPrompt.briefFileBase64)} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">{isGenerating ? <Loader2 size={24} className="animate-spin" /> : <Zap size={24} />}{isGenerating ? (isFetchingRef ? 'Analisando site de referência...' : 'Gerando página de alta conversão...') : 'Gerar Página Profissional com IA'}</button>
                   </div>
                ) : (
-                  <div className="space-y-8 animate-in slide-in-from-right-4 duration-300"><div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={100}/></div><h4 className="text-xl font-black mb-2 uppercase tracking-tighter">Estrutura Pronta!</h4><p className="text-indigo-100 font-medium leading-relaxed">Sua página foi gerada conforme as instruções fornecidas. Clique abaixo para salvar e revisar.</p></div><div className="flex gap-4 pt-6 border-t"><button onClick={() => setCurrentDraft(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Voltar</button><button onClick={confirmDraft} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Revisar e Publicar</button></div></div>
+                  <div className="space-y-8 animate-in slide-in-from-right-4 duration-300"><div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={100}/></div><h4 className="text-xl font-black mb-2 uppercase tracking-tighter">Página de Alta Conversão Pronta!</h4><p className="text-indigo-100 font-medium leading-relaxed">Sua página profissional foi gerada com {fetchedRefContent ? 'análise real do site de referência, ' : ''}copywriting persuasivo, estrutura de conversão e design premium. Clique abaixo para revisar e publicar.</p></div><div className="flex gap-4 pt-6 border-t"><button onClick={() => setCurrentDraft(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Voltar</button><button onClick={confirmDraft} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Revisar e Publicar</button></div></div>
                )}
             </div>
           </div>

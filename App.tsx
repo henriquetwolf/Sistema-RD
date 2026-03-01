@@ -38,6 +38,7 @@ import { AiAssistant } from './components/AiAssistant';
 import { LandingPageManager } from './components/LandingPageManager';
 import { LandingPagePublicViewer } from './components/LandingPagePublicViewer';
 import { ContaAzulManager } from './components/ContaAzulManager';
+import { VOLL_LOGO_BASE64 } from './utils/constants';
 import { SupabaseConfig, FileData, AppStep, UploadStatus, SyncJob, FormModel, Contract, StudentSession, CollaboratorSession, PartnerStudioSession, EntityImportType, LandingPage } from './types';
 import { parseCsvFile } from './utils/csvParser';
 import { parseExcelFile } from './utils/excelParser';
@@ -63,7 +64,7 @@ function App() {
   const [isPublicLoading, setIsPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
 
-  const DEFAULT_LOGO = "https://vollpilates.com.br/wp-content/uploads/2022/10/logo-voll-pilates-group.png";
+  const DEFAULT_LOGO = VOLL_LOGO_BASE64;
   const [appLogo, setAppLogo] = useState<string>(DEFAULT_LOGO);
 
   const handleLogoChange = (newLogo: string | null) => {

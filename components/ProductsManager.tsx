@@ -177,8 +177,18 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const fetchContaAzulItems = async () => {
       try {
           const items = await contaAzulService.getProducts();
+          const prods = items.filter((i: any) => i.tipo === 'PRODUTO');
+          const svcs = items.filter((i: any) => i.tipo === 'SERVICO');
+          console.log(`[ContaAzul Items] Total: ${items.length} | Produtos: ${prods.length} | Serviços: ${svcs.length}`);
+          if (svcs.length === 0 && items.length > 0) {
+              console.warn('[ContaAzul Items] Nenhum serviço retornado. Tipos encontrados:', [...new Set(items.map((i: any) => i.tipo))]);
+              console.log('[ContaAzul Items] Amostra dos itens:', items.slice(0, 5));
+          }
           setContaAzulItems(items);
-      } catch (e) { setContaAzulItems([]); }
+      } catch (e) {
+          console.error('[ContaAzul Items] Erro ao buscar:', e);
+          setContaAzulItems([]);
+      }
   };
 
   const fetchCompanies = async () => {
@@ -1017,7 +1027,19 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                     ))}
                                 </select>
                                 {contaAzulItems.filter(p => p.tipo === 'SERVICO').length === 0 && (
-                                    <p className="text-[10px] text-amber-600 mt-1 ml-1 font-medium">Nenhum serviço encontrado no Conta Azul.</p>
+                                    <div className="mt-1 ml-1">
+                                        <p className="text-[10px] text-amber-600 font-medium">
+                                            Nenhum serviço encontrado no Conta Azul. ({contaAzulItems.length} itens carregados, {contaAzulItems.filter(p => p.tipo === 'PRODUTO').length} produtos)
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => { fetchContaAzulItems(); }}
+                                            className="text-[10px] text-blue-600 font-bold underline mt-1 hover:text-blue-800"
+                                        >
+                                            Recarregar itens do Conta Azul
+                                        </button>
+                                        <p className="text-[9px] text-slate-400 mt-0.5">Abra o console do navegador (F12) para ver detalhes da API</p>
+                                    </div>
                                 )}
                             </div>
                         )}

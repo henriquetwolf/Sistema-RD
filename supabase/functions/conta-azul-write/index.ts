@@ -241,21 +241,21 @@ async function updateInstallment(req: Request): Promise<Response> {
 
 async function listProducts(): Promise<Response> {
   const all: any[] = [];
+  const debug: Record<string, any> = {};
 
   // ── Produtos (GET /v1/produtos) ──
   try {
-    let page = 1;
-    let hasMore = true;
-    while (hasMore) {
-      const prodRes = await contaAzulFetch(`/v1/produtos?pagina=${page}&tamanho_pagina=200&status=ATIVO`);
-      if (!prodRes.ok) {
-        const errText = await prodRes.text();
-        console.error("Erro ao buscar produtos:", prodRes.status, errText);
-        break;
-      }
+    const prodRes = await contaAzulFetch("/v1/produtos?pagina=1&tamanho_pagina=200&status=ATIVO");
+    debug.produtos_status = prodRes.status;
+    if (!prodRes.ok) {
+      debug.produtos_error = await prodRes.text();
+      console.error("Erro produtos:", prodRes.status, debug.produtos_error);
+    } else {
       const body = await prodRes.json();
+      debug.produtos_keys = Object.keys(body);
       const items = Array.isArray(body) ? body : body.items || body.itens || body.content || [];
-      console.log(`Produtos page ${page}: ${items.length} itens`);
+      debug.produtos_count = items.length;
+      if (items.length > 0) debug.produtos_sample_keys = Object.keys(items[0]);
       for (const p of items) {
         all.push({
           id: String(p.id),
@@ -264,40 +264,85 @@ async function listProducts(): Promise<Response> {
           valor: p.valor_venda || p.preco_venda || p.preco || p.valor || 0,
         });
       }
-      hasMore = items.length >= 200;
-      page++;
     }
-  } catch (e) { console.error("Error fetching produtos:", e); }
+  } catch (e: any) { debug.produtos_exception = e.message; console.error("Exception produtos:", e); }
 
-  // ── Serviços (GET /v1/servicos) ──
-  try {
-    let page = 1;
-    let hasMore = true;
-    while (hasMore) {
-      const servRes = await contaAzulFetch(`/v1/servicos?pagina=${page}&tamanho_pagina=200`);
+  // ── Serviços — tenta múltiplos endpoints ──
+  const serviceEndpoints = [
+    "/v1/servicos?pagina=1&tamanho_pagina=200",
+    "/v1/servicos",
+    "/v1/servico/busca?pagina=1&tamanho_pagina=200",
+  ];
+
+  let servicesFound = false;
+  for (const endpoint of serviceEndpoints) {
+    if (servicesFound) break;
+    try {
+      console.log("Tentando endpoint servicos:", endpoint);
+      const servRes = await contaAzulFetch(endpoint);
+      debug[`svc_${endpoint}_status`] = servRes.status;
+
       if (!servRes.ok) {
         const errText = await servRes.text();
-        console.error("Erro ao buscar servicos:", servRes.status, errText);
-        break;
+        debug[`svc_${endpoint}_error`] = errText.substring(0, 300);
+        console.error(`Servicos ${endpoint}:`, servRes.status, errText.substring(0, 300));
+        continue;
       }
-      const body = await servRes.json();
-      const items = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
-      console.log(`Servicos page ${page}: ${items.length} itens`);
+
+      const rawText = await servRes.text();
+      debug[`svc_${endpoint}_raw_preview`] = rawText.substring(0, 500);
+      console.log(`Servicos ${endpoint} raw preview:`, rawText.substring(0, 500));
+
+      let body: any;
+      try { body = JSON.parse(rawText); } catch { debug[`svc_${endpoint}_parse_error`] = "JSON parse failed"; continue; }
+
+      debug[`svc_${endpoint}_keys`] = Object.keys(body);
+
+      let items: any[] = [];
+      if (Array.isArray(body)) {
+        items = body;
+      } else if (body.itens && Array.isArray(body.itens)) {
+        items = body.itens;
+      } else if (body.items && Array.isArray(body.items)) {
+        items = body.items;
+      } else if (body.content && Array.isArray(body.content)) {
+        items = body.content;
+      } else if (body.data && Array.isArray(body.data)) {
+        items = body.data;
+      }
+
+      debug[`svc_${endpoint}_count`] = items.length;
+      if (items.length > 0) {
+        debug[`svc_${endpoint}_sample_keys`] = Object.keys(items[0]);
+        debug[`svc_${endpoint}_sample`] = JSON.stringify(items[0]).substring(0, 400);
+      }
+
       for (const s of items) {
         all.push({
           id: String(s.id),
-          nome: s.nome || s.descricao || "Serviço",
+          nome: s.nome || s.descricao || s.name || "Serviço",
           tipo: "SERVICO",
-          valor: s.preco || s.preco_venda || s.valor || 0,
+          valor: s.preco || s.preco_venda || s.valor || s.value || s.valor_venda || 0,
         });
       }
-      hasMore = items.length >= 200;
-      page++;
-    }
-  } catch (e) { console.error("Error fetching servicos:", e); }
 
-  console.log(`listProducts total: ${all.length} (${all.filter(i => i.tipo === 'PRODUTO').length} produtos, ${all.filter(i => i.tipo === 'SERVICO').length} servicos)`);
-  return jsonResponse({ success: true, items: all });
+      if (items.length > 0) {
+        servicesFound = true;
+        console.log(`Servicos encontrados via ${endpoint}: ${items.length}`);
+      }
+    } catch (e: any) {
+      debug[`svc_${endpoint}_exception`] = e.message;
+      console.error(`Exception servicos ${endpoint}:`, e.message);
+    }
+  }
+
+  const totalProd = all.filter(i => i.tipo === 'PRODUTO').length;
+  const totalSvc = all.filter(i => i.tipo === 'SERVICO').length;
+  console.log(`listProducts total: ${all.length} (${totalProd} produtos, ${totalSvc} servicos)`);
+  debug.total_produtos = totalProd;
+  debug.total_servicos = totalSvc;
+
+  return jsonResponse({ success: true, items: all, _debug: debug });
 }
 
 async function createSale(req: Request): Promise<Response> {

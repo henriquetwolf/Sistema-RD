@@ -168,7 +168,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const fetchContaAzulCategories = async () => {
       try {
           const cats = await contaAzulService.getCategories();
-          setContaAzulCategories(cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS'));
+          setContaAzulCategories(cats);
       } catch (e) { setContaAzulCategories([]); }
   };
 
@@ -838,7 +838,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                             >
                                 <option value="">Selecione uma categoria...</option>
                                 {contaAzulCategories.map(cat => (
-                                    <option key={cat.id} value={cat.id_conta_azul}>{cat.nome}</option>
+                                    <option key={cat.id} value={cat.id_conta_azul}>[{cat.tipo}] {cat.nome}</option>
                                 ))}
                             </select>
                             {contaAzulCategories.length === 0 && <p className="text-[10px] text-amber-600 mt-1 ml-1 font-medium">Sincronize as categorias no painel Conta Azul primeiro.</p>}

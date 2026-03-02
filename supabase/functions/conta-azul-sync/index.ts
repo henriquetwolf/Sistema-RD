@@ -29,19 +29,23 @@ async function getValidAccessToken(): Promise<string> {
 
 async function contaAzulFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = await getValidAccessToken();
-  return fetch(CONTA_AZUL_BASE + path, { ...options, headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", ...(options.headers as Record<string,string> || {}) } });
+  return fetch(CONTA_AZUL_BASE + path, { ...options, headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", ...(options.headers as Record<string, string> || {}) } });
 }
 
 async function contaAzulFetchPaginated<T>(basePath: string, queryParams: Record<string, string> = {}, maxPages = 50): Promise<T[]> {
-  const all: T[] = []; let page = 0; const size = 200;
+  const all: T[] = [];
+  let page = 1;
+  const size = 200;
   for (let i = 0; i < maxPages; i++) {
     const params = new URLSearchParams({ ...queryParams, pagina: String(page), tamanho_pagina: String(size) });
     const res = await contaAzulFetch(basePath + "?" + params.toString());
     if (!res.ok) { const e = await res.text(); throw new Error("API_ERROR: " + res.status + " on " + basePath + " - " + e); }
     const body = await res.json();
     const items: T[] = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
-    if (items.length === 0) break; all.push(...items);
-    if (items.length < size) break; page++;
+    if (items.length === 0) break;
+    all.push(...items);
+    if (items.length < size) break;
+    page++;
     await new Promise(r => setTimeout(r, 120));
   }
   return all;
@@ -54,21 +58,87 @@ function errorResponse(message: string, status = 400) { return jsonResponse({ er
 async function createSyncLog(tipo: string) { const db = getSupabaseServiceClient(); const { data } = await db.from("conta_azul_sync_log").insert({ tipo_sync: tipo, status: "running" }).select("id").single(); return data?.id; }
 async function completeSyncLog(logId: string, count: number, error?: string) { const db = getSupabaseServiceClient(); await db.from("conta_azul_sync_log").update({ status: error ? "error" : "success", registros_sincronizados: count, erro: error || null, finished_at: new Date().toISOString() }).eq("id", logId); }
 
+function defaultDateRange() {
+  const now = new Date();
+  const from = new Date(now);
+  from.setFullYear(from.getFullYear() - 2);
+  const to = new Date(now);
+  to.setFullYear(to.getFullYear() + 2);
+  return {
+    data_vencimento_de: from.toISOString().split("T")[0],
+    data_vencimento_ate: to.toISOString().split("T")[0],
+  };
+}
+
 function mapReceivableToRow(item: any) {
-  return { id_conta_azul: String(item.id || item.id_parcela || item.id_evento), id_evento: item.id_evento ? String(item.id_evento) : null, descricao: item.descricao || item.observacao || null, valor: parseFloat(item.valor || item.valor_original || 0), valor_pago: parseFloat(item.valor_pago || item.valor_recebido || 0), data_vencimento: item.data_vencimento || null, data_competencia: item.data_competencia || null, data_pagamento: item.data_pagamento || null, data_alteracao: item.data_alteracao || null, status: item.situacao || item.status || "PENDENTE", categoria_id: item.categoria?.id ? String(item.categoria.id) : null, categoria_nome: item.categoria?.nome || null, centro_custo_id: item.centro_custo?.id ? String(item.centro_custo.id) : null, centro_custo_nome: item.centro_custo?.nome || null, conta_financeira_id: item.conta_financeira?.id ? String(item.conta_financeira.id) : null, conta_financeira_nome: item.conta_financeira?.nome || null, parcela_numero: item.numero_parcela ?? null, total_parcelas: item.total_parcelas ?? null, contato_nome: item.contato?.nome || item.cliente?.nome || null, contato_id: item.contato?.id ? String(item.contato.id) : item.cliente?.id ? String(item.cliente.id) : null, observacoes: item.observacao || item.observacoes || null, numero_documento: item.numero_documento || null, synced_at: new Date().toISOString() };
+  const cat = Array.isArray(item.categorias) ? item.categorias[0] : item.categorias;
+  const cc = Array.isArray(item.centros_custo) ? item.centros_custo[0] : item.centros_custo;
+  return {
+    id_conta_azul: String(item.id),
+    id_evento: item.id_evento ? String(item.id_evento) : null,
+    descricao: item.descricao || null,
+    valor: parseFloat(item.total || item.valor || item.valor_original || 0),
+    valor_pago: parseFloat(item.pago || item.valor_pago || item.valor_recebido || 0),
+    data_vencimento: item.data_vencimento || null,
+    data_competencia: item.data_competencia || null,
+    data_pagamento: item.data_pagamento || null,
+    data_alteracao: item.data_alteracao || null,
+    status: item.status_traduzido || item.status || "PENDENTE",
+    categoria_id: cat?.id ? String(cat.id) : null,
+    categoria_nome: cat?.nome || null,
+    centro_custo_id: cc?.id ? String(cc.id) : null,
+    centro_custo_nome: cc?.nome || null,
+    conta_financeira_id: item.conta_financeira?.id ? String(item.conta_financeira.id) : null,
+    conta_financeira_nome: item.conta_financeira?.nome || null,
+    parcela_numero: item.numero_parcela ?? null,
+    total_parcelas: item.total_parcelas ?? null,
+    contato_nome: item.cliente?.nome || item.contato?.nome || null,
+    contato_id: item.cliente?.id ? String(item.cliente.id) : item.contato?.id ? String(item.contato.id) : null,
+    observacoes: item.observacao || item.observacoes || null,
+    numero_documento: item.numero_documento || null,
+    synced_at: new Date().toISOString(),
+  };
 }
 
 function mapPayableToRow(item: any) {
-  return { id_conta_azul: String(item.id || item.id_parcela || item.id_evento), id_evento: item.id_evento ? String(item.id_evento) : null, descricao: item.descricao || item.observacao || null, valor: parseFloat(item.valor || item.valor_original || 0), valor_pago: parseFloat(item.valor_pago || 0), data_vencimento: item.data_vencimento || null, data_competencia: item.data_competencia || null, data_pagamento: item.data_pagamento || null, data_alteracao: item.data_alteracao || null, status: item.situacao || item.status || "PENDENTE", categoria_id: item.categoria?.id ? String(item.categoria.id) : null, categoria_nome: item.categoria?.nome || null, centro_custo_id: item.centro_custo?.id ? String(item.centro_custo.id) : null, centro_custo_nome: item.centro_custo?.nome || null, conta_financeira_id: item.conta_financeira?.id ? String(item.conta_financeira.id) : null, conta_financeira_nome: item.conta_financeira?.nome || null, parcela_numero: item.numero_parcela ?? null, total_parcelas: item.total_parcelas ?? null, fornecedor_nome: item.contato?.nome || item.fornecedor?.nome || null, fornecedor_id: item.contato?.id ? String(item.contato.id) : item.fornecedor?.id ? String(item.fornecedor.id) : null, observacoes: item.observacao || item.observacoes || null, numero_documento: item.numero_documento || null, synced_at: new Date().toISOString() };
+  const cat = Array.isArray(item.categorias) ? item.categorias[0] : item.categorias;
+  const cc = Array.isArray(item.centros_custo) ? item.centros_custo[0] : item.centros_custo;
+  return {
+    id_conta_azul: String(item.id),
+    id_evento: item.id_evento ? String(item.id_evento) : null,
+    descricao: item.descricao || null,
+    valor: parseFloat(item.total || item.valor || item.valor_original || 0),
+    valor_pago: parseFloat(item.pago || item.valor_pago || 0),
+    data_vencimento: item.data_vencimento || null,
+    data_competencia: item.data_competencia || null,
+    data_pagamento: item.data_pagamento || null,
+    data_alteracao: item.data_alteracao || null,
+    status: item.status_traduzido || item.status || "PENDENTE",
+    categoria_id: cat?.id ? String(cat.id) : null,
+    categoria_nome: cat?.nome || null,
+    centro_custo_id: cc?.id ? String(cc.id) : null,
+    centro_custo_nome: cc?.nome || null,
+    conta_financeira_id: item.conta_financeira?.id ? String(item.conta_financeira.id) : null,
+    conta_financeira_nome: item.conta_financeira?.nome || null,
+    parcela_numero: item.numero_parcela ?? null,
+    total_parcelas: item.total_parcelas ?? null,
+    fornecedor_nome: item.fornecedor?.nome || item.contato?.nome || null,
+    fornecedor_id: item.fornecedor?.id ? String(item.fornecedor.id) : item.contato?.id ? String(item.contato.id) : null,
+    observacoes: item.observacao || item.observacoes || null,
+    numero_documento: item.numero_documento || null,
+    synced_at: new Date().toISOString(),
+  };
 }
 
 async function syncReceivables(req: Request): Promise<Response> {
   const logId = await createSyncLog("receivables"); let count = 0;
   try {
     const body = await req.json().catch(() => ({}));
-    const params: Record<string, string> = {};
-    if (body.data_vencimento_inicio) params.data_vencimento_inicio = body.data_vencimento_inicio;
-    if (body.data_vencimento_fim) params.data_vencimento_fim = body.data_vencimento_fim;
+    const dateRange = defaultDateRange();
+    const params: Record<string, string> = {
+      data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
+      data_vencimento_ate: body.data_vencimento_ate || dateRange.data_vencimento_ate,
+    };
     const items = await contaAzulFetchPaginated<any>("/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
     const db = getSupabaseServiceClient();
     for (const item of items) { const { error } = await db.from("conta_azul_contas_receber").upsert(mapReceivableToRow(item), { onConflict: "id_conta_azul" }); if (!error) count++; }
@@ -81,9 +151,11 @@ async function syncPayables(req: Request): Promise<Response> {
   const logId = await createSyncLog("payables"); let count = 0;
   try {
     const body = await req.json().catch(() => ({}));
-    const params: Record<string, string> = {};
-    if (body.data_vencimento_inicio) params.data_vencimento_inicio = body.data_vencimento_inicio;
-    if (body.data_vencimento_fim) params.data_vencimento_fim = body.data_vencimento_fim;
+    const dateRange = defaultDateRange();
+    const params: Record<string, string> = {
+      data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
+      data_vencimento_ate: body.data_vencimento_ate || dateRange.data_vencimento_ate,
+    };
     const items = await contaAzulFetchPaginated<any>("/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params);
     const db = getSupabaseServiceClient();
     for (const item of items) { const { error } = await db.from("conta_azul_contas_pagar").upsert(mapPayableToRow(item), { onConflict: "id_conta_azul" }); if (!error) count++; }
@@ -95,9 +167,9 @@ async function syncPayables(req: Request): Promise<Response> {
 async function syncCategories(): Promise<Response> {
   const logId = await createSyncLog("categories"); let count = 0;
   try {
-    const items = await contaAzulFetchPaginated<any>("/v1/categorias");
+    const items = await contaAzulFetchPaginated<any>("/v1/categorias", { permite_apenas_filhos: "true" });
     const db = getSupabaseServiceClient();
-    for (const item of items) { const { error } = await db.from("conta_azul_categorias").upsert({ id_conta_azul: String(item.id), nome: item.nome || item.descricao || "Sem nome", tipo: item.tipo || "AMBOS", ativo: item.ativo !== false, synced_at: new Date().toISOString() }, { onConflict: "id_conta_azul" }); if (!error) count++; }
+    for (const item of items) { const { error } = await db.from("conta_azul_categorias").upsert({ id_conta_azul: String(item.id), nome: item.nome || item.descricao || "Sem nome", tipo: item.tipo || "AMBOS", ativo: true, synced_at: new Date().toISOString() }, { onConflict: "id_conta_azul" }); if (!error) count++; }
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: "categories", sincronizados: count });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
@@ -106,7 +178,7 @@ async function syncCategories(): Promise<Response> {
 async function syncCostCenters(): Promise<Response> {
   const logId = await createSyncLog("cost-centers"); let count = 0;
   try {
-    const items = await contaAzulFetchPaginated<any>("/v1/centro-de-custo");
+    const items = await contaAzulFetchPaginated<any>("/v1/centro-de-custo", { filtro_rapido: "TODOS" });
     const db = getSupabaseServiceClient();
     for (const item of items) { const { error } = await db.from("conta_azul_centros_custo").upsert({ id_conta_azul: String(item.id), codigo: item.codigo || null, nome: item.nome || "Sem nome", ativo: item.ativo !== false, synced_at: new Date().toISOString() }, { onConflict: "id_conta_azul" }); if (!error) count++; }
     await completeSyncLog(logId!, count);
@@ -117,7 +189,7 @@ async function syncCostCenters(): Promise<Response> {
 async function syncAccounts(): Promise<Response> {
   const logId = await createSyncLog("accounts"); let count = 0;
   try {
-    const items = await contaAzulFetchPaginated<any>("/v1/conta-financeira");
+    const items = await contaAzulFetchPaginated<any>("/v1/conta-financeira", { apenas_ativo: "true" });
     const db = getSupabaseServiceClient();
     for (const item of items) {
       let saldoAtual = 0;

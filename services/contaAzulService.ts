@@ -235,9 +235,9 @@ interface FinancialStats {
 
 async function getFinancialStats(): Promise<FinancialStats> {
   const [receber, pagar, contas] = await Promise.all([
-    supabase.from('conta_azul_contas_receber').select('valor, valor_pago, status'),
-    supabase.from('conta_azul_contas_pagar').select('valor, valor_pago, status'),
-    supabase.from('conta_azul_contas_financeiras').select('saldo_atual').eq('ativo', true),
+    supabase.from('conta_azul_contas_receber').select('valor, valor_pago, status').limit(10000),
+    supabase.from('conta_azul_contas_pagar').select('valor, valor_pago, status').limit(10000),
+    supabase.from('conta_azul_contas_financeiras').select('saldo_atual').eq('ativo', true).limit(10000),
   ]);
 
   const receberData = receber.data || [];

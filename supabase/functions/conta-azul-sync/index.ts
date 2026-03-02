@@ -141,7 +141,12 @@ async function syncReceivables(req: Request): Promise<Response> {
     };
     const items = await contaAzulFetchPaginated<any>("/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
     const db = getSupabaseServiceClient();
-    for (const item of items) { const { error } = await db.from("conta_azul_contas_receber").upsert(mapReceivableToRow(item), { onConflict: "id_conta_azul" }); if (!error) count++; }
+    const rows = items.map(mapReceivableToRow);
+    for (let i = 0; i < rows.length; i += 200) {
+      const batch = rows.slice(i, i + 200);
+      const { error } = await db.from("conta_azul_contas_receber").upsert(batch, { onConflict: "id_conta_azul" });
+      if (!error) count += batch.length;
+    }
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: "receivables", sincronizados: count });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
@@ -158,7 +163,12 @@ async function syncPayables(req: Request): Promise<Response> {
     };
     const items = await contaAzulFetchPaginated<any>("/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params);
     const db = getSupabaseServiceClient();
-    for (const item of items) { const { error } = await db.from("conta_azul_contas_pagar").upsert(mapPayableToRow(item), { onConflict: "id_conta_azul" }); if (!error) count++; }
+    const rows = items.map(mapPayableToRow);
+    for (let i = 0; i < rows.length; i += 200) {
+      const batch = rows.slice(i, i + 200);
+      const { error } = await db.from("conta_azul_contas_pagar").upsert(batch, { onConflict: "id_conta_azul" });
+      if (!error) count += batch.length;
+    }
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: "payables", sincronizados: count });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
@@ -169,7 +179,13 @@ async function syncCategories(): Promise<Response> {
   try {
     const items = await contaAzulFetchPaginated<any>("/v1/categorias", { permite_apenas_filhos: "true" });
     const db = getSupabaseServiceClient();
-    for (const item of items) { const { error } = await db.from("conta_azul_categorias").upsert({ id_conta_azul: String(item.id), nome: item.nome || item.descricao || "Sem nome", tipo: item.tipo || "AMBOS", ativo: true, synced_at: new Date().toISOString() }, { onConflict: "id_conta_azul" }); if (!error) count++; }
+    const now = new Date().toISOString();
+    const rows = items.map((item: any) => ({ id_conta_azul: String(item.id), nome: item.nome || item.descricao || "Sem nome", tipo: item.tipo || "AMBOS", ativo: true, synced_at: now }));
+    for (let i = 0; i < rows.length; i += 200) {
+      const batch = rows.slice(i, i + 200);
+      const { error } = await db.from("conta_azul_categorias").upsert(batch, { onConflict: "id_conta_azul" });
+      if (!error) count += batch.length;
+    }
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: "categories", sincronizados: count });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
@@ -178,9 +194,15 @@ async function syncCategories(): Promise<Response> {
 async function syncCostCenters(): Promise<Response> {
   const logId = await createSyncLog("cost-centers"); let count = 0;
   try {
-    const items = await contaAzulFetchPaginated<any>("/v1/centro-de-custo", { filtro_rapido: "TODOS" });
+    const items = await contaAzulFetchPaginated<any>("/v1/centro-de-custo");
     const db = getSupabaseServiceClient();
-    for (const item of items) { const { error } = await db.from("conta_azul_centros_custo").upsert({ id_conta_azul: String(item.id), codigo: item.codigo || null, nome: item.nome || "Sem nome", ativo: item.ativo !== false, synced_at: new Date().toISOString() }, { onConflict: "id_conta_azul" }); if (!error) count++; }
+    const now = new Date().toISOString();
+    const rows = items.map((item: any) => ({ id_conta_azul: String(item.id), codigo: item.codigo || null, nome: item.nome || "Sem nome", ativo: item.ativo !== false, synced_at: now }));
+    for (let i = 0; i < rows.length; i += 200) {
+      const batch = rows.slice(i, i + 200);
+      const { error } = await db.from("conta_azul_centros_custo").upsert(batch, { onConflict: "id_conta_azul" });
+      if (!error) count += batch.length;
+    }
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: "cost-centers", sincronizados: count });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
@@ -193,7 +215,15 @@ async function syncAccounts(): Promise<Response> {
     const db = getSupabaseServiceClient();
     for (const item of items) {
       let saldoAtual = 0;
-      try { const bRes = await contaAzulFetch("/v1/conta-financeira/" + item.id + "/saldo-atual"); if (bRes.ok) { const bd = await bRes.json(); saldoAtual = parseFloat(bd.saldo || bd.valor || 0); } await new Promise(r => setTimeout(r, 120)); } catch {}
+      try {
+        const bRes = await contaAzulFetch("/v1/conta-financeira/" + item.id + "/saldo-atual");
+        if (bRes.ok) {
+          const bd = await bRes.json();
+          saldoAtual = parseFloat(bd.saldo ?? bd.saldo_atual ?? bd.valor ?? bd.balance ?? bd.amount ?? 0);
+          if (isNaN(saldoAtual)) saldoAtual = 0;
+        }
+        await new Promise(r => setTimeout(r, 120));
+      } catch {}
       const { error } = await db.from("conta_azul_contas_financeiras").upsert({ id_conta_azul: String(item.id), nome: item.nome || "Sem nome", tipo: item.tipo || null, saldo_atual: saldoAtual, ativo: item.ativo !== false, synced_at: new Date().toISOString() }, { onConflict: "id_conta_azul" });
       if (!error) count++;
     }

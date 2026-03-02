@@ -70,7 +70,7 @@ async function createReceivable(req: Request): Promise<Response> {
     const p: any = {
       data_vencimento: d.toISOString().split("T")[0],
       descricao: numParcelas > 1 ? `${descricao} - Parcela ${i + 1}/${numParcelas}` : descricao,
-      detalhe_valor: { valor_bruto: valorParcela },
+      detalhe_valor: { valor_bruto: valorParcela, valor_liquido: valorParcela },
       nota: observacao,
     };
     if (body.conta_financeira_id) p.conta_financeira = body.conta_financeira_id;
@@ -118,7 +118,7 @@ async function createPayable(req: Request): Promise<Response> {
     const p: any = {
       data_vencimento: d.toISOString().split("T")[0],
       descricao: numParcelas > 1 ? `${descricao} - Parcela ${i + 1}/${numParcelas}` : descricao,
-      detalhe_valor: { valor_bruto: valorParcela },
+      detalhe_valor: { valor_bruto: valorParcela, valor_liquido: valorParcela },
       nota: observacao,
     };
     if (body.conta_financeira_id) p.conta_financeira = body.conta_financeira_id;

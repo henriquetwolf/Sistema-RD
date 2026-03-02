@@ -1027,18 +1027,38 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                     ))}
                                 </select>
                                 {contaAzulItems.filter(p => p.tipo === 'SERVICO').length === 0 && (
-                                    <div className="mt-1 ml-1">
+                                    <div className="mt-1 ml-1 space-y-1">
                                         <p className="text-[10px] text-amber-600 font-medium">
                                             Nenhum serviço encontrado no Conta Azul. ({contaAzulItems.length} itens carregados, {contaAzulItems.filter(p => p.tipo === 'PRODUTO').length} produtos)
                                         </p>
-                                        <button
-                                            type="button"
-                                            onClick={() => { fetchContaAzulItems(); }}
-                                            className="text-[10px] text-blue-600 font-bold underline mt-1 hover:text-blue-800"
-                                        >
-                                            Recarregar itens do Conta Azul
-                                        </button>
-                                        <p className="text-[9px] text-slate-400 mt-0.5">Abra o console do navegador (F12) para ver detalhes da API</p>
+                                        <div className="flex gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => { fetchContaAzulItems(); }}
+                                                className="text-[10px] text-blue-600 font-bold underline hover:text-blue-800"
+                                            >
+                                                Recarregar itens
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    try {
+                                                        const res = await fetch(
+                                                            `${(import.meta as any).env?.VITE_APP_SUPABASE_URL || ''}/functions/v1/conta-azul-write/debug-services`,
+                                                            { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: (import.meta as any).env?.VITE_APP_SUPABASE_ANON_KEY || '' } }
+                                                        );
+                                                        const data = await res.json();
+                                                        console.log('[DEBUG SERVICES]', JSON.stringify(data, null, 2));
+                                                        alert('Debug enviado ao console (F12). Status dos endpoints:\n\n' +
+                                                            Object.entries(data).filter(([k]) => k.startsWith('/v1')).map(([k, v]: any) => `${k}: ${v.status} (${v.bodyLength} bytes)`).join('\n')
+                                                        );
+                                                    } catch (e: any) { alert('Erro: ' + e.message); }
+                                                }}
+                                                className="text-[10px] text-red-600 font-bold underline hover:text-red-800"
+                                            >
+                                                Testar API Serviços
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>

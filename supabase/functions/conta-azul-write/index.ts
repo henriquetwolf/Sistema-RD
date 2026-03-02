@@ -48,6 +48,7 @@ Deno.serve(async (req) => {
       case "installment": return await updateInstallment(req);
       case "sale": return await createSale(req);
       case "products": return await listProducts();
+      case "debug-services": return await debugServices();
       default: return errorResponse("Acao desconhecida: " + action, 404);
     }
   } catch (err: any) { console.error("conta-azul-write error:", err); return errorResponse(err.message || "Erro interno", 500); }
@@ -270,25 +271,36 @@ async function listProducts(): Promise<Response> {
     }
   } catch (e: any) { errors.push("produtos exception: " + e.message); console.error("Exception produtos:", e); }
 
+  // Delay entre chamadas para evitar rate limit
+  await new Promise(r => setTimeout(r, 300));
+
   // ── Serviços (GET /v1/servicos) — com paginação e retry ──
   let svcLoaded = false;
   for (let attempt = 1; attempt <= 3 && !svcLoaded; attempt++) {
     try {
       if (attempt > 1) {
-        console.log(`Servicos: retry ${attempt}/3 (aguardando 500ms)...`);
-        await new Promise(r => setTimeout(r, 500));
+        console.log(`Servicos: retry ${attempt}/3 (aguardando 1s)...`);
+        await new Promise(r => setTimeout(r, 1000));
       }
+      const token = await getValidAccessToken();
+      console.log(`Servicos attempt ${attempt}: token ok (${token.substring(0, 10)}...)`);
       let page = 1;
       let svcCount = 0;
       for (let i = 0; i < 20; i++) {
-        const res = await contaAzulFetch(`/v1/servicos?pagina=${page}&tamanho_pagina=200`);
+        const url = `${CONTA_AZUL_BASE}/v1/servicos?pagina=${page}&tamanho_pagina=200`;
+        console.log(`Servicos fetch: ${url}`);
+        const res = await fetch(url, { headers: { Authorization: "Bearer " + token, Accept: "application/json" } });
+        console.log(`Servicos response: ${res.status} ${res.statusText}`);
         if (!res.ok) {
           const errText = await res.text().catch(() => "");
-          errors.push(`servicos p${page} attempt${attempt}: ${res.status} - ${errText.substring(0, 150)}`);
-          console.error(`Servicos page ${page} attempt ${attempt}: ${res.status} ${errText.substring(0, 150)}`);
+          errors.push(`servicos p${page} attempt${attempt}: ${res.status} - ${errText.substring(0, 200)}`);
+          console.error(`Servicos ERRO page ${page} attempt ${attempt}: ${res.status} ${errText.substring(0, 200)}`);
           break;
         }
-        const body = await res.json();
+        const rawText = await res.text();
+        console.log(`Servicos raw (${rawText.length} chars): ${rawText.substring(0, 300)}`);
+        let body: any;
+        try { body = JSON.parse(rawText); } catch { errors.push(`servicos parse error attempt${attempt}`); break; }
         const items = extractItems(body);
         for (const s of items) {
           all.push({ id: String(s.id), nome: s.nome || s.descricao || s.name || "Serviço", tipo: "SERVICO", valor: s.preco || s.preco_venda || s.valor || s.valor_venda || 0 });
@@ -302,6 +314,8 @@ async function listProducts(): Promise<Response> {
       if (svcCount > 0) {
         svcLoaded = true;
         console.log(`Servicos carregados: ${svcCount} (attempt ${attempt})`);
+      } else {
+        errors.push(`servicos attempt${attempt}: 0 itens retornados`);
       }
     } catch (e: any) {
       errors.push(`servicos attempt${attempt} exception: ${e.message}`);
@@ -314,6 +328,46 @@ async function listProducts(): Promise<Response> {
   console.log(`listProducts FINAL: ${all.length} total (${totalProd} produtos, ${totalSvc} servicos)${errors.length ? ' | errors: ' + errors.join('; ') : ''}`);
 
   return jsonResponse({ success: true, items: all, _meta: { totalProd, totalSvc, errors: errors.length ? errors : undefined } });
+}
+
+async function debugServices(): Promise<Response> {
+  const results: any = {};
+  try {
+    const token = await getValidAccessToken();
+    results.token_prefix = token.substring(0, 15) + "...";
+
+    const endpoints = [
+      "/v1/servicos?pagina=1&tamanho_pagina=10",
+      "/v1/servicos",
+      "/v1/servicos?pagina=1&tamanho_pagina=200",
+    ];
+
+    for (const ep of endpoints) {
+      try {
+        const url = CONTA_AZUL_BASE + ep;
+        const res = await fetch(url, { headers: { Authorization: "Bearer " + token, Accept: "application/json" } });
+        const text = await res.text();
+        results[ep] = {
+          status: res.status,
+          statusText: res.statusText,
+          headers: Object.fromEntries(res.headers.entries()),
+          bodyLength: text.length,
+          bodyPreview: text.substring(0, 800),
+        };
+      } catch (e: any) {
+        results[ep] = { exception: e.message };
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    const prodRes = await fetch(CONTA_AZUL_BASE + "/v1/produtos?pagina=1&tamanho_pagina=5&status=ATIVO", { headers: { Authorization: "Bearer " + token, Accept: "application/json" } });
+    const prodText = await prodRes.text();
+    results["produtos_test"] = { status: prodRes.status, bodyLength: prodText.length, bodyPreview: prodText.substring(0, 300) };
+
+  } catch (e: any) {
+    results.error = e.message;
+  }
+  return jsonResponse(results);
 }
 
 async function createSale(req: Request): Promise<Response> {

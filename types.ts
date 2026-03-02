@@ -686,3 +686,151 @@ export interface EmailConfig {
   senderEmail: string;
   senderName: string;
 }
+
+// ── Conta Azul Integration Types ────────────────────────────
+
+export interface ContaAzulAuthStatus {
+  connected: boolean;
+  tokenExpiresAt?: string;
+  needsRefresh?: boolean;
+  connectedSince?: string;
+  lastSync: string | null;
+  lastSyncType?: string;
+  lastSyncStatus?: string;
+}
+
+export interface ContaAzulReceivable {
+  id: string;
+  id_conta_azul: string;
+  id_evento?: string;
+  descricao?: string;
+  valor: number;
+  valor_pago: number;
+  data_vencimento?: string;
+  data_competencia?: string;
+  data_pagamento?: string;
+  data_alteracao?: string;
+  status: string;
+  categoria_id?: string;
+  categoria_nome?: string;
+  centro_custo_id?: string;
+  centro_custo_nome?: string;
+  conta_financeira_id?: string;
+  conta_financeira_nome?: string;
+  parcela_numero?: number;
+  total_parcelas?: number;
+  contato_nome?: string;
+  contato_id?: string;
+  observacoes?: string;
+  numero_documento?: string;
+  synced_at: string;
+  created_at: string;
+}
+
+export interface ContaAzulPayable {
+  id: string;
+  id_conta_azul: string;
+  id_evento?: string;
+  descricao?: string;
+  valor: number;
+  valor_pago: number;
+  data_vencimento?: string;
+  data_competencia?: string;
+  data_pagamento?: string;
+  data_alteracao?: string;
+  status: string;
+  categoria_id?: string;
+  categoria_nome?: string;
+  centro_custo_id?: string;
+  centro_custo_nome?: string;
+  conta_financeira_id?: string;
+  conta_financeira_nome?: string;
+  parcela_numero?: number;
+  total_parcelas?: number;
+  fornecedor_nome?: string;
+  fornecedor_id?: string;
+  observacoes?: string;
+  numero_documento?: string;
+  synced_at: string;
+  created_at: string;
+}
+
+export interface ContaAzulCategory {
+  id: string;
+  id_conta_azul: string;
+  nome: string;
+  tipo: 'RECEITA' | 'DESPESA' | 'AMBOS';
+  ativo: boolean;
+  synced_at: string;
+}
+
+export interface ContaAzulCostCenter {
+  id: string;
+  id_conta_azul: string;
+  codigo?: string;
+  nome: string;
+  ativo: boolean;
+  synced_at: string;
+}
+
+export interface ContaAzulFinancialAccount {
+  id: string;
+  id_conta_azul: string;
+  nome: string;
+  tipo?: string;
+  saldo_atual: number;
+  ativo: boolean;
+  synced_at: string;
+}
+
+export interface ContaAzulSyncLog {
+  id: string;
+  tipo_sync: string;
+  status: 'running' | 'success' | 'error';
+  registros_sincronizados: number;
+  erro?: string;
+  started_at: string;
+  finished_at?: string;
+}
+
+export interface ContaAzulSyncResult {
+  success: boolean;
+  tipo?: string;
+  sincronizados?: number;
+  results?: Record<string, any>;
+  error?: string;
+}
+
+export interface ContaAzulCreateReceivablePayload {
+  descricao: string;
+  valor: number;
+  data_competencia?: string;
+  data_vencimento?: string;
+  parcelas?: number;
+  categoria_id?: string;
+  centro_custo_id?: string;
+  conta_financeira_id?: string;
+  contato_id?: string;
+  observacoes?: string;
+}
+
+export interface ContaAzulCreatePayablePayload {
+  descricao: string;
+  valor: number;
+  data_competencia?: string;
+  data_vencimento?: string;
+  parcelas?: number;
+  categoria_id?: string;
+  centro_custo_id?: string;
+  conta_financeira_id?: string;
+  contato_id?: string;
+  observacoes?: string;
+}
+
+export interface ContaAzulUpdateInstallmentPayload {
+  id: string;
+  data_vencimento?: string;
+  valor?: number;
+  observacao?: string;
+  conta_financeira_id?: string;
+}

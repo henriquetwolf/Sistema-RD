@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { appBackend, CompanySetting, Pipeline, PipelineStage, WebhookTrigger } from '../services/appBackend';
 import { whatsappService } from '../services/whatsappService';
+import { contaAzulService } from '../services/contaAzulService';
 import clsx from 'clsx';
 
 // --- Types ---
@@ -380,6 +381,26 @@ export const CrmBoard: React.FC = () => {
       }
   };
 
+  const triggerContaAzulReceivable = async (deal: any) => {
+      if (deal.stage !== 'closed' || !deal.value || deal.value <= 0) return;
+      try {
+          const status = await contaAzulService.getAuthStatus();
+          if (!status.connected) return;
+
+          await contaAzulService.createReceivable({
+              descricao: `[CRM #${deal.deal_number || ''}] ${deal.product_name || deal.company_name || deal.contact_name || 'Venda'}`,
+              valor: deal.value,
+              data_competencia: new Date().toISOString().split('T')[0],
+              data_vencimento: deal.first_due_date || new Date().toISOString().split('T')[0],
+              parcelas: deal.installments || 1,
+              observacoes: `Negócio CRM: ${deal.title || ''} | Cliente: ${deal.company_name || deal.contact_name || ''} | CNPJ: ${deal.billing_cnpj || 'N/A'}`,
+          });
+          console.log('Conta a receber criada no Conta Azul para deal:', deal.deal_number);
+      } catch (err) {
+          console.error('Erro ao criar conta a receber no Conta Azul:', err);
+      }
+  };
+
   const productOptions = useMemo(() => {
       if (dealFormData.productType === 'Digital') return (digitalProducts || []).map(p => p.name).sort();
       if (dealFormData.productType === 'Evento') return (eventsList || []).map(e => e.name).sort();
@@ -417,6 +438,7 @@ export const CrmBoard: React.FC = () => {
             dispatchNegotiationWebhook(data);
             triggerDigitalSupportTicket(data);
             triggerWhatsAppAutomation(data);
+            triggerContaAzulReceivable(data);
         }
 
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal.title}" para a etapa: ${newStage}`, recordId: dealId });
@@ -449,6 +471,7 @@ export const CrmBoard: React.FC = () => {
             dispatchNegotiationWebhook(data);
             triggerDigitalSupportTicket(data);
             triggerWhatsAppAutomation(data);
+            triggerContaAzulReceivable(data);
         }
 
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para Funil: ${pipelineName}, Etapa: ${targetStage}`, recordId: draggedDealId });

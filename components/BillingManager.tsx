@@ -90,11 +90,25 @@ export const BillingManager: React.FC = () => {
       let hasMore = true;
       let safetyCounter = 0;
 
+      // Try new synced table first, fall back to legacy table
+      const tableCandidates = ['conta_azul_contas_receber', 'Conta_Azul_Receber'];
+      let activeTable = '';
+      for (const tName of tableCandidates) {
+        const { count, error } = await appBackend.client
+          .from(tName)
+          .select('*', { count: 'exact', head: true });
+        if (!error && count !== null && count > 0) {
+          activeTable = tName;
+          break;
+        }
+      }
+      if (!activeTable) activeTable = 'conta_azul_contas_receber';
+
       while (hasMore && safetyCounter < 20) {
         const { data, error } = await appBackend.client
-          .from('Conta_Azul_Receber')
+          .from(activeTable)
           .select('*')
-          .order('id', { ascending: false })
+          .order(activeTable === 'conta_azul_contas_receber' ? 'data_vencimento' : 'id', { ascending: false })
           .range(from, from + step - 1);
 
         if (error) throw error;
@@ -174,10 +188,10 @@ export const BillingManager: React.FC = () => {
     now.setHours(0, 0, 0, 0);
 
     return records.map(r => {
-      const valOrig = parseToNumber(getFlexibleField(r, ['Valor original da parcela', 'Valor original', 'Valor nominal']));
-      const valRec = parseToNumber(getFlexibleField(r, ['Valor recebido da parcela', 'Valor recebido', 'Valor pago']));
-      const rawStatus = getFlexibleField(r, ['Status', 'Situação']) || 'Pendente';
-      const vencStr = getFlexibleField(r, ['Vencimento', 'Data de vencimento', 'Vencimento original']);
+      const valOrig = parseToNumber(getFlexibleField(r, ['valor', 'Valor original da parcela', 'Valor original', 'Valor nominal']));
+      const valRec = parseToNumber(getFlexibleField(r, ['valor_pago', 'Valor recebido da parcela', 'Valor recebido', 'Valor pago']));
+      const rawStatus = getFlexibleField(r, ['status', 'Status', 'Situação']) || 'Pendente';
+      const vencStr = getFlexibleField(r, ['data_vencimento', 'Vencimento', 'Data de vencimento', 'Vencimento original']);
       
       let finalStatus = rawStatus;
       const isPaidRaw = rawStatus === 'Pago' || rawStatus === 'Liquidado' || rawStatus === 'Liquidado antecipadamente';
@@ -186,9 +200,14 @@ export const BillingManager: React.FC = () => {
         if (valRec >= valOrig) finalStatus = 'Pago';
         else if (valRec > 0) finalStatus = 'Pago';
         else if (vencStr) {
+          let vencDate: Date | null = null;
           const parts = vencStr.split('/');
           if (parts.length === 3) {
-            const vencDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+            vencDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+          } else if (vencStr.includes('-')) {
+            vencDate = new Date(vencStr + 'T00:00:00');
+          }
+          if (vencDate && !isNaN(vencDate.getTime())) {
             if (vencDate < now) finalStatus = 'Atrasado';
             else finalStatus = 'Pendente';
           }
@@ -197,10 +216,10 @@ export const BillingManager: React.FC = () => {
 
       return {
         ...r,
-        _display_name: getFlexibleField(r, ['Nome do cliente', 'Cliente', 'Nome']),
-        _display_id_cliente: getFlexibleField(r, ['Identificador do cliente', 'Identificador', 'ID Cliente']),
-        _display_ref: getFlexibleField(r, ['Código referência', 'Referência', 'Ref']),
-        _display_comp: getFlexibleField(r, ['Data de competência', 'Competência']),
+        _display_name: getFlexibleField(r, ['contato_nome', 'Nome do cliente', 'Cliente', 'Nome']),
+        _display_id_cliente: getFlexibleField(r, ['contato_id', 'id_conta_azul', 'Identificador do cliente', 'Identificador', 'ID Cliente']),
+        _display_ref: getFlexibleField(r, ['numero_documento', 'Código referência', 'Referência', 'Ref']),
+        _display_comp: getFlexibleField(r, ['data_competencia', 'Data de competência', 'Competência']),
         _display_venc: vencStr,
         _display_valor_original: valOrig,
         _display_valor_recebido: valRec,
@@ -223,9 +242,14 @@ export const BillingManager: React.FC = () => {
       if (startDate || endDate) {
         const dateStr = r._display_venc;
         if (dateStr) {
+          let recordDate = '';
           const parts = dateStr.split('/');
           if (parts.length === 3) {
-            const recordDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+            recordDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          } else if (dateStr.includes('-')) {
+            recordDate = dateStr.split('T')[0];
+          }
+          if (recordDate) {
             if (startDate && recordDate < startDate) matchesDate = false;
             if (endDate && recordDate > endDate) matchesDate = false;
           } else matchesDate = false;

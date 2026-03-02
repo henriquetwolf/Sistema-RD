@@ -58,36 +58,40 @@ async function createReceivable(req: Request): Promise<Response> {
   const dataCompetencia = body.data_competencia || body.competenceDate || new Date().toISOString().split("T")[0];
   const dataVencimento = body.data_vencimento || dataCompetencia;
   const numParcelas = parseInt(body.parcelas) || 1;
+  const observacao = body.observacoes || body.observacao || descricao;
 
   if (!valor) return errorResponse("Valor é obrigatório e deve ser maior que zero.");
   if (!body.categoria_id) return errorResponse("Categoria é obrigatória para criar um lançamento.");
 
+  const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
   const parcelas = Array.from({ length: numParcelas }, (_, i) => {
     const d = new Date(dataVencimento);
     d.setMonth(d.getMonth() + i);
-    return {
-      numero: i + 1,
+    const p: any = {
       data_vencimento: d.toISOString().split("T")[0],
-      valor: Math.round((valor / numParcelas) * 100) / 100,
       descricao: numParcelas > 1 ? `${descricao} - Parcela ${i + 1}/${numParcelas}` : descricao,
+      detalhe_valor: { valor_bruto: valorParcela },
+      nota: observacao,
     };
+    if (body.conta_financeira_id) p.conta_financeira = body.conta_financeira_id;
+    return p;
   });
 
-  const rateio: any[] = [{ categoria: { id: body.categoria_id }, valor }];
-  if (body.centro_custo_id) rateio[0].centro_custo = { id: body.centro_custo_id };
+  const ratItem: any = { id_categoria: body.categoria_id, valor };
+  if (body.centro_custo_id) {
+    ratItem.rateio_centro_custo = [{ id_centro_custo: body.centro_custo_id, valor }];
+  }
 
   const payload: any = {
     descricao,
+    valor,
     data_competencia: dataCompetencia,
-    condicao_pagamento: {
-      tipo: numParcelas > 1 ? "PARCELADO" : "A_VISTA",
-      parcelas,
-    },
-    rateio,
+    observacao,
+    condicao_pagamento: { parcelas },
+    rateio: [ratItem],
   };
-  if (body.conta_financeira_id) payload.conta_financeira = { id: body.conta_financeira_id };
-  if (body.contato_id) payload.contato = { id: body.contato_id };
-  if (body.observacoes) payload.observacao = body.observacoes;
+  if (body.conta_financeira_id) payload.conta_financeira = body.conta_financeira_id;
+  if (body.contato_id) payload.contato = body.contato_id;
 
   console.log("CREATE RECEIVABLE payload:", JSON.stringify(payload));
   const res = await contaAzulFetch("/v1/financeiro/eventos-financeiros/contas-a-receber", { method: "POST", body: JSON.stringify(payload) });
@@ -102,36 +106,40 @@ async function createPayable(req: Request): Promise<Response> {
   const dataCompetencia = body.data_competencia || body.competenceDate || new Date().toISOString().split("T")[0];
   const dataVencimento = body.data_vencimento || dataCompetencia;
   const numParcelas = parseInt(body.parcelas) || 1;
+  const observacao = body.observacoes || body.observacao || descricao;
 
   if (!valor) return errorResponse("Valor é obrigatório e deve ser maior que zero.");
   if (!body.categoria_id) return errorResponse("Categoria é obrigatória para criar um lançamento.");
 
+  const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
   const parcelas = Array.from({ length: numParcelas }, (_, i) => {
     const d = new Date(dataVencimento);
     d.setMonth(d.getMonth() + i);
-    return {
-      numero: i + 1,
+    const p: any = {
       data_vencimento: d.toISOString().split("T")[0],
-      valor: Math.round((valor / numParcelas) * 100) / 100,
       descricao: numParcelas > 1 ? `${descricao} - Parcela ${i + 1}/${numParcelas}` : descricao,
+      detalhe_valor: { valor_bruto: valorParcela },
+      nota: observacao,
     };
+    if (body.conta_financeira_id) p.conta_financeira = body.conta_financeira_id;
+    return p;
   });
 
-  const rateio: any[] = [{ categoria: { id: body.categoria_id }, valor }];
-  if (body.centro_custo_id) rateio[0].centro_custo = { id: body.centro_custo_id };
+  const ratItem: any = { id_categoria: body.categoria_id, valor };
+  if (body.centro_custo_id) {
+    ratItem.rateio_centro_custo = [{ id_centro_custo: body.centro_custo_id, valor }];
+  }
 
   const payload: any = {
     descricao,
+    valor,
     data_competencia: dataCompetencia,
-    condicao_pagamento: {
-      tipo: numParcelas > 1 ? "PARCELADO" : "A_VISTA",
-      parcelas,
-    },
-    rateio,
+    observacao,
+    condicao_pagamento: { parcelas },
+    rateio: [ratItem],
   };
-  if (body.conta_financeira_id) payload.conta_financeira = { id: body.conta_financeira_id };
-  if (body.contato_id) payload.contato = { id: body.contato_id };
-  if (body.observacoes) payload.observacao = body.observacoes;
+  if (body.conta_financeira_id) payload.conta_financeira = body.conta_financeira_id;
+  if (body.contato_id) payload.contato = body.contato_id;
 
   console.log("CREATE PAYABLE payload:", JSON.stringify(payload));
   const res = await contaAzulFetch("/v1/financeiro/eventos-financeiros/contas-a-pagar", { method: "POST", body: JSON.stringify(payload) });

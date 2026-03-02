@@ -868,7 +868,9 @@ export interface ContaAzulProductMapping {
   productPercentage: number;
   servicePercentage: number;
   contaAzulServiceName?: string;
+  contaAzulServiceId?: string;
   contaAzulProductName?: string;
+  contaAzulProductId?: string;
   billingCompanyName?: string;
   billingCnpj?: string;
   createdAt: string;

@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS crm_conta_azul_product_mapping (
   product_percentage NUMERIC NOT NULL DEFAULT 0,
   service_percentage NUMERIC NOT NULL DEFAULT 100,
   conta_azul_service_name TEXT,
+  conta_azul_service_id TEXT,           -- id do serviço no Conta Azul (API)
   conta_azul_product_name TEXT,
+  conta_azul_product_id TEXT,           -- id do produto no Conta Azul (API)
   billing_company_name TEXT,            -- Empresa de Faturamento (define qual conta Conta Azul)
   billing_cnpj TEXT,                    -- CNPJ de Venda
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -21,6 +23,14 @@ CREATE TABLE IF NOT EXISTS crm_conta_azul_product_mapping (
 DO $$ BEGIN
   ALTER TABLE crm_conta_azul_product_mapping ADD COLUMN IF NOT EXISTS billing_company_name TEXT;
   ALTER TABLE crm_conta_azul_product_mapping ADD COLUMN IF NOT EXISTS billing_cnpj TEXT;
+  ALTER TABLE crm_conta_azul_product_mapping ADD COLUMN IF NOT EXISTS conta_azul_service_id TEXT;
+  ALTER TABLE crm_conta_azul_product_mapping ADD COLUMN IF NOT EXISTS conta_azul_product_id TEXT;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- Remover CHECK constraint restritivo da tabela de categorias (pode bloquear sync de subcategorias)
+DO $$ BEGIN
+  ALTER TABLE conta_azul_categorias DROP CONSTRAINT IF EXISTS conta_azul_categorias_tipo_check;
 EXCEPTION WHEN others THEN NULL;
 END $$;
 

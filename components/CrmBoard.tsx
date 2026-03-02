@@ -499,15 +499,16 @@ export const CrmBoard: React.FC = () => {
       if (mapping) {
           matchedCategoryId = mapping.contaAzulCategoryId || '';
           if (mapping.splitMode === 'divided') {
-              const serviceId = findContaAzulProductByName(mapping.contaAzulServiceName || '', prods);
-              const productId = findContaAzulProductByName(mapping.contaAzulProductName || '', prods);
+              // Prioridade: IDs salvos diretamente no mapping; fallback: busca por nome
+              const serviceId = mapping.contaAzulServiceId || findContaAzulProductByName(mapping.contaAzulServiceName || '', prods);
+              const productId = mapping.contaAzulProductId || findContaAzulProductByName(mapping.contaAzulProductName || '', prods);
               mapping._resolvedServiceId = serviceId;
               mapping._resolvedProductId = productId;
               matchedProductId = serviceId || productId;
+          } else if (mapping.splitMode === 'all_product') {
+              matchedProductId = mapping.contaAzulProductId || findContaAzulProductByName(mapping.contaAzulProductName || '', prods);
           } else {
-              const targetName = mapping.splitMode === 'all_product'
-                  ? mapping.contaAzulProductName : mapping.contaAzulServiceName;
-              matchedProductId = findContaAzulProductByName(targetName || '', prods);
+              matchedProductId = mapping.contaAzulServiceId || findContaAzulProductByName(mapping.contaAzulServiceName || '', prods);
           }
       }
 
@@ -582,9 +583,11 @@ export const CrmBoard: React.FC = () => {
               const svcName = activeMapping.contaAzulServiceName || 'Serviço';
               const prodName = activeMapping.contaAzulProductName || 'Material Didático';
 
+              const dealNum = contaAzulFormData.deal_number || '';
               await contaAzulService.createSale({
                   ...basePayload,
-                  descricao: `[CRM #${contaAzulFormData.deal_number}] ${svcName} (${activeMapping.servicePercentage}%)`,
+                  deal_number: dealNum ? `${dealNum}01` : '',
+                  descricao: `[CRM #${dealNum}] ${svcName} (${activeMapping.servicePercentage}%)`,
                   valor: serviceValue,
                   produto_id: svcId,
                   observacoes: `${contaAzulFormData.observacoes} | SERVIÇO ${activeMapping.servicePercentage}% de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
@@ -592,7 +595,8 @@ export const CrmBoard: React.FC = () => {
 
               await contaAzulService.createSale({
                   ...basePayload,
-                  descricao: `[CRM #${contaAzulFormData.deal_number}] ${prodName} (${activeMapping.productPercentage}%)`,
+                  deal_number: dealNum ? `${dealNum}02` : '',
+                  descricao: `[CRM #${dealNum}] ${prodName} (${activeMapping.productPercentage}%)`,
                   valor: productValue,
                   produto_id: prodId,
                   observacoes: `${contaAzulFormData.observacoes} | PRODUTO ${activeMapping.productPercentage}% de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,

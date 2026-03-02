@@ -216,10 +216,17 @@ async function syncCategories(): Promise<Response> {
 
     const db = getSupabaseServiceClient();
     const now = new Date().toISOString();
+    const VALID_TIPOS = ["RECEITA", "DESPESA", "AMBOS"];
+    const normalizeTipo = (t: any): string => {
+      if (!t) return "AMBOS";
+      const upper = String(t).toUpperCase().trim();
+      return VALID_TIPOS.includes(upper) ? upper : "AMBOS";
+    };
+
     const rows = Array.from(allMap.values()).map((item: any) => ({
       id_conta_azul: String(item.id),
       nome: buildPath(item),
-      tipo: item.tipo || "AMBOS",
+      tipo: normalizeTipo(item.tipo),
       ativo: true,
       synced_at: now,
     }));

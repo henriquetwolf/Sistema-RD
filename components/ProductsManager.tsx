@@ -58,6 +58,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const [showContaAzulModal, setShowContaAzulModal] = useState(false);
   const [contaAzulEditItem, setContaAzulEditItem] = useState<UnifiedItem | null>(null);
   const [contaAzulCategories, setContaAzulCategories] = useState<{ id: string; id_conta_azul: string; nome: string; tipo: string }[]>([]);
+  const [contaAzulItems, setContaAzulItems] = useState<{ id: string; nome: string; tipo: string; valor: number }[]>([]);
   const [mappingForm, setMappingForm] = useState<Partial<ContaAzulProductMapping>>({});
   const [companiesList, setCompaniesList] = useState<{ id: string; legalName: string; cnpj: string }[]>([]);
 
@@ -103,6 +104,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
               fetchEvents(),
               fetchMappings(),
               fetchContaAzulCategories(),
+              fetchContaAzulItems(),
               fetchCompanies(),
           ]);
       } catch (e: any) {
@@ -172,6 +174,13 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       } catch (e) { setContaAzulCategories([]); }
   };
 
+  const fetchContaAzulItems = async () => {
+      try {
+          const items = await contaAzulService.getProducts();
+          setContaAzulItems(items);
+      } catch (e) { setContaAzulItems([]); }
+  };
+
   const fetchCompanies = async () => {
       try {
           const data = await appBackend.getCompanies();
@@ -238,7 +247,6 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       if (existing) {
           setMappingForm({ ...existing });
       } else {
-          const isFormacao = item.name.toLowerCase().includes('formação completa em pilates');
           setMappingForm({
               itemType: item.type,
               itemId: item.id,
@@ -247,8 +255,10 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
               splitMode: item.type === 'turma' ? 'divided' : 'all_service',
               productPercentage: item.type === 'turma' ? 30 : 0,
               servicePercentage: item.type === 'turma' ? 70 : 100,
-              contaAzulServiceName: isFormacao ? `${item.name} - Espaço Vida Pilates` : `${item.name}`,
-              contaAzulProductName: isFormacao ? `MATERIAL DIDÁTICO ${item.name.toUpperCase()}` : `MATERIAL DIDÁTICO ${item.name.toUpperCase()}`,
+              contaAzulServiceName: '',
+              contaAzulServiceId: '',
+              contaAzulProductName: '',
+              contaAzulProductId: '',
               billingCompanyName: '',
               billingCnpj: '',
           });
@@ -987,34 +997,52 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                             </div>
                         )}
 
-                        {/* Nomes no Conta Azul */}
+                        {/* Itens do Conta Azul (Serviço / Produto) */}
                         {(mappingForm.splitMode === 'divided' || mappingForm.splitMode === 'all_service') && (
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
-                                    Nome do Item (Serviço) no Conta Azul
+                                    Serviço no Conta Azul
                                 </label>
-                                <input
-                                    type="text"
-                                    value={mappingForm.contaAzulServiceName || ''}
-                                    onChange={e => setMappingForm(f => ({ ...f, contaAzulServiceName: e.target.value }))}
+                                <select
+                                    value={mappingForm.contaAzulServiceId || ''}
+                                    onChange={e => {
+                                        const item = contaAzulItems.find(p => p.id === e.target.value);
+                                        setMappingForm(f => ({ ...f, contaAzulServiceId: e.target.value, contaAzulServiceName: item?.nome || '' }));
+                                    }}
                                     className="w-full px-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-blue-500 rounded-2xl text-sm font-bold outline-none transition-all"
-                                    placeholder="Ex: Formação Completa em Pilates - Espaço Vida Pilates"
-                                />
+                                >
+                                    <option value="">Selecione o serviço...</option>
+                                    {contaAzulItems.filter(p => p.tipo === 'SERVICO').map(p => (
+                                        <option key={p.id} value={p.id}>{p.nome}</option>
+                                    ))}
+                                </select>
+                                {contaAzulItems.filter(p => p.tipo === 'SERVICO').length === 0 && (
+                                    <p className="text-[10px] text-amber-600 mt-1 ml-1 font-medium">Nenhum serviço encontrado no Conta Azul.</p>
+                                )}
                             </div>
                         )}
 
                         {(mappingForm.splitMode === 'divided' || mappingForm.splitMode === 'all_product') && (
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
-                                    Nome do Item (Produto) no Conta Azul
+                                    Produto no Conta Azul
                                 </label>
-                                <input
-                                    type="text"
-                                    value={mappingForm.contaAzulProductName || ''}
-                                    onChange={e => setMappingForm(f => ({ ...f, contaAzulProductName: e.target.value }))}
+                                <select
+                                    value={mappingForm.contaAzulProductId || ''}
+                                    onChange={e => {
+                                        const item = contaAzulItems.find(p => p.id === e.target.value);
+                                        setMappingForm(f => ({ ...f, contaAzulProductId: e.target.value, contaAzulProductName: item?.nome || '' }));
+                                    }}
                                     className="w-full px-5 py-3 border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-emerald-500 rounded-2xl text-sm font-bold outline-none transition-all"
-                                    placeholder="Ex: MATERIAL DIDÁTICO FORMAÇÃO COMPLETA EM PILATES"
-                                />
+                                >
+                                    <option value="">Selecione o produto...</option>
+                                    {contaAzulItems.filter(p => p.tipo === 'PRODUTO').map(p => (
+                                        <option key={p.id} value={p.id}>{p.nome}</option>
+                                    ))}
+                                </select>
+                                {contaAzulItems.filter(p => p.tipo === 'PRODUTO').length === 0 && (
+                                    <p className="text-[10px] text-amber-600 mt-1 ml-1 font-medium">Nenhum produto encontrado no Conta Azul.</p>
+                                )}
                             </div>
                         )}
 

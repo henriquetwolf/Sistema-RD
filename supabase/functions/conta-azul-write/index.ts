@@ -53,38 +53,70 @@ Deno.serve(async (req) => {
   } catch (err: any) { console.error("conta-azul-write error:", err); return errorResponse(err.message || "Erro interno", 500); }
 });
 
-async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<string | null> {
-  if (!nome && !cpfCnpj) return null;
+async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<string> {
+  if (!nome && !cpfCnpj) throw new Error("CONTACT_ERROR: Nome do cliente é obrigatório.");
   const cleanDoc = (cpfCnpj || '').replace(/\D/g, '');
+  const errors: string[] = [];
+
+  // 1. Search by document
+  if (cleanDoc.length >= 11) {
+    try {
+      const res = await contaAzulFetch("/v1/pessoas?busca=" + encodeURIComponent(cleanDoc));
+      if (res.ok) {
+        const body = await res.json();
+        const list = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
+        if (list.length > 0) return String(list[0].id);
+      }
+    } catch (e: any) { errors.push("Busca por doc: " + e.message); }
+  }
+
+  // 2. Search by name
   try {
-    const searchTerm = cleanDoc.length >= 11 ? cleanDoc : nome;
-    const searchRes = await contaAzulFetch("/v1/pessoas?busca=" + encodeURIComponent(searchTerm));
-    if (searchRes.ok) {
-      const body = await searchRes.json();
+    const res = await contaAzulFetch("/v1/pessoas?busca=" + encodeURIComponent(nome));
+    if (res.ok) {
+      const body = await res.json();
       const list = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
-      if (list.length > 0) return String(list[0].id);
+      const match = list.find((p: any) => (p.nome || '').toLowerCase() === nome.toLowerCase());
+      if (match) return String(match.id);
     }
-  } catch (e) { console.error("Error searching pessoa:", e); }
+  } catch (e: any) { errors.push("Busca por nome: " + e.message); }
+
+  // 3. Create new person
+  const isJuridica = cleanDoc.length === 14;
+  const newPessoa: any = {
+    nome: nome || "Cliente",
+    tipo_pessoa: isJuridica ? "Juridica" : "Fisica",
+    perfis: [{ tipo_perfil: "Cliente" }],
+    ativo: true,
+  };
+  if (cleanDoc.length === 11) newPessoa.cpf = cleanDoc;
+  else if (cleanDoc.length === 14) newPessoa.cnpj = cleanDoc;
+
+  console.log("Creating pessoa:", JSON.stringify(newPessoa));
   try {
-    const isJuridica = cleanDoc.length === 14;
-    const newPessoa: any = {
-      nome: nome || "Cliente",
-      tipo_pessoa: isJuridica ? "Jurídica" : "Física",
-      perfis: [{ tipo_perfil: "Cliente" }],
-      ativo: true,
-    };
-    if (cleanDoc.length === 11) newPessoa.cpf = cleanDoc;
-    else if (cleanDoc.length === 14) newPessoa.cnpj = cleanDoc;
-    console.log("Creating pessoa:", JSON.stringify(newPessoa));
     const createRes = await contaAzulFetch("/v1/pessoas", { method: "POST", body: JSON.stringify(newPessoa) });
-    if (createRes.ok) {
+    if (createRes.ok || createRes.status === 201) {
       const created = await createRes.json();
       return String(created.id);
     }
     const errText = await createRes.text();
-    console.error("Failed to create pessoa:", createRes.status, errText);
-  } catch (e) { console.error("Error creating pessoa:", e); }
-  return null;
+    errors.push("Criar pessoa (" + createRes.status + "): " + errText);
+  } catch (e: any) { errors.push("Criar pessoa: " + e.message); }
+
+  // 4. Fallback: try with accented type names
+  try {
+    newPessoa.tipo_pessoa = isJuridica ? "Jur\u00eddica" : "F\u00edsica";
+    console.log("Retry creating pessoa with accents:", JSON.stringify(newPessoa));
+    const retryRes = await contaAzulFetch("/v1/pessoas", { method: "POST", body: JSON.stringify(newPessoa) });
+    if (retryRes.ok || retryRes.status === 201) {
+      const created = await retryRes.json();
+      return String(created.id);
+    }
+    const errText = await retryRes.text();
+    errors.push("Retry (" + retryRes.status + "): " + errText);
+  } catch (e: any) { errors.push("Retry: " + e.message); }
+
+  throw new Error("Não foi possível encontrar ou criar o cliente '" + nome + "' no Conta Azul. Detalhes: " + errors.join(" | "));
 }
 
 async function createReceivable(req: Request): Promise<Response> {
@@ -101,7 +133,7 @@ async function createReceivable(req: Request): Promise<Response> {
 
   let contatoId = body.contato_id || null;
   if (!contatoId && (body.contato_nome || body.contato_cpf)) {
-    contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf);
+    try { contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf); } catch (e: any) { console.error("Contact error:", e.message); }
   }
 
   const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
@@ -154,7 +186,7 @@ async function createPayable(req: Request): Promise<Response> {
 
   let contatoId = body.contato_id || null;
   if (!contatoId && (body.contato_nome || body.contato_cpf)) {
-    contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf);
+    try { contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf); } catch (e: any) { console.error("Contact error:", e.message); }
   }
 
   const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
@@ -239,10 +271,13 @@ async function createSale(req: Request): Promise<Response> {
   if (!body.produto_id) return errorResponse("Produto/Serviço é obrigatório para criar uma venda.");
 
   let clienteId = body.contato_id || null;
-  if (!clienteId && (body.contato_nome || body.contato_cpf)) {
-    clienteId = await findOrCreateContact(body.contato_nome, body.contato_cpf);
+  if (!clienteId) {
+    try {
+      clienteId = await findOrCreateContact(body.contato_nome || '', body.contato_cpf || '');
+    } catch (e: any) {
+      return errorResponse(e.message || "Erro ao buscar/criar cliente no Conta Azul.", 400);
+    }
   }
-  if (!clienteId) return errorResponse("Cliente é obrigatório para criar uma venda.");
 
   const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
   let opcaoCondicao = "À vista";

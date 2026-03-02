@@ -188,6 +188,7 @@ export const CrmBoard: React.FC = () => {
   const [contaAzulProducts, setContaAzulProducts] = useState<{ id: string; nome: string; tipo: string; valor: number }[]>([]);
   const [isCreatingReceivable, setIsCreatingReceivable] = useState(false);
   const [isFetchingCep, setIsFetchingCep] = useState(false);
+  const [pendingCloseMove, setPendingCloseMove] = useState<{ dealId: string; pipeline: string; targetStage: string; previousStage: string } | null>(null);
 
   // Tasks Form State
   const [newTaskDesc, setNewTaskDesc] = useState('');
@@ -405,7 +406,7 @@ export const CrmBoard: React.FC = () => {
   };
 
   const triggerContaAzulReceivable = async (deal: any) => {
-      if (deal.stage !== 'closed' || !deal.value || deal.value <= 0) return;
+      if (!deal.value || deal.value <= 0) return;
       try {
           const status = await contaAzulService.getAuthStatus();
           if (!status.connected) return;
@@ -483,10 +484,14 @@ export const CrmBoard: React.FC = () => {
               deal_number: contaAzulFormData.deal_number,
               observacoes: contaAzulFormData.observacoes,
           });
-          alert('Venda criada com sucesso no Conta Azul!');
+          if (pendingCloseMove) {
+              await executePendingMove(pendingCloseMove);
+              setPendingCloseMove(null);
+          }
+          alert('Venda criada com sucesso no Conta Azul! O negócio foi movido para a etapa final.');
           setContaAzulConfirmDeal(null);
       } catch (err: any) {
-          alert(`Erro ao criar Venda: ${err.message}`);
+          alert(`Erro ao criar Venda: ${err.message}\n\nO negócio NÃO foi movido.`);
       } finally {
           setIsCreatingReceivable(false);
       }
@@ -502,6 +507,29 @@ export const CrmBoard: React.FC = () => {
   const formatCurrency = (val: number = 0) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   const getOwnerName = (id: string) => (collaborators || []).find(c => c.id === id)?.fullName || 'Desconhecido';
 
+  const isLastStage = (pipelineName: string, stageId: string): boolean => {
+      const pipeline = pipelines.find(p => p.name === pipelineName);
+      if (!pipeline || !pipeline.stages?.length) return false;
+      return pipeline.stages[pipeline.stages.length - 1].id === stageId;
+  };
+
+  const executePendingMove = async (moveInfo: { dealId: string; pipeline: string; targetStage: string; previousStage: string }) => {
+      const now = new Date();
+      setDeals(prev => prev.map(d => d.id === moveInfo.dealId ? { ...d, pipeline: moveInfo.pipeline, stage: moveInfo.targetStage, closedAt: now } : d));
+      try {
+          const updates: any = { pipeline: moveInfo.pipeline, stage: moveInfo.targetStage, closed_at: now.toISOString() };
+          const { data, error = null } = await appBackend.client.from('crm_deals').update(updates).eq('id', moveInfo.dealId).select().single();
+          if (error) throw error;
+          if (data) {
+              dispatchNegotiationWebhook(data);
+              triggerDigitalSupportTicket(data);
+              triggerWhatsAppAutomation(data);
+          }
+          const deal = deals.find(d => d.id === moveInfo.dealId);
+          await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal?.title || ''}" para a etapa final após venda confirmada no Conta Azul`, recordId: moveInfo.dealId });
+      } catch (e) { handleDbError(e); fetchData(); }
+  };
+
   const moveDeal = async (dealId: string, currentStage: DealStage, pipelineName: string, direction: 'next' | 'prev') => {
     const pipeline = pipelines.find(p => p.name === pipelineName);
     if (!pipeline) return;
@@ -516,6 +544,12 @@ export const CrmBoard: React.FC = () => {
 
     if (!deal) return;
 
+    if (isLastStage(pipelineName, newStage) && deal.value > 0) {
+        setPendingCloseMove({ dealId, pipeline: pipelineName, targetStage: newStage, previousStage: currentStage });
+        triggerContaAzulReceivable({ ...deal, stage: newStage, deal_number: deal.dealNumber, company_name: deal.companyName, contact_name: deal.contactName, product_name: deal.productName, payment_method: deal.paymentMethod, first_due_date: deal.firstDueDate, billing_cnpj: deal.billingCnpj });
+        return;
+    }
+
     setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage: newStage, closedAt: newStage === 'closed' ? now : (currentStage === 'closed' ? undefined : d.closedAt) } : d));
 
     try {
@@ -529,7 +563,6 @@ export const CrmBoard: React.FC = () => {
             dispatchNegotiationWebhook(data);
             triggerDigitalSupportTicket(data);
             triggerWhatsAppAutomation(data);
-            triggerContaAzulReceivable(data);
         }
 
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Moveu negócio "${deal.title}" para a etapa: ${newStage}`, recordId: dealId });
@@ -549,6 +582,14 @@ export const CrmBoard: React.FC = () => {
     if (!draggedDealId) return;
     const currentDeal = (deals || []).find(d => d.id === draggedDealId);
     if (!currentDeal || (currentDeal.stage === targetStage && currentDeal.pipeline === pipelineName)) { setDraggedDealId(null); return; }
+
+    if (isLastStage(pipelineName, targetStage) && currentDeal.value > 0) {
+        setPendingCloseMove({ dealId: draggedDealId, pipeline: pipelineName, targetStage, previousStage: currentDeal.stage });
+        triggerContaAzulReceivable({ ...currentDeal, stage: targetStage, deal_number: currentDeal.dealNumber, company_name: currentDeal.companyName, contact_name: currentDeal.contactName, product_name: currentDeal.productName, payment_method: currentDeal.paymentMethod, first_due_date: currentDeal.firstDueDate, billing_cnpj: currentDeal.billingCnpj });
+        setDraggedDealId(null);
+        return;
+    }
+
     const now = new Date();
     setDeals(prev => prev.map(d => d.id === draggedDealId ? { ...d, pipeline: pipelineName, stage: targetStage, closedAt: targetStage === 'closed' ? now : (d.stage === 'closed' ? undefined : d.closedAt) } : d));
     try {
@@ -562,7 +603,6 @@ export const CrmBoard: React.FC = () => {
             dispatchNegotiationWebhook(data);
             triggerDigitalSupportTicket(data);
             triggerWhatsAppAutomation(data);
-            triggerContaAzulReceivable(data);
         }
 
         await appBackend.logActivity({ action: 'update', module: 'crm', details: `Arrastou negócio "${currentDeal.title}" para Funil: ${pipelineName}, Etapa: ${targetStage}`, recordId: draggedDealId });
@@ -1240,7 +1280,7 @@ export const CrmBoard: React.FC = () => {
                           <DollarSign size={20} className="text-green-600" />
                           Lançar Venda no Conta Azul
                       </h3>
-                      <button onClick={() => setContaAzulConfirmDeal(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors"><X size={20}/></button>
+                      <button onClick={() => { setContaAzulConfirmDeal(null); setPendingCloseMove(null); }} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors"><X size={20}/></button>
                   </div>
 
                   <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">
@@ -1425,7 +1465,7 @@ export const CrmBoard: React.FC = () => {
                   </div>
 
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
-                      <button onClick={() => setContaAzulConfirmDeal(null)} className="px-5 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-100 rounded-xl transition-colors">
+                      <button onClick={() => { setContaAzulConfirmDeal(null); setPendingCloseMove(null); }} className="px-5 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-100 rounded-xl transition-colors">
                           Cancelar
                       </button>
                       <button onClick={handleConfirmContaAzulReceivable} disabled={isCreatingReceivable} className="bg-green-600 hover:bg-green-700 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-green-600/20 flex items-center gap-2 transition-all disabled:opacity-50">

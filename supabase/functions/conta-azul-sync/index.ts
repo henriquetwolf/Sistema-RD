@@ -193,10 +193,37 @@ async function syncPayables(req: Request): Promise<Response> {
 async function syncCategories(): Promise<Response> {
   const logId = await createSyncLog("categories"); let count = 0;
   try {
-    const items = await contaAzulFetchPaginated<any>("/v1/categorias", { permite_apenas_filhos: "true" });
+    // Busca todas as categorias (sem filtro) para incluir subcategorias
+    const items = await contaAzulFetchPaginated<any>("/v1/categorias", {});
+    // Também busca apenas as folha (que podem ser usadas em lançamentos)
+    const leafItems = await contaAzulFetchPaginated<any>("/v1/categorias", { permite_apenas_filhos: "true" });
+
+    // Monta lookup de ID→nome para construir caminho hierárquico
+    const byId = new Map<string, any>();
+    for (const item of items) byId.set(String(item.id), item);
+
+    function buildPath(item: any): string {
+      const parentId = item.categoria_pai_id || item.pai?.id || item.parent_id;
+      const parent = parentId ? byId.get(String(parentId)) : null;
+      const selfName = item.nome || item.descricao || "Sem nome";
+      return parent ? buildPath(parent) + " > " + selfName : selfName;
+    }
+
+    // Mescla tudo (pais + filhos), sem duplicar
+    const allMap = new Map<string, any>();
+    for (const item of items) allMap.set(String(item.id), item);
+    for (const item of leafItems) allMap.set(String(item.id), item);
+
     const db = getSupabaseServiceClient();
     const now = new Date().toISOString();
-    const rows = items.map((item: any) => ({ id_conta_azul: String(item.id), nome: item.nome || item.descricao || "Sem nome", tipo: item.tipo || "AMBOS", ativo: true, synced_at: now }));
+    const rows = Array.from(allMap.values()).map((item: any) => ({
+      id_conta_azul: String(item.id),
+      nome: buildPath(item),
+      tipo: item.tipo || "AMBOS",
+      ativo: true,
+      synced_at: now,
+    }));
+
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await db.from("conta_azul_categorias").upsert(batch, { onConflict: "id_conta_azul" });

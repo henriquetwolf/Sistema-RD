@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
-const CONTA_AZUL_AUTH_BASE = "https://api.contaazul.com/auth";
+const CONTA_AZUL_AUTH_BASE = "https://auth.contaazul.com/oauth2";
 
 function getSupabaseServiceClient() {
   return createClient(
@@ -71,7 +71,7 @@ function handleAuthorize(): Response {
   authUrl.searchParams.set("client_id", creds.clientId);
   authUrl.searchParams.set("redirect_uri", creds.redirectUri);
   authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", "accounting");
+  authUrl.searchParams.set("state", crypto.randomUUID());
   return jsonResponse({ authorize_url: authUrl.toString() });
 }
 

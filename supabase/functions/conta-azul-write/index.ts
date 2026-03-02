@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const CONTA_AZUL_BASE = "https://api-v2.contaazul.com";
-const CONTA_AZUL_AUTH_BASE = "https://api.contaazul.com/auth";
+const CONTA_AZUL_AUTH_BASE = "https://auth.contaazul.com/oauth2";
 
 function getSupabaseServiceClient() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);

@@ -79,11 +79,28 @@ export const ContaAzulManager: React.FC = () => {
     try {
       const status = await contaAzulService.getAuthStatus();
       setAuthStatus(status);
+      return status;
     } catch {
-      setAuthStatus({ connected: false, lastSync: null });
+      const fallback = { connected: false, lastSync: null } as ContaAzulAuthStatus;
+      setAuthStatus(fallback);
+      return fallback;
     } finally {
       setIsCheckingAuth(false);
     }
+  }, []);
+
+  const handleConnect = useCallback(() => {
+    contaAzulService.startOAuthFlow();
+    const pollInterval = setInterval(async () => {
+      try {
+        const status = await contaAzulService.getAuthStatus();
+        if (status.connected) {
+          setAuthStatus(status);
+          clearInterval(pollInterval);
+        }
+      } catch { /* ignore polling errors */ }
+    }, 3000);
+    setTimeout(() => clearInterval(pollInterval), 300000);
   }, []);
 
   useEffect(() => {
@@ -288,7 +305,7 @@ export const ContaAzulManager: React.FC = () => {
             </div>
           ) : (
             <button
-              onClick={() => contaAzulService.startOAuthFlow()}
+              onClick={handleConnect}
               className="flex items-center gap-2 px-4 py-2 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 text-amber-700 text-[10px] font-black uppercase transition-all"
             >
               <Unlink size={12} /> Conectar ao Conta Azul
@@ -356,7 +373,7 @@ export const ContaAzulManager: React.FC = () => {
             Conecte sua conta do Conta Azul para visualizar dados financeiros em tempo real, criar lançamentos e manter tudo sincronizado.
           </p>
           <button
-            onClick={() => contaAzulService.startOAuthFlow()}
+            onClick={handleConnect}
             className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all flex items-center gap-3"
           >
             <Zap size={18} /> Conectar ao Conta Azul

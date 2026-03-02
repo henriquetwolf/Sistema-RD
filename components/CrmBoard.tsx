@@ -188,6 +188,7 @@ export const CrmBoard: React.FC = () => {
   const [contaAzulProducts, setContaAzulProducts] = useState<{ id: string; nome: string; tipo: string; valor: number }[]>([]);
   const [isCreatingReceivable, setIsCreatingReceivable] = useState(false);
   const [activeMapping, setActiveMapping] = useState<any | null>(null);
+  const [dealProductMapping, setDealProductMapping] = useState<any | null>(null);
   const [isFetchingCep, setIsFetchingCep] = useState(false);
   const [pendingCloseMove, setPendingCloseMove] = useState<{ dealId: string; pipeline: string; targetStage: string; previousStage: string } | null>(null);
 
@@ -212,34 +213,51 @@ export const CrmBoard: React.FC = () => {
     fetchData();
   }, []);
 
-  // Lógica de preenchimento automático de CNPJ e Empresa
+  // Lógica de preenchimento automático de CNPJ, Empresa e Configuração Conta Azul
   useEffect(() => {
       const resolve = async () => {
-          // 0. Prioridade máxima: mapping do cadastro de Produtos e Serviços
+          const productTypeToItemType: Record<string, string> = { Digital: 'produto_digital', Presencial: 'turma', Evento: 'evento' };
+
+          let foundMapping: any = null;
+
+          // Busca mapping do cadastro Produtos e Serviços
           if (dealFormData.productName) {
               try {
                   const mappings = await appBackend.getContaAzulProductMappings();
-                  const mapping = mappings.find(m => m.itemName.toLowerCase().trim() === (dealFormData.productName || '').toLowerCase().trim());
-                  if (mapping?.billingCnpj && mapping?.billingCompanyName) {
+                  const pName = (dealFormData.productName || '').toLowerCase().trim();
+                  const expectedType = productTypeToItemType[dealFormData.productType || ''] || '';
+
+                  // Busca por nome + tipo (mais preciso)
+                  foundMapping = mappings.find(m =>
+                      m.itemName.toLowerCase().trim() === pName &&
+                      (!expectedType || m.itemType === expectedType)
+                  );
+                  // Fallback: busca apenas por nome
+                  if (!foundMapping) {
+                      foundMapping = mappings.find(m => m.itemName.toLowerCase().trim() === pName);
+                  }
+
+                  if (foundMapping?.billingCnpj && foundMapping?.billingCompanyName) {
                       setDealFormData(prev => ({
                           ...prev,
-                          billingCnpj: mapping.billingCnpj!,
-                          billingCompanyName: mapping.billingCompanyName!,
+                          billingCnpj: foundMapping.billingCnpj!,
+                          billingCompanyName: foundMapping.billingCompanyName!,
                       }));
+                      setDealProductMapping(foundMapping);
                       return;
                   }
               } catch (e) { /* fallback abaixo */ }
           }
 
+          setDealProductMapping(foundMapping || null);
+
           if (companies.length > 0) {
               let matched: CompanySetting | undefined;
 
-              // 1. Tenta encontrar por PRODUTO ESPECÍFICO
               if (dealFormData.productName) {
                   matched = companies.find(c => (c.productIds || []).includes(dealFormData.productName!));
               }
 
-              // 2. Fallback: tenta por TIPO DE PRODUTO
               if (!matched && dealFormData.productType) {
                   matched = companies.find(c => (c.productTypes || []).includes(dealFormData.productType!));
               }
@@ -464,8 +482,18 @@ export const CrmBoard: React.FC = () => {
       setContaAzulProducts(prods);
 
       const dealProductName = (deal.product_name || deal.productName || '').toLowerCase().trim();
+      const dealProductType = (deal.product_type || deal.productType || '').toLowerCase().trim();
+      const typeMap: Record<string, string> = { digital: 'produto_digital', presencial: 'turma', evento: 'evento' };
+      const expectedItemType = typeMap[dealProductType] || '';
 
-      const mapping = mappingsData.find((m: any) => m.itemName?.toLowerCase().trim() === dealProductName);
+      // Busca por nome + tipo (mais preciso) e fallback por apenas nome
+      let mapping = mappingsData.find((m: any) =>
+          m.itemName?.toLowerCase().trim() === dealProductName &&
+          (!expectedItemType || m.itemType === expectedItemType)
+      );
+      if (!mapping) {
+          mapping = mappingsData.find((m: any) => m.itemName?.toLowerCase().trim() === dealProductName);
+      }
       setActiveMapping(mapping || null);
 
       if (mapping) {
@@ -649,7 +677,7 @@ export const CrmBoard: React.FC = () => {
 
     if (isLastStage(pipelineName, newStage)) {
         setPendingCloseMove({ dealId, pipeline: pipelineName, targetStage: newStage, previousStage: currentStage });
-        triggerContaAzulReceivable({ ...deal, stage: newStage, deal_number: deal.dealNumber, company_name: deal.companyName, contact_name: deal.contactName, product_name: deal.productName, payment_method: deal.paymentMethod, first_due_date: deal.firstDueDate, billing_cnpj: deal.billingCnpj });
+        triggerContaAzulReceivable({ ...deal, stage: newStage, deal_number: deal.dealNumber, company_name: deal.companyName, contact_name: deal.contactName, product_name: deal.productName, product_type: deal.productType, payment_method: deal.paymentMethod, first_due_date: deal.firstDueDate, billing_cnpj: deal.billingCnpj });
         return;
     }
 
@@ -688,7 +716,7 @@ export const CrmBoard: React.FC = () => {
 
     if (isLastStage(pipelineName, targetStage)) {
         setPendingCloseMove({ dealId: draggedDealId, pipeline: pipelineName, targetStage, previousStage: currentDeal.stage });
-        triggerContaAzulReceivable({ ...currentDeal, stage: targetStage, deal_number: currentDeal.dealNumber, company_name: currentDeal.companyName, contact_name: currentDeal.contactName, product_name: currentDeal.productName, payment_method: currentDeal.paymentMethod, first_due_date: currentDeal.firstDueDate, billing_cnpj: currentDeal.billingCnpj });
+        triggerContaAzulReceivable({ ...currentDeal, stage: targetStage, deal_number: currentDeal.dealNumber, company_name: currentDeal.companyName, contact_name: currentDeal.contactName, product_name: currentDeal.productName, product_type: currentDeal.productType, payment_method: currentDeal.paymentMethod, first_due_date: currentDeal.firstDueDate, billing_cnpj: currentDeal.billingCnpj });
         setDraggedDealId(null);
         return;
     }
@@ -1768,6 +1796,58 @@ export const CrmBoard: React.FC = () => {
                             <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm bg-slate-50" value={dealFormData.billingCnpj} readOnly />
                         </div>
                     </div>
+
+                    {/* CONFIGURAÇÃO CONTA AZUL DO PRODUTO (auto-preenchida) */}
+                    {dealProductMapping && (
+                        <div className="lg:col-span-3 rounded-xl border-2 border-green-300 bg-green-50/50 p-4 space-y-3 animate-in slide-in-from-top-2">
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-[10px] font-black text-green-700 uppercase tracking-widest flex items-center gap-1.5">
+                                    <DollarSign size={12}/> Configuração Conta Azul — {dealProductMapping.itemName}
+                                </h4>
+                                <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-black uppercase",
+                                    dealProductMapping.splitMode === 'divided' ? "bg-amber-100 text-amber-700" :
+                                    dealProductMapping.splitMode === 'all_product' ? "bg-purple-100 text-purple-700" :
+                                    "bg-blue-100 text-blue-700"
+                                )}>
+                                    {dealProductMapping.splitMode === 'divided' ? 'Dividido' : dealProductMapping.splitMode === 'all_product' ? 'Tudo Produto' : 'Tudo Serviço'}
+                                </span>
+                            </div>
+
+                            {dealProductMapping.splitMode === 'divided' ? (
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-white rounded-lg p-3 border border-blue-200">
+                                        <span className="block text-[9px] font-black text-blue-600 uppercase">Serviço ({dealProductMapping.servicePercentage}%)</span>
+                                        <span className="block text-xs font-bold text-slate-800 mt-0.5">{dealProductMapping.contaAzulServiceName || '—'}</span>
+                                        {dealFormData.value ? (
+                                            <span className="block text-sm font-black text-blue-700 mt-1">R$ {(Math.round((dealFormData.value || 0) * (dealProductMapping.servicePercentage / 100) * 100) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                        ) : null}
+                                    </div>
+                                    <div className="bg-white rounded-lg p-3 border border-purple-200">
+                                        <span className="block text-[9px] font-black text-purple-600 uppercase">Produto ({dealProductMapping.productPercentage}%)</span>
+                                        <span className="block text-xs font-bold text-slate-800 mt-0.5">{dealProductMapping.contaAzulProductName || '—'}</span>
+                                        {dealFormData.value ? (
+                                            <span className="block text-sm font-black text-purple-700 mt-1">R$ {(Math.round((dealFormData.value || 0) * (dealProductMapping.productPercentage / 100) * 100) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                        ) : null}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                    <span className="block text-[9px] font-black text-slate-500 uppercase">
+                                        {dealProductMapping.splitMode === 'all_product' ? 'Produto' : 'Serviço'} no Conta Azul
+                                    </span>
+                                    <span className="block text-xs font-bold text-slate-800 mt-0.5">
+                                        {(dealProductMapping.splitMode === 'all_product' ? dealProductMapping.contaAzulProductName : dealProductMapping.contaAzulServiceName) || '—'}
+                                    </span>
+                                </div>
+                            )}
+
+                            {dealProductMapping.billingCompanyName && (
+                                <p className="text-[10px] text-green-700 font-medium">
+                                    Faturamento: {dealProductMapping.billingCompanyName} — CNPJ: {dealProductMapping.billingCnpj}
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fonte</label>

@@ -7,7 +7,8 @@ import {
   SyncJob, ActivityLog, CollaboratorSession, BillingNegotiation, FormFolder, 
   CourseInfo, TeacherNews, SupportTicket, SupportMessage, 
   CompanySetting, Pipeline, WebhookTrigger, SupportTag, OnlineCourse, CourseModule, CourseLesson, StudentCourseAccess, StudentLessonProgress,
-  WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow, EmailConfig
+  WAAutomationRule, WAAutomationLog, PipelineStage, LandingPage, AutomationFlow, EmailConfig,
+  ContaAzulProductMapping
 } from '../types';
 import { whatsappService } from './whatsappService';
 
@@ -1112,5 +1113,61 @@ export const appBackend = {
     localStorage.setItem('crm_email_config', JSON.stringify(config));
     if (!isConfigured) return;
     await supabase.from('crm_settings').upsert({ key: 'email_config', value: JSON.stringify(config) }, { onConflict: 'key' });
-  }
+  },
+
+  // ── Conta Azul Product Mapping ─────────────────────────────
+
+  getContaAzulProductMappings: async (): Promise<ContaAzulProductMapping[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase
+      .from('crm_conta_azul_product_mapping')
+      .select('*')
+      .order('item_name');
+    if (error) throw error;
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      itemType: r.item_type,
+      itemId: r.item_id,
+      itemName: r.item_name,
+      contaAzulCategoryId: r.conta_azul_category_id,
+      splitMode: r.split_mode,
+      productPercentage: Number(r.product_percentage || 0),
+      servicePercentage: Number(r.service_percentage || 100),
+      contaAzulServiceName: r.conta_azul_service_name,
+      contaAzulProductName: r.conta_azul_product_name,
+      billingCompanyName: r.billing_company_name,
+      billingCnpj: r.billing_cnpj,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+  },
+
+  saveContaAzulProductMapping: async (mapping: Partial<ContaAzulProductMapping>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload: any = {
+      item_type: mapping.itemType,
+      item_id: mapping.itemId || null,
+      item_name: mapping.itemName,
+      conta_azul_category_id: mapping.contaAzulCategoryId || null,
+      split_mode: mapping.splitMode || 'all_service',
+      product_percentage: mapping.productPercentage ?? 0,
+      service_percentage: mapping.servicePercentage ?? 100,
+      conta_azul_service_name: mapping.contaAzulServiceName || null,
+      conta_azul_product_name: mapping.contaAzulProductName || null,
+      billing_company_name: mapping.billingCompanyName || null,
+      billing_cnpj: mapping.billingCnpj || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (mapping.id) {
+      await supabase.from('crm_conta_azul_product_mapping').update(payload).eq('id', mapping.id);
+    } else {
+      payload.id = crypto.randomUUID();
+      await supabase.from('crm_conta_azul_product_mapping').insert([payload]);
+    }
+  },
+
+  deleteContaAzulProductMapping: async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    await supabase.from('crm_conta_azul_product_mapping').delete().eq('id', id);
+  },
 };

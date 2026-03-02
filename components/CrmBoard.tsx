@@ -213,34 +213,52 @@ export const CrmBoard: React.FC = () => {
 
   // Lógica de preenchimento automático de CNPJ e Empresa
   useEffect(() => {
-      if (companies.length > 0) {
-          let matched: CompanySetting | undefined;
-
-          // 1. Prioridade Máxima: Tenta encontrar por PRODUTO ESPECÍFICO
+      const resolve = async () => {
+          // 0. Prioridade máxima: mapping do cadastro de Produtos e Serviços
           if (dealFormData.productName) {
-              matched = companies.find(c => (c.productIds || []).includes(dealFormData.productName!));
+              try {
+                  const mappings = await appBackend.getContaAzulProductMappings();
+                  const mapping = mappings.find(m => m.itemName.toLowerCase().trim() === (dealFormData.productName || '').toLowerCase().trim());
+                  if (mapping?.billingCnpj && mapping?.billingCompanyName) {
+                      setDealFormData(prev => ({
+                          ...prev,
+                          billingCnpj: mapping.billingCnpj!,
+                          billingCompanyName: mapping.billingCompanyName!,
+                      }));
+                      return;
+                  }
+              } catch (e) { /* fallback abaixo */ }
           }
 
-          // 2. Fallback: Se não encontrou por produto, tenta por TIPO DE PRODUTO
-          if (!matched && dealFormData.productType) {
-              matched = companies.find(c => (c.productTypes || []).includes(dealFormData.productType!));
-          }
+          if (companies.length > 0) {
+              let matched: CompanySetting | undefined;
 
-          if (matched) {
-              setDealFormData(prev => ({
-                  ...prev,
-                  billingCnpj: matched!.cnpj,
-                  billingCompanyName: matched!.legalName
-              }));
-          } else {
-              // Se não houver match algum, limpa os campos automáticos
-              setDealFormData(prev => ({
-                  ...prev,
-                  billingCnpj: '',
-                  billingCompanyName: ''
-              }));
+              // 1. Tenta encontrar por PRODUTO ESPECÍFICO
+              if (dealFormData.productName) {
+                  matched = companies.find(c => (c.productIds || []).includes(dealFormData.productName!));
+              }
+
+              // 2. Fallback: tenta por TIPO DE PRODUTO
+              if (!matched && dealFormData.productType) {
+                  matched = companies.find(c => (c.productTypes || []).includes(dealFormData.productType!));
+              }
+
+              if (matched) {
+                  setDealFormData(prev => ({
+                      ...prev,
+                      billingCnpj: matched!.cnpj,
+                      billingCompanyName: matched!.legalName
+                  }));
+              } else {
+                  setDealFormData(prev => ({
+                      ...prev,
+                      billingCnpj: '',
+                      billingCompanyName: ''
+                  }));
+              }
           }
-      }
+      };
+      resolve();
   }, [dealFormData.productName, dealFormData.productType, companies]);
 
   const fetchData = async () => {
@@ -411,10 +429,11 @@ export const CrmBoard: React.FC = () => {
           const status = await contaAzulService.getAuthStatus();
           if (!status.connected) return;
 
-          const [cats, ccs, prods] = await Promise.all([
+          const [cats, ccs, prods, mappingsData] = await Promise.all([
               contaAzulService.getCategories(),
               contaAzulService.getCostCenters(),
               contaAzulService.getProducts(),
+              appBackend.getContaAzulProductMappings(),
           ]);
           setContaAzulCategories(cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS'));
           setContaAzulCostCenters(ccs);
@@ -422,7 +441,24 @@ export const CrmBoard: React.FC = () => {
 
           const dealProductName = (deal.product_name || deal.productName || '').toLowerCase().trim();
           let matchedProductId = '';
-          if (dealProductName && prods.length > 0) {
+          let matchedCategoryId = '';
+
+          // Try to find mapping for this product
+          const mapping = mappingsData.find((m: any) => m.itemName.toLowerCase().trim() === dealProductName);
+
+          if (mapping) {
+              matchedCategoryId = mapping.contaAzulCategoryId || '';
+              // Use the Conta Azul service/product name from mapping to find the right product/service
+              const targetName = mapping.splitMode === 'all_product'
+                  ? mapping.contaAzulProductName
+                  : mapping.contaAzulServiceName;
+              if (targetName && prods.length > 0) {
+                  const match = prods.find((p: any) => p.nome.toLowerCase().trim() === targetName.toLowerCase().trim());
+                  if (match) matchedProductId = match.id;
+              }
+          }
+
+          if (!matchedProductId && dealProductName && prods.length > 0) {
               const exact = prods.find((p: any) => p.nome.toLowerCase().trim() === dealProductName);
               if (exact) {
                   matchedProductId = exact.id;
@@ -439,7 +475,7 @@ export const CrmBoard: React.FC = () => {
               data_competencia: hoje,
               data_vencimento: deal.first_due_date || hoje,
               parcelas: deal.installments || 1,
-              categoria_id: '',
+              categoria_id: matchedCategoryId,
               centro_custo_id: '',
               observacoes: `Negócio CRM: ${deal.title || ''} | Cliente: ${deal.company_name || deal.contact_name || ''} | CNPJ: ${deal.billing_cnpj || 'N/A'}`,
               contato_nome: deal.company_name || deal.contact_name || '',

@@ -854,3 +854,23 @@ export interface ContaAzulUpdateInstallmentPayload {
   observacao?: string;
   conta_financeira_id?: string;
 }
+
+export type ContaAzulSplitMode = 'divided' | 'all_service' | 'all_product';
+export type CatalogItemType = 'produto_digital' | 'turma' | 'evento';
+
+export interface ContaAzulProductMapping {
+  id: string;
+  itemType: CatalogItemType;
+  itemId?: string;
+  itemName: string;
+  contaAzulCategoryId?: string;
+  splitMode: ContaAzulSplitMode;
+  productPercentage: number;
+  servicePercentage: number;
+  contaAzulServiceName?: string;
+  contaAzulProductName?: string;
+  billingCompanyName?: string;
+  billingCnpj?: string;
+  createdAt: string;
+  updatedAt: string;
+}

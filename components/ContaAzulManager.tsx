@@ -322,6 +322,11 @@ export const ContaAzulManager: React.FC = () => {
   const recTotalPages = Math.ceil(recCount / PAGE_SIZE);
   const payTotalPages = Math.ceil(payCount / PAGE_SIZE);
 
+  const lastSuccessfulSync = useMemo(() => {
+    const successLog = syncLogs.find(l => l.status === 'success');
+    return successLog?.finished_at || null;
+  }, [syncLogs]);
+
   // ── Render ──────────────────────────────────────────────
 
   return (
@@ -343,9 +348,9 @@ export const ContaAzulManager: React.FC = () => {
           ) : authStatus?.connected ? (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-xl border border-green-100 text-green-700 text-[10px] font-black uppercase">
               <Link2 size={12} /> Conectado
-              {authStatus.lastSync && (
+              {lastSuccessfulSync && (
                 <span className="text-green-500 font-bold normal-case ml-1">
-                  Sync: {new Date(authStatus.lastSync).toLocaleString('pt-BR')}
+                  Ultima sync: {new Date(lastSuccessfulSync).toLocaleString('pt-BR')}
                 </span>
               )}
             </div>
@@ -462,6 +467,24 @@ export const ContaAzulManager: React.FC = () => {
         {/* ═══ OVERVIEW ═══ */}
         {activeTab === 'overview' && authStatus?.connected && (
           <div className="space-y-6 animate-in slide-in-from-left-4 duration-500">
+            {/* Last Sync Info */}
+            {lastSuccessfulSync && (
+              <div className="flex items-center gap-3 px-5 py-3 bg-blue-50 rounded-2xl border border-blue-100">
+                <Clock size={16} className="text-blue-500" />
+                <span className="text-xs font-bold text-blue-700">
+                  Dados sincronizados em: {new Date(lastSuccessfulSync).toLocaleString('pt-BR')}
+                </span>
+                <button
+                  onClick={() => handleSync('all')}
+                  disabled={isSyncing}
+                  className="ml-auto text-[10px] font-black uppercase tracking-wider text-blue-600 hover:text-blue-800 disabled:opacity-50 flex items-center gap-1"
+                >
+                  {isSyncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  Atualizar
+                </button>
+              </div>
+            )}
+
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <KpiCard

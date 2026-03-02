@@ -58,6 +58,12 @@ function errorResponse(message: string, status = 400) { return jsonResponse({ er
 async function createSyncLog(tipo: string) { const db = getSupabaseServiceClient(); const { data } = await db.from("conta_azul_sync_log").insert({ tipo_sync: tipo, status: "running" }).select("id").single(); return data?.id; }
 async function completeSyncLog(logId: string, count: number, error?: string) { const db = getSupabaseServiceClient(); await db.from("conta_azul_sync_log").update({ status: error ? "error" : "success", registros_sincronizados: count, erro: error || null, finished_at: new Date().toISOString() }).eq("id", logId); }
 
+function safeFloat(val: any): number {
+  if (val === null || val === undefined) return 0;
+  const n = typeof val === 'number' ? val : parseFloat(String(val));
+  return isNaN(n) ? 0 : n;
+}
+
 function defaultDateRange() {
   const now = new Date();
   const from = new Date(now);
@@ -77,8 +83,8 @@ function mapReceivableToRow(item: any) {
     id_conta_azul: String(item.id),
     id_evento: item.id_evento ? String(item.id_evento) : null,
     descricao: item.descricao || null,
-    valor: parseFloat(item.total || item.valor || item.valor_original || 0),
-    valor_pago: parseFloat(item.pago || item.valor_pago || item.valor_recebido || 0),
+    valor: safeFloat(item.total ?? item.valor ?? item.valor_original),
+    valor_pago: safeFloat(item.pago ?? item.valor_pago ?? item.valor_recebido),
     data_vencimento: item.data_vencimento || null,
     data_competencia: item.data_competencia || null,
     data_pagamento: item.data_pagamento || null,
@@ -107,8 +113,8 @@ function mapPayableToRow(item: any) {
     id_conta_azul: String(item.id),
     id_evento: item.id_evento ? String(item.id_evento) : null,
     descricao: item.descricao || null,
-    valor: parseFloat(item.total || item.valor || item.valor_original || 0),
-    valor_pago: parseFloat(item.pago || item.valor_pago || 0),
+    valor: safeFloat(item.total ?? item.valor ?? item.valor_original),
+    valor_pago: safeFloat(item.pago ?? item.valor_pago),
     data_vencimento: item.data_vencimento || null,
     data_competencia: item.data_competencia || null,
     data_pagamento: item.data_pagamento || null,
@@ -140,12 +146,17 @@ async function syncReceivables(req: Request): Promise<Response> {
       data_vencimento_ate: body.data_vencimento_ate || dateRange.data_vencimento_ate,
     };
     const items = await contaAzulFetchPaginated<any>("/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
+    console.log("Receivables fetched:", items.length, "items");
     const db = getSupabaseServiceClient();
     const rows = items.map(mapReceivableToRow);
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await db.from("conta_azul_contas_receber").upsert(batch, { onConflict: "id_conta_azul" });
-      if (!error) count += batch.length;
+      if (error) {
+        console.error("Receivables batch error at index", i, ":", error.message, error.details);
+      } else {
+        count += batch.length;
+      }
     }
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: "receivables", sincronizados: count });
@@ -162,12 +173,17 @@ async function syncPayables(req: Request): Promise<Response> {
       data_vencimento_ate: body.data_vencimento_ate || dateRange.data_vencimento_ate,
     };
     const items = await contaAzulFetchPaginated<any>("/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params);
+    console.log("Payables fetched:", items.length, "items");
     const db = getSupabaseServiceClient();
     const rows = items.map(mapPayableToRow);
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await db.from("conta_azul_contas_pagar").upsert(batch, { onConflict: "id_conta_azul" });
-      if (!error) count += batch.length;
+      if (error) {
+        console.error("Payables batch error at index", i, ":", error.message, error.details);
+      } else {
+        count += batch.length;
+      }
     }
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: "payables", sincronizados: count });
@@ -184,7 +200,11 @@ async function syncCategories(): Promise<Response> {
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await db.from("conta_azul_categorias").upsert(batch, { onConflict: "id_conta_azul" });
-      if (!error) count += batch.length;
+      if (error) {
+        console.error("Categories batch error at index", i, ":", error.message, error.details);
+      } else {
+        count += batch.length;
+      }
     }
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: "categories", sincronizados: count });
@@ -201,7 +221,11 @@ async function syncCostCenters(): Promise<Response> {
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await db.from("conta_azul_centros_custo").upsert(batch, { onConflict: "id_conta_azul" });
-      if (!error) count += batch.length;
+      if (error) {
+        console.error("CostCenters batch error at index", i, ":", error.message, error.details);
+      } else {
+        count += batch.length;
+      }
     }
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: "cost-centers", sincronizados: count });
@@ -219,8 +243,7 @@ async function syncAccounts(): Promise<Response> {
         const bRes = await contaAzulFetch("/v1/conta-financeira/" + item.id + "/saldo-atual");
         if (bRes.ok) {
           const bd = await bRes.json();
-          saldoAtual = parseFloat(bd.saldo ?? bd.saldo_atual ?? bd.valor ?? bd.balance ?? bd.amount ?? 0);
-          if (isNaN(saldoAtual)) saldoAtual = 0;
+          saldoAtual = safeFloat(bd.saldo ?? bd.saldo_atual ?? bd.valor ?? bd.balance ?? bd.amount);
         }
         await new Promise(r => setTimeout(r, 120));
       } catch {}

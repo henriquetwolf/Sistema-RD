@@ -187,6 +187,7 @@ export const CrmBoard: React.FC = () => {
   const [contaAzulCostCenters, setContaAzulCostCenters] = useState<{ id: string; id_conta_azul: string; nome: string }[]>([]);
   const [contaAzulProducts, setContaAzulProducts] = useState<{ id: string; nome: string; tipo: string; valor: number }[]>([]);
   const [isCreatingReceivable, setIsCreatingReceivable] = useState(false);
+  const [activeMapping, setActiveMapping] = useState<any | null>(null);
   const [isFetchingCep, setIsFetchingCep] = useState(false);
   const [pendingCloseMove, setPendingCloseMove] = useState<{ dealId: string; pipeline: string; targetStage: string; previousStage: string } | null>(null);
 
@@ -423,6 +424,15 @@ export const CrmBoard: React.FC = () => {
       }
   };
 
+  const findContaAzulProductByName = (name: string, prods: any[]): string => {
+      if (!name || !prods.length) return '';
+      const n = name.toLowerCase().trim();
+      const exact = prods.find((p: any) => p.nome.toLowerCase().trim() === n);
+      if (exact) return exact.id;
+      const partial = prods.find((p: any) => p.nome.toLowerCase().includes(n) || n.includes(p.nome.toLowerCase()));
+      return partial ? partial.id : '';
+  };
+
   const triggerContaAzulReceivable = async (deal: any) => {
       if (!deal.value || deal.value <= 0) return;
       try {
@@ -443,29 +453,28 @@ export const CrmBoard: React.FC = () => {
           let matchedProductId = '';
           let matchedCategoryId = '';
 
-          // Try to find mapping for this product
           const mapping = mappingsData.find((m: any) => m.itemName.toLowerCase().trim() === dealProductName);
+          setActiveMapping(mapping || null);
 
           if (mapping) {
               matchedCategoryId = mapping.contaAzulCategoryId || '';
-              // Use the Conta Azul service/product name from mapping to find the right product/service
-              const targetName = mapping.splitMode === 'all_product'
-                  ? mapping.contaAzulProductName
-                  : mapping.contaAzulServiceName;
-              if (targetName && prods.length > 0) {
-                  const match = prods.find((p: any) => p.nome.toLowerCase().trim() === targetName.toLowerCase().trim());
-                  if (match) matchedProductId = match.id;
+              if (mapping.splitMode === 'divided') {
+                  // For divided mode, auto-match both service and product IDs
+                  const serviceId = findContaAzulProductByName(mapping.contaAzulServiceName || '', prods);
+                  const productId = findContaAzulProductByName(mapping.contaAzulProductName || '', prods);
+                  // Store resolved IDs in the mapping object for use in confirmation
+                  mapping._resolvedServiceId = serviceId;
+                  mapping._resolvedProductId = productId;
+                  matchedProductId = serviceId || productId;
+              } else {
+                  const targetName = mapping.splitMode === 'all_product'
+                      ? mapping.contaAzulProductName : mapping.contaAzulServiceName;
+                  matchedProductId = findContaAzulProductByName(targetName || '', prods);
               }
           }
 
-          if (!matchedProductId && dealProductName && prods.length > 0) {
-              const exact = prods.find((p: any) => p.nome.toLowerCase().trim() === dealProductName);
-              if (exact) {
-                  matchedProductId = exact.id;
-              } else {
-                  const partial = prods.find((p: any) => p.nome.toLowerCase().includes(dealProductName) || dealProductName.includes(p.nome.toLowerCase()));
-                  if (partial) matchedProductId = partial.id;
-              }
+          if (!matchedProductId && dealProductName) {
+              matchedProductId = findContaAzulProductByName(dealProductName, prods);
           }
 
           const hoje = new Date().toISOString().split('T')[0];
@@ -491,10 +500,20 @@ export const CrmBoard: React.FC = () => {
   };
 
   const handleConfirmContaAzulReceivable = async () => {
-      if (!contaAzulFormData.produto_id) {
+      const isDivided = activeMapping?.splitMode === 'divided';
+
+      if (isDivided) {
+          const svcId = activeMapping?._resolvedServiceId || contaAzulFormData.produto_id;
+          const prodId = activeMapping?._resolvedProductId || '';
+          if (!svcId || !prodId) {
+              alert('Para lançamento dividido, é necessário que ambos os itens (Serviço e Produto) estejam vinculados no Conta Azul.\n\nVerifique os nomes configurados no cadastro de Produtos e Serviços.');
+              return;
+          }
+      } else if (!contaAzulFormData.produto_id) {
           alert('Selecione um Produto/Serviço antes de confirmar.');
           return;
       }
+
       if (!contaAzulFormData.valor || contaAzulFormData.valor <= 0) {
           alert('O valor deve ser maior que zero.');
           return;
@@ -505,27 +524,68 @@ export const CrmBoard: React.FC = () => {
       }
       setIsCreatingReceivable(true);
       try {
-          await contaAzulService.createSale({
-              descricao: contaAzulFormData.descricao,
-              valor: contaAzulFormData.valor,
+          const basePayload = {
               data_venda: contaAzulFormData.data_competencia,
               data_vencimento: contaAzulFormData.data_vencimento,
               parcelas: contaAzulFormData.parcelas,
               categoria_id: contaAzulFormData.categoria_id,
               centro_custo_id: contaAzulFormData.centro_custo_id,
-              produto_id: contaAzulFormData.produto_id,
               contato_nome: contaAzulFormData.contato_nome,
               contato_cpf: contaAzulFormData.contato_cpf,
               tipo_pagamento: contaAzulFormData.tipo_pagamento,
               deal_number: contaAzulFormData.deal_number,
-              observacoes: contaAzulFormData.observacoes,
-          });
-          if (pendingCloseMove) {
-              await executePendingMove(pendingCloseMove);
-              setPendingCloseMove(null);
+          };
+
+          if (isDivided) {
+              const svcPct = activeMapping.servicePercentage / 100;
+              const prodPct = activeMapping.productPercentage / 100;
+              const totalValue = contaAzulFormData.valor;
+              const serviceValue = Math.round(totalValue * svcPct * 100) / 100;
+              const productValue = Math.round(totalValue * prodPct * 100) / 100;
+              const svcId = activeMapping._resolvedServiceId;
+              const prodId = activeMapping._resolvedProductId;
+              const svcName = activeMapping.contaAzulServiceName || 'Serviço';
+              const prodName = activeMapping.contaAzulProductName || 'Material Didático';
+
+              await contaAzulService.createSale({
+                  ...basePayload,
+                  descricao: `[CRM #${contaAzulFormData.deal_number}] ${svcName} (${activeMapping.servicePercentage}%)`,
+                  valor: serviceValue,
+                  produto_id: svcId,
+                  observacoes: `${contaAzulFormData.observacoes} | SERVIÇO ${activeMapping.servicePercentage}% de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+              });
+
+              await contaAzulService.createSale({
+                  ...basePayload,
+                  descricao: `[CRM #${contaAzulFormData.deal_number}] ${prodName} (${activeMapping.productPercentage}%)`,
+                  valor: productValue,
+                  produto_id: prodId,
+                  observacoes: `${contaAzulFormData.observacoes} | PRODUTO ${activeMapping.productPercentage}% de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+              });
+
+              if (pendingCloseMove) {
+                  await executePendingMove(pendingCloseMove);
+                  setPendingCloseMove(null);
+              }
+              alert(`2 lançamentos criados no Conta Azul!\n\n• Serviço: R$ ${serviceValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${activeMapping.servicePercentage}%)\n• Produto: R$ ${productValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${activeMapping.productPercentage}%)\n\nO negócio foi movido para a etapa final.`);
+          } else {
+              await contaAzulService.createSale({
+                  ...basePayload,
+                  descricao: contaAzulFormData.descricao,
+                  valor: contaAzulFormData.valor,
+                  produto_id: contaAzulFormData.produto_id,
+                  observacoes: contaAzulFormData.observacoes,
+              });
+
+              if (pendingCloseMove) {
+                  await executePendingMove(pendingCloseMove);
+                  setPendingCloseMove(null);
+              }
+              alert('Venda criada com sucesso no Conta Azul! O negócio foi movido para a etapa final.');
           }
-          alert('Venda criada com sucesso no Conta Azul! O negócio foi movido para a etapa final.');
+
           setContaAzulConfirmDeal(null);
+          setActiveMapping(null);
       } catch (err: any) {
           alert(`Erro ao criar Venda: ${err.message}\n\nO negócio NÃO foi movido.`);
       } finally {
@@ -1316,7 +1376,7 @@ export const CrmBoard: React.FC = () => {
                           <DollarSign size={20} className="text-green-600" />
                           Lançar Venda no Conta Azul
                       </h3>
-                      <button onClick={() => { setContaAzulConfirmDeal(null); setPendingCloseMove(null); }} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors"><X size={20}/></button>
+                      <button onClick={() => { setContaAzulConfirmDeal(null); setActiveMapping(null); setPendingCloseMove(null); }} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors"><X size={20}/></button>
                   </div>
 
                   <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">
@@ -1430,10 +1490,54 @@ export const CrmBoard: React.FC = () => {
                           )}
                       </div>
 
+                      {/* DIVISÃO AUTOMÁTICA (se mapping dividido) */}
+                      {activeMapping?.splitMode === 'divided' && (() => {
+                          const total = contaAzulFormData.valor || 0;
+                          const svcPct = activeMapping.servicePercentage || 0;
+                          const prodPct = activeMapping.productPercentage || 0;
+                          const svcVal = Math.round(total * (svcPct / 100) * 100) / 100;
+                          const prodVal = Math.round(total * (prodPct / 100) * 100) / 100;
+                          const svcName = activeMapping.contaAzulServiceName || 'Serviço';
+                          const prodName = activeMapping.contaAzulProductName || 'Material Didático';
+                          const svcResolved = activeMapping._resolvedServiceId;
+                          const prodResolved = activeMapping._resolvedProductId;
+                          const svcMatch = svcResolved ? contaAzulProducts.find(p => p.id === svcResolved) : null;
+                          const prodMatch = prodResolved ? contaAzulProducts.find(p => p.id === prodResolved) : null;
+                          return (
+                          <div className="border-2 border-amber-300 rounded-xl p-4 space-y-3 bg-amber-50/60">
+                              <h4 className="text-xs font-black text-amber-700 uppercase tracking-wider flex items-center gap-1.5">
+                                  <AlertTriangle size={14}/> Lançamento Dividido — 2 itens serão criados
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div className="bg-white rounded-xl p-3 border border-blue-200">
+                                      <span className="block text-[10px] font-black text-blue-600 uppercase mb-1">Serviço ({svcPct}%)</span>
+                                      <span className="block text-sm font-bold text-slate-800 mb-1">{svcName}</span>
+                                      <span className="block text-lg font-black text-blue-700">R$ {svcVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                      {svcMatch
+                                          ? <span className="block text-[10px] text-green-600 font-bold mt-1">Vinculado: {svcMatch.nome}</span>
+                                          : <span className="block text-[10px] text-red-600 font-bold mt-1">Não encontrado no Conta Azul</span>
+                                      }
+                                  </div>
+                                  <div className="bg-white rounded-xl p-3 border border-purple-200">
+                                      <span className="block text-[10px] font-black text-purple-600 uppercase mb-1">Produto ({prodPct}%)</span>
+                                      <span className="block text-sm font-bold text-slate-800 mb-1">{prodName}</span>
+                                      <span className="block text-lg font-black text-purple-700">R$ {prodVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                      {prodMatch
+                                          ? <span className="block text-[10px] text-green-600 font-bold mt-1">Vinculado: {prodMatch.nome}</span>
+                                          : <span className="block text-[10px] text-red-600 font-bold mt-1">Não encontrado no Conta Azul</span>
+                                      }
+                                  </div>
+                              </div>
+                              <p className="text-[10px] text-amber-700 font-medium">Valor total: R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} = R$ {svcVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (serviço) + R$ {prodVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (produto)</p>
+                          </div>
+                          );
+                      })()}
+
                       {/* DADOS PARA O CONTA AZUL */}
                       <div className="border border-green-200 rounded-xl p-4 space-y-3 bg-green-50/30">
                           <h4 className="text-xs font-black text-green-700 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={14}/> Dados da Venda — Conta Azul</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {activeMapping?.splitMode !== 'divided' && (
                               <div className="md:col-span-2">
                                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Produto / Serviço *</label>
                                   <select value={contaAzulFormData.produto_id} onChange={e => setContaAzulFormData(f => ({ ...f, produto_id: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium bg-white focus:ring-2 focus:ring-green-500 outline-none">
@@ -1444,6 +1548,7 @@ export const CrmBoard: React.FC = () => {
                                   </select>
                                   {contaAzulProducts.length === 0 && <p className="text-[10px] text-amber-600 mt-1 font-medium">Nenhum produto/serviço encontrado no Conta Azul. Cadastre pelo menos um.</p>}
                               </div>
+                              )}
 
                               <div className="md:col-span-2">
                                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição</label>
@@ -1501,12 +1606,12 @@ export const CrmBoard: React.FC = () => {
                   </div>
 
                   <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
-                      <button onClick={() => { setContaAzulConfirmDeal(null); setPendingCloseMove(null); }} className="px-5 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-100 rounded-xl transition-colors">
+                      <button onClick={() => { setContaAzulConfirmDeal(null); setActiveMapping(null); setPendingCloseMove(null); }} className="px-5 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-100 rounded-xl transition-colors">
                           Cancelar
                       </button>
                       <button onClick={handleConfirmContaAzulReceivable} disabled={isCreatingReceivable} className="bg-green-600 hover:bg-green-700 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-green-600/20 flex items-center gap-2 transition-all disabled:opacity-50">
                           {isCreatingReceivable ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                          Confirmar e Lançar
+                          {activeMapping?.splitMode === 'divided' ? 'Confirmar e Lançar (2 itens)' : 'Confirmar e Lançar'}
                       </button>
                   </div>
               </div>

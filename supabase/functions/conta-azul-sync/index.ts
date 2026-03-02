@@ -32,7 +32,7 @@ async function contaAzulFetch(path: string, options: RequestInit = {}): Promise<
   return fetch(CONTA_AZUL_BASE + path, { ...options, headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", ...(options.headers as Record<string, string> || {}) } });
 }
 
-async function contaAzulFetchPaginated<T>(basePath: string, queryParams: Record<string, string> = {}, maxPages = 50): Promise<T[]> {
+async function contaAzulFetchPaginated<T>(basePath: string, queryParams: Record<string, string> = {}, maxPages = 20): Promise<T[]> {
   const all: T[] = [];
   let page = 1;
   const size = 200;
@@ -46,7 +46,7 @@ async function contaAzulFetchPaginated<T>(basePath: string, queryParams: Record<
     all.push(...items);
     if (items.length < size) break;
     page++;
-    await new Promise(r => setTimeout(r, 120));
+    await new Promise(r => setTimeout(r, 50));
   }
   return all;
 }
@@ -67,9 +67,9 @@ function safeFloat(val: any): number {
 function defaultDateRange() {
   const now = new Date();
   const from = new Date(now);
-  from.setFullYear(from.getFullYear() - 2);
+  from.setFullYear(from.getFullYear() - 1);
   const to = new Date(now);
-  to.setFullYear(to.getFullYear() + 2);
+  to.setFullYear(to.getFullYear() + 1);
   return {
     data_vencimento_de: from.toISOString().split("T")[0],
     data_vencimento_ate: to.toISOString().split("T")[0],
@@ -245,7 +245,7 @@ async function syncAccounts(): Promise<Response> {
           const bd = await bRes.json();
           saldoAtual = safeFloat(bd.saldo ?? bd.saldo_atual ?? bd.valor ?? bd.balance ?? bd.amount);
         }
-        await new Promise(r => setTimeout(r, 120));
+        await new Promise(r => setTimeout(r, 50));
       } catch {}
       const { error } = await db.from("conta_azul_contas_financeiras").upsert({ id_conta_azul: String(item.id), nome: item.nome || "Sem nome", tipo: item.tipo || null, saldo_atual: saldoAtual, ativo: item.ativo !== false, synced_at: new Date().toISOString() }, { onConflict: "id_conta_azul" });
       if (!error) count++;

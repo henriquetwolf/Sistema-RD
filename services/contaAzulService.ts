@@ -32,7 +32,7 @@ async function edgeFetch(fn: string, path: string, options: RequestInit = {}): P
   const url = `${EDGE_BASE}/${fn}/${path}`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120000);
+  const timeoutId = setTimeout(() => controller.abort(), 300000);
 
   try {
     const res = await fetch(url, {
@@ -59,7 +59,7 @@ async function edgeFetch(fn: string, path: string, options: RequestInit = {}): P
     return json;
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      throw new Error('Timeout: a sincronização demorou mais de 2 minutos. Tente sincronizar cada tipo individualmente.');
+      throw new Error('Timeout: a sincronização demorou mais de 5 minutos. Tente sincronizar cada tipo individualmente.');
     }
     throw err;
   } finally {
@@ -93,11 +93,47 @@ async function refreshToken(): Promise<void> {
 
 type SyncType = 'all' | 'receivables' | 'payables' | 'categories' | 'cost-centers' | 'accounts';
 
+function generateQuarterlyRanges(): { data_vencimento_de: string; data_vencimento_ate: string }[] {
+  const ranges: { data_vencimento_de: string; data_vencimento_ate: string }[] = [];
+  const now = new Date();
+  const start = new Date(now);
+  start.setFullYear(start.getFullYear() - 1);
+  const end = new Date(now);
+  end.setFullYear(end.getFullYear() + 1);
+
+  const cursor = new Date(start);
+  while (cursor < end) {
+    const rangeStart = cursor.toISOString().split('T')[0];
+    cursor.setMonth(cursor.getMonth() + 3);
+    const rangeEnd = (cursor < end ? cursor : end).toISOString().split('T')[0];
+    ranges.push({ data_vencimento_de: rangeStart, data_vencimento_ate: rangeEnd });
+  }
+  return ranges;
+}
+
 async function triggerSync(type: SyncType, body?: Record<string, any>): Promise<ContaAzulSyncResult> {
   return edgeFetch('conta-azul-sync', type, {
     method: 'POST',
     body: JSON.stringify(body || {}),
   });
+}
+
+async function triggerSyncChunked(
+  type: 'receivables' | 'payables',
+  onProgress?: (chunk: number, total: number) => void,
+): Promise<ContaAzulSyncResult> {
+  const ranges = generateQuarterlyRanges();
+  let totalSynced = 0;
+  for (let i = 0; i < ranges.length; i++) {
+    onProgress?.(i + 1, ranges.length);
+    try {
+      const result = await triggerSync(type, ranges[i]);
+      totalSynced += result.sincronizados ?? 0;
+    } catch (e: any) {
+      console.warn(`Chunk ${i + 1}/${ranges.length} (${type}) error:`, e.message);
+    }
+  }
+  return { success: true, tipo: type, sincronizados: totalSynced };
 }
 
 async function getSyncLogs(limit = 20): Promise<ContaAzulSyncLog[]> {
@@ -294,6 +330,7 @@ export const contaAzulService = {
   disconnect,
   refreshToken,
   triggerSync,
+  triggerSyncChunked,
   getSyncLogs,
   getReceivables,
   getPayables,

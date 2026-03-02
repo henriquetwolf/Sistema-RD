@@ -223,12 +223,28 @@ export const ContaAzulManager: React.FC = () => {
         const step = syncSteps[i];
         setSyncProgress(Math.round((i / syncSteps.length) * 100));
         setSyncStep(step.label);
-        setSyncMessage(`Sincronizando ${step.label}... (${i + 1}/${syncSteps.length})`);
-        try {
-          const result = await contaAzulService.triggerSync(step.type);
-          totalSynced += result.sincronizados ?? 0;
-        } catch (e: any) {
-          errors.push(`${step.label}: ${e.message}`);
+
+        if (step.type === 'receivables' || step.type === 'payables') {
+          setSyncMessage(`Sincronizando ${step.label} (em partes trimestrais)... (${i + 1}/${syncSteps.length})`);
+          try {
+            const result = await contaAzulService.triggerSyncChunked(step.type, (chunk, total) => {
+              const baseProgress = Math.round((i / syncSteps.length) * 100);
+              const chunkProgress = Math.round((chunk / total) * (100 / syncSteps.length));
+              setSyncProgress(baseProgress + chunkProgress);
+              setSyncMessage(`Sincronizando ${step.label}... parte ${chunk}/${total} (${i + 1}/${syncSteps.length})`);
+            });
+            totalSynced += result.sincronizados ?? 0;
+          } catch (e: any) {
+            errors.push(`${step.label}: ${e.message}`);
+          }
+        } else {
+          setSyncMessage(`Sincronizando ${step.label}... (${i + 1}/${syncSteps.length})`);
+          try {
+            const result = await contaAzulService.triggerSync(step.type);
+            totalSynced += result.sincronizados ?? 0;
+          } catch (e: any) {
+            errors.push(`${step.label}: ${e.message}`);
+          }
         }
       }
       setSyncProgress(100);
@@ -245,19 +261,39 @@ export const ContaAzulManager: React.FC = () => {
       if (activeTab === 'payables') loadPayables();
     } else {
       const stepLabel = syncSteps.find(s => s.type === type)?.label || type;
-      setSyncMessage(`Sincronizando ${stepLabel}...`);
-      setSyncProgress(50);
-      setSyncStep(stepLabel);
-      try {
-        const result = await contaAzulService.triggerSync(type);
-        setSyncProgress(100);
-        setSyncMessage(`${stepLabel}: ${result.sincronizados ?? 'OK'} registros sincronizados`);
-        await loadOverview();
-        if (type === 'receivables') loadReceivables();
-        else if (type === 'payables') loadPayables();
-        else loadAuxiliaries();
-      } catch (e: any) {
-        setSyncMessage(`Erro em ${stepLabel}: ${e.message}`);
+
+      if (type === 'receivables' || type === 'payables') {
+        setSyncMessage(`Sincronizando ${stepLabel} (em partes trimestrais)...`);
+        setSyncProgress(10);
+        setSyncStep(stepLabel);
+        try {
+          const result = await contaAzulService.triggerSyncChunked(type, (chunk, total) => {
+            setSyncProgress(Math.round((chunk / total) * 100));
+            setSyncMessage(`Sincronizando ${stepLabel}... parte ${chunk}/${total}`);
+          });
+          setSyncProgress(100);
+          setSyncMessage(`${stepLabel}: ${result.sincronizados ?? 'OK'} registros sincronizados`);
+          await loadOverview();
+          if (type === 'receivables') loadReceivables();
+          else loadPayables();
+        } catch (e: any) {
+          setSyncMessage(`Erro em ${stepLabel}: ${e.message}`);
+        }
+      } else {
+        setSyncMessage(`Sincronizando ${stepLabel}...`);
+        setSyncProgress(50);
+        setSyncStep(stepLabel);
+        try {
+          const result = await contaAzulService.triggerSync(type);
+          setSyncProgress(100);
+          setSyncMessage(`${stepLabel}: ${result.sincronizados ?? 'OK'} registros sincronizados`);
+          await loadOverview();
+          if (type === 'receivables') loadReceivables();
+          else if (type === 'payables') loadPayables();
+          else loadAuxiliaries();
+        } catch (e: any) {
+          setSyncMessage(`Erro em ${stepLabel}: ${e.message}`);
+        }
       }
     }
 

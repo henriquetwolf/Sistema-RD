@@ -165,7 +165,17 @@ export const CrmBoard: React.FC = () => {
   
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormData, setDealFormData] = useState<Partial<Deal>>(INITIAL_FORM_STATE);
-  
+
+  // Conta Azul confirmation popup
+  const [contaAzulConfirmDeal, setContaAzulConfirmDeal] = useState<any | null>(null);
+  const [contaAzulFormData, setContaAzulFormData] = useState<{
+    descricao: string; valor: number; data_competencia: string; data_vencimento: string;
+    parcelas: number; categoria_id: string; centro_custo_id: string; observacoes: string;
+  }>({ descricao: '', valor: 0, data_competencia: '', data_vencimento: '', parcelas: 1, categoria_id: '', centro_custo_id: '', observacoes: '' });
+  const [contaAzulCategories, setContaAzulCategories] = useState<{ id: string; id_conta_azul: string; nome: string; tipo: string }[]>([]);
+  const [contaAzulCostCenters, setContaAzulCostCenters] = useState<{ id: string; id_conta_azul: string; nome: string }[]>([]);
+  const [isCreatingReceivable, setIsCreatingReceivable] = useState(false);
+
   // Tasks Form State
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskDate, setNewTaskDate] = useState(new Date().toISOString().split('T')[0]);
@@ -387,17 +397,52 @@ export const CrmBoard: React.FC = () => {
           const status = await contaAzulService.getAuthStatus();
           if (!status.connected) return;
 
-          await contaAzulService.createReceivable({
+          const [cats, ccs] = await Promise.all([
+              contaAzulService.getCategories(),
+              contaAzulService.getCostCenters(),
+          ]);
+          setContaAzulCategories(cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS'));
+          setContaAzulCostCenters(ccs);
+
+          const hoje = new Date().toISOString().split('T')[0];
+          setContaAzulFormData({
               descricao: `[CRM #${deal.deal_number || ''}] ${deal.product_name || deal.company_name || deal.contact_name || 'Venda'}`,
               valor: deal.value,
-              data_competencia: new Date().toISOString().split('T')[0],
-              data_vencimento: deal.first_due_date || new Date().toISOString().split('T')[0],
+              data_competencia: hoje,
+              data_vencimento: deal.first_due_date || hoje,
               parcelas: deal.installments || 1,
+              categoria_id: '',
+              centro_custo_id: '',
               observacoes: `Negócio CRM: ${deal.title || ''} | Cliente: ${deal.company_name || deal.contact_name || ''} | CNPJ: ${deal.billing_cnpj || 'N/A'}`,
           });
-          console.log('Conta a receber criada no Conta Azul para deal:', deal.deal_number);
+          setContaAzulConfirmDeal(deal);
       } catch (err) {
-          console.error('Erro ao criar conta a receber no Conta Azul:', err);
+          console.error('Erro ao preparar lançamento Conta Azul:', err);
+      }
+  };
+
+  const handleConfirmContaAzulReceivable = async () => {
+      if (!contaAzulFormData.categoria_id) {
+          alert('Selecione uma Categoria antes de confirmar.');
+          return;
+      }
+      if (!contaAzulFormData.valor || contaAzulFormData.valor <= 0) {
+          alert('O valor deve ser maior que zero.');
+          return;
+      }
+      if (!contaAzulFormData.data_vencimento) {
+          alert('Informe a Data de Vencimento.');
+          return;
+      }
+      setIsCreatingReceivable(true);
+      try {
+          await contaAzulService.createReceivable(contaAzulFormData);
+          alert('Conta a Receber criada com sucesso no Conta Azul!');
+          setContaAzulConfirmDeal(null);
+      } catch (err: any) {
+          alert(`Erro ao criar Conta a Receber: ${err.message}`);
+      } finally {
+          setIsCreatingReceivable(false);
       }
   };
 
@@ -1103,6 +1148,91 @@ export const CrmBoard: React.FC = () => {
                       <button onClick={handleSaveTeam} disabled={isSavingTeam || !teamName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg font-bold text-sm shadow-lg shadow-teal-600/20 flex items-center gap-2 transition-all">
                           {isSavingTeam ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                           Salvar Equipe
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- CONTA AZUL CONFIRMATION MODAL --- */}
+      {contaAzulConfirmDeal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-50 shrink-0">
+                      <h3 className="text-lg font-bold text-green-800 flex items-center gap-2">
+                          <DollarSign size={20} className="text-green-600" />
+                          Lançar no Conta Azul — Contas a Receber
+                      </h3>
+                      <button onClick={() => setContaAzulConfirmDeal(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors"><X size={20}/></button>
+                  </div>
+
+                  <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                      <div className="bg-green-50 border border-green-100 rounded-xl p-3 text-xs text-green-700 font-medium">
+                          Negócio <strong>#{contaAzulConfirmDeal.deal_number || contaAzulConfirmDeal.dealNumber}</strong> — {contaAzulConfirmDeal.title || contaAzulConfirmDeal.contact_name || 'Sem título'}. Confira os dados abaixo antes de lançar.
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="md:col-span-2">
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição *</label>
+                              <input type="text" value={contaAzulFormData.descricao} onChange={e => setContaAzulFormData(f => ({ ...f, descricao: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                          </div>
+
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor (R$) *</label>
+                              <input type="number" step="0.01" value={contaAzulFormData.valor || ''} onChange={e => setContaAzulFormData(f => ({ ...f, valor: parseFloat(e.target.value) || 0 }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                          </div>
+
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Parcelas</label>
+                              <input type="number" min={1} value={contaAzulFormData.parcelas} onChange={e => setContaAzulFormData(f => ({ ...f, parcelas: parseInt(e.target.value) || 1 }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                          </div>
+
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data Competência</label>
+                              <input type="date" value={contaAzulFormData.data_competencia} onChange={e => setContaAzulFormData(f => ({ ...f, data_competencia: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                          </div>
+
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data Vencimento *</label>
+                              <input type="date" value={contaAzulFormData.data_vencimento} onChange={e => setContaAzulFormData(f => ({ ...f, data_vencimento: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                          </div>
+
+                          <div className="md:col-span-2">
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria *</label>
+                              <select value={contaAzulFormData.categoria_id} onChange={e => setContaAzulFormData(f => ({ ...f, categoria_id: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium bg-white focus:ring-2 focus:ring-green-500 outline-none">
+                                  <option value="">Selecione uma categoria...</option>
+                                  {contaAzulCategories.map(c => (
+                                      <option key={c.id} value={c.id_conta_azul}>{c.nome}</option>
+                                  ))}
+                              </select>
+                          </div>
+
+                          {contaAzulCostCenters.length > 0 && (
+                              <div className="md:col-span-2">
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Centro de Custo</label>
+                                  <select value={contaAzulFormData.centro_custo_id} onChange={e => setContaAzulFormData(f => ({ ...f, centro_custo_id: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium bg-white focus:ring-2 focus:ring-green-500 outline-none">
+                                      <option value="">Nenhum</option>
+                                      {contaAzulCostCenters.map(cc => (
+                                          <option key={cc.id} value={cc.id_conta_azul}>{cc.nome}</option>
+                                      ))}
+                                  </select>
+                              </div>
+                          )}
+
+                          <div className="md:col-span-2">
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Observações</label>
+                              <textarea value={contaAzulFormData.observacoes} onChange={e => setContaAzulFormData(f => ({ ...f, observacoes: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium h-20 resize-none focus:ring-2 focus:ring-green-500 outline-none" />
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                      <button onClick={() => setContaAzulConfirmDeal(null)} className="px-5 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-100 rounded-xl transition-colors">
+                          Cancelar
+                      </button>
+                      <button onClick={handleConfirmContaAzulReceivable} disabled={isCreatingReceivable} className="bg-green-600 hover:bg-green-700 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-green-600/20 flex items-center gap-2 transition-all disabled:opacity-50">
+                          {isCreatingReceivable ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                          Confirmar e Lançar
                       </button>
                   </div>
               </div>

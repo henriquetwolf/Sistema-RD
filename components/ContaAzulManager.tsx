@@ -59,6 +59,8 @@ export const ContaAzulManager: React.FC = () => {
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  const [syncProgress, setSyncProgress] = useState(0);
+  const [syncStep, setSyncStep] = useState('');
 
   // Loading states
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -201,22 +203,66 @@ export const ContaAzulManager: React.FC = () => {
 
   // ── Sync ────────────────────────────────────────────────
 
+  const syncSteps: { type: 'categories' | 'cost-centers' | 'accounts' | 'receivables' | 'payables'; label: string }[] = [
+    { type: 'categories', label: 'Categorias' },
+    { type: 'cost-centers', label: 'Centros de Custo' },
+    { type: 'accounts', label: 'Contas Financeiras' },
+    { type: 'receivables', label: 'Contas a Receber' },
+    { type: 'payables', label: 'Contas a Pagar' },
+  ];
+
   const handleSync = async (type: 'all' | 'receivables' | 'payables' | 'categories' | 'cost-centers' | 'accounts') => {
     setIsSyncing(true);
-    setSyncMessage(`Sincronizando ${type === 'all' ? 'todos os dados' : type}...`);
-    try {
-      const result = await contaAzulService.triggerSync(type);
-      setSyncMessage(`Sincronização concluída: ${result.sincronizados ?? 'OK'} registros`);
+    setSyncProgress(0);
+    setSyncStep('');
+
+    if (type === 'all') {
+      let totalSynced = 0;
+      let errors: string[] = [];
+      for (let i = 0; i < syncSteps.length; i++) {
+        const step = syncSteps[i];
+        setSyncProgress(Math.round((i / syncSteps.length) * 100));
+        setSyncStep(step.label);
+        setSyncMessage(`Sincronizando ${step.label}... (${i + 1}/${syncSteps.length})`);
+        try {
+          const result = await contaAzulService.triggerSync(step.type);
+          totalSynced += result.sincronizados ?? 0;
+        } catch (e: any) {
+          errors.push(`${step.label}: ${e.message}`);
+        }
+      }
+      setSyncProgress(100);
+      setSyncStep('');
+      if (errors.length > 0) {
+        setSyncMessage(`Concluído com ${errors.length} erro(s). ${totalSynced} registros sincronizados.`);
+        console.warn('Sync errors:', errors);
+      } else {
+        setSyncMessage(`Sincronização completa: ${totalSynced} registros sincronizados!`);
+      }
       await loadOverview();
+      loadAuxiliaries();
       if (activeTab === 'receivables') loadReceivables();
       if (activeTab === 'payables') loadPayables();
-      if (activeTab === 'accounts' || activeTab === 'categories') loadAuxiliaries();
-    } catch (e: any) {
-      setSyncMessage(`Erro: ${e.message}`);
-    } finally {
-      setIsSyncing(false);
-      setTimeout(() => setSyncMessage(''), 5000);
+    } else {
+      const stepLabel = syncSteps.find(s => s.type === type)?.label || type;
+      setSyncMessage(`Sincronizando ${stepLabel}...`);
+      setSyncProgress(50);
+      setSyncStep(stepLabel);
+      try {
+        const result = await contaAzulService.triggerSync(type);
+        setSyncProgress(100);
+        setSyncMessage(`${stepLabel}: ${result.sincronizados ?? 'OK'} registros sincronizados`);
+        await loadOverview();
+        if (type === 'receivables') loadReceivables();
+        else if (type === 'payables') loadPayables();
+        else loadAuxiliaries();
+      } catch (e: any) {
+        setSyncMessage(`Erro em ${stepLabel}: ${e.message}`);
+      }
     }
+
+    setIsSyncing(false);
+    setTimeout(() => { setSyncMessage(''); setSyncProgress(0); setSyncStep(''); }, 6000);
   };
 
   // ── Create ──────────────────────────────────────────────
@@ -314,16 +360,6 @@ export const ContaAzulManager: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {syncMessage && (
-            <div className={clsx(
-              "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border animate-in fade-in",
-              syncMessage.includes('Erro') ? "bg-red-50 text-red-600 border-red-100" : "bg-blue-50 text-blue-600 border-blue-100"
-            )}>
-              {isSyncing && <Loader2 size={12} className="animate-spin inline mr-1" />}
-              {syncMessage}
-            </div>
-          )}
-
           {authStatus?.connected && (
             <>
               <button
@@ -345,6 +381,46 @@ export const ContaAzulManager: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Sync Progress Bar */}
+      {(isSyncing || syncMessage) && (
+        <div className="mb-4 shrink-0 animate-in fade-in duration-300">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                {isSyncing && <Loader2 size={14} className="animate-spin text-blue-600" />}
+                <span className={clsx(
+                  "text-[11px] font-black uppercase tracking-wider",
+                  syncMessage.includes('Erro') || syncMessage.includes('erro') ? "text-red-600" : syncProgress === 100 ? "text-green-600" : "text-blue-600"
+                )}>
+                  {syncMessage}
+                </span>
+              </div>
+              {isSyncing && syncProgress > 0 && (
+                <span className="text-[11px] font-black text-slate-500">{syncProgress}%</span>
+              )}
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className={clsx(
+                  "h-full rounded-full transition-all duration-700 ease-out",
+                  syncMessage.includes('Erro') || syncMessage.includes('erro')
+                    ? "bg-gradient-to-r from-red-400 to-red-500"
+                    : syncProgress === 100
+                    ? "bg-gradient-to-r from-green-400 to-emerald-500"
+                    : "bg-gradient-to-r from-blue-400 to-indigo-500"
+                )}
+                style={{ width: `${syncProgress}%` }}
+              />
+            </div>
+            {isSyncing && syncStep && (
+              <p className="text-[10px] text-slate-400 font-bold mt-1.5 uppercase tracking-wider">
+                Etapa atual: {syncStep}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Sub-tabs */}
       <div className="flex bg-slate-100 p-1 rounded-2xl shadow-inner mb-6 shrink-0 overflow-x-auto">

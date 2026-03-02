@@ -31,20 +31,40 @@ async function edgeFetch(fn: string, path: string, options: RequestInit = {}): P
   const headers = await getAuthHeader();
   const url = `${EDGE_BASE}/${fn}/${path}`;
 
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-      ...(options.headers as Record<string, string> || {}),
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-  const json = await res.json();
-  if (!res.ok) {
-    throw new Error(json.error || `Edge function error: ${res.status}`);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+        ...(options.headers as Record<string, string> || {}),
+      },
+    });
+
+    const text = await res.text();
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`Resposta inesperada (${res.status}): ${text.substring(0, 200)}`);
+    }
+
+    if (!res.ok) {
+      throw new Error(json.error || `Edge function error: ${res.status}`);
+    }
+    return json;
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error('Timeout: a sincronização demorou mais de 2 minutos. Tente sincronizar cada tipo individualmente.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return json;
 }
 
 // ── Auth ────────────────────────────────────────────────────

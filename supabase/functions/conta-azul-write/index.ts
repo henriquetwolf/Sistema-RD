@@ -241,22 +241,62 @@ async function updateInstallment(req: Request): Promise<Response> {
 
 async function listProducts(): Promise<Response> {
   const all: any[] = [];
+
+  // ── Produtos (GET /v1/produtos) ──
   try {
-    const prodRes = await contaAzulFetch("/v1/produtos?tamanho_pagina=200");
-    if (prodRes.ok) {
+    let page = 1;
+    let hasMore = true;
+    while (hasMore) {
+      const prodRes = await contaAzulFetch(`/v1/produtos?pagina=${page}&tamanho_pagina=200&status=ATIVO`);
+      if (!prodRes.ok) {
+        const errText = await prodRes.text();
+        console.error("Erro ao buscar produtos:", prodRes.status, errText);
+        break;
+      }
       const body = await prodRes.json();
-      const items = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
-      for (const p of items) all.push({ id: String(p.id), nome: p.nome || p.descricao || "Produto", tipo: "PRODUTO", valor: p.preco_venda || p.valor || 0 });
+      const items = Array.isArray(body) ? body : body.items || body.itens || body.content || [];
+      console.log(`Produtos page ${page}: ${items.length} itens`);
+      for (const p of items) {
+        all.push({
+          id: String(p.id),
+          nome: p.nome || p.descricao || "Produto",
+          tipo: "PRODUTO",
+          valor: p.valor_venda || p.preco_venda || p.preco || p.valor || 0,
+        });
+      }
+      hasMore = items.length >= 200;
+      page++;
     }
   } catch (e) { console.error("Error fetching produtos:", e); }
+
+  // ── Serviços (GET /v1/servicos) ──
   try {
-    const servRes = await contaAzulFetch("/v1/servicos?tamanho_pagina=200");
-    if (servRes.ok) {
+    let page = 1;
+    let hasMore = true;
+    while (hasMore) {
+      const servRes = await contaAzulFetch(`/v1/servicos?pagina=${page}&tamanho_pagina=200`);
+      if (!servRes.ok) {
+        const errText = await servRes.text();
+        console.error("Erro ao buscar servicos:", servRes.status, errText);
+        break;
+      }
       const body = await servRes.json();
       const items = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
-      for (const s of items) all.push({ id: String(s.id), nome: s.nome || s.descricao || "Serviço", tipo: "SERVICO", valor: s.preco_venda || s.valor || 0 });
+      console.log(`Servicos page ${page}: ${items.length} itens`);
+      for (const s of items) {
+        all.push({
+          id: String(s.id),
+          nome: s.nome || s.descricao || "Serviço",
+          tipo: "SERVICO",
+          valor: s.preco || s.preco_venda || s.valor || 0,
+        });
+      }
+      hasMore = items.length >= 200;
+      page++;
     }
   } catch (e) { console.error("Error fetching servicos:", e); }
+
+  console.log(`listProducts total: ${all.length} (${all.filter(i => i.tipo === 'PRODUTO').length} produtos, ${all.filter(i => i.tipo === 'SERVICO').length} servicos)`);
   return jsonResponse({ success: true, items: all });
 }
 

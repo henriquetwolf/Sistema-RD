@@ -434,69 +434,76 @@ export const CrmBoard: React.FC = () => {
   };
 
   const triggerContaAzulReceivable = async (deal: any) => {
-      if (!deal.value || deal.value <= 0) return;
+      let cats: any[] = [];
+      let ccs: any[] = [];
+      let prods: any[] = [];
+      let mappingsData: any[] = [];
+      let matchedProductId = '';
+      let matchedCategoryId = '';
+
       try {
           const status = await contaAzulService.getAuthStatus();
-          if (!status.connected) return;
-
-          const [cats, ccs, prods, mappingsData] = await Promise.all([
-              contaAzulService.getCategories(),
-              contaAzulService.getCostCenters(),
-              contaAzulService.getProducts(),
-              appBackend.getContaAzulProductMappings(),
-          ]);
-          setContaAzulCategories(cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS'));
-          setContaAzulCostCenters(ccs);
-          setContaAzulProducts(prods);
-
-          const dealProductName = (deal.product_name || deal.productName || '').toLowerCase().trim();
-          let matchedProductId = '';
-          let matchedCategoryId = '';
-
-          const mapping = mappingsData.find((m: any) => m.itemName.toLowerCase().trim() === dealProductName);
-          setActiveMapping(mapping || null);
-
-          if (mapping) {
-              matchedCategoryId = mapping.contaAzulCategoryId || '';
-              if (mapping.splitMode === 'divided') {
-                  // For divided mode, auto-match both service and product IDs
-                  const serviceId = findContaAzulProductByName(mapping.contaAzulServiceName || '', prods);
-                  const productId = findContaAzulProductByName(mapping.contaAzulProductName || '', prods);
-                  // Store resolved IDs in the mapping object for use in confirmation
-                  mapping._resolvedServiceId = serviceId;
-                  mapping._resolvedProductId = productId;
-                  matchedProductId = serviceId || productId;
-              } else {
-                  const targetName = mapping.splitMode === 'all_product'
-                      ? mapping.contaAzulProductName : mapping.contaAzulServiceName;
-                  matchedProductId = findContaAzulProductByName(targetName || '', prods);
-              }
+          if (status.connected) {
+              const results = await Promise.allSettled([
+                  contaAzulService.getCategories(),
+                  contaAzulService.getCostCenters(),
+                  contaAzulService.getProducts(),
+                  appBackend.getContaAzulProductMappings(),
+              ]);
+              cats = results[0].status === 'fulfilled' ? results[0].value : [];
+              ccs = results[1].status === 'fulfilled' ? results[1].value : [];
+              prods = results[2].status === 'fulfilled' ? results[2].value : [];
+              mappingsData = results[3].status === 'fulfilled' ? results[3].value : [];
           }
-
-          if (!matchedProductId && dealProductName) {
-              matchedProductId = findContaAzulProductByName(dealProductName, prods);
-          }
-
-          const hoje = new Date().toISOString().split('T')[0];
-          setContaAzulFormData({
-              descricao: `[CRM #${deal.deal_number || ''}] ${deal.product_name || deal.company_name || deal.contact_name || 'Venda'}`,
-              valor: deal.value,
-              data_competencia: hoje,
-              data_vencimento: deal.first_due_date || hoje,
-              parcelas: deal.installments || 1,
-              categoria_id: matchedCategoryId,
-              centro_custo_id: '',
-              observacoes: `Negócio CRM: ${deal.title || ''} | Cliente: ${deal.company_name || deal.contact_name || ''} | CNPJ: ${deal.billing_cnpj || 'N/A'}`,
-              contato_nome: deal.company_name || deal.contact_name || '',
-              contato_cpf: deal.cpf || deal.billing_cnpj || '',
-              produto_id: matchedProductId,
-              tipo_pagamento: deal.payment_method || deal.paymentMethod || '',
-              deal_number: String(deal.deal_number || deal.dealNumber || ''),
-          });
-          setContaAzulConfirmDeal(deal);
       } catch (err) {
-          console.error('Erro ao preparar lançamento Conta Azul:', err);
+          console.error('Erro ao buscar dados do Conta Azul (modal será exibido mesmo assim):', err);
       }
+
+      setContaAzulCategories(cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS'));
+      setContaAzulCostCenters(ccs);
+      setContaAzulProducts(prods);
+
+      const dealProductName = (deal.product_name || deal.productName || '').toLowerCase().trim();
+
+      const mapping = mappingsData.find((m: any) => m.itemName?.toLowerCase().trim() === dealProductName);
+      setActiveMapping(mapping || null);
+
+      if (mapping) {
+          matchedCategoryId = mapping.contaAzulCategoryId || '';
+          if (mapping.splitMode === 'divided') {
+              const serviceId = findContaAzulProductByName(mapping.contaAzulServiceName || '', prods);
+              const productId = findContaAzulProductByName(mapping.contaAzulProductName || '', prods);
+              mapping._resolvedServiceId = serviceId;
+              mapping._resolvedProductId = productId;
+              matchedProductId = serviceId || productId;
+          } else {
+              const targetName = mapping.splitMode === 'all_product'
+                  ? mapping.contaAzulProductName : mapping.contaAzulServiceName;
+              matchedProductId = findContaAzulProductByName(targetName || '', prods);
+          }
+      }
+
+      if (!matchedProductId && dealProductName) {
+          matchedProductId = findContaAzulProductByName(dealProductName, prods);
+      }
+
+      const hoje = new Date().toISOString().split('T')[0];
+      setContaAzulFormData({
+          descricao: `[CRM #${deal.deal_number || ''}] ${deal.product_name || deal.company_name || deal.contact_name || 'Venda'}`,
+          valor: deal.value || 0,
+          data_competencia: hoje,
+          data_vencimento: deal.first_due_date || hoje,
+          parcelas: deal.installments || 1,
+          categoria_id: matchedCategoryId,
+          centro_custo_id: '',
+          observacoes: `Negócio CRM: ${deal.title || ''} | Cliente: ${deal.company_name || deal.contact_name || ''} | CNPJ: ${deal.billing_cnpj || 'N/A'}`,
+          contato_nome: deal.company_name || deal.contact_name || '',
+          contato_cpf: deal.cpf || deal.billing_cnpj || '',
+          produto_id: matchedProductId,
+          tipo_pagamento: deal.payment_method || deal.paymentMethod || '',
+          deal_number: String(deal.deal_number || deal.dealNumber || ''),
+      });
+      setContaAzulConfirmDeal(deal);
   };
 
   const handleConfirmContaAzulReceivable = async () => {
@@ -640,7 +647,7 @@ export const CrmBoard: React.FC = () => {
 
     if (!deal) return;
 
-    if (isLastStage(pipelineName, newStage) && deal.value > 0) {
+    if (isLastStage(pipelineName, newStage)) {
         setPendingCloseMove({ dealId, pipeline: pipelineName, targetStage: newStage, previousStage: currentStage });
         triggerContaAzulReceivable({ ...deal, stage: newStage, deal_number: deal.dealNumber, company_name: deal.companyName, contact_name: deal.contactName, product_name: deal.productName, payment_method: deal.paymentMethod, first_due_date: deal.firstDueDate, billing_cnpj: deal.billingCnpj });
         return;
@@ -679,7 +686,7 @@ export const CrmBoard: React.FC = () => {
     const currentDeal = (deals || []).find(d => d.id === draggedDealId);
     if (!currentDeal || (currentDeal.stage === targetStage && currentDeal.pipeline === pipelineName)) { setDraggedDealId(null); return; }
 
-    if (isLastStage(pipelineName, targetStage) && currentDeal.value > 0) {
+    if (isLastStage(pipelineName, targetStage)) {
         setPendingCloseMove({ dealId: draggedDealId, pipeline: pipelineName, targetStage, previousStage: currentDeal.stage });
         triggerContaAzulReceivable({ ...currentDeal, stage: targetStage, deal_number: currentDeal.dealNumber, company_name: currentDeal.companyName, contact_name: currentDeal.contactName, product_name: currentDeal.productName, payment_method: currentDeal.paymentMethod, first_due_date: currentDeal.firstDueDate, billing_cnpj: currentDeal.billingCnpj });
         setDraggedDealId(null);

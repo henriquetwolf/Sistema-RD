@@ -239,110 +239,74 @@ async function updateInstallment(req: Request): Promise<Response> {
   return jsonResponse({ success: true, data: await res.json() });
 }
 
+async function fetchAllPages(basePath: string, extraParams: string = ""): Promise<{ items: any[]; totalPages: number }> {
+  const all: any[] = [];
+  let page = 1;
+  let totalPages = 1;
+  const pageSize = 200;
+  for (let i = 0; i < 50; i++) {
+    const sep = basePath.includes("?") ? "&" : "?";
+    const url = `${basePath}${sep}pagina=${page}&tamanho_pagina=${pageSize}${extraParams}`;
+    const res = await contaAzulFetch(url);
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`fetchAllPages ${url}: ${res.status} - ${errText.substring(0, 200)}`);
+      break;
+    }
+    const body = await res.json();
+    let items: any[] = [];
+    if (Array.isArray(body)) {
+      items = body;
+    } else {
+      items = body.items || body.itens || body.content || body.data || [];
+    }
+    if (body.paginacao?.total_paginas) totalPages = body.paginacao.total_paginas;
+    else if (body.totalPages) totalPages = body.totalPages;
+    all.push(...items);
+    console.log(`fetchAllPages ${basePath} page ${page}/${totalPages}: ${items.length} itens (acumulado: ${all.length})`);
+    if (items.length < pageSize && page >= totalPages) break;
+    if (items.length === 0) break;
+    page++;
+  }
+  return { items: all, totalPages };
+}
+
 async function listProducts(): Promise<Response> {
   const all: any[] = [];
-  const debug: Record<string, any> = {};
 
-  // ── Produtos (GET /v1/produtos) ──
+  // ── Produtos (GET /v1/produtos) — todas as páginas ──
   try {
-    const prodRes = await contaAzulFetch("/v1/produtos?pagina=1&tamanho_pagina=200&status=ATIVO");
-    debug.produtos_status = prodRes.status;
-    if (!prodRes.ok) {
-      debug.produtos_error = await prodRes.text();
-      console.error("Erro produtos:", prodRes.status, debug.produtos_error);
-    } else {
-      const body = await prodRes.json();
-      debug.produtos_keys = Object.keys(body);
-      const items = Array.isArray(body) ? body : body.items || body.itens || body.content || [];
-      debug.produtos_count = items.length;
-      if (items.length > 0) debug.produtos_sample_keys = Object.keys(items[0]);
-      for (const p of items) {
-        all.push({
-          id: String(p.id),
-          nome: p.nome || p.descricao || "Produto",
-          tipo: "PRODUTO",
-          valor: p.valor_venda || p.preco_venda || p.preco || p.valor || 0,
-        });
-      }
+    const { items } = await fetchAllPages("/v1/produtos", "&status=ATIVO");
+    for (const p of items) {
+      all.push({
+        id: String(p.id),
+        nome: p.nome || p.descricao || "Produto",
+        tipo: "PRODUTO",
+        valor: p.valor_venda || p.preco_venda || p.preco || p.valor || 0,
+      });
     }
-  } catch (e: any) { debug.produtos_exception = e.message; console.error("Exception produtos:", e); }
+    console.log(`Produtos carregados: ${items.length}`);
+  } catch (e: any) { console.error("Exception produtos:", e); }
 
-  // ── Serviços — tenta múltiplos endpoints ──
-  const serviceEndpoints = [
-    "/v1/servicos?pagina=1&tamanho_pagina=200",
-    "/v1/servicos",
-    "/v1/servico/busca?pagina=1&tamanho_pagina=200",
-  ];
-
-  let servicesFound = false;
-  for (const endpoint of serviceEndpoints) {
-    if (servicesFound) break;
-    try {
-      console.log("Tentando endpoint servicos:", endpoint);
-      const servRes = await contaAzulFetch(endpoint);
-      debug[`svc_${endpoint}_status`] = servRes.status;
-
-      if (!servRes.ok) {
-        const errText = await servRes.text();
-        debug[`svc_${endpoint}_error`] = errText.substring(0, 300);
-        console.error(`Servicos ${endpoint}:`, servRes.status, errText.substring(0, 300));
-        continue;
-      }
-
-      const rawText = await servRes.text();
-      debug[`svc_${endpoint}_raw_preview`] = rawText.substring(0, 500);
-      console.log(`Servicos ${endpoint} raw preview:`, rawText.substring(0, 500));
-
-      let body: any;
-      try { body = JSON.parse(rawText); } catch { debug[`svc_${endpoint}_parse_error`] = "JSON parse failed"; continue; }
-
-      debug[`svc_${endpoint}_keys`] = Object.keys(body);
-
-      let items: any[] = [];
-      if (Array.isArray(body)) {
-        items = body;
-      } else if (body.itens && Array.isArray(body.itens)) {
-        items = body.itens;
-      } else if (body.items && Array.isArray(body.items)) {
-        items = body.items;
-      } else if (body.content && Array.isArray(body.content)) {
-        items = body.content;
-      } else if (body.data && Array.isArray(body.data)) {
-        items = body.data;
-      }
-
-      debug[`svc_${endpoint}_count`] = items.length;
-      if (items.length > 0) {
-        debug[`svc_${endpoint}_sample_keys`] = Object.keys(items[0]);
-        debug[`svc_${endpoint}_sample`] = JSON.stringify(items[0]).substring(0, 400);
-      }
-
-      for (const s of items) {
-        all.push({
-          id: String(s.id),
-          nome: s.nome || s.descricao || s.name || "Serviço",
-          tipo: "SERVICO",
-          valor: s.preco || s.preco_venda || s.valor || s.value || s.valor_venda || 0,
-        });
-      }
-
-      if (items.length > 0) {
-        servicesFound = true;
-        console.log(`Servicos encontrados via ${endpoint}: ${items.length}`);
-      }
-    } catch (e: any) {
-      debug[`svc_${endpoint}_exception`] = e.message;
-      console.error(`Exception servicos ${endpoint}:`, e.message);
+  // ── Serviços (GET /v1/servicos) — todas as páginas ──
+  try {
+    const { items } = await fetchAllPages("/v1/servicos");
+    for (const s of items) {
+      all.push({
+        id: String(s.id),
+        nome: s.nome || s.descricao || s.name || "Serviço",
+        tipo: "SERVICO",
+        valor: s.preco || s.preco_venda || s.valor || s.valor_venda || 0,
+      });
     }
-  }
+    console.log(`Servicos carregados: ${items.length}`);
+  } catch (e: any) { console.error("Exception servicos:", e); }
 
   const totalProd = all.filter(i => i.tipo === 'PRODUTO').length;
   const totalSvc = all.filter(i => i.tipo === 'SERVICO').length;
   console.log(`listProducts total: ${all.length} (${totalProd} produtos, ${totalSvc} servicos)`);
-  debug.total_produtos = totalProd;
-  debug.total_servicos = totalSvc;
 
-  return jsonResponse({ success: true, items: all, _debug: debug });
+  return jsonResponse({ success: true, items: all });
 }
 
 async function createSale(req: Request): Promise<Response> {

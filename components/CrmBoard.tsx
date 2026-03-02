@@ -1155,9 +1155,15 @@ export const CrmBoard: React.FC = () => {
       )}
 
       {/* --- CONTA AZUL CONFIRMATION MODAL --- */}
-      {contaAzulConfirmDeal && (
+      {contaAzulConfirmDeal && (() => {
+          const d = contaAzulConfirmDeal;
+          const pm = (d.payment_method || d.paymentMethod || '').toUpperCase();
+          const isBoleto = pm.includes('BOLETO');
+          const isCartao = pm.includes('CART') || pm.includes('CRÉD') || pm.includes('DÉBI') || pm.includes('CREDIT') || pm.includes('DEBIT');
+          const isAVista = !isBoleto && !isCartao;
+          return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[95vh]">
                   <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-50 shrink-0">
                       <h3 className="text-lg font-bold text-green-800 flex items-center gap-2">
                           <DollarSign size={20} className="text-green-600" />
@@ -1166,62 +1172,168 @@ export const CrmBoard: React.FC = () => {
                       <button onClick={() => setContaAzulConfirmDeal(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors"><X size={20}/></button>
                   </div>
 
-                  <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                  <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">
                       <div className="bg-green-50 border border-green-100 rounded-xl p-3 text-xs text-green-700 font-medium">
-                          Negócio <strong>#{contaAzulConfirmDeal.deal_number || contaAzulConfirmDeal.dealNumber}</strong> — {contaAzulConfirmDeal.title || contaAzulConfirmDeal.contact_name || 'Sem título'}. Confira os dados abaixo antes de lançar.
+                          Negócio <strong>#{d.deal_number || d.dealNumber}</strong> — {d.title || d.contact_name || 'Sem título'}. Confira os dados abaixo antes de lançar.
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="md:col-span-2">
-                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição *</label>
-                              <input type="text" value={contaAzulFormData.descricao} onChange={e => setContaAzulFormData(f => ({ ...f, descricao: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
-                          </div>
-
-                          <div>
-                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor (R$) *</label>
-                              <input type="number" step="0.01" value={contaAzulFormData.valor || ''} onChange={e => setContaAzulFormData(f => ({ ...f, valor: parseFloat(e.target.value) || 0 }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
-                          </div>
-
-                          <div>
-                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Parcelas</label>
-                              <input type="number" min={1} value={contaAzulFormData.parcelas} onChange={e => setContaAzulFormData(f => ({ ...f, parcelas: parseInt(e.target.value) || 1 }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
-                          </div>
-
-                          <div>
-                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data Competência</label>
-                              <input type="date" value={contaAzulFormData.data_competencia} onChange={e => setContaAzulFormData(f => ({ ...f, data_competencia: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
-                          </div>
-
-                          <div>
-                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data Vencimento *</label>
-                              <input type="date" value={contaAzulFormData.data_vencimento} onChange={e => setContaAzulFormData(f => ({ ...f, data_vencimento: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
-                          </div>
-
-                          <div className="md:col-span-2">
-                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria *</label>
-                              <select value={contaAzulFormData.categoria_id} onChange={e => setContaAzulFormData(f => ({ ...f, categoria_id: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium bg-white focus:ring-2 focus:ring-green-500 outline-none">
-                                  <option value="">Selecione uma categoria...</option>
-                                  {contaAzulCategories.map(c => (
-                                      <option key={c.id} value={c.id_conta_azul}>{c.nome}</option>
-                                  ))}
-                              </select>
-                          </div>
-
-                          {contaAzulCostCenters.length > 0 && (
+                      {/* DADOS DO CLIENTE */}
+                      <div className="border border-slate-200 rounded-xl p-4 space-y-3">
+                          <h4 className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5"><User size={14}/> Dados do Cliente</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Nome Completo</span>
+                                  <span className="text-sm font-semibold text-slate-800">{d.contact_name || d.contactName || '—'}</span>
+                              </div>
+                              <div>
+                                  <span className="block text-[10px] font-bold text-slate-400 uppercase">CPF / CNPJ</span>
+                                  <span className="text-sm font-semibold text-slate-800">{d.cpf || d.billing_cnpj || d.billingCnpj || '—'}</span>
+                              </div>
+                              <div>
+                                  <span className="block text-[10px] font-bold text-slate-400 uppercase">E-mail</span>
+                                  <span className="text-sm font-semibold text-slate-800">{d.email || '—'}</span>
+                              </div>
+                              <div>
+                                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Telefone</span>
+                                  <span className="text-sm font-semibold text-slate-800">{d.phone || '—'}</span>
+                              </div>
                               <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Centro de Custo</label>
-                                  <select value={contaAzulFormData.centro_custo_id} onChange={e => setContaAzulFormData(f => ({ ...f, centro_custo_id: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium bg-white focus:ring-2 focus:ring-green-500 outline-none">
-                                      <option value="">Nenhum</option>
-                                      {contaAzulCostCenters.map(cc => (
-                                          <option key={cc.id} value={cc.id_conta_azul}>{cc.nome}</option>
-                                      ))}
-                                  </select>
+                                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Endereço</span>
+                                  <span className="text-sm font-semibold text-slate-800">
+                                      {[d.address || d.addressName, d.address_number || d.addressNumber].filter(Boolean).join(', ') || '—'}
+                                      {(d.zip_code || d.zipCode) ? ` — CEP: ${d.zip_code || d.zipCode}` : ''}
+                                  </span>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* CONDIÇÕES DA VENDA */}
+                      <div className="border border-blue-200 rounded-xl p-4 space-y-3 bg-blue-50/30">
+                          <h4 className="text-xs font-black text-blue-700 uppercase tracking-wider flex items-center gap-1.5"><CreditCard size={14}/> Condições da Venda</h4>
+                          <div className="flex items-center gap-2 mb-2">
+                              <span className={clsx("px-3 py-1 rounded-lg text-[10px] font-black uppercase", isAVista ? "bg-green-100 text-green-700" : isCartao ? "bg-purple-100 text-purple-700" : "bg-orange-100 text-orange-700")}>
+                                  {isBoleto ? 'Boleto' : isCartao ? 'Cartão' : 'À Vista'}
+                              </span>
+                              <span className="text-sm font-bold text-slate-700">{d.payment_method || d.paymentMethod || 'Não informado'}</span>
+                          </div>
+
+                          {isAVista && (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div>
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Valor Total</span>
+                                      <span className="text-lg font-black text-green-700">R$ {(d.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div>
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Link do Comprovante</span>
+                                      {(d.receipt_link || d.receiptLink) ? (
+                                          <a href={d.receipt_link || d.receiptLink} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-blue-600 underline break-all">{d.receipt_link || d.receiptLink}</a>
+                                      ) : <span className="text-sm text-slate-400">Não informado</span>}
+                                  </div>
                               </div>
                           )}
 
-                          <div className="md:col-span-2">
-                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Observações</label>
-                              <textarea value={contaAzulFormData.observacoes} onChange={e => setContaAzulFormData(f => ({ ...f, observacoes: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium h-20 resize-none focus:ring-2 focus:ring-green-500 outline-none" />
+                          {isCartao && (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div>
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Valor Total</span>
+                                      <span className="text-lg font-black text-purple-700">R$ {(d.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div>
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Parcelamento</span>
+                                      <span className="text-sm font-bold text-slate-800">{d.installments || 1}x de R$ {((d.installment_value || d.installmentValue) || ((d.value || 0) / (d.installments || 1))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div>
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Código de Transação</span>
+                                      <span className="text-sm font-semibold text-slate-800">{d.transaction_code || d.transactionCode || '—'}</span>
+                                  </div>
+                                  <div>
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Link do Comprovante</span>
+                                      {(d.receipt_link || d.receiptLink) ? (
+                                          <a href={d.receipt_link || d.receiptLink} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-blue-600 underline break-all">{d.receipt_link || d.receiptLink}</a>
+                                      ) : <span className="text-sm text-slate-400">Não informado</span>}
+                                  </div>
+                              </div>
+                          )}
+
+                          {isBoleto && (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div>
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Valor de Entrada</span>
+                                      <span className="text-lg font-black text-orange-700">R$ {(d.entry_value || d.entryValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div>
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Parcelas</span>
+                                      <span className="text-sm font-bold text-slate-800">{d.installments || 1}x de R$ {((d.installment_value || d.installmentValue) || (((d.value || 0) - (d.entry_value || d.entryValue || 0)) / (d.installments || 1))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div>
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Vencimento 1º Boleto</span>
+                                      <span className="text-sm font-bold text-slate-800">{(d.first_due_date || d.firstDueDate) ? new Date(d.first_due_date || d.firstDueDate).toLocaleDateString('pt-BR') : '—'}</span>
+                                  </div>
+                                  <div>
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Link Comprovante Entrada</span>
+                                      {(d.receipt_link || d.receiptLink) ? (
+                                          <a href={d.receipt_link || d.receiptLink} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-blue-600 underline break-all">{d.receipt_link || d.receiptLink}</a>
+                                      ) : <span className="text-sm text-slate-400">Não informado</span>}
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+
+                      {/* DADOS PARA O CONTA AZUL */}
+                      <div className="border border-green-200 rounded-xl p-4 space-y-3 bg-green-50/30">
+                          <h4 className="text-xs font-black text-green-700 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={14}/> Dados do Lançamento — Conta Azul</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="md:col-span-2">
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição *</label>
+                                  <input type="text" value={contaAzulFormData.descricao} onChange={e => setContaAzulFormData(f => ({ ...f, descricao: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                              </div>
+
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor (R$) *</label>
+                                  <input type="number" step="0.01" value={contaAzulFormData.valor || ''} onChange={e => setContaAzulFormData(f => ({ ...f, valor: parseFloat(e.target.value) || 0 }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                              </div>
+
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Parcelas</label>
+                                  <input type="number" min={1} value={contaAzulFormData.parcelas} onChange={e => setContaAzulFormData(f => ({ ...f, parcelas: parseInt(e.target.value) || 1 }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                              </div>
+
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data Competência</label>
+                                  <input type="date" value={contaAzulFormData.data_competencia} onChange={e => setContaAzulFormData(f => ({ ...f, data_competencia: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                              </div>
+
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data Vencimento *</label>
+                                  <input type="date" value={contaAzulFormData.data_vencimento} onChange={e => setContaAzulFormData(f => ({ ...f, data_vencimento: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
+                              </div>
+
+                              <div className="md:col-span-2">
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria *</label>
+                                  <select value={contaAzulFormData.categoria_id} onChange={e => setContaAzulFormData(f => ({ ...f, categoria_id: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium bg-white focus:ring-2 focus:ring-green-500 outline-none">
+                                      <option value="">Selecione uma categoria...</option>
+                                      {contaAzulCategories.map(c => (
+                                          <option key={c.id} value={c.id_conta_azul}>{c.nome}</option>
+                                      ))}
+                                  </select>
+                              </div>
+
+                              {contaAzulCostCenters.length > 0 && (
+                                  <div className="md:col-span-2">
+                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Centro de Custo</label>
+                                      <select value={contaAzulFormData.centro_custo_id} onChange={e => setContaAzulFormData(f => ({ ...f, centro_custo_id: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium bg-white focus:ring-2 focus:ring-green-500 outline-none">
+                                          <option value="">Nenhum</option>
+                                          {contaAzulCostCenters.map(cc => (
+                                              <option key={cc.id} value={cc.id_conta_azul}>{cc.nome}</option>
+                                          ))}
+                                      </select>
+                                  </div>
+                              )}
+
+                              <div className="md:col-span-2">
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Observações</label>
+                                  <textarea value={contaAzulFormData.observacoes} onChange={e => setContaAzulFormData(f => ({ ...f, observacoes: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium h-20 resize-none focus:ring-2 focus:ring-green-500 outline-none" />
+                              </div>
                           </div>
                       </div>
                   </div>
@@ -1237,7 +1349,8 @@ export const CrmBoard: React.FC = () => {
                   </div>
               </div>
           </div>
-      )}
+          );
+      })()}
 
       {/* --- DEAL MODAL --- */}
       {showDealModal && (

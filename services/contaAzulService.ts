@@ -326,6 +326,10 @@ async function updateInstallment(payload: ContaAzulUpdateInstallmentPayload): Pr
 async function getProducts(): Promise<{ id: string; nome: string; tipo: string; valor: number }[]> {
   try {
     const result = await edgeFetch('conta-azul-write', 'products', { method: 'POST' });
+    if (result?._meta) {
+      console.log(`[ContaAzul] Produtos: ${result._meta.totalProd}, Serviços: ${result._meta.totalSvc}` +
+        (result._meta.errors ? ` | ERROS: ${result._meta.errors.join('; ')}` : ''));
+    }
     return result?.items || [];
   } catch {
     return [];

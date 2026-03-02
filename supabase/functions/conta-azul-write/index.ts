@@ -239,74 +239,81 @@ async function updateInstallment(req: Request): Promise<Response> {
   return jsonResponse({ success: true, data: await res.json() });
 }
 
-async function fetchAllPages(basePath: string, extraParams: string = ""): Promise<{ items: any[]; totalPages: number }> {
-  const all: any[] = [];
-  let page = 1;
-  let totalPages = 1;
-  const pageSize = 200;
-  for (let i = 0; i < 50; i++) {
-    const sep = basePath.includes("?") ? "&" : "?";
-    const url = `${basePath}${sep}pagina=${page}&tamanho_pagina=${pageSize}${extraParams}`;
-    const res = await contaAzulFetch(url);
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`fetchAllPages ${url}: ${res.status} - ${errText.substring(0, 200)}`);
-      break;
-    }
-    const body = await res.json();
-    let items: any[] = [];
-    if (Array.isArray(body)) {
-      items = body;
-    } else {
-      items = body.items || body.itens || body.content || body.data || [];
-    }
-    if (body.paginacao?.total_paginas) totalPages = body.paginacao.total_paginas;
-    else if (body.totalPages) totalPages = body.totalPages;
-    all.push(...items);
-    console.log(`fetchAllPages ${basePath} page ${page}/${totalPages}: ${items.length} itens (acumulado: ${all.length})`);
-    if (items.length < pageSize && page >= totalPages) break;
-    if (items.length === 0) break;
-    page++;
-  }
-  return { items: all, totalPages };
+function extractItems(body: any): any[] {
+  if (Array.isArray(body)) return body;
+  if (body.itens && Array.isArray(body.itens)) return body.itens;
+  if (body.items && Array.isArray(body.items)) return body.items;
+  if (body.content && Array.isArray(body.content)) return body.content;
+  if (body.data && Array.isArray(body.data)) return body.data;
+  return [];
 }
 
 async function listProducts(): Promise<Response> {
   const all: any[] = [];
+  const errors: string[] = [];
 
-  // ── Produtos (GET /v1/produtos) — todas as páginas ──
+  // ── Produtos (GET /v1/produtos) — com paginação ──
   try {
-    const { items } = await fetchAllPages("/v1/produtos", "&status=ATIVO");
-    for (const p of items) {
-      all.push({
-        id: String(p.id),
-        nome: p.nome || p.descricao || "Produto",
-        tipo: "PRODUTO",
-        valor: p.valor_venda || p.preco_venda || p.preco || p.valor || 0,
-      });
+    let page = 1;
+    for (let i = 0; i < 20; i++) {
+      const res = await contaAzulFetch(`/v1/produtos?pagina=${page}&tamanho_pagina=200&status=ATIVO`);
+      if (!res.ok) { errors.push(`produtos p${page}: ${res.status}`); break; }
+      const body = await res.json();
+      const items = extractItems(body);
+      for (const p of items) {
+        all.push({ id: String(p.id), nome: p.nome || p.descricao || "Produto", tipo: "PRODUTO", valor: p.valor_venda || p.preco_venda || p.preco || p.valor || 0 });
+      }
+      const totalPg = body.paginacao?.total_paginas || body.totalPages || 1;
+      console.log(`Produtos page ${page}/${totalPg}: ${items.length} itens`);
+      if (items.length < 200 || page >= totalPg) break;
+      page++;
     }
-    console.log(`Produtos carregados: ${items.length}`);
-  } catch (e: any) { console.error("Exception produtos:", e); }
+  } catch (e: any) { errors.push("produtos exception: " + e.message); console.error("Exception produtos:", e); }
 
-  // ── Serviços (GET /v1/servicos) — todas as páginas ──
-  try {
-    const { items } = await fetchAllPages("/v1/servicos");
-    for (const s of items) {
-      all.push({
-        id: String(s.id),
-        nome: s.nome || s.descricao || s.name || "Serviço",
-        tipo: "SERVICO",
-        valor: s.preco || s.preco_venda || s.valor || s.valor_venda || 0,
-      });
+  // ── Serviços (GET /v1/servicos) — com paginação e retry ──
+  let svcLoaded = false;
+  for (let attempt = 1; attempt <= 3 && !svcLoaded; attempt++) {
+    try {
+      if (attempt > 1) {
+        console.log(`Servicos: retry ${attempt}/3 (aguardando 500ms)...`);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      let page = 1;
+      let svcCount = 0;
+      for (let i = 0; i < 20; i++) {
+        const res = await contaAzulFetch(`/v1/servicos?pagina=${page}&tamanho_pagina=200`);
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          errors.push(`servicos p${page} attempt${attempt}: ${res.status} - ${errText.substring(0, 150)}`);
+          console.error(`Servicos page ${page} attempt ${attempt}: ${res.status} ${errText.substring(0, 150)}`);
+          break;
+        }
+        const body = await res.json();
+        const items = extractItems(body);
+        for (const s of items) {
+          all.push({ id: String(s.id), nome: s.nome || s.descricao || s.name || "Serviço", tipo: "SERVICO", valor: s.preco || s.preco_venda || s.valor || s.valor_venda || 0 });
+        }
+        svcCount += items.length;
+        const totalPg = body.paginacao?.total_paginas || body.totalPages || 1;
+        console.log(`Servicos page ${page}/${totalPg} attempt ${attempt}: ${items.length} itens`);
+        if (items.length < 200 || page >= totalPg) break;
+        page++;
+      }
+      if (svcCount > 0) {
+        svcLoaded = true;
+        console.log(`Servicos carregados: ${svcCount} (attempt ${attempt})`);
+      }
+    } catch (e: any) {
+      errors.push(`servicos attempt${attempt} exception: ${e.message}`);
+      console.error(`Exception servicos attempt ${attempt}:`, e);
     }
-    console.log(`Servicos carregados: ${items.length}`);
-  } catch (e: any) { console.error("Exception servicos:", e); }
+  }
 
   const totalProd = all.filter(i => i.tipo === 'PRODUTO').length;
   const totalSvc = all.filter(i => i.tipo === 'SERVICO').length;
-  console.log(`listProducts total: ${all.length} (${totalProd} produtos, ${totalSvc} servicos)`);
+  console.log(`listProducts FINAL: ${all.length} total (${totalProd} produtos, ${totalSvc} servicos)${errors.length ? ' | errors: ' + errors.join('; ') : ''}`);
 
-  return jsonResponse({ success: true, items: all });
+  return jsonResponse({ success: true, items: all, _meta: { totalProd, totalSvc, errors: errors.length ? errors : undefined } });
 }
 
 async function createSale(req: Request): Promise<Response> {

@@ -419,6 +419,18 @@ export const CrmBoard: React.FC = () => {
           setContaAzulCostCenters(ccs);
           setContaAzulProducts(prods);
 
+          const dealProductName = (deal.product_name || deal.productName || '').toLowerCase().trim();
+          let matchedProductId = '';
+          if (dealProductName && prods.length > 0) {
+              const exact = prods.find((p: any) => p.nome.toLowerCase().trim() === dealProductName);
+              if (exact) {
+                  matchedProductId = exact.id;
+              } else {
+                  const partial = prods.find((p: any) => p.nome.toLowerCase().includes(dealProductName) || dealProductName.includes(p.nome.toLowerCase()));
+                  if (partial) matchedProductId = partial.id;
+              }
+          }
+
           const hoje = new Date().toISOString().split('T')[0];
           setContaAzulFormData({
               descricao: `[CRM #${deal.deal_number || ''}] ${deal.product_name || deal.company_name || deal.contact_name || 'Venda'}`,
@@ -431,7 +443,7 @@ export const CrmBoard: React.FC = () => {
               observacoes: `Negócio CRM: ${deal.title || ''} | Cliente: ${deal.company_name || deal.contact_name || ''} | CNPJ: ${deal.billing_cnpj || 'N/A'}`,
               contato_nome: deal.company_name || deal.contact_name || '',
               contato_cpf: deal.cpf || deal.billing_cnpj || '',
-              produto_id: '',
+              produto_id: matchedProductId,
               tipo_pagamento: deal.payment_method || deal.paymentMethod || '',
               deal_number: String(deal.deal_number || deal.dealNumber || ''),
           });

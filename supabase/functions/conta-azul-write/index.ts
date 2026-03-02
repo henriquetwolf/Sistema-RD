@@ -55,27 +55,35 @@ Deno.serve(async (req) => {
 
 async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<string | null> {
   if (!nome && !cpfCnpj) return null;
+  const cleanDoc = (cpfCnpj || '').replace(/\D/g, '');
   try {
-    const searchTerm = cpfCnpj ? cpfCnpj.replace(/\D/g, '') : nome;
-    const searchRes = await contaAzulFetch("/v1/contatos?busca=" + encodeURIComponent(searchTerm));
+    const searchTerm = cleanDoc.length >= 11 ? cleanDoc : nome;
+    const searchRes = await contaAzulFetch("/v1/pessoas?busca=" + encodeURIComponent(searchTerm));
     if (searchRes.ok) {
-      const contacts = await searchRes.json();
-      const list = Array.isArray(contacts) ? contacts : contacts.itens || contacts.items || [];
+      const body = await searchRes.json();
+      const list = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
       if (list.length > 0) return String(list[0].id);
     }
-  } catch (e) { console.error("Error searching contact:", e); }
+  } catch (e) { console.error("Error searching pessoa:", e); }
   try {
-    const newContact: any = { nome: nome || "Cliente" };
-    const cleanDoc = (cpfCnpj || '').replace(/\D/g, '');
-    if (cleanDoc.length === 11) newContact.cpf = cleanDoc;
-    else if (cleanDoc.length === 14) newContact.cnpj = cleanDoc;
-    const createRes = await contaAzulFetch("/v1/contatos", { method: "POST", body: JSON.stringify(newContact) });
+    const isJuridica = cleanDoc.length === 14;
+    const newPessoa: any = {
+      nome: nome || "Cliente",
+      tipo_pessoa: isJuridica ? "Jurídica" : "Física",
+      perfis: [{ tipo_perfil: "Cliente" }],
+      ativo: true,
+    };
+    if (cleanDoc.length === 11) newPessoa.cpf = cleanDoc;
+    else if (cleanDoc.length === 14) newPessoa.cnpj = cleanDoc;
+    console.log("Creating pessoa:", JSON.stringify(newPessoa));
+    const createRes = await contaAzulFetch("/v1/pessoas", { method: "POST", body: JSON.stringify(newPessoa) });
     if (createRes.ok) {
       const created = await createRes.json();
       return String(created.id);
     }
-    console.error("Failed to create contact:", await createRes.text());
-  } catch (e) { console.error("Error creating contact:", e); }
+    const errText = await createRes.text();
+    console.error("Failed to create pessoa:", createRes.status, errText);
+  } catch (e) { console.error("Error creating pessoa:", e); }
   return null;
 }
 

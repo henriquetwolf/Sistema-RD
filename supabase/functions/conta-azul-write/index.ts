@@ -46,10 +46,38 @@ Deno.serve(async (req) => {
       case "receivable": return await createReceivable(req);
       case "payable": return await createPayable(req);
       case "installment": return await updateInstallment(req);
+      case "sale": return await createSale(req);
+      case "products": return await listProducts();
       default: return errorResponse("Acao desconhecida: " + action, 404);
     }
   } catch (err: any) { console.error("conta-azul-write error:", err); return errorResponse(err.message || "Erro interno", 500); }
 });
+
+async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<string | null> {
+  if (!nome && !cpfCnpj) return null;
+  try {
+    const searchTerm = cpfCnpj ? cpfCnpj.replace(/\D/g, '') : nome;
+    const searchRes = await contaAzulFetch("/v1/contatos?busca=" + encodeURIComponent(searchTerm));
+    if (searchRes.ok) {
+      const contacts = await searchRes.json();
+      const list = Array.isArray(contacts) ? contacts : contacts.itens || contacts.items || [];
+      if (list.length > 0) return String(list[0].id);
+    }
+  } catch (e) { console.error("Error searching contact:", e); }
+  try {
+    const newContact: any = { nome: nome || "Cliente" };
+    const cleanDoc = (cpfCnpj || '').replace(/\D/g, '');
+    if (cleanDoc.length === 11) newContact.cpf = cleanDoc;
+    else if (cleanDoc.length === 14) newContact.cnpj = cleanDoc;
+    const createRes = await contaAzulFetch("/v1/contatos", { method: "POST", body: JSON.stringify(newContact) });
+    if (createRes.ok) {
+      const created = await createRes.json();
+      return String(created.id);
+    }
+    console.error("Failed to create contact:", await createRes.text());
+  } catch (e) { console.error("Error creating contact:", e); }
+  return null;
+}
 
 async function createReceivable(req: Request): Promise<Response> {
   const body = await req.json();
@@ -62,6 +90,11 @@ async function createReceivable(req: Request): Promise<Response> {
 
   if (!valor) return errorResponse("Valor é obrigatório e deve ser maior que zero.");
   if (!body.categoria_id) return errorResponse("Categoria é obrigatória para criar um lançamento.");
+
+  let contatoId = body.contato_id || null;
+  if (!contatoId && (body.contato_nome || body.contato_cpf)) {
+    contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf);
+  }
 
   const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
   const parcelas = Array.from({ length: numParcelas }, (_, i) => {
@@ -91,7 +124,7 @@ async function createReceivable(req: Request): Promise<Response> {
     rateio: [ratItem],
   };
   if (body.conta_financeira_id) payload.conta_financeira = body.conta_financeira_id;
-  if (body.contato_id) payload.contato = body.contato_id;
+  if (contatoId) payload.contato = contatoId;
 
   console.log("CREATE RECEIVABLE payload:", JSON.stringify(payload));
   const res = await contaAzulFetch("/v1/financeiro/eventos-financeiros/contas-a-receber", { method: "POST", body: JSON.stringify(payload) });
@@ -111,6 +144,11 @@ async function createPayable(req: Request): Promise<Response> {
   if (!valor) return errorResponse("Valor é obrigatório e deve ser maior que zero.");
   if (!body.categoria_id) return errorResponse("Categoria é obrigatória para criar um lançamento.");
 
+  let contatoId = body.contato_id || null;
+  if (!contatoId && (body.contato_nome || body.contato_cpf)) {
+    contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf);
+  }
+
   const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
   const parcelas = Array.from({ length: numParcelas }, (_, i) => {
     const d = new Date(dataVencimento);
@@ -139,7 +177,7 @@ async function createPayable(req: Request): Promise<Response> {
     rateio: [ratItem],
   };
   if (body.conta_financeira_id) payload.conta_financeira = body.conta_financeira_id;
-  if (body.contato_id) payload.contato = body.contato_id;
+  if (contatoId) payload.contato = contatoId;
 
   console.log("CREATE PAYABLE payload:", JSON.stringify(payload));
   const res = await contaAzulFetch("/v1/financeiro/eventos-financeiros/contas-a-pagar", { method: "POST", body: JSON.stringify(payload) });
@@ -159,4 +197,92 @@ async function updateInstallment(req: Request): Promise<Response> {
   const res = await contaAzulFetch("/v1/financeiro/eventos-financeiros/parcelas/" + installmentId, { method: "PATCH", body: JSON.stringify(payload) });
   if (!res.ok) { const e = await res.text(); return errorResponse("Erro ao atualizar parcela: " + res.status + " - " + e, res.status); }
   return jsonResponse({ success: true, data: await res.json() });
+}
+
+async function listProducts(): Promise<Response> {
+  const all: any[] = [];
+  try {
+    const prodRes = await contaAzulFetch("/v1/produtos?tamanho_pagina=200");
+    if (prodRes.ok) {
+      const body = await prodRes.json();
+      const items = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
+      for (const p of items) all.push({ id: String(p.id), nome: p.nome || p.descricao || "Produto", tipo: "PRODUTO", valor: p.preco_venda || p.valor || 0 });
+    }
+  } catch (e) { console.error("Error fetching produtos:", e); }
+  try {
+    const servRes = await contaAzulFetch("/v1/servicos?tamanho_pagina=200");
+    if (servRes.ok) {
+      const body = await servRes.json();
+      const items = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
+      for (const s of items) all.push({ id: String(s.id), nome: s.nome || s.descricao || "Serviço", tipo: "SERVICO", valor: s.preco_venda || s.valor || 0 });
+    }
+  } catch (e) { console.error("Error fetching servicos:", e); }
+  return jsonResponse({ success: true, items: all });
+}
+
+async function createSale(req: Request): Promise<Response> {
+  const body = await req.json();
+  const valor = parseFloat(body.valor || body.value) || 0;
+  const numParcelas = parseInt(body.parcelas) || 1;
+  const dataVenda = body.data_venda || body.data_competencia || new Date().toISOString().split("T")[0];
+  const dataVencimento = body.data_vencimento || dataVenda;
+
+  if (!valor) return errorResponse("Valor é obrigatório e deve ser maior que zero.");
+  if (!body.produto_id) return errorResponse("Produto/Serviço é obrigatório para criar uma venda.");
+
+  let clienteId = body.contato_id || null;
+  if (!clienteId && (body.contato_nome || body.contato_cpf)) {
+    clienteId = await findOrCreateContact(body.contato_nome, body.contato_cpf);
+  }
+  if (!clienteId) return errorResponse("Cliente é obrigatório para criar uma venda.");
+
+  const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
+  let opcaoCondicao = "À vista";
+  if (numParcelas > 1) opcaoCondicao = numParcelas + "x";
+
+  const pm = (body.tipo_pagamento || body.payment_method || "").toUpperCase();
+  let tipoPagamento = "OUTRO";
+  if (pm.includes("BOLETO")) tipoPagamento = "BOLETO_BANCARIO";
+  else if (pm.includes("CRED")) tipoPagamento = "CARTAO_CREDITO";
+  else if (pm.includes("DEB")) tipoPagamento = "CARTAO_DEBITO";
+  else if (pm.includes("PIX")) tipoPagamento = "PIX_PAGAMENTO_INSTANTANEO";
+  else if (pm.includes("DINHEIRO") || pm.includes("VISTA")) tipoPagamento = "DINHEIRO";
+  else if (pm.includes("TRANSF")) tipoPagamento = "TRANSFERENCIA_BANCARIA";
+
+  const parcelas = Array.from({ length: numParcelas }, (_, i) => {
+    const d = new Date(dataVencimento);
+    d.setMonth(d.getMonth() + i);
+    return {
+      descricao: numParcelas > 1 ? `Parcela ${i + 1}/${numParcelas}` : "Pagamento único",
+      valor: valorParcela,
+      data_vencimento: d.toISOString().split("T")[0],
+    };
+  });
+
+  const payload: any = {
+    id_cliente: clienteId,
+    numero: parseInt(body.numero_venda || body.deal_number) || Date.now(),
+    situacao: "APROVADO",
+    data_venda: dataVenda,
+    itens: [{
+      id: body.produto_id,
+      valor,
+      quantidade: 1,
+      descricao: body.descricao || "Venda CRM",
+    }],
+    condicao_pagamento: {
+      opcao_condicao_pagamento: opcaoCondicao,
+      tipo_pagamento: tipoPagamento,
+      parcelas,
+    },
+    observacoes: body.observacoes || "",
+  };
+  if (body.categoria_id) payload.id_categoria = body.categoria_id;
+  if (body.centro_custo_id) payload.id_centro_custo = body.centro_custo_id;
+  if (body.transaction_code) payload.condicao_pagamento.nsu = body.transaction_code;
+
+  console.log("CREATE SALE payload:", JSON.stringify(payload));
+  const res = await contaAzulFetch("/v1/venda", { method: "POST", body: JSON.stringify(payload) });
+  if (!res.ok) { const e = await res.text(); return errorResponse("Erro ao criar venda: " + res.status + " - " + e, res.status); }
+  return jsonResponse({ success: true, data: await res.json() }, 201);
 }

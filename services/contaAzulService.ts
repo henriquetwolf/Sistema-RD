@@ -11,6 +11,7 @@ import type {
   ContaAzulCreateReceivablePayload,
   ContaAzulCreatePayablePayload,
   ContaAzulUpdateInstallmentPayload,
+  ContaAzulCreateSalePayload,
 } from '../types';
 
 const SUPABASE_URL = (import.meta as any).env?.VITE_APP_SUPABASE_URL || '';
@@ -322,6 +323,22 @@ async function updateInstallment(payload: ContaAzulUpdateInstallmentPayload): Pr
   });
 }
 
+async function getProducts(): Promise<{ id: string; nome: string; tipo: string; valor: number }[]> {
+  try {
+    const result = await edgeFetch('conta-azul-write', 'products', { method: 'POST' });
+    return result?.items || [];
+  } catch {
+    return [];
+  }
+}
+
+async function createSale(payload: ContaAzulCreateSalePayload): Promise<any> {
+  return edgeFetch('conta-azul-write', 'sale', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 // ── Export ───────────────────────────────────────────────────
 
 export const contaAzulService = {
@@ -341,4 +358,6 @@ export const contaAzulService = {
   createReceivable,
   createPayable,
   updateInstallment,
+  getProducts,
+  createSale,
 };

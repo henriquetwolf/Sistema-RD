@@ -181,9 +181,11 @@ export const CrmBoard: React.FC = () => {
   const [contaAzulFormData, setContaAzulFormData] = useState<{
     descricao: string; valor: number; data_competencia: string; data_vencimento: string;
     parcelas: number; categoria_id: string; centro_custo_id: string; observacoes: string;
-  }>({ descricao: '', valor: 0, data_competencia: '', data_vencimento: '', parcelas: 1, categoria_id: '', centro_custo_id: '', observacoes: '' });
+    contato_nome: string; contato_cpf: string; produto_id: string; tipo_pagamento: string; deal_number: string;
+  }>({ descricao: '', valor: 0, data_competencia: '', data_vencimento: '', parcelas: 1, categoria_id: '', centro_custo_id: '', observacoes: '', contato_nome: '', contato_cpf: '', produto_id: '', tipo_pagamento: '', deal_number: '' });
   const [contaAzulCategories, setContaAzulCategories] = useState<{ id: string; id_conta_azul: string; nome: string; tipo: string }[]>([]);
   const [contaAzulCostCenters, setContaAzulCostCenters] = useState<{ id: string; id_conta_azul: string; nome: string }[]>([]);
+  const [contaAzulProducts, setContaAzulProducts] = useState<{ id: string; nome: string; tipo: string; valor: number }[]>([]);
   const [isCreatingReceivable, setIsCreatingReceivable] = useState(false);
   const [isFetchingCep, setIsFetchingCep] = useState(false);
 
@@ -408,12 +410,14 @@ export const CrmBoard: React.FC = () => {
           const status = await contaAzulService.getAuthStatus();
           if (!status.connected) return;
 
-          const [cats, ccs] = await Promise.all([
+          const [cats, ccs, prods] = await Promise.all([
               contaAzulService.getCategories(),
               contaAzulService.getCostCenters(),
+              contaAzulService.getProducts(),
           ]);
           setContaAzulCategories(cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS'));
           setContaAzulCostCenters(ccs);
+          setContaAzulProducts(prods);
 
           const hoje = new Date().toISOString().split('T')[0];
           setContaAzulFormData({
@@ -425,6 +429,11 @@ export const CrmBoard: React.FC = () => {
               categoria_id: '',
               centro_custo_id: '',
               observacoes: `Negócio CRM: ${deal.title || ''} | Cliente: ${deal.company_name || deal.contact_name || ''} | CNPJ: ${deal.billing_cnpj || 'N/A'}`,
+              contato_nome: deal.company_name || deal.contact_name || '',
+              contato_cpf: deal.cpf || deal.billing_cnpj || '',
+              produto_id: '',
+              tipo_pagamento: deal.payment_method || deal.paymentMethod || '',
+              deal_number: String(deal.deal_number || deal.dealNumber || ''),
           });
           setContaAzulConfirmDeal(deal);
       } catch (err) {
@@ -433,8 +442,8 @@ export const CrmBoard: React.FC = () => {
   };
 
   const handleConfirmContaAzulReceivable = async () => {
-      if (!contaAzulFormData.categoria_id) {
-          alert('Selecione uma Categoria antes de confirmar.');
+      if (!contaAzulFormData.produto_id) {
+          alert('Selecione um Produto/Serviço antes de confirmar.');
           return;
       }
       if (!contaAzulFormData.valor || contaAzulFormData.valor <= 0) {
@@ -447,11 +456,25 @@ export const CrmBoard: React.FC = () => {
       }
       setIsCreatingReceivable(true);
       try {
-          await contaAzulService.createReceivable(contaAzulFormData);
-          alert('Conta a Receber criada com sucesso no Conta Azul!');
+          await contaAzulService.createSale({
+              descricao: contaAzulFormData.descricao,
+              valor: contaAzulFormData.valor,
+              data_venda: contaAzulFormData.data_competencia,
+              data_vencimento: contaAzulFormData.data_vencimento,
+              parcelas: contaAzulFormData.parcelas,
+              categoria_id: contaAzulFormData.categoria_id,
+              centro_custo_id: contaAzulFormData.centro_custo_id,
+              produto_id: contaAzulFormData.produto_id,
+              contato_nome: contaAzulFormData.contato_nome,
+              contato_cpf: contaAzulFormData.contato_cpf,
+              tipo_pagamento: contaAzulFormData.tipo_pagamento,
+              deal_number: contaAzulFormData.deal_number,
+              observacoes: contaAzulFormData.observacoes,
+          });
+          alert('Venda criada com sucesso no Conta Azul!');
           setContaAzulConfirmDeal(null);
       } catch (err: any) {
-          alert(`Erro ao criar Conta a Receber: ${err.message}`);
+          alert(`Erro ao criar Venda: ${err.message}`);
       } finally {
           setIsCreatingReceivable(false);
       }
@@ -1203,7 +1226,7 @@ export const CrmBoard: React.FC = () => {
                   <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-50 shrink-0">
                       <h3 className="text-lg font-bold text-green-800 flex items-center gap-2">
                           <DollarSign size={20} className="text-green-600" />
-                          Lançar no Conta Azul — Contas a Receber
+                          Lançar Venda no Conta Azul
                       </h3>
                       <button onClick={() => setContaAzulConfirmDeal(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors"><X size={20}/></button>
                   </div>
@@ -1321,10 +1344,21 @@ export const CrmBoard: React.FC = () => {
 
                       {/* DADOS PARA O CONTA AZUL */}
                       <div className="border border-green-200 rounded-xl p-4 space-y-3 bg-green-50/30">
-                          <h4 className="text-xs font-black text-green-700 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={14}/> Dados do Lançamento — Conta Azul</h4>
+                          <h4 className="text-xs font-black text-green-700 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={14}/> Dados da Venda — Conta Azul</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição *</label>
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Produto / Serviço *</label>
+                                  <select value={contaAzulFormData.produto_id} onChange={e => setContaAzulFormData(f => ({ ...f, produto_id: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium bg-white focus:ring-2 focus:ring-green-500 outline-none">
+                                      <option value="">Selecione um produto/serviço do Conta Azul...</option>
+                                      {contaAzulProducts.map(p => (
+                                          <option key={p.id} value={p.id}>[{p.tipo === 'SERVICO' ? 'Serviço' : 'Produto'}] {p.nome}</option>
+                                      ))}
+                                  </select>
+                                  {contaAzulProducts.length === 0 && <p className="text-[10px] text-amber-600 mt-1 font-medium">Nenhum produto/serviço encontrado no Conta Azul. Cadastre pelo menos um.</p>}
+                              </div>
+
+                              <div className="md:col-span-2">
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição</label>
                                   <input type="text" value={contaAzulFormData.descricao} onChange={e => setContaAzulFormData(f => ({ ...f, descricao: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none" />
                               </div>
 
@@ -1349,7 +1383,7 @@ export const CrmBoard: React.FC = () => {
                               </div>
 
                               <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria *</label>
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria</label>
                                   <select value={contaAzulFormData.categoria_id} onChange={e => setContaAzulFormData(f => ({ ...f, categoria_id: e.target.value }))} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium bg-white focus:ring-2 focus:ring-green-500 outline-none">
                                       <option value="">Selecione uma categoria...</option>
                                       {contaAzulCategories.map(c => (

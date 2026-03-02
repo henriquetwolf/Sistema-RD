@@ -811,6 +811,8 @@ export interface ContaAzulCreateReceivablePayload {
   centro_custo_id?: string;
   conta_financeira_id?: string;
   contato_id?: string;
+  contato_nome?: string;
+  contato_cpf?: string;
   observacoes?: string;
 }
 
@@ -824,6 +826,24 @@ export interface ContaAzulCreatePayablePayload {
   centro_custo_id?: string;
   conta_financeira_id?: string;
   contato_id?: string;
+  observacoes?: string;
+}
+
+export interface ContaAzulCreateSalePayload {
+  descricao: string;
+  valor: number;
+  data_venda?: string;
+  data_vencimento?: string;
+  parcelas?: number;
+  categoria_id?: string;
+  centro_custo_id?: string;
+  produto_id: string;
+  contato_id?: string;
+  contato_nome?: string;
+  contato_cpf?: string;
+  tipo_pagamento?: string;
+  deal_number?: string;
+  transaction_code?: string;
   observacoes?: string;
 }
 

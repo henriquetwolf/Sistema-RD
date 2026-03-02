@@ -494,23 +494,23 @@ export const CrmBoard: React.FC = () => {
       if (!mapping) {
           mapping = mappingsData.find((m: any) => m.itemName?.toLowerCase().trim() === dealProductName);
       }
-      setActiveMapping(mapping || null);
 
       if (mapping) {
           matchedCategoryId = mapping.contaAzulCategoryId || '';
           if (mapping.splitMode === 'divided') {
-              // Prioridade: IDs salvos diretamente no mapping; fallback: busca por nome
               const serviceId = mapping.contaAzulServiceId || findContaAzulProductByName(mapping.contaAzulServiceName || '', prods);
               const productId = mapping.contaAzulProductId || findContaAzulProductByName(mapping.contaAzulProductName || '', prods);
               mapping._resolvedServiceId = serviceId;
               mapping._resolvedProductId = productId;
               matchedProductId = serviceId || productId;
+              console.log('[CA] Divided mapping resolved — serviceId:', serviceId, 'productId:', productId);
           } else if (mapping.splitMode === 'all_product') {
               matchedProductId = mapping.contaAzulProductId || findContaAzulProductByName(mapping.contaAzulProductName || '', prods);
           } else {
               matchedProductId = mapping.contaAzulServiceId || findContaAzulProductByName(mapping.contaAzulServiceName || '', prods);
           }
       }
+      setActiveMapping(mapping ? { ...mapping } : null);
 
       if (!matchedProductId && dealProductName) {
           matchedProductId = findContaAzulProductByName(dealProductName, prods);
@@ -538,11 +538,26 @@ export const CrmBoard: React.FC = () => {
   const handleConfirmContaAzulReceivable = async () => {
       const isDivided = activeMapping?.splitMode === 'divided';
 
+      let resolvedSvcId = '';
+      let resolvedProdId = '';
+
       if (isDivided) {
-          const svcId = activeMapping?._resolvedServiceId || contaAzulFormData.produto_id;
-          const prodId = activeMapping?._resolvedProductId || '';
-          if (!svcId || !prodId) {
-              alert('Para lançamento dividido, é necessário que ambos os itens (Serviço e Produto) estejam vinculados no Conta Azul.\n\nVerifique os nomes configurados no cadastro de Produtos e Serviços.');
+          resolvedSvcId = activeMapping?._resolvedServiceId || activeMapping?.contaAzulServiceId || contaAzulFormData.produto_id || '';
+          resolvedProdId = activeMapping?._resolvedProductId || activeMapping?.contaAzulProductId || '';
+
+          if (!resolvedSvcId && activeMapping?.contaAzulServiceName) {
+              const match = contaAzulProducts.find(p => p.nome?.toLowerCase().trim() === activeMapping.contaAzulServiceName.toLowerCase().trim());
+              if (match) resolvedSvcId = match.id;
+          }
+          if (!resolvedProdId && activeMapping?.contaAzulProductName) {
+              const match = contaAzulProducts.find(p => p.nome?.toLowerCase().trim() === activeMapping.contaAzulProductName.toLowerCase().trim());
+              if (match) resolvedProdId = match.id;
+          }
+
+          console.log('[CA] handleConfirm — resolvedSvcId:', resolvedSvcId, 'resolvedProdId:', resolvedProdId);
+
+          if (!resolvedSvcId || !resolvedProdId) {
+              alert(`Para lançamento dividido, é necessário que ambos os itens (Serviço e Produto) estejam vinculados no Conta Azul.\n\nServiço ID: ${resolvedSvcId || '(vazio)'}\nProduto ID: ${resolvedProdId || '(vazio)'}\n\nVerifique os nomes/IDs configurados no cadastro de Produtos e Serviços.`);
               return;
           }
       } else if (!contaAzulFormData.produto_id) {
@@ -572,33 +587,34 @@ export const CrmBoard: React.FC = () => {
               deal_number: contaAzulFormData.deal_number,
           };
 
-          if (isDivided) {
+          if (isDivided && activeMapping) {
               const svcPct = activeMapping.servicePercentage / 100;
               const prodPct = activeMapping.productPercentage / 100;
               const totalValue = contaAzulFormData.valor;
               const serviceValue = Math.round(totalValue * svcPct * 100) / 100;
               const productValue = Math.round(totalValue * prodPct * 100) / 100;
-              const svcId = activeMapping._resolvedServiceId;
-              const prodId = activeMapping._resolvedProductId;
               const svcName = activeMapping.contaAzulServiceName || 'Serviço';
               const prodName = activeMapping.contaAzulProductName || 'Material Didático';
 
               const dealNum = contaAzulFormData.deal_number || '';
+
+              console.log('[CA] Sending service sale — produto_id:', resolvedSvcId, 'valor:', serviceValue);
               await contaAzulService.createSale({
                   ...basePayload,
                   deal_number: dealNum ? `${dealNum}01` : '',
                   descricao: `[CRM #${dealNum}] ${svcName} (${activeMapping.servicePercentage}%)`,
                   valor: serviceValue,
-                  produto_id: svcId,
+                  produto_id: resolvedSvcId,
                   observacoes: `${contaAzulFormData.observacoes} | SERVIÇO ${activeMapping.servicePercentage}% de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
               });
 
+              console.log('[CA] Sending product sale — produto_id:', resolvedProdId, 'valor:', productValue);
               await contaAzulService.createSale({
                   ...basePayload,
                   deal_number: dealNum ? `${dealNum}02` : '',
                   descricao: `[CRM #${dealNum}] ${prodName} (${activeMapping.productPercentage}%)`,
                   valor: productValue,
-                  produto_id: prodId,
+                  produto_id: resolvedProdId,
                   observacoes: `${contaAzulFormData.observacoes} | PRODUTO ${activeMapping.productPercentage}% de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
               });
 

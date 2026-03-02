@@ -55,6 +55,9 @@ interface Deal {
   zipCode?: string;
   address?: string;
   addressNumber?: string;
+  neighborhood?: string;
+  addressCity?: string;
+  addressState?: string;
   registrationData?: string;
   observation?: string;
   courseState?: string;
@@ -106,6 +109,13 @@ const formatCPF = (value: string = '') => {
         .replace(/(-\d{2})\d+?$/, '$1');
 };
 
+const formatCEP = (value: string = '') => {
+    return value
+        .replace(/\D/g, '')
+        .replace(/(\d{5})(\d)/, '$1-$2')
+        .replace(/(-\d{3})\d+?$/, '$1');
+};
+
 const handleDbError = (e: any) => {
     console.error("Erro de Banco de Dados:", e);
     const msg = e.message || "Erro desconhecido";
@@ -134,7 +144,7 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
     paymentMethod: '', status: 'warm', stage: '', nextTask: '', owner: '',
     source: '', campaign: '', entryValue: 0, installments: 1, installmentValue: 0,
     cpf: '', email: '', phone: '', firstDueDate: '', receiptLink: '', transactionCode: '',
-    zipCode: '', address: '', addressNumber: '',
+    zipCode: '', address: '', addressNumber: '', neighborhood: '', addressCity: '', addressState: '',
     registrationData: '', observation: '', courseState: '', courseCity: '', classMod1: '', classMod2: '',
     pipeline: 'Padrão',
     productType: '', 
@@ -175,6 +185,7 @@ export const CrmBoard: React.FC = () => {
   const [contaAzulCategories, setContaAzulCategories] = useState<{ id: string; id_conta_azul: string; nome: string; tipo: string }[]>([]);
   const [contaAzulCostCenters, setContaAzulCostCenters] = useState<{ id: string; id_conta_azul: string; nome: string }[]>([]);
   const [isCreatingReceivable, setIsCreatingReceivable] = useState(false);
+  const [isFetchingCep, setIsFetchingCep] = useState(false);
 
   // Tasks Form State
   const [newTaskDesc, setNewTaskDesc] = useState('');
@@ -252,7 +263,7 @@ export const CrmBoard: React.FC = () => {
                   source: d.source || '', campaign: d.campaign || '', entryValue: Number(d.entry_value || 0), installments: Number(d.installments || 1),
                   installmentValue: Number(d.installment_value || 0), productType: d.product_type || '', productName: d.product_name,
                   email: d.email || '', phone: d.phone || '', cpf: d.cpf || '', firstDueDate: d.first_due_date, receiptLink: d.receipt_link,
-                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number,
+                  transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number, neighborhood: d.neighborhood, addressCity: d.address_city, addressState: d.address_state,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
                   classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
                   billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
@@ -719,6 +730,31 @@ export const CrmBoard: React.FC = () => {
       }
   };
 
+  const fetchAddressByCep = async (rawCep: string) => {
+      const digits = rawCep.replace(/\D/g, '');
+      if (digits.length !== 8) return;
+      setIsFetchingCep(true);
+      try {
+          const resp = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+          const data = await resp.json();
+          if (data.erro) {
+              alert('CEP não encontrado.');
+              return;
+          }
+          setDealFormData(prev => ({
+              ...prev,
+              address: data.logradouro || prev.address,
+              neighborhood: data.bairro || prev.neighborhood,
+              addressCity: data.localidade || prev.addressCity,
+              addressState: data.uf || prev.addressState,
+          }));
+      } catch {
+          alert('Erro ao buscar CEP. Verifique sua conexão.');
+      } finally {
+          setIsFetchingCep(false);
+      }
+  };
+
   const handleSaveDeal = async () => {
       if (!dealFormData.companyName) { alert("Preencha o Nome Completo do Cliente."); return; }
       const payload = {
@@ -728,7 +764,7 @@ export const CrmBoard: React.FC = () => {
           installments: Number(dealFormData.installments) || 1, installment_value: Number(dealFormData.installmentValue || 0),
           product_type: dealFormData.productType || null, product_name: dealFormData.productName, email: dealFormData.email, phone: dealFormData.phone,
           cpf: dealFormData.cpf, first_due_date: dealFormData.firstDueDate || null, receipt_link: dealFormData.receiptLink, transaction_code: dealFormData.transactionCode,
-          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber, registration_data: dealFormData.registrationData,
+          zip_code: dealFormData.zipCode, address: dealFormData.address, address_number: dealFormData.addressNumber, neighborhood: dealFormData.neighborhood, address_city: dealFormData.addressCity, address_state: dealFormData.addressState, registration_data: dealFormData.registrationData,
           observation: dealFormData.observation, course_state: dealFormData.courseState, course_city: dealFormData.courseCity, 
           class_mod_1: dealFormData.classMod1, class_mod_2: dealFormData.classMod2, pipeline: dealFormData.pipeline, 
           tasks: dealFormData.tasks || [], billing_cnpj: dealFormData.billingCnpj, billing_company_name: dealFormData.billingCompanyName
@@ -1183,7 +1219,7 @@ export const CrmBoard: React.FC = () => {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               <div>
                                   <span className="block text-[10px] font-bold text-slate-400 uppercase">Nome Completo</span>
-                                  <span className="text-sm font-semibold text-slate-800">{d.contact_name || d.contactName || '—'}</span>
+                                  <span className="text-sm font-semibold text-slate-800">{d.company_name || d.companyName || d.contact_name || d.contactName || '—'}</span>
                               </div>
                               <div>
                                   <span className="block text-[10px] font-bold text-slate-400 uppercase">CPF / CNPJ</span>
@@ -1201,6 +1237,10 @@ export const CrmBoard: React.FC = () => {
                                   <span className="block text-[10px] font-bold text-slate-400 uppercase">Endereço</span>
                                   <span className="text-sm font-semibold text-slate-800">
                                       {[d.address || d.addressName, d.address_number || d.addressNumber].filter(Boolean).join(', ') || '—'}
+                                      {(d.neighborhood) ? ` — ${d.neighborhood}` : ''}
+                                  </span>
+                                  <span className="block text-xs text-slate-500">
+                                      {[d.address_city || d.addressCity, d.address_state || d.addressState].filter(Boolean).join('/') || ''}
                                       {(d.zip_code || d.zipCode) ? ` — CEP: ${d.zip_code || d.zipCode}` : ''}
                                   </span>
                               </div>
@@ -1385,6 +1425,50 @@ export const CrmBoard: React.FC = () => {
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">CPF</label>
                         <input type="text" className="w-full px-3 py-2 border rounded-lg text-sm" value={dealFormData.cpf} onChange={e => setDealFormData({...dealFormData, cpf: formatCPF(e.target.value)})} maxLength={14} />
+                    </div>
+
+                    <div className="lg:col-span-3 border-t pt-4">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><MapPin size={14}/> Endereço do Cliente</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">CEP</label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        className="w-full px-3 py-1.5 border rounded-lg text-sm pr-8"
+                                        placeholder="00000-000"
+                                        maxLength={9}
+                                        value={dealFormData.zipCode}
+                                        onChange={e => {
+                                            const formatted = formatCEP(e.target.value);
+                                            setDealFormData({...dealFormData, zipCode: formatted});
+                                            if (formatted.replace(/\D/g, '').length === 8) fetchAddressByCep(formatted);
+                                        }}
+                                    />
+                                    {isFetchingCep && <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-indigo-500" />}
+                                </div>
+                            </div>
+                            <div className="md:col-span-3">
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Rua / Logradouro</label>
+                                <input type="text" className="w-full px-3 py-1.5 border rounded-lg text-sm" value={dealFormData.address} onChange={e => setDealFormData({...dealFormData, address: e.target.value})} />
+                            </div>
+                            <div className="md:col-span-1">
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Número</label>
+                                <input type="text" className="w-full px-3 py-1.5 border rounded-lg text-sm" value={dealFormData.addressNumber} onChange={e => setDealFormData({...dealFormData, addressNumber: e.target.value})} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Bairro</label>
+                                <input type="text" className="w-full px-3 py-1.5 border rounded-lg text-sm" value={dealFormData.neighborhood} onChange={e => setDealFormData({...dealFormData, neighborhood: e.target.value})} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Cidade</label>
+                                <input type="text" className="w-full px-3 py-1.5 border rounded-lg text-sm" value={dealFormData.addressCity} onChange={e => setDealFormData({...dealFormData, addressCity: e.target.value})} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">UF</label>
+                                <input type="text" className="w-full px-3 py-1.5 border rounded-lg text-sm uppercase" maxLength={2} value={dealFormData.addressState} onChange={e => setDealFormData({...dealFormData, addressState: e.target.value.toUpperCase()})} />
+                            </div>
+                        </div>
                     </div>
 
                     <div className="lg:col-span-3 border-t pt-4">

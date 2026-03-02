@@ -308,6 +308,14 @@ export const ContaAzulManager: React.FC = () => {
       alert('Descrição e Valor são obrigatórios.');
       return;
     }
+    if (!createForm.categoria_id) {
+      alert('Categoria é obrigatória. Selecione uma categoria antes de criar.');
+      return;
+    }
+    if (!createForm.data_vencimento) {
+      alert('Data de Vencimento é obrigatória.');
+      return;
+    }
     setIsCreating(true);
     try {
       if (createType === 'receivable') {
@@ -946,13 +954,13 @@ export const ContaAzulManager: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data Vencimento</label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data Vencimento *</label>
                     <input type="date" value={createForm.data_vencimento || ''} onChange={e => setCreateForm(f => ({ ...f, data_vencimento: e.target.value }))} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" />
                   </div>
 
                   {categories.length > 0 && (
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria *</label>
                       <select value={createForm.categoria_id || ''} onChange={e => setCreateForm(f => ({ ...f, categoria_id: e.target.value }))} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold bg-white focus:ring-2 focus:ring-blue-500 outline-none">
                         <option value="">Selecione...</option>
                         {categories.filter(c => createType === 'receivable' ? c.tipo !== 'DESPESA' : c.tipo !== 'RECEITA').map(c => (

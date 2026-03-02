@@ -53,16 +53,43 @@ Deno.serve(async (req) => {
 
 async function createReceivable(req: Request): Promise<Response> {
   const body = await req.json();
-  const payload: any = { descricao: body.descricao || body.description, data_competencia: body.data_competencia || body.competenceDate || new Date().toISOString().split("T")[0], valor: body.valor || body.value };
-  if (body.categoria_id) payload.categoria = { id: body.categoria_id };
-  if (body.centro_custo_id) payload.centro_custo = { id: body.centro_custo_id };
+  const descricao = body.descricao || body.description || "Conta a Receber";
+  const valor = parseFloat(body.valor || body.value) || 0;
+  const dataCompetencia = body.data_competencia || body.competenceDate || new Date().toISOString().split("T")[0];
+  const dataVencimento = body.data_vencimento || dataCompetencia;
+  const numParcelas = parseInt(body.parcelas) || 1;
+
+  if (!valor) return errorResponse("Valor é obrigatório e deve ser maior que zero.");
+  if (!body.categoria_id) return errorResponse("Categoria é obrigatória para criar um lançamento.");
+
+  const parcelas = Array.from({ length: numParcelas }, (_, i) => {
+    const d = new Date(dataVencimento);
+    d.setMonth(d.getMonth() + i);
+    return {
+      numero: i + 1,
+      data_vencimento: d.toISOString().split("T")[0],
+      valor: Math.round((valor / numParcelas) * 100) / 100,
+      descricao: numParcelas > 1 ? `${descricao} - Parcela ${i + 1}/${numParcelas}` : descricao,
+    };
+  });
+
+  const rateio: any[] = [{ categoria: { id: body.categoria_id }, valor }];
+  if (body.centro_custo_id) rateio[0].centro_custo = { id: body.centro_custo_id };
+
+  const payload: any = {
+    descricao,
+    data_competencia: dataCompetencia,
+    condicao_pagamento: {
+      tipo: numParcelas > 1 ? "PARCELADO" : "A_VISTA",
+      parcelas,
+    },
+    rateio,
+  };
   if (body.conta_financeira_id) payload.conta_financeira = { id: body.conta_financeira_id };
   if (body.contato_id) payload.contato = { id: body.contato_id };
-  if (body.condicao_pagamento) { payload.condicao_pagamento = body.condicao_pagamento; }
-  else if (body.parcelas && body.data_vencimento) {
-    payload.condicao_pagamento = { tipo: body.parcelas > 1 ? "PARCELADO" : "A_VISTA", parcelas: Array.from({ length: body.parcelas }, (_, i) => { const d = new Date(body.data_vencimento); d.setMonth(d.getMonth() + i); return { numero: i + 1, data_vencimento: d.toISOString().split("T")[0], valor: Math.round((body.valor / body.parcelas) * 100) / 100 }; }) };
-  }
   if (body.observacoes) payload.observacao = body.observacoes;
+
+  console.log("CREATE RECEIVABLE payload:", JSON.stringify(payload));
   const res = await contaAzulFetch("/v1/financeiro/eventos-financeiros/contas-a-receber", { method: "POST", body: JSON.stringify(payload) });
   if (!res.ok) { const e = await res.text(); return errorResponse("Erro ao criar conta a receber: " + res.status + " - " + e, res.status); }
   return jsonResponse({ success: true, data: await res.json() }, 201);
@@ -70,16 +97,43 @@ async function createReceivable(req: Request): Promise<Response> {
 
 async function createPayable(req: Request): Promise<Response> {
   const body = await req.json();
-  const payload: any = { descricao: body.descricao || body.description, data_competencia: body.data_competencia || body.competenceDate || new Date().toISOString().split("T")[0], valor: body.valor || body.value };
-  if (body.categoria_id) payload.categoria = { id: body.categoria_id };
-  if (body.centro_custo_id) payload.centro_custo = { id: body.centro_custo_id };
+  const descricao = body.descricao || body.description || "Conta a Pagar";
+  const valor = parseFloat(body.valor || body.value) || 0;
+  const dataCompetencia = body.data_competencia || body.competenceDate || new Date().toISOString().split("T")[0];
+  const dataVencimento = body.data_vencimento || dataCompetencia;
+  const numParcelas = parseInt(body.parcelas) || 1;
+
+  if (!valor) return errorResponse("Valor é obrigatório e deve ser maior que zero.");
+  if (!body.categoria_id) return errorResponse("Categoria é obrigatória para criar um lançamento.");
+
+  const parcelas = Array.from({ length: numParcelas }, (_, i) => {
+    const d = new Date(dataVencimento);
+    d.setMonth(d.getMonth() + i);
+    return {
+      numero: i + 1,
+      data_vencimento: d.toISOString().split("T")[0],
+      valor: Math.round((valor / numParcelas) * 100) / 100,
+      descricao: numParcelas > 1 ? `${descricao} - Parcela ${i + 1}/${numParcelas}` : descricao,
+    };
+  });
+
+  const rateio: any[] = [{ categoria: { id: body.categoria_id }, valor }];
+  if (body.centro_custo_id) rateio[0].centro_custo = { id: body.centro_custo_id };
+
+  const payload: any = {
+    descricao,
+    data_competencia: dataCompetencia,
+    condicao_pagamento: {
+      tipo: numParcelas > 1 ? "PARCELADO" : "A_VISTA",
+      parcelas,
+    },
+    rateio,
+  };
   if (body.conta_financeira_id) payload.conta_financeira = { id: body.conta_financeira_id };
   if (body.contato_id) payload.contato = { id: body.contato_id };
-  if (body.condicao_pagamento) { payload.condicao_pagamento = body.condicao_pagamento; }
-  else if (body.parcelas && body.data_vencimento) {
-    payload.condicao_pagamento = { tipo: body.parcelas > 1 ? "PARCELADO" : "A_VISTA", parcelas: Array.from({ length: body.parcelas }, (_, i) => { const d = new Date(body.data_vencimento); d.setMonth(d.getMonth() + i); return { numero: i + 1, data_vencimento: d.toISOString().split("T")[0], valor: Math.round((body.valor / body.parcelas) * 100) / 100 }; }) };
-  }
   if (body.observacoes) payload.observacao = body.observacoes;
+
+  console.log("CREATE PAYABLE payload:", JSON.stringify(payload));
   const res = await contaAzulFetch("/v1/financeiro/eventos-financeiros/contas-a-pagar", { method: "POST", body: JSON.stringify(payload) });
   if (!res.ok) { const e = await res.text(); return errorResponse("Erro ao criar conta a pagar: " + res.status + " - " + e, res.status); }
   return jsonResponse({ success: true, data: await res.json() }, 201);

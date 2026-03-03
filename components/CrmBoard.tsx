@@ -46,6 +46,9 @@ interface Deal {
   billingCnpj?: string;
   billingCompanyName?: string;
 
+  contaAzulSaleNumberService?: string;
+  contaAzulSaleNumberProduct?: string;
+
   email?: string;
   phone?: string;
   cpf?: string;
@@ -150,6 +153,7 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
     productType: '', 
     productName: '',
     billingCnpj: '', billingCompanyName: '',
+    contaAzulSaleNumberService: '', contaAzulSaleNumberProduct: '',
     tasks: []
 };
 
@@ -306,7 +310,9 @@ export const CrmBoard: React.FC = () => {
                   transactionCode: d.transaction_code, zipCode: d.zip_code, address: d.address, addressNumber: d.address_number, neighborhood: d.neighborhood, addressCity: d.address_city, addressState: d.address_state,
                   registrationData: d.registration_data, observation: d.observation, courseState: d.course_state, courseCity: d.course_city,
                   classMod1: d.class_mod_1, classMod2: d.class_mod_2, pipeline: d.pipeline || 'Padrão',
-                  billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name, tasks: d.tasks || []
+                  billingCnpj: d.billing_cnpj, billingCompanyName: d.billing_company_name,
+                  contaAzulSaleNumberService: d.conta_azul_sale_number_service || '', contaAzulSaleNumberProduct: d.conta_azul_sale_number_product || '',
+                  tasks: d.tasks || []
               })));
           } else {
               setDeals([]);
@@ -587,6 +593,8 @@ export const CrmBoard: React.FC = () => {
               deal_number: contaAzulFormData.deal_number,
           };
 
+          const dealId = contaAzulConfirmDeal?.id || pendingCloseMove?.dealId || '';
+
           if (isDivided && activeMapping) {
               const svcPct = activeMapping.servicePercentage / 100;
               const prodPct = activeMapping.productPercentage / 100;
@@ -599,9 +607,8 @@ export const CrmBoard: React.FC = () => {
               const dealNum = contaAzulFormData.deal_number || '';
 
               console.log('[CA] Sending service sale — produto_id:', resolvedSvcId, 'valor:', serviceValue);
-              await contaAzulService.createSale({
+              const svcResult = await contaAzulService.createSale({
                   ...basePayload,
-                  deal_number: dealNum ? `${dealNum}01` : '',
                   descricao: `[CRM #${dealNum}] ${svcName} (${activeMapping.servicePercentage}%)`,
                   valor: serviceValue,
                   produto_id: resolvedSvcId,
@@ -609,22 +616,32 @@ export const CrmBoard: React.FC = () => {
               });
 
               console.log('[CA] Sending product sale — produto_id:', resolvedProdId, 'valor:', productValue);
-              await contaAzulService.createSale({
+              const prodResult = await contaAzulService.createSale({
                   ...basePayload,
-                  deal_number: dealNum ? `${dealNum}02` : '',
                   descricao: `[CRM #${dealNum}] ${prodName} (${activeMapping.productPercentage}%)`,
                   valor: productValue,
                   produto_id: resolvedProdId,
                   observacoes: `${contaAzulFormData.observacoes} | PRODUTO ${activeMapping.productPercentage}% de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
               });
 
+              const svcNum = svcResult?.numero_venda || svcResult?.data?.numero || '';
+              const prodNum = prodResult?.numero_venda || prodResult?.data?.numero || '';
+              console.log('[CA] Números de venda — serviço:', svcNum, 'produto:', prodNum);
+
+              if (dealId && (svcNum || prodNum)) {
+                  await appBackend.client.from('crm_deals').update({
+                      conta_azul_sale_number_service: String(svcNum),
+                      conta_azul_sale_number_product: String(prodNum),
+                  }).eq('id', dealId);
+              }
+
               if (pendingCloseMove) {
                   await executePendingMove(pendingCloseMove);
                   setPendingCloseMove(null);
               }
-              alert(`2 lançamentos criados no Conta Azul!\n\n• Serviço: R$ ${serviceValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${activeMapping.servicePercentage}%)\n• Produto: R$ ${productValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${activeMapping.productPercentage}%)\n\nO negócio foi movido para a etapa final.`);
+              alert(`2 lançamentos criados no Conta Azul!\n\n• Serviço: R$ ${serviceValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${activeMapping.servicePercentage}%) — Venda nº ${svcNum || '(auto)'}\n• Produto: R$ ${productValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${activeMapping.productPercentage}%) — Venda nº ${prodNum || '(auto)'}\n\nO negócio foi movido para a etapa final.`);
           } else {
-              await contaAzulService.createSale({
+              const saleResult = await contaAzulService.createSale({
                   ...basePayload,
                   descricao: contaAzulFormData.descricao,
                   valor: contaAzulFormData.valor,
@@ -632,11 +649,20 @@ export const CrmBoard: React.FC = () => {
                   observacoes: contaAzulFormData.observacoes,
               });
 
+              const saleNum = saleResult?.numero_venda || saleResult?.data?.numero || '';
+              console.log('[CA] Número de venda:', saleNum);
+
+              if (dealId && saleNum) {
+                  await appBackend.client.from('crm_deals').update({
+                      conta_azul_sale_number_service: String(saleNum),
+                  }).eq('id', dealId);
+              }
+
               if (pendingCloseMove) {
                   await executePendingMove(pendingCloseMove);
                   setPendingCloseMove(null);
               }
-              alert('Venda criada com sucesso no Conta Azul! O negócio foi movido para a etapa final.');
+              alert(`Venda criada com sucesso no Conta Azul! Venda nº ${saleNum || '(auto)'}\n\nO negócio foi movido para a etapa final.`);
           }
 
           setContaAzulConfirmDeal(null);
@@ -1200,8 +1226,11 @@ export const CrmBoard: React.FC = () => {
                                                                     </div>
                                                                 )}
                                                             </div>
-                                                            <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm" title={`Responsável: ${getOwnerName(deal.owner)}`}>
-                                                                {(getOwnerName(deal.owner) || '?').charAt(0)}
+                                                            <div className="flex items-center gap-1">
+                                                                {deal.contaAzulSaleNumberService && <span className="text-[8px] bg-green-100 text-green-700 px-1 rounded font-bold" title={`CA Serviço: ${deal.contaAzulSaleNumberService}${deal.contaAzulSaleNumberProduct ? ' | Produto: ' + deal.contaAzulSaleNumberProduct : ''}`}>CA</span>}
+                                                                <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold border border-white shadow-sm" title={`Responsável: ${getOwnerName(deal.owner)}`}>
+                                                                    {(getOwnerName(deal.owner) || '?').charAt(0)}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1866,6 +1895,28 @@ export const CrmBoard: React.FC = () => {
                                     Faturamento: {dealProductMapping.billingCompanyName} — CNPJ: {dealProductMapping.billingCnpj}
                                 </p>
                             )}
+                        </div>
+                    )}
+
+                    {(dealFormData.contaAzulSaleNumberService || dealFormData.contaAzulSaleNumberProduct) && (
+                        <div className="lg:col-span-3 rounded-xl border-2 border-indigo-300 bg-indigo-50/50 p-4">
+                            <h4 className="text-[10px] font-black text-indigo-700 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                <DollarSign size={12}/> Vendas Registradas no Conta Azul
+                            </h4>
+                            <div className="flex flex-wrap gap-4">
+                                {dealFormData.contaAzulSaleNumberService && (
+                                    <div className="bg-white rounded-lg px-4 py-2 border border-indigo-200">
+                                        <span className="block text-[9px] font-black text-blue-600 uppercase">Serviço</span>
+                                        <span className="block text-sm font-black text-indigo-800">Venda nº {dealFormData.contaAzulSaleNumberService}</span>
+                                    </div>
+                                )}
+                                {dealFormData.contaAzulSaleNumberProduct && (
+                                    <div className="bg-white rounded-lg px-4 py-2 border border-indigo-200">
+                                        <span className="block text-[9px] font-black text-purple-600 uppercase">Produto</span>
+                                        <span className="block text-sm font-black text-indigo-800">Venda nº {dealFormData.contaAzulSaleNumberProduct}</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 

@@ -340,27 +340,6 @@ async function debugServices(): Promise<Response> {
   return jsonResponse(results);
 }
 
-async function getNextSaleNumber(): Promise<number> {
-  const endpoints = ["/v1/vendas/proximo-numero", "/v1/venda/proximo-numero"];
-  for (const ep of endpoints) {
-    try {
-      const res = await contaAzulFetch(ep);
-      const text = await res.text();
-      console.log(`getNextSaleNumber ${ep}: status=${res.status} body=${text.substring(0, 300)}`);
-      if (res.ok) {
-        const data = JSON.parse(text);
-        const num = data.proximo_numero ?? data.proximoNumero ?? data.numero ?? data;
-        if (typeof num === "number" && num > 0) return num;
-        const parsed = parseInt(String(num));
-        if (!isNaN(parsed) && parsed > 0) return parsed;
-      }
-    } catch (e: any) { console.error(`getNextSaleNumber ${ep} error:`, e.message); }
-  }
-  const fallback = Math.floor(Date.now() / 1000) + Math.floor(Math.random() * 9999);
-  console.log(`getNextSaleNumber: todos endpoints falharam, usando fallback ${fallback}`);
-  return fallback;
-}
-
 async function createSale(req: Request): Promise<Response> {
   const body = await req.json();
   const valor = parseFloat(body.valor || body.value) || 0;
@@ -403,12 +382,8 @@ async function createSale(req: Request): Promise<Response> {
     };
   });
 
-  const saleNumber = await getNextSaleNumber();
-  console.log(`createSale: proximo numero = ${saleNumber} (deal_number CRM: ${body.deal_number || 'N/A'})`);
-
   const payload: any = {
     id_cliente: clienteId,
-    numero: saleNumber,
     situacao: "APROVADO",
     data_venda: dataVenda,
     itens: [{
@@ -428,8 +403,31 @@ async function createSale(req: Request): Promise<Response> {
   if (body.centro_custo_id) payload.id_centro_custo = body.centro_custo_id;
   if (body.transaction_code) payload.condicao_pagamento.nsu = body.transaction_code;
 
-  console.log("CREATE SALE payload:", JSON.stringify(payload));
-  const res = await contaAzulFetch("/v1/venda", { method: "POST", body: JSON.stringify(payload) });
-  if (!res.ok) { const e = await res.text(); return errorResponse("Erro ao criar venda: " + res.status + " - " + e, res.status); }
-  return jsonResponse({ success: true, data: await res.json() }, 201);
+  console.log("CREATE SALE payload (sem numero):", JSON.stringify(payload));
+  let res = await contaAzulFetch("/v1/venda", { method: "POST", body: JSON.stringify(payload) });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`createSale tentativa 1 falhou: ${res.status} - ${errText.substring(0, 500)}`);
+
+    const dupMatch = errText.match(/O n[º°]\s*(\d+)\s*[eé] o pr[oó]ximo/i);
+    if (dupMatch) {
+      const nextNum = parseInt(dupMatch[1]);
+      console.log(`createSale: numero duplicado detectado, re-tentando com numero ${nextNum}`);
+      payload.numero = nextNum;
+      res = await contaAzulFetch("/v1/venda", { method: "POST", body: JSON.stringify(payload) });
+      if (!res.ok) {
+        const e2 = await res.text();
+        return errorResponse("Erro ao criar venda (retry): " + res.status + " - " + e2, res.status);
+      }
+    } else {
+      return errorResponse("Erro ao criar venda: " + res.status + " - " + errText, res.status);
+    }
+  }
+
+  const saleData = await res.json();
+  const numeroVenda = saleData.numero || saleData.numero_venda || payload.numero || null;
+  console.log(`createSale SUCESSO: numero_venda=${numeroVenda}`);
+
+  return jsonResponse({ success: true, data: saleData, numero_venda: numeroVenda }, 201);
 }

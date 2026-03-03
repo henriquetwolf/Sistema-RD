@@ -382,8 +382,11 @@ async function createSale(req: Request): Promise<Response> {
     };
   });
 
+  const saleNum = Math.floor(Date.now() / 1000) + Math.floor(Math.random() * 100);
+
   const payload: any = {
     id_cliente: clienteId,
+    numero: saleNum,
     situacao: "APROVADO",
     data_venda: dataVenda,
     itens: [{
@@ -403,7 +406,7 @@ async function createSale(req: Request): Promise<Response> {
   if (body.centro_custo_id) payload.id_centro_custo = body.centro_custo_id;
   if (body.transaction_code) payload.condicao_pagamento.nsu = body.transaction_code;
 
-  console.log("CREATE SALE payload (sem numero):", JSON.stringify(payload));
+  console.log(`CREATE SALE payload (numero=${saleNum}):`, JSON.stringify(payload));
   let res = await contaAzulFetch("/v1/venda", { method: "POST", body: JSON.stringify(payload) });
 
   if (!res.ok) {

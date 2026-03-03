@@ -9,18 +9,9 @@ function getSupabaseServiceClient() {
   );
 }
 
-function normalizeRedirectUri(uri: string): string {
-  let u = (uri || "").trim().replace(/\/+$/, "");
-  if (!u) return u;
-  // Remove /callback suffix if present — Conta Azul portal doesn't accept it
-  u = u.replace(/\/callback\/?$/, "");
-  // Ensure it ends with /conta-azul-auth
-  if (!u.endsWith("/conta-azul-auth")) {
-    if (u.endsWith("/functions/v1")) {
-      u += "/conta-azul-auth";
-    }
-  }
-  return u;
+function getCanonicalRedirectUri(): string {
+  const supabaseUrl = (Deno.env.get("SUPABASE_URL") || "").replace(/\/+$/, "");
+  return `${supabaseUrl}/functions/v1/conta-azul-auth`;
 }
 
 async function getAccountCredentials(accountId: string) {
@@ -34,7 +25,7 @@ async function getAccountCredentials(accountId: string) {
   return {
     clientId: (data.client_id || "").trim(),
     clientSecret: (data.client_secret || "").trim(),
-    redirectUri: normalizeRedirectUri(data.redirect_uri),
+    redirectUri: getCanonicalRedirectUri(),
     nome: data.nome,
     cnpj: data.cnpj,
   };

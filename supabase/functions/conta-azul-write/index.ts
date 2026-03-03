@@ -341,17 +341,24 @@ async function debugServices(): Promise<Response> {
 }
 
 async function getNextSaleNumber(): Promise<number> {
-  try {
-    const res = await contaAzulFetch("/v1/venda/proximo-numero");
-    if (res.ok) {
-      const data = await res.json();
-      const num = data.proximo_numero || data.proximoNumero || data.numero || data;
-      if (typeof num === "number") return num;
-      const parsed = parseInt(String(num));
-      if (!isNaN(parsed)) return parsed;
-    }
-  } catch (e) { console.error("getNextSaleNumber error:", e); }
-  return Date.now();
+  const endpoints = ["/v1/vendas/proximo-numero", "/v1/venda/proximo-numero"];
+  for (const ep of endpoints) {
+    try {
+      const res = await contaAzulFetch(ep);
+      const text = await res.text();
+      console.log(`getNextSaleNumber ${ep}: status=${res.status} body=${text.substring(0, 300)}`);
+      if (res.ok) {
+        const data = JSON.parse(text);
+        const num = data.proximo_numero ?? data.proximoNumero ?? data.numero ?? data;
+        if (typeof num === "number" && num > 0) return num;
+        const parsed = parseInt(String(num));
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+    } catch (e: any) { console.error(`getNextSaleNumber ${ep} error:`, e.message); }
+  }
+  const fallback = Math.floor(Date.now() / 1000) + Math.floor(Math.random() * 9999);
+  console.log(`getNextSaleNumber: todos endpoints falharam, usando fallback ${fallback}`);
+  return fallback;
 }
 
 async function createSale(req: Request): Promise<Response> {

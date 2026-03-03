@@ -119,10 +119,15 @@ function startOAuthFlow(accountId: string): void {
     if (data.authorize_url) {
       if (data.debug_redirect_uri) {
         console.log('[ContaAzul] Redirect URI enviado:', data.debug_redirect_uri);
-        (window as any).__contaAzulLastRedirectUri = data.debug_redirect_uri;
+        console.log('[ContaAzul] Authorize URL:', data.authorize_url);
+        alert(`[DEBUG] Redirect URI sendo enviado ao Conta Azul:\n\n${data.debug_redirect_uri}\n\nCertifique-se de que este valor é IDÊNTICO ao cadastrado no portal de desenvolvedor do Conta Azul.\n\nClique OK para continuar.`);
       }
       window.open(data.authorize_url, 'contaazul_auth', 'width=600,height=700');
+    } else if (data.error) {
+      alert(`Erro ao iniciar conexão: ${data.error}`);
     }
+  }).catch((err) => {
+    alert(`Erro ao chamar Edge Function: ${err.message}`);
   });
 }
 

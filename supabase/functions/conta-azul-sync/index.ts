@@ -58,6 +58,15 @@ async function contaAzulFetch(accountId: string, path: string, options: RequestI
   });
 }
 
+function extractItems<T>(body: any): T[] {
+  if (Array.isArray(body)) return body;
+  if (body.itens && Array.isArray(body.itens)) return body.itens;
+  if (body.items && Array.isArray(body.items)) return body.items;
+  if (body.content && Array.isArray(body.content)) return body.content;
+  if (body.data && Array.isArray(body.data)) return body.data;
+  return [];
+}
+
 async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, queryParams: Record<string, string> = {}, maxPages = 20): Promise<T[]> {
   const all: T[] = [];
   let page = 1;
@@ -67,8 +76,13 @@ async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, q
     const res = await contaAzulFetch(accountId, basePath + "?" + params.toString());
     if (!res.ok) { const e = await res.text(); throw new Error("API_ERROR: " + res.status + " on " + basePath + " - " + e); }
     const body = await res.json();
-    const items: T[] = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
-    if (items.length === 0) break;
+    const items: T[] = extractItems<T>(body);
+    if (items.length === 0) {
+      if (page === 1) {
+        console.warn(`[contaAzulFetchPaginated] 0 items on first page for ${basePath}. Response keys:`, Object.keys(body || {}));
+      }
+      break;
+    }
     all.push(...items);
     if (items.length < size) break;
     page++;
@@ -243,6 +257,11 @@ async function syncCategories(req: Request): Promise<Response> {
   try {
     const items = await contaAzulFetchPaginated<any>(accountId, "/v1/categorias", {});
     const leafItems = await contaAzulFetchPaginated<any>(accountId, "/v1/categorias", { permite_apenas_filhos: "true" });
+    console.log(`[syncCategories] account=${accountId} | API returned: ${items.length} categories, ${leafItems.length} leaf categories`);
+
+    if (items.length === 0 && leafItems.length === 0) {
+      console.warn(`[syncCategories] API returned 0 categories for account ${accountId}. Check token/permissions.`);
+    }
 
     const byId = new Map<string, any>();
     for (const item of items) byId.set(String(item.id), item);
@@ -275,16 +294,24 @@ async function syncCategories(req: Request): Promise<Response> {
       ativo: true,
       synced_at: now,
     }));
+    console.log(`[syncCategories] ${rows.length} unique categories to upsert for account ${accountId}`);
 
+    let upsertErrors = 0;
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
       const { error } = await db.from("conta_azul_categorias").upsert(batch, { onConflict: "account_id,id_conta_azul" });
       if (error) {
-        console.error("Categories batch error at index", i, ":", error.message, error.details);
+        upsertErrors++;
+        console.error("Categories batch error at index", i, ":", error.message, error.details, error.hint);
       } else {
         count += batch.length;
       }
     }
+
+    if (upsertErrors > 0) {
+      console.error(`[syncCategories] ${upsertErrors} batch(es) failed during upsert for account ${accountId}`);
+    }
+    console.log(`[syncCategories] Done: ${count} categories synced for account ${accountId}`);
     await completeSyncLog(logId!, count);
     return jsonResponse({ success: true, tipo: "categories", sincronizados: count });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }

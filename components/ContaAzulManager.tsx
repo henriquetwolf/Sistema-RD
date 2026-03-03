@@ -472,7 +472,11 @@ export const ContaAzulManager: React.FC = () => {
       }
 
       setSyncProgress(100);
-      setSyncMessage(`${stepLabel}: ${totalSynced} registros sincronizados`);
+      if (totalSynced === 0 && (type === 'categories' || type === 'cost-centers')) {
+        setSyncMessage(`${stepLabel}: 0 registros encontrados. Verifique se a conta está conectada e tente sincronizar novamente.`);
+      } else {
+        setSyncMessage(`${stepLabel}: ${totalSynced} registros sincronizados`);
+      }
       await loadOverview();
       if (type === 'receivables') loadReceivables();
       else if (type === 'payables') loadPayables();

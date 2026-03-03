@@ -574,6 +574,14 @@ export const CrmBoard: React.FC = () => {
       }
       setActiveMapping(mapping ? { ...mapping } : null);
 
+      if (matchedCategoryId && filteredCats.length > 0) {
+          const catExists = filteredCats.some((c: any) => c.id_conta_azul === matchedCategoryId);
+          if (!catExists) {
+              console.log('[CA] Categoria do mapeamento não encontrada nas categorias da conta, limpando para fallback');
+              matchedCategoryId = '';
+          }
+      }
+
       if (!matchedCategoryId && filteredCats.length > 0) {
           const defaultCat = filteredCats.find((c: any) =>
               c.nome?.toLowerCase().includes('receita não realizada') ||

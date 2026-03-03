@@ -9,6 +9,18 @@ function getSupabaseServiceClient() {
   );
 }
 
+function normalizeRedirectUri(uri: string): string {
+  let u = (uri || "").trim().replace(/\/+$/, "");
+  if (u && !u.endsWith("/conta-azul-auth/callback")) {
+    if (u.endsWith("/functions/v1") || u.endsWith("/functions/v1/")) {
+      u = u.replace(/\/+$/, "") + "/conta-azul-auth/callback";
+    } else if (!u.includes("/callback")) {
+      u += "/conta-azul-auth/callback";
+    }
+  }
+  return u;
+}
+
 async function getAccountCredentials(accountId: string) {
   const db = getSupabaseServiceClient();
   const { data, error } = await db
@@ -20,7 +32,7 @@ async function getAccountCredentials(accountId: string) {
   return {
     clientId: (data.client_id || "").trim(),
     clientSecret: (data.client_secret || "").trim(),
-    redirectUri: (data.redirect_uri || "").trim(),
+    redirectUri: normalizeRedirectUri(data.redirect_uri),
     nome: data.nome,
     cnpj: data.cnpj,
   };

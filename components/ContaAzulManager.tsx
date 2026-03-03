@@ -185,11 +185,16 @@ export const ContaAzulManager: React.FC = () => {
     setShowAccountModal(true);
   }, []);
 
+  const defaultRedirectUri = useMemo(() => {
+    const base = (import.meta as any).env?.VITE_APP_SUPABASE_URL || '';
+    return base ? `${base.replace(/\/+$/, '')}/functions/v1/conta-azul-auth/callback` : '';
+  }, []);
+
   const openNewAccount = useCallback(() => {
     setEditingAccount(null);
-    setAccountForm({ nome: '', cnpj: '', client_id: '', client_secret: '', redirect_uri: '' });
+    setAccountForm({ nome: '', cnpj: '', client_id: '', client_secret: '', redirect_uri: defaultRedirectUri });
     setShowAccountModal(true);
-  }, []);
+  }, [defaultRedirectUri]);
 
   // ── Auth check ──────────────────────────────────────────
 
@@ -1444,8 +1449,11 @@ export const ContaAzulManager: React.FC = () => {
                   value={accountForm.redirect_uri}
                   onChange={e => setAccountForm(f => ({ ...f, redirect_uri: e.target.value }))}
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold font-mono focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="https://..."
+                  placeholder={defaultRedirectUri || "https://SEU-PROJETO.supabase.co/functions/v1/conta-azul-auth/callback"}
                 />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Deve terminar com <span className="font-mono font-bold text-slate-500">/conta-azul-auth/callback</span>. Cadastre esta mesma URL no app OAuth do Conta Azul.
+                </p>
               </div>
             </div>
 

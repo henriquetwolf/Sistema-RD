@@ -107,12 +107,20 @@ export const ContaAzulManager: React.FC = () => {
 
   const loadAccounts = useCallback(async () => {
     try {
-      const [accs, statuses] = await Promise.all([
+      const results = await Promise.allSettled([
         contaAzulService.getAccounts(),
         contaAzulService.getAuthStatusAll(),
       ]);
-      setCaAccounts(accs);
-      setAccountStatuses(statuses);
+      if (results[0].status === 'fulfilled') {
+        setCaAccounts(results[0].value);
+      } else {
+        console.error('Error loading accounts:', results[0].reason);
+      }
+      if (results[1].status === 'fulfilled') {
+        setAccountStatuses(results[1].value);
+      } else {
+        console.error('Error loading account statuses:', results[1].reason);
+      }
     } catch (e) {
       console.error('Error loading accounts:', e);
     }

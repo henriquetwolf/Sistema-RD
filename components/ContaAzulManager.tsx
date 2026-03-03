@@ -119,22 +119,37 @@ export const ContaAzulManager: React.FC = () => {
   }, []);
 
   const handleSaveAccount = useCallback(async () => {
-    if (!accountForm.nome || !accountForm.client_id) {
+    if (!accountForm.nome.trim() || !accountForm.client_id.trim()) {
       alert('Nome e Client ID são obrigatórios.');
       return;
     }
-    if (!editingAccount && !accountForm.client_secret) {
+    if (!accountForm.cnpj.trim()) {
+      alert('CNPJ é obrigatório.');
+      return;
+    }
+    if (!editingAccount && !accountForm.client_secret.trim()) {
       alert('Client Secret é obrigatório ao criar uma nova conta.');
+      return;
+    }
+    if (!accountForm.redirect_uri.trim()) {
+      alert('Redirect URI é obrigatório. Exemplo: https://SEU-PROJETO.supabase.co/functions/v1/conta-azul-auth/callback');
       return;
     }
     setIsSavingAccount(true);
     try {
+      const trimmed = {
+        nome: accountForm.nome.trim(),
+        cnpj: accountForm.cnpj.trim(),
+        client_id: accountForm.client_id.trim(),
+        client_secret: accountForm.client_secret.trim(),
+        redirect_uri: accountForm.redirect_uri.trim(),
+      };
       if (editingAccount) {
-        const updatePayload: Record<string, any> = { nome: accountForm.nome, cnpj: accountForm.cnpj, client_id: accountForm.client_id, redirect_uri: accountForm.redirect_uri };
-        if (accountForm.client_secret) updatePayload.client_secret = accountForm.client_secret;
+        const updatePayload: Record<string, any> = { nome: trimmed.nome, cnpj: trimmed.cnpj, client_id: trimmed.client_id, redirect_uri: trimmed.redirect_uri };
+        if (trimmed.client_secret) updatePayload.client_secret = trimmed.client_secret;
         await contaAzulService.updateAccount(editingAccount.id, updatePayload);
       } else {
-        await contaAzulService.createAccount(accountForm);
+        await contaAzulService.createAccount(trimmed);
       }
       setShowAccountModal(false);
       setEditingAccount(null);

@@ -18,9 +18,9 @@ async function getAccountCredentials(accountId: string) {
     .single();
   if (error || !data) throw new Error("Conta não encontrada: " + accountId);
   return {
-    clientId: data.client_id,
-    clientSecret: data.client_secret,
-    redirectUri: data.redirect_uri,
+    clientId: (data.client_id || "").trim(),
+    clientSecret: (data.client_secret || "").trim(),
+    redirectUri: (data.redirect_uri || "").trim(),
     nome: data.nome,
     cnpj: data.cnpj,
   };
@@ -103,11 +103,11 @@ async function handleCreateAccount(req: Request): Promise<Response> {
   const { data, error } = await db
     .from("conta_azul_accounts")
     .insert({
-      nome: body.nome,
-      cnpj: body.cnpj.replace(/\D/g, ""),
-      client_id: body.client_id,
-      client_secret: body.client_secret,
-      redirect_uri: body.redirect_uri,
+      nome: body.nome.trim(),
+      cnpj: body.cnpj.replace(/\D/g, "").trim(),
+      client_id: body.client_id.trim(),
+      client_secret: body.client_secret.trim(),
+      redirect_uri: body.redirect_uri.trim(),
       ativo: body.ativo !== false,
     })
     .select("id, nome, cnpj, client_id, redirect_uri, ativo, created_at")
@@ -123,9 +123,9 @@ async function handleUpdateAccount(req: Request): Promise<Response> {
   const updates: Record<string, any> = { updated_at: new Date().toISOString() };
   if (body.nome !== undefined) updates.nome = body.nome;
   if (body.cnpj !== undefined) updates.cnpj = body.cnpj.replace(/\D/g, "");
-  if (body.client_id !== undefined) updates.client_id = body.client_id;
-  if (body.client_secret !== undefined) updates.client_secret = body.client_secret;
-  if (body.redirect_uri !== undefined) updates.redirect_uri = body.redirect_uri;
+  if (body.client_id !== undefined) updates.client_id = body.client_id.trim();
+  if (body.client_secret !== undefined) updates.client_secret = body.client_secret.trim();
+  if (body.redirect_uri !== undefined) updates.redirect_uri = body.redirect_uri.trim();
   if (body.ativo !== undefined) updates.ativo = body.ativo;
 
   const { error } = await db.from("conta_azul_accounts").update(updates).eq("id", body.id);
@@ -150,6 +150,13 @@ async function handleAuthorize(url: URL): Promise<Response> {
   if (!accountId) return errorResponse("Parâmetro 'account_id' é obrigatório.");
 
   const creds = await getAccountCredentials(accountId);
+
+  if (!creds.clientId) {
+    return errorResponse("Client ID está vazio para esta conta. Edite a conta e preencha o Client ID corretamente.");
+  }
+
+  console.log(`[authorize] account=${accountId} clientId=${creds.clientId.substring(0, 8)}... redirectUri=${creds.redirectUri}`);
+
   const state = accountId + ":" + crypto.randomUUID();
   const authUrl = new URL(CONTA_AZUL_AUTH_BASE + "/authorize");
   authUrl.searchParams.set("client_id", creds.clientId);

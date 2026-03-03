@@ -132,7 +132,7 @@ export const ContaAzulManager: React.FC = () => {
       return;
     }
     if (!accountForm.redirect_uri.trim()) {
-      alert('Redirect URI é obrigatório. Exemplo: https://SEU-PROJETO.supabase.co/functions/v1/conta-azul-auth/callback');
+      alert('Redirect URI é obrigatório. Exemplo: https://SEU-PROJETO.supabase.co/functions/v1/conta-azul-auth');
       return;
     }
     setIsSavingAccount(true);
@@ -187,7 +187,7 @@ export const ContaAzulManager: React.FC = () => {
 
   const defaultRedirectUri = useMemo(() => {
     const base = (import.meta as any).env?.VITE_APP_SUPABASE_URL || '';
-    return base ? `${base.replace(/\/+$/, '')}/functions/v1/conta-azul-auth/callback` : '';
+    return base ? `${base.replace(/\/+$/, '')}/functions/v1/conta-azul-auth` : '';
   }, []);
 
   const openNewAccount = useCallback(() => {
@@ -215,6 +215,14 @@ export const ContaAzulManager: React.FC = () => {
 
   const handleConnect = useCallback((accountId: string) => {
     contaAzulService.startOAuthFlow(accountId);
+
+    setTimeout(() => {
+      const lastUri = (window as any).__contaAzulLastRedirectUri;
+      if (lastUri) {
+        console.log('[ContaAzul] Se houver erro "redirect_mismatch", cadastre este Redirect URI no portal do Conta Azul:', lastUri);
+      }
+    }, 2000);
+
     const pollInterval = setInterval(async () => {
       try {
         const status = await contaAzulService.getAuthStatus(accountId);
@@ -1449,10 +1457,10 @@ export const ContaAzulManager: React.FC = () => {
                   value={accountForm.redirect_uri}
                   onChange={e => setAccountForm(f => ({ ...f, redirect_uri: e.target.value }))}
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold font-mono focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder={defaultRedirectUri || "https://SEU-PROJETO.supabase.co/functions/v1/conta-azul-auth/callback"}
+                  placeholder={defaultRedirectUri || "https://SEU-PROJETO.supabase.co/functions/v1/conta-azul-auth"}
                 />
                 <p className="text-[10px] text-slate-400 mt-1">
-                  Deve terminar com <span className="font-mono font-bold text-slate-500">/conta-azul-auth/callback</span>. Cadastre esta mesma URL no app OAuth do Conta Azul.
+                  Deve terminar com <span className="font-mono font-bold text-slate-500">/conta-azul-auth</span>. Cadastre esta mesma URL no portal de desenvolvedor do Conta Azul.
                 </p>
               </div>
             </div>

@@ -11,11 +11,13 @@ function getSupabaseServiceClient() {
 
 function normalizeRedirectUri(uri: string): string {
   let u = (uri || "").trim().replace(/\/+$/, "");
-  if (u && !u.endsWith("/conta-azul-auth/callback")) {
-    if (u.endsWith("/functions/v1") || u.endsWith("/functions/v1/")) {
-      u = u.replace(/\/+$/, "") + "/conta-azul-auth/callback";
-    } else if (!u.includes("/callback")) {
-      u += "/conta-azul-auth/callback";
+  if (!u) return u;
+  // Remove /callback suffix if present — Conta Azul portal doesn't accept it
+  u = u.replace(/\/callback\/?$/, "");
+  // Ensure it ends with /conta-azul-auth
+  if (!u.endsWith("/conta-azul-auth")) {
+    if (u.endsWith("/functions/v1")) {
+      u += "/conta-azul-auth";
     }
   }
   return u;
@@ -65,7 +67,14 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const action = url.pathname.split("/").pop();
 
+  // Conta Azul redirects back to the base function URL with ?code=...&state=...
+  const isOAuthCallback = url.searchParams.has("code") && url.searchParams.has("state");
+
   try {
+    if (isOAuthCallback) {
+      return await handleCallback(url);
+    }
+
     switch (action) {
       case "authorize":
         return await handleAuthorize(url);
@@ -167,7 +176,7 @@ async function handleAuthorize(url: URL): Promise<Response> {
     return errorResponse("Client ID está vazio para esta conta. Edite a conta e preencha o Client ID corretamente.");
   }
 
-  console.log(`[authorize] account=${accountId} clientId=${creds.clientId.substring(0, 8)}... redirectUri=${creds.redirectUri}`);
+  console.log(`[authorize] account=${accountId} clientId=${creds.clientId} redirectUri=${creds.redirectUri}`);
 
   const state = accountId + ":" + crypto.randomUUID();
   const authUrl = new URL(CONTA_AZUL_AUTH_BASE + "/authorize");
@@ -175,7 +184,10 @@ async function handleAuthorize(url: URL): Promise<Response> {
   authUrl.searchParams.set("redirect_uri", creds.redirectUri);
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("state", state);
-  return jsonResponse({ authorize_url: authUrl.toString() });
+  return jsonResponse({
+    authorize_url: authUrl.toString(),
+    debug_redirect_uri: creds.redirectUri,
+  });
 }
 
 async function handleCallback(url: URL): Promise<Response> {

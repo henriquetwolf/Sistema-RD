@@ -117,6 +117,10 @@ async function getAuthStatusAll(): Promise<ContaAzulAccountStatus[]> {
 function startOAuthFlow(accountId: string): void {
   edgeFetch('conta-azul-auth', `authorize?account_id=${accountId}`).then((data) => {
     if (data.authorize_url) {
+      if (data.debug_redirect_uri) {
+        console.log('[ContaAzul] Redirect URI enviado:', data.debug_redirect_uri);
+        (window as any).__contaAzulLastRedirectUri = data.debug_redirect_uri;
+      }
       window.open(data.authorize_url, 'contaazul_auth', 'width=600,height=700');
     }
   });

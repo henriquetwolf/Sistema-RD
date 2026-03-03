@@ -539,7 +539,8 @@ export const CrmBoard: React.FC = () => {
           console.error('Erro ao buscar dados do Conta Azul (modal será exibido mesmo assim):', err);
       }
 
-      setContaAzulCategories(cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS'));
+      const filteredCats = cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS');
+      setContaAzulCategories(filteredCats);
       setContaAzulCostCenters(ccs);
       setContaAzulProducts(prods);
 
@@ -548,7 +549,6 @@ export const CrmBoard: React.FC = () => {
       const typeMap: Record<string, string> = { digital: 'produto_digital', presencial: 'turma', evento: 'evento' };
       const expectedItemType = typeMap[dealProductType] || '';
 
-      // Busca por nome + tipo (mais preciso) e fallback por apenas nome
       let mapping = mappingsData.find((m: any) =>
           m.itemName?.toLowerCase().trim() === dealProductName &&
           (!expectedItemType || m.itemType === expectedItemType)
@@ -573,6 +573,18 @@ export const CrmBoard: React.FC = () => {
           }
       }
       setActiveMapping(mapping ? { ...mapping } : null);
+
+      if (!matchedCategoryId && filteredCats.length > 0) {
+          const defaultCat = filteredCats.find((c: any) =>
+              c.nome?.toLowerCase().includes('receita não realizada') ||
+              c.nome?.toLowerCase().includes('receita nao realizada') ||
+              c.nome?.toLowerCase().includes('diferidas')
+          );
+          if (defaultCat) {
+              matchedCategoryId = defaultCat.id_conta_azul;
+              console.log('[CA] Categoria padrão aplicada:', defaultCat.nome, '->', matchedCategoryId);
+          }
+      }
 
       if (!matchedProductId && dealProductName) {
           matchedProductId = findContaAzulProductByName(dealProductName, prods);

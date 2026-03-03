@@ -1,15 +1,34 @@
 
 {
-  "name": "csv-supabase-syncer",
+  "name": "voll-pilates-app",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:mobile": "vite build && npx cap sync",
+    "cap:open:ios": "npx cap open ios",
+    "cap:open:android": "npx cap open android",
+    "cap:sync": "npx cap sync",
+    "cap:run:android": "npx cap run android",
+    "cap:run:ios": "npx cap run ios"
   },
   "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/camera": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/geolocation": "^6.0.0",
+    "@capacitor/haptics": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
+    "@capacitor/keyboard": "^6.0.0",
+    "@capacitor/preferences": "^6.0.0",
+    "@capacitor/push-notifications": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0",
+    "@capgo/capacitor-updater": "^6.0.0",
+    "capacitor-native-biometric": "^4.2.0",
     "@google/genai": "^1.3.0",
     "@supabase/supabase-js": "^2.39.0",
     "clsx": "^2.1.0",
@@ -19,10 +38,12 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-leaflet": "^4.2.1",
+    "react-router-dom": "^6.22.0",
     "read-excel-file": "^5.7.1",
     "recharts": "^2.12.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
     "@types/leaflet": "^1.9.8",
     "@types/node": "^20.10.0",
     "@types/papaparse": "^5.3.14",

@@ -245,6 +245,13 @@ async function getCostCenters(): Promise<ContaAzulCostCenter[]> {
   return data || [];
 }
 
+async function createCostCenter(nome: string): Promise<{ id_conta_azul: string; nome: string }> {
+  return edgeFetch('conta-azul-write', 'create-cost-center', {
+    method: 'POST',
+    body: JSON.stringify({ nome }),
+  });
+}
+
 async function getFinancialAccounts(): Promise<ContaAzulFinancialAccount[]> {
   const { data, error } = await supabase
     .from('conta_azul_contas_financeiras')
@@ -357,6 +364,7 @@ export const contaAzulService = {
   getPayables,
   getCategories,
   getCostCenters,
+  createCostCenter,
   getFinancialAccounts,
   getFinancialStats,
   createReceivable,

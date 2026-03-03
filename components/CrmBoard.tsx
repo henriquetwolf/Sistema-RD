@@ -523,6 +523,31 @@ export const CrmBoard: React.FC = () => {
       }
 
       const hoje = new Date().toISOString().split('T')[0];
+      const classMod1 = (deal.class_mod_1 || deal.classMod1 || '').trim();
+      let matchedCcId = '';
+
+      if (classMod1 && ccs.length > 0) {
+          const ccMatch = ccs.find((cc: any) => cc.nome?.toLowerCase().trim() === classMod1.toLowerCase());
+          if (ccMatch) {
+              matchedCcId = ccMatch.id_conta_azul;
+              console.log('[CA] Centro de custo encontrado:', classMod1, '->', matchedCcId);
+          }
+      }
+
+      if (classMod1 && !matchedCcId) {
+          try {
+              console.log('[CA] Centro de custo não encontrado, criando:', classMod1);
+              const newCc = await contaAzulService.createCostCenter(classMod1);
+              if (newCc?.id_conta_azul) {
+                  matchedCcId = newCc.id_conta_azul;
+                  setContaAzulCostCenters(prev => [...prev, { id: newCc.id_conta_azul, id_conta_azul: newCc.id_conta_azul, nome: newCc.nome || classMod1 }]);
+                  console.log('[CA] Centro de custo criado:', classMod1, '->', matchedCcId);
+              }
+          } catch (e: any) {
+              console.error('[CA] Erro ao criar centro de custo:', e.message);
+          }
+      }
+
       setContaAzulFormData({
           descricao: `[CRM #${deal.deal_number || ''}] ${deal.product_name || deal.company_name || deal.contact_name || 'Venda'}`,
           valor: deal.value || 0,
@@ -530,7 +555,7 @@ export const CrmBoard: React.FC = () => {
           data_vencimento: deal.first_due_date || hoje,
           parcelas: deal.installments || 1,
           categoria_id: matchedCategoryId,
-          centro_custo_id: '',
+          centro_custo_id: matchedCcId,
           observacoes: `Negócio CRM: ${deal.title || ''} | Cliente: ${deal.company_name || deal.contact_name || ''} | CNPJ: ${deal.billing_cnpj || 'N/A'}`,
           contato_nome: deal.company_name || deal.contact_name || '',
           contato_cpf: deal.cpf || deal.billing_cnpj || '',
@@ -723,7 +748,7 @@ export const CrmBoard: React.FC = () => {
 
     if (isLastStage(pipelineName, newStage)) {
         setPendingCloseMove({ dealId, pipeline: pipelineName, targetStage: newStage, previousStage: currentStage });
-        triggerContaAzulReceivable({ ...deal, stage: newStage, deal_number: deal.dealNumber, company_name: deal.companyName, contact_name: deal.contactName, product_name: deal.productName, product_type: deal.productType, payment_method: deal.paymentMethod, first_due_date: deal.firstDueDate, billing_cnpj: deal.billingCnpj });
+        triggerContaAzulReceivable({ ...deal, stage: newStage, deal_number: deal.dealNumber, company_name: deal.companyName, contact_name: deal.contactName, product_name: deal.productName, product_type: deal.productType, payment_method: deal.paymentMethod, first_due_date: deal.firstDueDate, billing_cnpj: deal.billingCnpj, class_mod_1: deal.classMod1 });
         return;
     }
 
@@ -762,7 +787,7 @@ export const CrmBoard: React.FC = () => {
 
     if (isLastStage(pipelineName, targetStage)) {
         setPendingCloseMove({ dealId: draggedDealId, pipeline: pipelineName, targetStage, previousStage: currentDeal.stage });
-        triggerContaAzulReceivable({ ...currentDeal, stage: targetStage, deal_number: currentDeal.dealNumber, company_name: currentDeal.companyName, contact_name: currentDeal.contactName, product_name: currentDeal.productName, product_type: currentDeal.productType, payment_method: currentDeal.paymentMethod, first_due_date: currentDeal.firstDueDate, billing_cnpj: currentDeal.billingCnpj });
+        triggerContaAzulReceivable({ ...currentDeal, stage: targetStage, deal_number: currentDeal.dealNumber, company_name: currentDeal.companyName, contact_name: currentDeal.contactName, product_name: currentDeal.productName, product_type: currentDeal.productType, payment_method: currentDeal.paymentMethod, first_due_date: currentDeal.firstDueDate, billing_cnpj: currentDeal.billingCnpj, class_mod_1: currentDeal.classMod1 });
         setDraggedDealId(null);
         return;
     }

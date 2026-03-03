@@ -48,6 +48,7 @@ Deno.serve(async (req) => {
       case "installment": return await updateInstallment(req);
       case "sale": return await createSale(req);
       case "products": return await listProducts();
+      case "create-cost-center": return await createCostCenter(req);
       case "debug-services": return await debugServices();
       default: return errorResponse("Acao desconhecida: " + action, 404);
     }
@@ -338,6 +339,32 @@ async function debugServices(): Promise<Response> {
     results.error = e.message;
   }
   return jsonResponse(results);
+}
+
+async function createCostCenter(req: Request): Promise<Response> {
+  const body = await req.json();
+  const nome = (body.nome || '').trim();
+  if (!nome) return errorResponse("Campo 'nome' é obrigatório para criar centro de custo.");
+
+  const res = await contaAzulFetch("/v1/centro-de-custo", { method: "POST", body: JSON.stringify({ nome }) });
+  if (!res.ok) {
+    const errText = await res.text();
+    return errorResponse("Erro ao criar centro de custo: " + res.status + " - " + errText, res.status);
+  }
+  const created = await res.json();
+  const idContaAzul = String(created.id);
+  console.log(`createCostCenter: criado "${nome}" com id ${idContaAzul}`);
+
+  const db = getSupabaseServiceClient();
+  await db.from("conta_azul_centros_custo").upsert({
+    id_conta_azul: idContaAzul,
+    codigo: created.codigo || null,
+    nome: created.nome || nome,
+    ativo: true,
+    synced_at: new Date().toISOString(),
+  }, { onConflict: "id_conta_azul" });
+
+  return jsonResponse({ success: true, id_conta_azul: idContaAzul, nome: created.nome || nome }, 201);
 }
 
 async function createSale(req: Request): Promise<Response> {

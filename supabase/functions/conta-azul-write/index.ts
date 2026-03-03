@@ -340,6 +340,20 @@ async function debugServices(): Promise<Response> {
   return jsonResponse(results);
 }
 
+async function getNextSaleNumber(): Promise<number> {
+  try {
+    const res = await contaAzulFetch("/v1/venda/proximo-numero");
+    if (res.ok) {
+      const data = await res.json();
+      const num = data.proximo_numero || data.proximoNumero || data.numero || data;
+      if (typeof num === "number") return num;
+      const parsed = parseInt(String(num));
+      if (!isNaN(parsed)) return parsed;
+    }
+  } catch (e) { console.error("getNextSaleNumber error:", e); }
+  return Date.now();
+}
+
 async function createSale(req: Request): Promise<Response> {
   const body = await req.json();
   const valor = parseFloat(body.valor || body.value) || 0;
@@ -382,9 +396,12 @@ async function createSale(req: Request): Promise<Response> {
     };
   });
 
+  const saleNumber = await getNextSaleNumber();
+  console.log(`createSale: proximo numero = ${saleNumber} (deal_number CRM: ${body.deal_number || 'N/A'})`);
+
   const payload: any = {
     id_cliente: clienteId,
-    numero: parseInt(body.numero_venda || body.deal_number) || Date.now(),
+    numero: saleNumber,
     situacao: "APROVADO",
     data_venda: dataVenda,
     itens: [{

@@ -162,13 +162,23 @@ interface ReceivableFilters {
 }
 
 async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: ContaAzulReceivable[]; count: number }> {
+  const today = new Date().toISOString().split('T')[0];
+
   let query = supabase
     .from('conta_azul_contas_receber')
     .select('*', { count: 'exact' })
     .order('data_vencimento', { ascending: false });
 
   if (filters.status && filters.status !== 'all') {
-    query = query.ilike('status', `%${filters.status}%`);
+    if (filters.status === 'Pago') {
+      query = query.ilike('status', '%Liquidado%');
+    } else if (filters.status === 'Pendente') {
+      query = query.not('status', 'ilike', '%Liquidado%').gte('data_vencimento', today);
+    } else if (filters.status === 'Atrasado') {
+      query = query.not('status', 'ilike', '%Liquidado%').lt('data_vencimento', today);
+    } else {
+      query = query.ilike('status', `%${filters.status}%`);
+    }
   }
   if (filters.startDate) {
     query = query.gte('data_vencimento', filters.startDate);
@@ -261,6 +271,48 @@ async function getFinancialAccounts(): Promise<ContaAzulFinancialAccount[]> {
 
   if (error) throw error;
   return data || [];
+}
+
+// ── Receivable Stats (for Billing tab) ──────────────────────
+
+export interface ReceivableStats {
+  totalOriginal: number;
+  totalRecebido: number;
+  paidCount: number;
+  pendingCount: number;
+  overdueCount: number;
+}
+
+async function getReceivableStats(): Promise<ReceivableStats> {
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('conta_azul_contas_receber')
+    .select('valor, valor_pago, status, data_vencimento')
+    .limit(50000);
+
+  if (error) throw error;
+  const records = data || [];
+
+  let totalOriginal = 0, totalRecebido = 0, paidCount = 0, pendingCount = 0, overdueCount = 0;
+
+  for (const r of records) {
+    const valor = Number(r.valor || 0);
+    const valorPago = Number(r.valor_pago || 0);
+    totalOriginal += valor;
+    totalRecebido += valorPago;
+
+    const isLiquidado = (r.status || '').toLowerCase().includes('liquidado');
+    if (isLiquidado || (valor > 0 && valorPago >= valor)) {
+      paidCount++;
+    } else if (r.data_vencimento && r.data_vencimento < today) {
+      overdueCount++;
+    } else {
+      pendingCount++;
+    }
+  }
+
+  return { totalOriginal, totalRecebido, paidCount, pendingCount, overdueCount };
 }
 
 // ── Aggregated Stats ────────────────────────────────────────
@@ -361,6 +413,7 @@ export const contaAzulService = {
   triggerSyncChunked,
   getSyncLogs,
   getReceivables,
+  getReceivableStats,
   getPayables,
   getCategories,
   getCostCenters,

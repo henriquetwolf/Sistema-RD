@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { appBackend } from '../services/appBackend';
-import { Product, CertificateModel, OnlineCourse, CourseModule, CourseLesson, ContaAzulProductMapping, ContaAzulSplitMode, CatalogItemType } from '../types';
+import { Product, CertificateModel, OnlineCourse, CourseModule, CourseLesson, ContaAzulProductMapping, ContaAzulSplitMode, CatalogItemType, ContaAzulAccount } from '../types';
 import { contaAzulService } from '../services/contaAzulService';
 
 interface ProductsManagerProps {
@@ -61,6 +61,9 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const [contaAzulItems, setContaAzulItems] = useState<{ id: string; nome: string; tipo: string; valor: number }[]>([]);
   const [mappingForm, setMappingForm] = useState<Partial<ContaAzulProductMapping>>({});
   const [companiesList, setCompaniesList] = useState<{ id: string; legalName: string; cnpj: string }[]>([]);
+  const [caAccounts, setCaAccounts] = useState<ContaAzulAccount[]>([]);
+  const [isLoadingCaItems, setIsLoadingCaItems] = useState(false);
+  const [selectedCaAccount, setSelectedCaAccount] = useState<ContaAzulAccount | null>(null);
 
   // Course Builder States
   const [editingCourse, setEditingCourse] = useState<OnlineCourse | null>(null);
@@ -96,7 +99,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const initData = async () => {
       setIsLoading(true);
       try {
-          await Promise.all([
+          const [, , , , , , , accounts] = await Promise.all([
               fetchCertificates(),
               fetchOnlineCourses(),
               fetchProducts(),
@@ -104,9 +107,12 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
               fetchEvents(),
               fetchMappings(),
               fetchContaAzulCategories(),
-              fetchContaAzulItems(),
+              fetchContaAzulAccounts(),
               fetchCompanies(),
           ]);
+          if (accounts && accounts.length > 0) {
+              await fetchContaAzulItemsAllAccounts(accounts);
+          }
       } catch (e: any) {
           console.error("Erro no carregamento:", e);
       } finally {
@@ -174,20 +180,50 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
       } catch (e) { setContaAzulCategories([]); }
   };
 
-  const fetchContaAzulItems = async () => {
+  const fetchContaAzulAccounts = async (): Promise<ContaAzulAccount[]> => {
       try {
-          const items = await contaAzulService.getProducts();
+          const accounts = await contaAzulService.getAccounts();
+          setCaAccounts(accounts.filter(a => a.ativo));
+          return accounts.filter(a => a.ativo);
+      } catch (e) {
+          setCaAccounts([]);
+          return [];
+      }
+  };
+
+  const fetchContaAzulItemsAllAccounts = async (accounts?: ContaAzulAccount[]) => {
+      const accs = accounts || caAccounts;
+      if (accs.length === 0) return;
+      try {
+          const allResults = await Promise.all(accs.map(acc => contaAzulService.getProducts(acc.id)));
+          const merged = new Map<string, { id: string; nome: string; tipo: string; valor: number }>();
+          for (const items of allResults) {
+              for (const item of items) {
+                  merged.set(item.id, item);
+              }
+          }
+          const allItems = Array.from(merged.values());
+          console.log(`[ContaAzul Items] Total (${accs.length} contas): ${allItems.length}`);
+          setContaAzulItems(allItems);
+      } catch (e) {
+          console.error('[ContaAzul Items] Erro ao buscar de todas as contas:', e);
+          setContaAzulItems([]);
+      }
+  };
+
+  const fetchContaAzulItemsForAccount = async (accountId: string) => {
+      setIsLoadingCaItems(true);
+      try {
+          const items = await contaAzulService.getProducts(accountId);
           const prods = items.filter((i: any) => i.tipo === 'PRODUTO');
           const svcs = items.filter((i: any) => i.tipo === 'SERVICO');
-          console.log(`[ContaAzul Items] Total: ${items.length} | Produtos: ${prods.length} | Serviços: ${svcs.length}`);
-          if (svcs.length === 0 && items.length > 0) {
-              console.warn('[ContaAzul Items] Nenhum serviço retornado. Tipos encontrados:', [...new Set(items.map((i: any) => i.tipo))]);
-              console.log('[ContaAzul Items] Amostra dos itens:', items.slice(0, 5));
-          }
+          console.log(`[ContaAzul Items] Conta ${accountId} | Total: ${items.length} | Produtos: ${prods.length} | Serviços: ${svcs.length}`);
           setContaAzulItems(items);
       } catch (e) {
           console.error('[ContaAzul Items] Erro ao buscar:', e);
           setContaAzulItems([]);
+      } finally {
+          setIsLoadingCaItems(false);
       }
   };
 
@@ -254,6 +290,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
   const handleOpenContaAzulModal = (item: UnifiedItem) => {
       setContaAzulEditItem(item);
       const existing = getMappingForItem(item);
+      const cnpj = existing?.billingCnpj || '';
       if (existing) {
           setMappingForm({ ...existing });
       } else {
@@ -272,6 +309,15 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
               billingCompanyName: '',
               billingCnpj: '',
           });
+      }
+      const matchedAccount = cnpj ? caAccounts.find(acc => acc.cnpj === cnpj) : null;
+      setSelectedCaAccount(matchedAccount || null);
+      if (matchedAccount) {
+          fetchContaAzulItemsForAccount(matchedAccount.id);
+          contaAzulService.getCategories(matchedAccount.id).then(setContaAzulCategories).catch(() => {});
+      } else {
+          fetchContaAzulItemsAllAccounts();
+          contaAzulService.getCategories().then(setContaAzulCategories).catch(() => {});
       }
       setShowContaAzulModal(true);
   };
@@ -881,7 +927,20 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                             ...f,
                                             billingCnpj: cnpj,
                                             billingCompanyName: company?.legalName || '',
+                                            contaAzulServiceId: '',
+                                            contaAzulServiceName: '',
+                                            contaAzulProductId: '',
+                                            contaAzulProductName: '',
                                         }));
+                                        const matchedAccount = caAccounts.find(acc => acc.cnpj === cnpj);
+                                        setSelectedCaAccount(matchedAccount || null);
+                                        if (matchedAccount) {
+                                            fetchContaAzulItemsForAccount(matchedAccount.id);
+                                            contaAzulService.getCategories(matchedAccount.id).then(setContaAzulCategories).catch(() => {});
+                                        } else if (cnpj) {
+                                            fetchContaAzulItemsAllAccounts();
+                                            contaAzulService.getCategories().then(setContaAzulCategories).catch(() => {});
+                                        }
                                     }}
                                     className="w-full px-5 py-3 border-2 border-blue-200 bg-white focus:border-blue-500 rounded-2xl text-sm font-bold outline-none transition-all"
                                 >
@@ -893,19 +952,34 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                 {companiesList.length === 0 && <p className="text-[10px] text-amber-600 mt-1 ml-1 font-medium">Cadastre empresas em Configurações &gt; Empresas do Grupo.</p>}
                             </div>
                             {mappingForm.billingCompanyName && (
-                                <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-200">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 ml-1">Empresa (Auto)</label>
-                                        <div className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-xl border border-blue-200 text-xs font-bold text-blue-900">
-                                            <Building2 size={14} className="text-blue-500 shrink-0" /> {mappingForm.billingCompanyName}
+                                <div className="space-y-3 animate-in fade-in duration-200">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 ml-1">Empresa (Auto)</label>
+                                            <div className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-xl border border-blue-200 text-xs font-bold text-blue-900">
+                                                <Building2 size={14} className="text-blue-500 shrink-0" /> {mappingForm.billingCompanyName}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 ml-1">CNPJ de Venda (Auto)</label>
+                                            <div className="bg-white px-4 py-2.5 rounded-xl border border-blue-200 text-xs font-mono text-slate-700">
+                                                {mappingForm.billingCnpj}
+                                            </div>
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 ml-1">CNPJ de Venda (Auto)</label>
-                                        <div className="bg-white px-4 py-2.5 rounded-xl border border-blue-200 text-xs font-mono text-slate-700">
-                                            {mappingForm.billingCnpj}
+                                    {selectedCaAccount ? (
+                                        <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl animate-in fade-in duration-200">
+                                            <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                                            <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Conta Azul vinculada:</span>
+                                            <span className="text-xs font-bold text-emerald-900">{selectedCaAccount.nome}</span>
+                                            {isLoadingCaItems && <Loader2 size={14} className="animate-spin text-emerald-600 ml-auto" />}
                                         </div>
-                                    </div>
+                                    ) : mappingForm.billingCnpj ? (
+                                        <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl animate-in fade-in duration-200">
+                                            <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+                                            <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Nenhuma conta Conta Azul com este CNPJ</span>
+                                        </div>
+                                    ) : null}
                                 </div>
                             )}
                         </div>
@@ -1034,10 +1108,13 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ onBack }) => {
                                         <div className="flex gap-3">
                                             <button
                                                 type="button"
-                                                onClick={() => { fetchContaAzulItems(); }}
+                                                onClick={() => {
+                                                    if (selectedCaAccount) fetchContaAzulItemsForAccount(selectedCaAccount.id);
+                                                    else fetchContaAzulItemsAllAccounts();
+                                                }}
                                                 className="text-[10px] text-blue-600 font-bold underline hover:text-blue-800"
                                             >
-                                                Recarregar itens
+                                                {isLoadingCaItems ? 'Carregando...' : 'Recarregar itens'}
                                             </button>
                                             <button
                                                 type="button"

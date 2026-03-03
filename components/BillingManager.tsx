@@ -11,7 +11,7 @@ import {
 import { appBackend } from '../services/appBackend';
 import { contaAzulService } from '../services/contaAzulService';
 import type { ReceivableStats } from '../services/contaAzulService';
-import { BillingNegotiation, ContaAzulReceivable } from '../types';
+import { BillingNegotiation, ContaAzulReceivable, ContaAzulAccount } from '../types';
 import clsx from 'clsx';
 
 const getDisplayStatus = (record: ContaAzulReceivable): string => {
@@ -40,6 +40,10 @@ const formatCurrency = (val: number) =>
 
 export const BillingManager: React.FC = () => {
   const [activeMainTab, setActiveMainTab] = useState<'conciliacao' | 'consultoria'>('conciliacao');
+
+  // Conta Azul accounts
+  const [contaAzulAccounts, setContaAzulAccounts] = useState<ContaAzulAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
 
   // Conciliação
   const [records, setRecords] = useState<ContaAzulReceivable[]>([]);
@@ -89,6 +93,7 @@ export const BillingManager: React.FC = () => {
     fetchStats();
     fetchNegotiations();
     fetchBillingTeam();
+    fetchAccounts();
 
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -103,7 +108,12 @@ export const BillingManager: React.FC = () => {
   // ── Reset page on filter / tab change ────────────────────
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, statusFilter, startDate, endDate, activeMainTab]);
+  }, [debouncedSearch, statusFilter, startDate, endDate, activeMainTab, selectedAccountId]);
+
+  // ── Reload stats when account changes ─────────────────────
+  useEffect(() => {
+    fetchStats(selectedAccountId || undefined);
+  }, [selectedAccountId]);
 
   // ── Server-side fetch for conciliação ────────────────────
   useEffect(() => {
@@ -119,6 +129,7 @@ export const BillingManager: React.FC = () => {
           status: statusFilter !== 'all' ? statusFilter : undefined,
           startDate: startDate || undefined,
           endDate: endDate || undefined,
+          accountId: selectedAccountId || undefined,
           limit: itemsPerPage,
           offset: (currentPage - 1) * itemsPerPage,
         });
@@ -134,12 +145,21 @@ export const BillingManager: React.FC = () => {
     };
     load();
     return () => { cancelled = true; };
-  }, [debouncedSearch, statusFilter, startDate, endDate, currentPage, activeMainTab, refreshTrigger]);
+  }, [debouncedSearch, statusFilter, startDate, endDate, currentPage, activeMainTab, refreshTrigger, selectedAccountId]);
 
   // ── Data fetchers ────────────────────────────────────────
-  const fetchStats = async () => {
+  const fetchAccounts = async () => {
     try {
-      const stats = await contaAzulService.getReceivableStats();
+      const accounts = await contaAzulService.getAccounts();
+      setContaAzulAccounts(accounts);
+    } catch (e) {
+      console.error('Erro ao carregar contas Conta Azul:', e);
+    }
+  };
+
+  const fetchStats = async (accountId?: string) => {
+    try {
+      const stats = await contaAzulService.getReceivableStats(accountId || undefined);
       setReceivableStats(stats);
     } catch (e) {
       console.error('Erro ao carregar estatísticas:', e);
@@ -171,14 +191,18 @@ export const BillingManager: React.FC = () => {
   // ── Sync handler ─────────────────────────────────────────
   const handleSync = async () => {
     if (isSyncing) return;
+    if (!selectedAccountId) {
+      alert('Selecione uma conta específica para sincronizar.');
+      return;
+    }
     setIsSyncing(true);
     setSyncProgress('Iniciando sincronização...');
     try {
-      const result = await contaAzulService.triggerSyncChunked('receivables', (chunk, total) => {
+      const result = await contaAzulService.triggerSyncChunked('receivables', selectedAccountId, (chunk, total) => {
         setSyncProgress(`Sincronizando lote ${chunk} de ${total}...`);
       });
       setSyncProgress(`${result.sincronizados} registros sincronizados.`);
-      fetchStats();
+      fetchStats(selectedAccountId);
       setRefreshTrigger(n => n + 1);
       setTimeout(() => setSyncProgress(''), 4000);
     } catch (e: any) {
@@ -251,19 +275,35 @@ export const BillingManager: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           {activeMainTab === 'conciliacao' && (
-            <button
-              onClick={handleSync}
-              disabled={isSyncing}
-              className={clsx(
-                'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm border',
-                isSyncing
-                  ? 'bg-amber-50 text-amber-700 border-amber-200 cursor-wait'
-                  : 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100 active:scale-95'
-              )}
-            >
-              <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
-              {isSyncing ? syncProgress : 'Sincronizar Conta Azul'}
-            </button>
+            <>
+              <select
+                value={selectedAccountId}
+                onChange={e => setSelectedAccountId(e.target.value)}
+                className="bg-white border border-slate-200 text-slate-600 text-sm rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="">Todas as Contas</option>
+                {contaAzulAccounts.map(acc => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.nome}{acc.cnpj ? ` — ${acc.cnpj}` : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleSync}
+                disabled={isSyncing || !selectedAccountId}
+                className={clsx(
+                  'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm border',
+                  isSyncing
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 cursor-wait'
+                    : !selectedAccountId
+                      ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                      : 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100 active:scale-95'
+                )}
+              >
+                <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+                {isSyncing ? syncProgress : 'Sincronizar Conta Azul'}
+              </button>
+            </>
           )}
           <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
             <button onClick={() => setActiveMainTab('conciliacao')} className={clsx('px-6 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2', activeMainTab === 'conciliacao' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>
@@ -339,8 +379,8 @@ export const BillingManager: React.FC = () => {
                 <label className="text-[10px] font-black text-slate-400 uppercase">Até:</label>
                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 border border-slate-200 text-slate-600 text-xs rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-teal-500" />
               </div>
-              {(searchTerm || statusFilter !== 'all' || startDate || endDate) && (
-                <button onClick={() => { setSearchTerm(''); setStatusFilter('all'); setStartDate(''); setEndDate(''); }} className="flex items-center gap-1.5 text-xs font-bold text-red-500 hover:text-red-700 transition-colors ml-auto px-3 py-1.5 hover:bg-red-50 rounded-lg"><Eraser size={14} /> Limpar Filtros</button>
+              {(searchTerm || statusFilter !== 'all' || startDate || endDate || selectedAccountId) && (
+                <button onClick={() => { setSearchTerm(''); setStatusFilter('all'); setStartDate(''); setEndDate(''); setSelectedAccountId(''); }} className="flex items-center gap-1.5 text-xs font-bold text-red-500 hover:text-red-700 transition-colors ml-auto px-3 py-1.5 hover:bg-red-50 rounded-lg"><Eraser size={14} /> Limpar Filtros</button>
               )}
             </div>
           </div>

@@ -7,38 +7,64 @@ function getSupabaseServiceClient() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
-function getContaAzulCredentials() {
-  return { clientId: Deno.env.get("CONTA_AZUL_CLIENT_ID")!, clientSecret: Deno.env.get("CONTA_AZUL_CLIENT_SECRET")!, redirectUri: Deno.env.get("CONTA_AZUL_REDIRECT_URI")! };
+async function getAccountCredentials(accountId: string) {
+  const db = getSupabaseServiceClient();
+  const { data, error } = await db
+    .from("conta_azul_accounts")
+    .select("client_id, client_secret, redirect_uri")
+    .eq("id", accountId)
+    .single();
+  if (error || !data) throw new Error("Conta não encontrada: " + accountId);
+  return { clientId: data.client_id, clientSecret: data.client_secret };
 }
 
-async function getValidAccessToken(): Promise<string> {
+async function getValidAccessToken(accountId: string): Promise<string> {
   const db = getSupabaseServiceClient();
-  const { data: tokenRow, error } = await db.from("conta_azul_tokens").select("*").order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (error || !tokenRow) throw new Error("NO_TOKEN: Conta Azul nao conectada.");
+  const { data: tokenRow, error } = await db
+    .from("conta_azul_tokens")
+    .select("*")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !tokenRow) throw new Error("NO_TOKEN: Conta Azul nao conectada para esta conta.");
   const expiresAt = new Date(tokenRow.expires_at);
   if (expiresAt.getTime() - 300000 > Date.now()) return tokenRow.access_token;
-  const creds = getContaAzulCredentials();
+
+  const creds = await getAccountCredentials(accountId);
   const basicAuth = btoa(creds.clientId + ":" + creds.clientSecret);
-  const res = await fetch(CONTA_AZUL_AUTH_BASE + "/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: "Basic " + basicAuth }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }) });
+  const res = await fetch(CONTA_AZUL_AUTH_BASE + "/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: "Basic " + basicAuth },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
+  });
   if (!res.ok) { const e = await res.text(); throw new Error("TOKEN_REFRESH_FAILED: " + res.status + " - " + e); }
   const tokens = await res.json();
   const newExp = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
-  await db.from("conta_azul_tokens").update({ access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_at: newExp, updated_at: new Date().toISOString() }).eq("id", tokenRow.id);
+  await db.from("conta_azul_tokens").update({
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expires_at: newExp,
+    updated_at: new Date().toISOString(),
+  }).eq("id", tokenRow.id);
   return tokens.access_token;
 }
 
-async function contaAzulFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const token = await getValidAccessToken();
-  return fetch(CONTA_AZUL_BASE + path, { ...options, headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", ...(options.headers as Record<string, string> || {}) } });
+async function contaAzulFetch(accountId: string, path: string, options: RequestInit = {}): Promise<Response> {
+  const token = await getValidAccessToken(accountId);
+  return fetch(CONTA_AZUL_BASE + path, {
+    ...options,
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", ...(options.headers as Record<string, string> || {}) },
+  });
 }
 
-async function contaAzulFetchPaginated<T>(basePath: string, queryParams: Record<string, string> = {}, maxPages = 20): Promise<T[]> {
+async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, queryParams: Record<string, string> = {}, maxPages = 20): Promise<T[]> {
   const all: T[] = [];
   let page = 1;
   const size = 200;
   for (let i = 0; i < maxPages; i++) {
     const params = new URLSearchParams({ ...queryParams, pagina: String(page), tamanho_pagina: String(size) });
-    const res = await contaAzulFetch(basePath + "?" + params.toString());
+    const res = await contaAzulFetch(accountId, basePath + "?" + params.toString());
     if (!res.ok) { const e = await res.text(); throw new Error("API_ERROR: " + res.status + " on " + basePath + " - " + e); }
     const body = await res.json();
     const items: T[] = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
@@ -55,8 +81,15 @@ function corsHeaders(origin = "*") { return { "Access-Control-Allow-Origin": ori
 function jsonResponse(data: unknown, status = 200) { return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json", ...corsHeaders() } }); }
 function errorResponse(message: string, status = 400) { return jsonResponse({ error: message }, status); }
 
-async function createSyncLog(tipo: string) { const db = getSupabaseServiceClient(); const { data } = await db.from("conta_azul_sync_log").insert({ tipo_sync: tipo, status: "running" }).select("id").single(); return data?.id; }
-async function completeSyncLog(logId: string, count: number, error?: string) { const db = getSupabaseServiceClient(); await db.from("conta_azul_sync_log").update({ status: error ? "error" : "success", registros_sincronizados: count, erro: error || null, finished_at: new Date().toISOString() }).eq("id", logId); }
+async function createSyncLog(tipo: string, accountId: string) {
+  const db = getSupabaseServiceClient();
+  const { data } = await db.from("conta_azul_sync_log").insert({ tipo_sync: tipo, status: "running", account_id: accountId }).select("id").single();
+  return data?.id;
+}
+async function completeSyncLog(logId: string, count: number, error?: string) {
+  const db = getSupabaseServiceClient();
+  await db.from("conta_azul_sync_log").update({ status: error ? "error" : "success", registros_sincronizados: count, erro: error || null, finished_at: new Date().toISOString() }).eq("id", logId);
+}
 
 function safeFloat(val: any): number {
   if (val === null || val === undefined) return 0;
@@ -76,10 +109,11 @@ function defaultDateRange() {
   };
 }
 
-function mapReceivableToRow(item: any) {
+function mapReceivableToRow(item: any, accountId: string) {
   const cat = Array.isArray(item.categorias) ? item.categorias[0] : item.categorias;
   const cc = Array.isArray(item.centros_custo) ? item.centros_custo[0] : item.centros_custo;
   return {
+    account_id: accountId,
     id_conta_azul: String(item.id),
     id_evento: item.id_evento ? String(item.id_evento) : null,
     descricao: item.descricao || null,
@@ -106,10 +140,11 @@ function mapReceivableToRow(item: any) {
   };
 }
 
-function mapPayableToRow(item: any) {
+function mapPayableToRow(item: any, accountId: string) {
   const cat = Array.isArray(item.categorias) ? item.categorias[0] : item.categorias;
   const cc = Array.isArray(item.centros_custo) ? item.centros_custo[0] : item.centros_custo;
   return {
+    account_id: accountId,
     id_conta_azul: String(item.id),
     id_evento: item.id_evento ? String(item.id_evento) : null,
     descricao: item.descricao || null,
@@ -136,22 +171,30 @@ function mapPayableToRow(item: any) {
   };
 }
 
+function extractAccountId(body: any): string {
+  const id = body?.account_id;
+  if (!id) throw new Error("Campo 'account_id' é obrigatório no body da requisição.");
+  return id;
+}
+
 async function syncReceivables(req: Request): Promise<Response> {
-  const logId = await createSyncLog("receivables"); let count = 0;
+  const body = await req.json().catch(() => ({}));
+  const accountId = extractAccountId(body);
+  const logId = await createSyncLog("receivables", accountId);
+  let count = 0;
   try {
-    const body = await req.json().catch(() => ({}));
     const dateRange = defaultDateRange();
     const params: Record<string, string> = {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
       data_vencimento_ate: body.data_vencimento_ate || dateRange.data_vencimento_ate,
     };
-    const items = await contaAzulFetchPaginated<any>("/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
-    console.log("Receivables fetched:", items.length, "items");
+    const items = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
+    console.log("Receivables fetched:", items.length, "items for account", accountId);
     const db = getSupabaseServiceClient();
-    const rows = items.map(mapReceivableToRow);
+    const rows = items.map(item => mapReceivableToRow(item, accountId));
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
-      const { error } = await db.from("conta_azul_contas_receber").upsert(batch, { onConflict: "id_conta_azul" });
+      const { error } = await db.from("conta_azul_contas_receber").upsert(batch, { onConflict: "account_id,id_conta_azul" });
       if (error) {
         console.error("Receivables batch error at index", i, ":", error.message, error.details);
       } else {
@@ -164,21 +207,23 @@ async function syncReceivables(req: Request): Promise<Response> {
 }
 
 async function syncPayables(req: Request): Promise<Response> {
-  const logId = await createSyncLog("payables"); let count = 0;
+  const body = await req.json().catch(() => ({}));
+  const accountId = extractAccountId(body);
+  const logId = await createSyncLog("payables", accountId);
+  let count = 0;
   try {
-    const body = await req.json().catch(() => ({}));
     const dateRange = defaultDateRange();
     const params: Record<string, string> = {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
       data_vencimento_ate: body.data_vencimento_ate || dateRange.data_vencimento_ate,
     };
-    const items = await contaAzulFetchPaginated<any>("/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params);
-    console.log("Payables fetched:", items.length, "items");
+    const items = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params);
+    console.log("Payables fetched:", items.length, "items for account", accountId);
     const db = getSupabaseServiceClient();
-    const rows = items.map(mapPayableToRow);
+    const rows = items.map(item => mapPayableToRow(item, accountId));
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
-      const { error } = await db.from("conta_azul_contas_pagar").upsert(batch, { onConflict: "id_conta_azul" });
+      const { error } = await db.from("conta_azul_contas_pagar").upsert(batch, { onConflict: "account_id,id_conta_azul" });
       if (error) {
         console.error("Payables batch error at index", i, ":", error.message, error.details);
       } else {
@@ -190,15 +235,15 @@ async function syncPayables(req: Request): Promise<Response> {
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 
-async function syncCategories(): Promise<Response> {
-  const logId = await createSyncLog("categories"); let count = 0;
+async function syncCategories(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => ({}));
+  const accountId = extractAccountId(body);
+  const logId = await createSyncLog("categories", accountId);
+  let count = 0;
   try {
-    // Busca todas as categorias (sem filtro) para incluir subcategorias
-    const items = await contaAzulFetchPaginated<any>("/v1/categorias", {});
-    // Também busca apenas as folha (que podem ser usadas em lançamentos)
-    const leafItems = await contaAzulFetchPaginated<any>("/v1/categorias", { permite_apenas_filhos: "true" });
+    const items = await contaAzulFetchPaginated<any>(accountId, "/v1/categorias", {});
+    const leafItems = await contaAzulFetchPaginated<any>(accountId, "/v1/categorias", { permite_apenas_filhos: "true" });
 
-    // Monta lookup de ID→nome para construir caminho hierárquico
     const byId = new Map<string, any>();
     for (const item of items) byId.set(String(item.id), item);
 
@@ -209,7 +254,6 @@ async function syncCategories(): Promise<Response> {
       return parent ? buildPath(parent) + " > " + selfName : selfName;
     }
 
-    // Mescla tudo (pais + filhos), sem duplicar
     const allMap = new Map<string, any>();
     for (const item of items) allMap.set(String(item.id), item);
     for (const item of leafItems) allMap.set(String(item.id), item);
@@ -224,6 +268,7 @@ async function syncCategories(): Promise<Response> {
     };
 
     const rows = Array.from(allMap.values()).map((item: any) => ({
+      account_id: accountId,
       id_conta_azul: String(item.id),
       nome: buildPath(item),
       tipo: normalizeTipo(item.tipo),
@@ -233,7 +278,7 @@ async function syncCategories(): Promise<Response> {
 
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
-      const { error } = await db.from("conta_azul_categorias").upsert(batch, { onConflict: "id_conta_azul" });
+      const { error } = await db.from("conta_azul_categorias").upsert(batch, { onConflict: "account_id,id_conta_azul" });
       if (error) {
         console.error("Categories batch error at index", i, ":", error.message, error.details);
       } else {
@@ -245,16 +290,26 @@ async function syncCategories(): Promise<Response> {
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 
-async function syncCostCenters(): Promise<Response> {
-  const logId = await createSyncLog("cost-centers"); let count = 0;
+async function syncCostCenters(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => ({}));
+  const accountId = extractAccountId(body);
+  const logId = await createSyncLog("cost-centers", accountId);
+  let count = 0;
   try {
-    const items = await contaAzulFetchPaginated<any>("/v1/centro-de-custo");
+    const items = await contaAzulFetchPaginated<any>(accountId, "/v1/centro-de-custo");
     const db = getSupabaseServiceClient();
     const now = new Date().toISOString();
-    const rows = items.map((item: any) => ({ id_conta_azul: String(item.id), codigo: item.codigo || null, nome: item.nome || "Sem nome", ativo: item.ativo !== false, synced_at: now }));
+    const rows = items.map((item: any) => ({
+      account_id: accountId,
+      id_conta_azul: String(item.id),
+      codigo: item.codigo || null,
+      nome: item.nome || "Sem nome",
+      ativo: item.ativo !== false,
+      synced_at: now,
+    }));
     for (let i = 0; i < rows.length; i += 200) {
       const batch = rows.slice(i, i + 200);
-      const { error } = await db.from("conta_azul_centros_custo").upsert(batch, { onConflict: "id_conta_azul" });
+      const { error } = await db.from("conta_azul_centros_custo").upsert(batch, { onConflict: "account_id,id_conta_azul" });
       if (error) {
         console.error("CostCenters batch error at index", i, ":", error.message, error.details);
       } else {
@@ -266,22 +321,33 @@ async function syncCostCenters(): Promise<Response> {
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 
-async function syncAccounts(): Promise<Response> {
-  const logId = await createSyncLog("accounts"); let count = 0;
+async function syncAccounts(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => ({}));
+  const accountId = extractAccountId(body);
+  const logId = await createSyncLog("accounts", accountId);
+  let count = 0;
   try {
-    const items = await contaAzulFetchPaginated<any>("/v1/conta-financeira", { apenas_ativo: "true" });
+    const items = await contaAzulFetchPaginated<any>(accountId, "/v1/conta-financeira", { apenas_ativo: "true" });
     const db = getSupabaseServiceClient();
     for (const item of items) {
       let saldoAtual = 0;
       try {
-        const bRes = await contaAzulFetch("/v1/conta-financeira/" + item.id + "/saldo-atual");
+        const bRes = await contaAzulFetch(accountId, "/v1/conta-financeira/" + item.id + "/saldo-atual");
         if (bRes.ok) {
           const bd = await bRes.json();
           saldoAtual = safeFloat(bd.saldo ?? bd.saldo_atual ?? bd.valor ?? bd.balance ?? bd.amount);
         }
         await new Promise(r => setTimeout(r, 50));
       } catch {}
-      const { error } = await db.from("conta_azul_contas_financeiras").upsert({ id_conta_azul: String(item.id), nome: item.nome || "Sem nome", tipo: item.tipo || null, saldo_atual: saldoAtual, ativo: item.ativo !== false, synced_at: new Date().toISOString() }, { onConflict: "id_conta_azul" });
+      const { error } = await db.from("conta_azul_contas_financeiras").upsert({
+        account_id: accountId,
+        id_conta_azul: String(item.id),
+        nome: item.nome || "Sem nome",
+        tipo: item.tipo || null,
+        saldo_atual: saldoAtual,
+        ativo: item.ativo !== false,
+        synced_at: new Date().toISOString(),
+      }, { onConflict: "account_id,id_conta_azul" });
       if (!error) count++;
     }
     await completeSyncLog(logId!, count);
@@ -290,15 +356,40 @@ async function syncAccounts(): Promise<Response> {
 }
 
 async function syncAll(req: Request): Promise<Response> {
-  const results: Record<string, any> = {};
   const body = await req.json().catch(() => ({}));
-  const mockReq = (b: any) => new Request("http://localhost", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
-  try { results.categories = await (await syncCategories()).json(); } catch (e: any) { results.categories = { error: e.message }; }
-  try { results.costCenters = await (await syncCostCenters()).json(); } catch (e: any) { results.costCenters = { error: e.message }; }
-  try { results.accounts = await (await syncAccounts()).json(); } catch (e: any) { results.accounts = { error: e.message }; }
+  const accountId = extractAccountId(body);
+  const results: Record<string, any> = {};
+  const mockReq = (b: any) => new Request("http://localhost", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...b, account_id: accountId }) });
+  try { results.categories = await (await syncCategories(mockReq({}))).json(); } catch (e: any) { results.categories = { error: e.message }; }
+  try { results.costCenters = await (await syncCostCenters(mockReq({}))).json(); } catch (e: any) { results.costCenters = { error: e.message }; }
+  try { results.accounts = await (await syncAccounts(mockReq({}))).json(); } catch (e: any) { results.accounts = { error: e.message }; }
   try { results.receivables = await (await syncReceivables(mockReq(body))).json(); } catch (e: any) { results.receivables = { error: e.message }; }
   try { results.payables = await (await syncPayables(mockReq(body))).json(); } catch (e: any) { results.payables = { error: e.message }; }
   return jsonResponse({ success: true, results });
+}
+
+async function syncAllAccounts(req: Request): Promise<Response> {
+  const db = getSupabaseServiceClient();
+  const { data: accounts } = await db
+    .from("conta_azul_accounts")
+    .select("id, nome")
+    .eq("ativo", true);
+
+  const allResults: Record<string, any> = {};
+  for (const acc of (accounts || [])) {
+    try {
+      const mockReq = new Request("http://localhost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: acc.id }),
+      });
+      const res = await syncAll(mockReq);
+      allResults[acc.nome] = await res.json();
+    } catch (e: any) {
+      allResults[acc.nome] = { error: e.message };
+    }
+  }
+  return jsonResponse({ success: true, results: allResults });
 }
 
 Deno.serve(async (req) => {
@@ -311,10 +402,11 @@ Deno.serve(async (req) => {
     switch (action) {
       case "receivables": return await syncReceivables(req);
       case "payables": return await syncPayables(req);
-      case "categories": return await syncCategories();
-      case "cost-centers": return await syncCostCenters();
-      case "accounts": return await syncAccounts();
+      case "categories": return await syncCategories(req);
+      case "cost-centers": return await syncCostCenters(req);
+      case "accounts": return await syncAccounts(req);
       case "all": return await syncAll(req);
+      case "all-accounts": return await syncAllAccounts(req);
       default: return errorResponse("Sync type desconhecido: " + action, 404);
     }
   } catch (err: any) { console.error("conta-azul-sync error:", err); return errorResponse(err.message || "Erro interno", 500); }

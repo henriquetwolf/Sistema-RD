@@ -7,29 +7,57 @@ function getSupabaseServiceClient() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
-function getContaAzulCredentials() {
-  return { clientId: Deno.env.get("CONTA_AZUL_CLIENT_ID")!, clientSecret: Deno.env.get("CONTA_AZUL_CLIENT_SECRET")!, redirectUri: Deno.env.get("CONTA_AZUL_REDIRECT_URI")! };
+async function getAccountCredentials(accountId: string) {
+  const db = getSupabaseServiceClient();
+  const { data, error } = await db
+    .from("conta_azul_accounts")
+    .select("client_id, client_secret")
+    .eq("id", accountId)
+    .single();
+  if (error || !data) throw new Error("Conta não encontrada: " + accountId);
+  return { clientId: data.client_id, clientSecret: data.client_secret };
 }
 
-async function getValidAccessToken(): Promise<string> {
+let _currentAccountId = "";
+
+async function getValidAccessToken(accountId: string): Promise<string> {
   const db = getSupabaseServiceClient();
-  const { data: tokenRow, error } = await db.from("conta_azul_tokens").select("*").order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (error || !tokenRow) throw new Error("NO_TOKEN: Conta Azul nao conectada.");
+  const { data: tokenRow, error } = await db
+    .from("conta_azul_tokens")
+    .select("*")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !tokenRow) throw new Error("NO_TOKEN: Conta Azul nao conectada para esta conta.");
   const expiresAt = new Date(tokenRow.expires_at);
   if (expiresAt.getTime() - 300000 > Date.now()) return tokenRow.access_token;
-  const creds = getContaAzulCredentials();
+
+  const creds = await getAccountCredentials(accountId);
   const basicAuth = btoa(creds.clientId + ":" + creds.clientSecret);
-  const res = await fetch(CONTA_AZUL_AUTH_BASE + "/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: "Basic " + basicAuth }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }) });
+  const res = await fetch(CONTA_AZUL_AUTH_BASE + "/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: "Basic " + basicAuth },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokenRow.refresh_token }),
+  });
   if (!res.ok) { const e = await res.text(); throw new Error("TOKEN_REFRESH_FAILED: " + res.status + " - " + e); }
   const tokens = await res.json();
   const newExp = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
-  await db.from("conta_azul_tokens").update({ access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_at: newExp, updated_at: new Date().toISOString() }).eq("id", tokenRow.id);
+  await db.from("conta_azul_tokens").update({
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expires_at: newExp,
+    updated_at: new Date().toISOString(),
+  }).eq("id", tokenRow.id);
   return tokens.access_token;
 }
 
 async function contaAzulFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const token = await getValidAccessToken();
-  return fetch(CONTA_AZUL_BASE + path, { ...options, headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", ...(options.headers as Record<string,string> || {}) } });
+  const token = await getValidAccessToken(_currentAccountId);
+  return fetch(CONTA_AZUL_BASE + path, {
+    ...options,
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", ...(options.headers as Record<string,string> || {}) },
+  });
 }
 
 function corsHeaders(origin = "*") { return { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" }; }
@@ -47,20 +75,26 @@ Deno.serve(async (req) => {
       case "payable": return await createPayable(req);
       case "installment": return await updateInstallment(req);
       case "sale": return await createSale(req);
-      case "products": return await listProducts();
+      case "products": return await listProducts(req);
       case "create-cost-center": return await createCostCenter(req);
-      case "debug-services": return await debugServices();
+      case "debug-services": return await debugServices(req);
       default: return errorResponse("Acao desconhecida: " + action, 404);
     }
   } catch (err: any) { console.error("conta-azul-write error:", err); return errorResponse(err.message || "Erro interno", 500); }
 });
+
+function setAccountFromBody(body: any): string {
+  const accountId = body?.account_id;
+  if (!accountId) throw new Error("Campo 'account_id' é obrigatório.");
+  _currentAccountId = accountId;
+  return accountId;
+}
 
 async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<string> {
   if (!nome && !cpfCnpj) throw new Error("CONTACT_ERROR: Nome do cliente é obrigatório.");
   const cleanDoc = (cpfCnpj || '').replace(/\D/g, '');
   const errors: string[] = [];
 
-  // 1. Search by document
   if (cleanDoc.length >= 11) {
     try {
       const res = await contaAzulFetch("/v1/pessoas?busca=" + encodeURIComponent(cleanDoc));
@@ -72,7 +106,6 @@ async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<stri
     } catch (e: any) { errors.push("Busca por doc: " + e.message); }
   }
 
-  // 2. Search by name
   try {
     const res = await contaAzulFetch("/v1/pessoas?busca=" + encodeURIComponent(nome));
     if (res.ok) {
@@ -83,7 +116,6 @@ async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<stri
     }
   } catch (e: any) { errors.push("Busca por nome: " + e.message); }
 
-  // 3. Create new person
   const isJuridica = cleanDoc.length === 14;
   const newPessoa: any = {
     nome: nome || "Cliente",
@@ -105,7 +137,6 @@ async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<stri
     errors.push("Criar pessoa (" + createRes.status + "): " + errText);
   } catch (e: any) { errors.push("Criar pessoa: " + e.message); }
 
-  // 4. Fallback: try with accented type names
   try {
     newPessoa.tipo_pessoa = isJuridica ? "Jur\u00eddica" : "F\u00edsica";
     console.log("Retry creating pessoa with accents:", JSON.stringify(newPessoa));
@@ -123,6 +154,7 @@ async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<stri
 
 async function createReceivable(req: Request): Promise<Response> {
   const body = await req.json();
+  setAccountFromBody(body);
   const descricao = body.descricao || body.description || "Conta a Receber";
   const valor = parseFloat(body.valor || body.value) || 0;
   const dataCompetencia = body.data_competencia || body.competenceDate || new Date().toISOString().split("T")[0];
@@ -176,6 +208,7 @@ async function createReceivable(req: Request): Promise<Response> {
 
 async function createPayable(req: Request): Promise<Response> {
   const body = await req.json();
+  setAccountFromBody(body);
   const descricao = body.descricao || body.description || "Conta a Pagar";
   const valor = parseFloat(body.valor || body.value) || 0;
   const dataCompetencia = body.data_competencia || body.competenceDate || new Date().toISOString().split("T")[0];
@@ -229,6 +262,7 @@ async function createPayable(req: Request): Promise<Response> {
 
 async function updateInstallment(req: Request): Promise<Response> {
   const body = await req.json();
+  setAccountFromBody(body);
   const installmentId = body.id || body.installment_id;
   if (!installmentId) return errorResponse("Campo 'id' (ID da parcela) e obrigatorio.");
   const payload: any = {};
@@ -250,11 +284,13 @@ function extractItems(body: any): any[] {
   return [];
 }
 
-async function listProducts(): Promise<Response> {
+async function listProducts(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => ({}));
+  setAccountFromBody(body);
+
   const all: any[] = [];
   const errors: string[] = [];
 
-  // ── Produtos (GET /v1/produtos) — com paginação ──
   try {
     let page = 1;
     for (let i = 0; i < 20; i++) {
@@ -272,10 +308,8 @@ async function listProducts(): Promise<Response> {
     }
   } catch (e: any) { errors.push("produtos exception: " + e.message); console.error("Exception produtos:", e); }
 
-  // Delay entre chamadas para evitar rate limit
   await new Promise(r => setTimeout(r, 300));
 
-  // ── Serviços (GET /v1/servicos) — tamanho_pagina max=100 (API rejeita 200) ──
   try {
     let page = 1;
     const svcPageSize = 100;
@@ -301,10 +335,13 @@ async function listProducts(): Promise<Response> {
   return jsonResponse({ success: true, items: all, _meta: { totalProd, totalSvc, errors: errors.length ? errors : undefined } });
 }
 
-async function debugServices(): Promise<Response> {
+async function debugServices(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => ({}));
+  setAccountFromBody(body);
+
   const results: any = {};
   try {
-    const token = await getValidAccessToken();
+    const token = await getValidAccessToken(_currentAccountId);
     results.token_prefix = token.substring(0, 15) + "...";
 
     const endpoints = [
@@ -343,6 +380,7 @@ async function debugServices(): Promise<Response> {
 
 async function createCostCenter(req: Request): Promise<Response> {
   const body = await req.json();
+  const accountId = setAccountFromBody(body);
   const nome = (body.nome || '').trim();
   if (!nome) return errorResponse("Campo 'nome' é obrigatório para criar centro de custo.");
 
@@ -357,18 +395,20 @@ async function createCostCenter(req: Request): Promise<Response> {
 
   const db = getSupabaseServiceClient();
   await db.from("conta_azul_centros_custo").upsert({
+    account_id: accountId,
     id_conta_azul: idContaAzul,
     codigo: created.codigo || null,
     nome: created.nome || nome,
     ativo: true,
     synced_at: new Date().toISOString(),
-  }, { onConflict: "id_conta_azul" });
+  }, { onConflict: "account_id,id_conta_azul" });
 
   return jsonResponse({ success: true, id_conta_azul: idContaAzul, nome: created.nome || nome }, 201);
 }
 
 async function createSale(req: Request): Promise<Response> {
   const body = await req.json();
+  setAccountFromBody(body);
   const valor = parseFloat(body.valor || body.value) || 0;
   const numParcelas = parseInt(body.parcelas) || 1;
   const dataVenda = body.data_venda || body.data_competencia || new Date().toISOString().split("T")[0];

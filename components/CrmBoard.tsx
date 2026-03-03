@@ -11,6 +11,7 @@ import {
 import { appBackend, CompanySetting, Pipeline, PipelineStage, WebhookTrigger } from '../services/appBackend';
 import { whatsappService } from '../services/whatsappService';
 import { contaAzulService } from '../services/contaAzulService';
+import { ContaAzulAccount } from '../types';
 import clsx from 'clsx';
 
 // --- Types ---
@@ -213,6 +214,8 @@ export const CrmBoard: React.FC = () => {
   const [dealProductMapping, setDealProductMapping] = useState<any | null>(null);
   const [isFetchingCep, setIsFetchingCep] = useState(false);
   const [pendingCloseMove, setPendingCloseMove] = useState<{ dealId: string; pipeline: string; targetStage: string; previousStage: string } | null>(null);
+  const [caAccounts, setCaAccounts] = useState<ContaAzulAccount[]>([]);
+  const [selectedCaAccountId, setSelectedCaAccountId] = useState<string | null>(null);
 
   // Tasks Form State
   const [newTaskDesc, setNewTaskDesc] = useState('');
@@ -375,6 +378,8 @@ export const CrmBoard: React.FC = () => {
           setCompanies(companiesResult || []);
           setWebhookTriggers(triggersResult || []);
 
+          contaAzulService.getAccounts().then(accs => setCaAccounts(accs)).catch(() => {});
+
       } catch (e: any) {
           console.error("Erro ao carregar dados do CRM:", e);
       } finally {
@@ -494,13 +499,24 @@ export const CrmBoard: React.FC = () => {
       let matchedProductId = '';
       let matchedCategoryId = '';
 
+      const dealCnpj = (deal.billing_cnpj || deal.billingCnpj || '').replace(/\D/g, '');
+      const matchedAccount = caAccounts.find(a => a.cnpj?.replace(/\D/g, '') === dealCnpj && dealCnpj.length > 0);
+      const accountId = matchedAccount?.id || undefined;
+
+      if (dealCnpj && !matchedAccount) {
+          alert(`Nenhuma conta Conta Azul configurada para o CNPJ ${deal.billing_cnpj || deal.billingCnpj}.\n\nConfigure a conta correspondente em Configurações > Conta Azul antes de lançar a venda.`);
+          return;
+      }
+
+      setSelectedCaAccountId(accountId || null);
+
       try {
-          const status = await contaAzulService.getAuthStatus();
+          const status = await contaAzulService.getAuthStatus(accountId);
           if (status.connected) {
               const results = await Promise.allSettled([
-                  contaAzulService.getCategories(),
-                  contaAzulService.getCostCenters(),
-                  contaAzulService.getProducts(),
+                  contaAzulService.getCategories(accountId),
+                  contaAzulService.getCostCenters(accountId),
+                  contaAzulService.getProducts(accountId!),
                   appBackend.getContaAzulProductMappings(),
               ]);
               cats = results[0].status === 'fulfilled' ? results[0].value : [];
@@ -566,7 +582,7 @@ export const CrmBoard: React.FC = () => {
       if (classMod1 && !matchedCcId) {
           try {
               console.log('[CA] Centro de custo não encontrado, criando:', classMod1);
-              const newCc = await contaAzulService.createCostCenter(classMod1);
+              const newCc = await contaAzulService.createCostCenter(classMod1, selectedCaAccountId!);
               if (newCc?.id_conta_azul) {
                   matchedCcId = newCc.id_conta_azul;
                   setContaAzulCostCenters(prev => [...prev, { id: newCc.id_conta_azul, id_conta_azul: newCc.id_conta_azul, nome: newCc.nome || classMod1 }]);
@@ -679,7 +695,7 @@ export const CrmBoard: React.FC = () => {
                       },
                   ],
                   observacoes: `${contaAzulFormData.observacoes} | Dividido: ${activeMapping.servicePercentage}% serviço + ${activeMapping.productPercentage}% produto de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-              });
+              }, selectedCaAccountId!);
 
               const saleNum = saleResult?.numero_venda || saleResult?.data?.numero || '';
               console.log('[CA] Número da venda unificada:', saleNum);
@@ -703,7 +719,7 @@ export const CrmBoard: React.FC = () => {
                   valor: contaAzulFormData.valor,
                   produto_id: contaAzulFormData.produto_id,
                   observacoes: contaAzulFormData.observacoes,
-              });
+              }, selectedCaAccountId!);
 
               const saleNum = saleResult?.numero_venda || saleResult?.data?.numero || '';
               console.log('[CA] Número de venda:', saleNum);
@@ -723,6 +739,7 @@ export const CrmBoard: React.FC = () => {
 
           setContaAzulConfirmDeal(null);
           setActiveMapping(null);
+          setSelectedCaAccountId(null);
       } catch (err: any) {
           alert(`Erro ao criar Venda: ${err.message}\n\nO negócio NÃO foi movido.`);
       } finally {
@@ -1512,11 +1529,21 @@ export const CrmBoard: React.FC = () => {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[95vh]">
                   <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-50 shrink-0">
-                      <h3 className="text-lg font-bold text-green-800 flex items-center gap-2">
-                          <DollarSign size={20} className="text-green-600" />
-                          Lançar Venda no Conta Azul
-                      </h3>
-                      <button onClick={() => { setContaAzulConfirmDeal(null); setActiveMapping(null); setPendingCloseMove(null); }} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors"><X size={20}/></button>
+                      <div>
+                          <h3 className="text-lg font-bold text-green-800 flex items-center gap-2">
+                              <DollarSign size={20} className="text-green-600" />
+                              Lançar Venda no Conta Azul
+                          </h3>
+                          {selectedCaAccountId && (() => {
+                              const acc = caAccounts.find(a => a.id === selectedCaAccountId);
+                              return acc ? (
+                                  <span className="text-xs text-green-600 font-medium mt-0.5 flex items-center gap-1">
+                                      <Building size={12} /> {acc.nome} {acc.cnpj ? `(${acc.cnpj})` : ''}
+                                  </span>
+                              ) : null;
+                          })()}
+                      </div>
+                      <button onClick={() => { setContaAzulConfirmDeal(null); setActiveMapping(null); setPendingCloseMove(null); setSelectedCaAccountId(null); }} className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200 transition-colors"><X size={20}/></button>
                   </div>
 
                   <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">

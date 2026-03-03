@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type {
   ContaAzulAuthStatus,
+  ContaAzulAccountStatus,
+  ContaAzulAccount,
   ContaAzulReceivable,
   ContaAzulPayable,
   ContaAzulCategory,
@@ -68,26 +70,70 @@ async function edgeFetch(fn: string, path: string, options: RequestInit = {}): P
   }
 }
 
+// Helper to inject account_id into POST body
+function withAccountId(body: Record<string, any>, accountId?: string): string {
+  const payload = accountId ? { ...body, account_id: accountId } : body;
+  return JSON.stringify(payload);
+}
+
+// ── Account Management ───────────────────────────────────────
+
+async function getAccounts(): Promise<ContaAzulAccount[]> {
+  return edgeFetch('conta-azul-auth', 'accounts');
+}
+
+async function createAccount(data: { nome: string; cnpj: string; client_id: string; client_secret: string; redirect_uri: string }): Promise<ContaAzulAccount> {
+  return edgeFetch('conta-azul-auth', 'create-account', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+async function updateAccount(id: string, data: Partial<{ nome: string; cnpj: string; client_id: string; client_secret: string; redirect_uri: string; ativo: boolean }>): Promise<void> {
+  await edgeFetch('conta-azul-auth', 'update-account', {
+    method: 'POST',
+    body: JSON.stringify({ id, ...data }),
+  });
+}
+
+async function deleteAccount(id: string): Promise<void> {
+  await edgeFetch('conta-azul-auth', 'delete-account', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
 // ── Auth ────────────────────────────────────────────────────
 
-async function getAuthStatus(): Promise<ContaAzulAuthStatus> {
+async function getAuthStatus(accountId?: string): Promise<ContaAzulAuthStatus> {
+  const path = accountId ? `status?account_id=${accountId}` : 'status';
+  return edgeFetch('conta-azul-auth', path);
+}
+
+async function getAuthStatusAll(): Promise<ContaAzulAccountStatus[]> {
   return edgeFetch('conta-azul-auth', 'status');
 }
 
-function startOAuthFlow(): void {
-  edgeFetch('conta-azul-auth', 'authorize').then((data) => {
+function startOAuthFlow(accountId: string): void {
+  edgeFetch('conta-azul-auth', `authorize?account_id=${accountId}`).then((data) => {
     if (data.authorize_url) {
       window.open(data.authorize_url, 'contaazul_auth', 'width=600,height=700');
     }
   });
 }
 
-async function disconnect(): Promise<void> {
-  await edgeFetch('conta-azul-auth', 'disconnect');
+async function disconnect(accountId: string): Promise<void> {
+  await edgeFetch('conta-azul-auth', 'disconnect', {
+    method: 'POST',
+    body: JSON.stringify({ account_id: accountId }),
+  });
 }
 
-async function refreshToken(): Promise<void> {
-  await edgeFetch('conta-azul-auth', 'refresh', { method: 'POST' });
+async function refreshToken(accountId: string): Promise<void> {
+  await edgeFetch('conta-azul-auth', 'refresh', {
+    method: 'POST',
+    body: JSON.stringify({ account_id: accountId }),
+  });
 }
 
 // ── Sync ────────────────────────────────────────────────────
@@ -112,15 +158,16 @@ function generateQuarterlyRanges(): { data_vencimento_de: string; data_venciment
   return ranges;
 }
 
-async function triggerSync(type: SyncType, body?: Record<string, any>): Promise<ContaAzulSyncResult> {
+async function triggerSync(type: SyncType, accountId: string, body?: Record<string, any>): Promise<ContaAzulSyncResult> {
   return edgeFetch('conta-azul-sync', type, {
     method: 'POST',
-    body: JSON.stringify(body || {}),
+    body: withAccountId(body || {}, accountId),
   });
 }
 
 async function triggerSyncChunked(
   type: 'receivables' | 'payables',
+  accountId: string,
   onProgress?: (chunk: number, total: number) => void,
 ): Promise<ContaAzulSyncResult> {
   const ranges = generateQuarterlyRanges();
@@ -128,7 +175,7 @@ async function triggerSyncChunked(
   for (let i = 0; i < ranges.length; i++) {
     onProgress?.(i + 1, ranges.length);
     try {
-      const result = await triggerSync(type, ranges[i]);
+      const result = await triggerSync(type, accountId, ranges[i]);
       totalSynced += result.sincronizados ?? 0;
     } catch (e: any) {
       console.warn(`Chunk ${i + 1}/${ranges.length} (${type}) error:`, e.message);
@@ -137,13 +184,18 @@ async function triggerSyncChunked(
   return { success: true, tipo: type, sincronizados: totalSynced };
 }
 
-async function getSyncLogs(limit = 20): Promise<ContaAzulSyncLog[]> {
-  const { data, error } = await supabase
+async function getSyncLogs(accountId?: string, limit = 20): Promise<ContaAzulSyncLog[]> {
+  let query = supabase
     .from('conta_azul_sync_log')
     .select('*')
     .order('started_at', { ascending: false })
     .limit(limit);
 
+  if (accountId) {
+    query = query.eq('account_id', accountId);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
@@ -159,6 +211,7 @@ interface ReceivableFilters {
   centroCusto?: string;
   limit?: number;
   offset?: number;
+  accountId?: string;
 }
 
 async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: ContaAzulReceivable[]; count: number }> {
@@ -168,6 +221,10 @@ async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: 
     .from('conta_azul_contas_receber')
     .select('*', { count: 'exact' })
     .order('data_vencimento', { ascending: false });
+
+  if (filters.accountId) {
+    query = query.eq('account_id', filters.accountId);
+  }
 
   if (filters.status && filters.status !== 'all') {
     if (filters.status === 'Pago') {
@@ -211,6 +268,10 @@ async function getPayables(filters: ReceivableFilters = {}): Promise<{ data: Con
     .select('*', { count: 'exact' })
     .order('data_vencimento', { ascending: false });
 
+  if (filters.accountId) {
+    query = query.eq('account_id', filters.accountId);
+  }
+
   if (filters.status && filters.status !== 'all') {
     query = query.ilike('status', `%${filters.status}%`);
   }
@@ -233,42 +294,57 @@ async function getPayables(filters: ReceivableFilters = {}): Promise<{ data: Con
   return { data: data || [], count: count || 0 };
 }
 
-async function getCategories(): Promise<ContaAzulCategory[]> {
-  const { data, error } = await supabase
+async function getCategories(accountId?: string): Promise<ContaAzulCategory[]> {
+  let query = supabase
     .from('conta_azul_categorias')
     .select('*')
     .eq('ativo', true)
     .order('nome');
 
+  if (accountId) {
+    query = query.eq('account_id', accountId);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
 
-async function getCostCenters(): Promise<ContaAzulCostCenter[]> {
-  const { data, error } = await supabase
+async function getCostCenters(accountId?: string): Promise<ContaAzulCostCenter[]> {
+  let query = supabase
     .from('conta_azul_centros_custo')
     .select('*')
     .eq('ativo', true)
     .order('nome');
 
+  if (accountId) {
+    query = query.eq('account_id', accountId);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
 
-async function createCostCenter(nome: string): Promise<{ id_conta_azul: string; nome: string }> {
+async function createCostCenter(nome: string, accountId: string): Promise<{ id_conta_azul: string; nome: string }> {
   return edgeFetch('conta-azul-write', 'create-cost-center', {
     method: 'POST',
-    body: JSON.stringify({ nome }),
+    body: withAccountId({ nome }, accountId),
   });
 }
 
-async function getFinancialAccounts(): Promise<ContaAzulFinancialAccount[]> {
-  const { data, error } = await supabase
+async function getFinancialAccounts(accountId?: string): Promise<ContaAzulFinancialAccount[]> {
+  let query = supabase
     .from('conta_azul_contas_financeiras')
     .select('*')
     .eq('ativo', true)
     .order('nome');
 
+  if (accountId) {
+    query = query.eq('account_id', accountId);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
@@ -283,14 +359,19 @@ export interface ReceivableStats {
   overdueCount: number;
 }
 
-async function getReceivableStats(): Promise<ReceivableStats> {
+async function getReceivableStats(accountId?: string): Promise<ReceivableStats> {
   const today = new Date().toISOString().split('T')[0];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('conta_azul_contas_receber')
     .select('valor, valor_pago, status, data_vencimento')
     .limit(50000);
 
+  if (accountId) {
+    query = query.eq('account_id', accountId);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   const records = data || [];
 
@@ -329,12 +410,18 @@ interface FinancialStats {
   countPagar: number;
 }
 
-async function getFinancialStats(): Promise<FinancialStats> {
-  const [receber, pagar, contas] = await Promise.all([
-    supabase.from('conta_azul_contas_receber').select('valor, valor_pago, status').limit(10000),
-    supabase.from('conta_azul_contas_pagar').select('valor, valor_pago, status').limit(10000),
-    supabase.from('conta_azul_contas_financeiras').select('saldo_atual').eq('ativo', true).limit(10000),
-  ]);
+async function getFinancialStats(accountId?: string): Promise<FinancialStats> {
+  let receberQ = supabase.from('conta_azul_contas_receber').select('valor, valor_pago, status').limit(10000);
+  let pagarQ = supabase.from('conta_azul_contas_pagar').select('valor, valor_pago, status').limit(10000);
+  let contasQ = supabase.from('conta_azul_contas_financeiras').select('saldo_atual').eq('ativo', true).limit(10000);
+
+  if (accountId) {
+    receberQ = receberQ.eq('account_id', accountId);
+    pagarQ = pagarQ.eq('account_id', accountId);
+    contasQ = contasQ.eq('account_id', accountId);
+  }
+
+  const [receber, pagar, contas] = await Promise.all([receberQ, pagarQ, contasQ]);
 
   const receberData = receber.data || [];
   const pagarData = pagar.data || [];
@@ -361,30 +448,33 @@ async function getFinancialStats(): Promise<FinancialStats> {
 
 // ── Write (via Edge Functions) ──────────────────────────────
 
-async function createReceivable(payload: ContaAzulCreateReceivablePayload): Promise<any> {
+async function createReceivable(payload: ContaAzulCreateReceivablePayload, accountId: string): Promise<any> {
   return edgeFetch('conta-azul-write', 'receivable', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: withAccountId(payload, accountId),
   });
 }
 
-async function createPayable(payload: ContaAzulCreatePayablePayload): Promise<any> {
+async function createPayable(payload: ContaAzulCreatePayablePayload, accountId: string): Promise<any> {
   return edgeFetch('conta-azul-write', 'payable', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: withAccountId(payload, accountId),
   });
 }
 
-async function updateInstallment(payload: ContaAzulUpdateInstallmentPayload): Promise<any> {
+async function updateInstallment(payload: ContaAzulUpdateInstallmentPayload, accountId: string): Promise<any> {
   return edgeFetch('conta-azul-write', 'installment', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: withAccountId(payload, accountId),
   });
 }
 
-async function getProducts(): Promise<{ id: string; nome: string; tipo: string; valor: number }[]> {
+async function getProducts(accountId: string): Promise<{ id: string; nome: string; tipo: string; valor: number }[]> {
   try {
-    const result = await edgeFetch('conta-azul-write', 'products', { method: 'POST' });
+    const result = await edgeFetch('conta-azul-write', 'products', {
+      method: 'POST',
+      body: withAccountId({}, accountId),
+    });
     if (result?._meta) {
       console.log(`[ContaAzul] Produtos: ${result._meta.totalProd}, Serviços: ${result._meta.totalSvc}` +
         (result._meta.errors ? ` | ERROS: ${result._meta.errors.join('; ')}` : ''));
@@ -395,23 +485,32 @@ async function getProducts(): Promise<{ id: string; nome: string; tipo: string; 
   }
 }
 
-async function createSale(payload: ContaAzulCreateSalePayload): Promise<any> {
+async function createSale(payload: ContaAzulCreateSalePayload, accountId: string): Promise<any> {
   return edgeFetch('conta-azul-write', 'sale', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: withAccountId(payload, accountId),
   });
 }
 
 // ── Export ───────────────────────────────────────────────────
 
 export const contaAzulService = {
+  // Account management
+  getAccounts,
+  createAccount,
+  updateAccount,
+  deleteAccount,
+  // Auth
   getAuthStatus,
+  getAuthStatusAll,
   startOAuthFlow,
   disconnect,
   refreshToken,
+  // Sync
   triggerSync,
   triggerSyncChunked,
   getSyncLogs,
+  // Read
   getReceivables,
   getReceivableStats,
   getPayables,
@@ -420,6 +519,7 @@ export const contaAzulService = {
   createCostCenter,
   getFinancialAccounts,
   getFinancialStats,
+  // Write
   createReceivable,
   createPayable,
   updateInstallment,

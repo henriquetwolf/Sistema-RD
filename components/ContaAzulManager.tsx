@@ -6,7 +6,7 @@ import {
   AlertTriangle, Zap, CheckCircle2 as CheckIcon, BarChart3,
   PieChart as PieIcon, TrendingUp, Monitor, BarChart, Wallet, ArrowDownToLine,
   ArrowUpRight, ArrowDownRight, Plus, Save, X, Link2, Unlink,
-  CreditCard, Layers, Building2, Tag, FileText, List
+  CreditCard, Layers, Building2, Tag, FileText, List, Trash2, Pencil
 } from 'lucide-react';
 import {
   BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -16,7 +16,8 @@ import { contaAzulService } from '../services/contaAzulService';
 import type {
   ContaAzulAuthStatus, ContaAzulReceivable, ContaAzulPayable,
   ContaAzulCategory, ContaAzulCostCenter, ContaAzulFinancialAccount,
-  ContaAzulSyncLog, ContaAzulCreateReceivablePayload, ContaAzulCreatePayablePayload
+  ContaAzulSyncLog, ContaAzulCreateReceivablePayload, ContaAzulCreatePayablePayload,
+  ContaAzulAccount, ContaAzulAccountStatus
 } from '../types';
 import clsx from 'clsx';
 
@@ -24,12 +25,21 @@ const COLORS = ['#0d9488', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 const formatDate = (d?: string) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '--';
 
-type TabId = 'overview' | 'receivables' | 'payables' | 'accounts' | 'categories' | 'create' | 'powerbi';
+type TabId = 'overview' | 'receivables' | 'payables' | 'accounts' | 'categories' | 'create' | 'contas' | 'powerbi';
 
 export const ContaAzulManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [authStatus, setAuthStatus] = useState<ContaAzulAuthStatus | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // Multi-account
+  const [caAccounts, setCaAccounts] = useState<ContaAzulAccount[]>([]);
+  const [accountStatuses, setAccountStatuses] = useState<ContaAzulAccountStatus[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<ContaAzulAccount | null>(null);
+  const [accountForm, setAccountForm] = useState({ nome: '', cnpj: '', client_id: '', client_secret: '', redirect_uri: '' });
+  const [isSavingAccount, setIsSavingAccount] = useState(false);
 
   // Overview stats
   const [stats, setStats] = useState<any>(null);
@@ -53,7 +63,7 @@ export const ContaAzulManager: React.FC = () => {
   // Auxiliaries
   const [categories, setCategories] = useState<ContaAzulCategory[]>([]);
   const [costCenters, setCostCenters] = useState<ContaAzulCostCenter[]>([]);
-  const [accounts, setAccounts] = useState<ContaAzulFinancialAccount[]>([]);
+  const [financialAccounts, setFinancialAccounts] = useState<ContaAzulFinancialAccount[]>([]);
   const [syncLogs, setSyncLogs] = useState<ContaAzulSyncLog[]>([]);
 
   // Sync state
@@ -74,12 +84,104 @@ export const ContaAzulManager: React.FC = () => {
 
   const PAGE_SIZE = 30;
 
+  // ── Derived state ─────────────────────────────────────────
+
+  const connectedCount = useMemo(
+    () => accountStatuses.filter(s => s.connected).length,
+    [accountStatuses]
+  );
+
+  const hasAnyConnected = connectedCount > 0;
+
+  const isSelectedConnected = useMemo(() => {
+    if (!selectedAccountId) return hasAnyConnected;
+    return accountStatuses.find(s => s.account_id === selectedAccountId)?.connected ?? false;
+  }, [selectedAccountId, accountStatuses, hasAnyConnected]);
+
+  const selectedAccountName = useMemo(() => {
+    if (!selectedAccountId) return 'Todas as Contas';
+    return caAccounts.find(a => a.id === selectedAccountId)?.nome || 'Conta';
+  }, [selectedAccountId, caAccounts]);
+
+  // ── Account Management ────────────────────────────────────
+
+  const loadAccounts = useCallback(async () => {
+    try {
+      const [accs, statuses] = await Promise.all([
+        contaAzulService.getAccounts(),
+        contaAzulService.getAuthStatusAll(),
+      ]);
+      setCaAccounts(accs);
+      setAccountStatuses(statuses);
+    } catch (e) {
+      console.error('Error loading accounts:', e);
+    }
+  }, []);
+
+  const handleSaveAccount = useCallback(async () => {
+    if (!accountForm.nome || !accountForm.client_id) {
+      alert('Nome e Client ID são obrigatórios.');
+      return;
+    }
+    if (!editingAccount && !accountForm.client_secret) {
+      alert('Client Secret é obrigatório ao criar uma nova conta.');
+      return;
+    }
+    setIsSavingAccount(true);
+    try {
+      if (editingAccount) {
+        const updatePayload: Record<string, any> = { nome: accountForm.nome, cnpj: accountForm.cnpj, client_id: accountForm.client_id, redirect_uri: accountForm.redirect_uri };
+        if (accountForm.client_secret) updatePayload.client_secret = accountForm.client_secret;
+        await contaAzulService.updateAccount(editingAccount.id, updatePayload);
+      } else {
+        await contaAzulService.createAccount(accountForm);
+      }
+      setShowAccountModal(false);
+      setEditingAccount(null);
+      setAccountForm({ nome: '', cnpj: '', client_id: '', client_secret: '', redirect_uri: '' });
+      await loadAccounts();
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
+    } finally {
+      setIsSavingAccount(false);
+    }
+  }, [accountForm, editingAccount, loadAccounts]);
+
+  const handleDeleteAccount = useCallback(async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta conta? Todos os dados associados serão perdidos.')) return;
+    try {
+      await contaAzulService.deleteAccount(id);
+      if (selectedAccountId === id) setSelectedAccountId(null);
+      await loadAccounts();
+    } catch (e: any) {
+      alert(`Erro ao excluir: ${e.message}`);
+    }
+  }, [selectedAccountId, loadAccounts]);
+
+  const openEditAccount = useCallback((acc: ContaAzulAccount) => {
+    setEditingAccount(acc);
+    setAccountForm({
+      nome: acc.nome,
+      cnpj: acc.cnpj || '',
+      client_id: acc.client_id || '',
+      client_secret: '',
+      redirect_uri: acc.redirect_uri || '',
+    });
+    setShowAccountModal(true);
+  }, []);
+
+  const openNewAccount = useCallback(() => {
+    setEditingAccount(null);
+    setAccountForm({ nome: '', cnpj: '', client_id: '', client_secret: '', redirect_uri: '' });
+    setShowAccountModal(true);
+  }, []);
+
   // ── Auth check ──────────────────────────────────────────
 
   const checkAuth = useCallback(async () => {
     setIsCheckingAuth(true);
     try {
-      const status = await contaAzulService.getAuthStatus();
+      const status = await contaAzulService.getAuthStatus(selectedAccountId || undefined);
       setAuthStatus(status);
       return status;
     } catch {
@@ -89,48 +191,64 @@ export const ContaAzulManager: React.FC = () => {
     } finally {
       setIsCheckingAuth(false);
     }
-  }, []);
+  }, [selectedAccountId]);
 
-  const handleConnect = useCallback(() => {
-    contaAzulService.startOAuthFlow();
+  const handleConnect = useCallback((accountId: string) => {
+    contaAzulService.startOAuthFlow(accountId);
     const pollInterval = setInterval(async () => {
       try {
-        const status = await contaAzulService.getAuthStatus();
+        const status = await contaAzulService.getAuthStatus(accountId);
         if (status.connected) {
           setAuthStatus(status);
+          loadAccounts();
           clearInterval(pollInterval);
         }
       } catch { /* ignore polling errors */ }
     }, 3000);
     setTimeout(() => clearInterval(pollInterval), 300000);
-  }, []);
+  }, [loadAccounts]);
+
+  const handleDisconnect = useCallback(async (accountId: string) => {
+    await contaAzulService.disconnect(accountId);
+    await Promise.all([checkAuth(), loadAccounts()]);
+  }, [checkAuth, loadAccounts]);
+
+  // ── Effects (mount + auth) ────────────────────────────────
+
+  useEffect(() => {
+    loadAccounts();
+  }, [loadAccounts]);
 
   useEffect(() => {
     checkAuth();
+  }, [checkAuth]);
+
+  useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === 'CONTA_AZUL_AUTH_SUCCESS') {
         checkAuth();
+        loadAccounts();
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [checkAuth]);
+  }, [checkAuth, loadAccounts]);
 
   // ── Data loading ────────────────────────────────────────
 
   const loadOverview = useCallback(async () => {
-    if (!authStatus?.connected) return;
+    if (!isSelectedConnected) return;
     try {
       const [s, logs] = await Promise.all([
-        contaAzulService.getFinancialStats(),
-        contaAzulService.getSyncLogs(10),
+        contaAzulService.getFinancialStats(selectedAccountId || undefined),
+        contaAzulService.getSyncLogs(selectedAccountId || undefined, 10),
       ]);
       setStats(s);
       setSyncLogs(logs);
     } catch (e) {
       console.error('Error loading overview:', e);
     }
-  }, [authStatus?.connected]);
+  }, [isSelectedConnected, selectedAccountId]);
 
   const loadReceivables = useCallback(async () => {
     setIsLoadingData(true);
@@ -142,6 +260,7 @@ export const ContaAzulManager: React.FC = () => {
         endDate: endDate || undefined,
         limit: PAGE_SIZE,
         offset: (recPage - 1) * PAGE_SIZE,
+        accountId: selectedAccountId || undefined,
       });
       setReceivables(data);
       setRecCount(count);
@@ -150,7 +269,7 @@ export const ContaAzulManager: React.FC = () => {
     } finally {
       setIsLoadingData(false);
     }
-  }, [searchTerm, statusFilter, startDate, endDate, recPage]);
+  }, [searchTerm, statusFilter, startDate, endDate, recPage, selectedAccountId]);
 
   const loadPayables = useCallback(async () => {
     setIsLoadingData(true);
@@ -162,6 +281,7 @@ export const ContaAzulManager: React.FC = () => {
         endDate: endDate || undefined,
         limit: PAGE_SIZE,
         offset: (payPage - 1) * PAGE_SIZE,
+        accountId: selectedAccountId || undefined,
       });
       setPayables(data);
       setPayCount(count);
@@ -170,36 +290,36 @@ export const ContaAzulManager: React.FC = () => {
     } finally {
       setIsLoadingData(false);
     }
-  }, [searchTerm, statusFilter, startDate, endDate, payPage]);
+  }, [searchTerm, statusFilter, startDate, endDate, payPage, selectedAccountId]);
 
   const loadAuxiliaries = useCallback(async () => {
     try {
       const [cats, ccs, accs] = await Promise.all([
-        contaAzulService.getCategories(),
-        contaAzulService.getCostCenters(),
-        contaAzulService.getFinancialAccounts(),
+        contaAzulService.getCategories(selectedAccountId || undefined),
+        contaAzulService.getCostCenters(selectedAccountId || undefined),
+        contaAzulService.getFinancialAccounts(selectedAccountId || undefined),
       ]);
       setCategories(cats);
       setCostCenters(ccs);
-      setAccounts(accs);
+      setFinancialAccounts(accs);
     } catch (e) {
       console.error('Error loading auxiliaries:', e);
     }
-  }, []);
+  }, [selectedAccountId]);
 
   useEffect(() => {
-    if (!authStatus?.connected) return;
+    if (!isSelectedConnected) return;
     loadOverview();
     loadAuxiliaries();
-  }, [authStatus?.connected, loadOverview, loadAuxiliaries]);
+  }, [isSelectedConnected, loadOverview, loadAuxiliaries]);
 
   useEffect(() => {
-    if (activeTab === 'receivables' && authStatus?.connected) loadReceivables();
-  }, [activeTab, loadReceivables, authStatus?.connected]);
+    if (activeTab === 'receivables' && isSelectedConnected) loadReceivables();
+  }, [activeTab, loadReceivables, isSelectedConnected]);
 
   useEffect(() => {
-    if (activeTab === 'payables' && authStatus?.connected) loadPayables();
-  }, [activeTab, loadPayables, authStatus?.connected]);
+    if (activeTab === 'payables' && isSelectedConnected) loadPayables();
+  }, [activeTab, loadPayables, isSelectedConnected]);
 
   // ── Sync ────────────────────────────────────────────────
 
@@ -212,38 +332,60 @@ export const ContaAzulManager: React.FC = () => {
   ];
 
   const handleSync = async (type: 'all' | 'receivables' | 'payables' | 'categories' | 'cost-centers' | 'accounts') => {
+    const connectedIds = selectedAccountId
+      ? [selectedAccountId]
+      : accountStatuses.filter(s => s.connected).map(s => s.account_id);
+
+    if (connectedIds.length === 0) {
+      alert('Nenhuma conta conectada para sincronizar.');
+      return;
+    }
+
     setIsSyncing(true);
     setSyncProgress(0);
     setSyncStep('');
 
+    const getAccName = (id: string) => connectedIds.length > 1
+      ? (accountStatuses.find(s => s.account_id === id)?.nome || id)
+      : '';
+
     if (type === 'all') {
       let totalSynced = 0;
       let errors: string[] = [];
-      for (let i = 0; i < syncSteps.length; i++) {
-        const step = syncSteps[i];
-        setSyncProgress(Math.round((i / syncSteps.length) * 100));
-        setSyncStep(step.label);
+      const totalSteps = syncSteps.length * connectedIds.length;
+      let currentStep = 0;
 
-        if (step.type === 'receivables' || step.type === 'payables') {
-          setSyncMessage(`Sincronizando ${step.label} (em partes trimestrais)... (${i + 1}/${syncSteps.length})`);
-          try {
-            const result = await contaAzulService.triggerSyncChunked(step.type, (chunk, total) => {
-              const baseProgress = Math.round((i / syncSteps.length) * 100);
-              const chunkProgress = Math.round((chunk / total) * (100 / syncSteps.length));
-              setSyncProgress(baseProgress + chunkProgress);
-              setSyncMessage(`Sincronizando ${step.label}... parte ${chunk}/${total} (${i + 1}/${syncSteps.length})`);
-            });
-            totalSynced += result.sincronizados ?? 0;
-          } catch (e: any) {
-            errors.push(`${step.label}: ${e.message}`);
-          }
-        } else {
-          setSyncMessage(`Sincronizando ${step.label}... (${i + 1}/${syncSteps.length})`);
-          try {
-            const result = await contaAzulService.triggerSync(step.type);
-            totalSynced += result.sincronizados ?? 0;
-          } catch (e: any) {
-            errors.push(`${step.label}: ${e.message}`);
+      for (const accId of connectedIds) {
+        const accName = getAccName(accId);
+        const prefix = accName ? `[${accName}] ` : '';
+
+        for (let i = 0; i < syncSteps.length; i++) {
+          const step = syncSteps[i];
+          currentStep++;
+          setSyncProgress(Math.round((currentStep / totalSteps) * 100));
+          setSyncStep(`${prefix}${step.label}`);
+
+          if (step.type === 'receivables' || step.type === 'payables') {
+            setSyncMessage(`${prefix}Sincronizando ${step.label} (trimestral)... (${currentStep}/${totalSteps})`);
+            try {
+              const result = await contaAzulService.triggerSyncChunked(step.type, accId, (chunk, total) => {
+                const baseProgress = Math.round(((currentStep - 1) / totalSteps) * 100);
+                const chunkProgress = Math.round((chunk / total) * (100 / totalSteps));
+                setSyncProgress(baseProgress + chunkProgress);
+                setSyncMessage(`${prefix}${step.label}... parte ${chunk}/${total}`);
+              });
+              totalSynced += result.sincronizados ?? 0;
+            } catch (e: any) {
+              errors.push(`${prefix}${step.label}: ${e.message}`);
+            }
+          } else {
+            setSyncMessage(`${prefix}Sincronizando ${step.label}... (${currentStep}/${totalSteps})`);
+            try {
+              const result = await contaAzulService.triggerSync(step.type, accId);
+              totalSynced += result.sincronizados ?? 0;
+            } catch (e: any) {
+              errors.push(`${prefix}${step.label}: ${e.message}`);
+            }
           }
         }
       }
@@ -261,40 +403,44 @@ export const ContaAzulManager: React.FC = () => {
       if (activeTab === 'payables') loadPayables();
     } else {
       const stepLabel = syncSteps.find(s => s.type === type)?.label || type;
+      let totalSynced = 0;
 
-      if (type === 'receivables' || type === 'payables') {
-        setSyncMessage(`Sincronizando ${stepLabel} (em partes trimestrais)...`);
-        setSyncProgress(10);
-        setSyncStep(stepLabel);
-        try {
-          const result = await contaAzulService.triggerSyncChunked(type, (chunk, total) => {
-            setSyncProgress(Math.round((chunk / total) * 100));
-            setSyncMessage(`Sincronizando ${stepLabel}... parte ${chunk}/${total}`);
-          });
-          setSyncProgress(100);
-          setSyncMessage(`${stepLabel}: ${result.sincronizados ?? 'OK'} registros sincronizados`);
-          await loadOverview();
-          if (type === 'receivables') loadReceivables();
-          else loadPayables();
-        } catch (e: any) {
-          setSyncMessage(`Erro em ${stepLabel}: ${e.message}`);
-        }
-      } else {
-        setSyncMessage(`Sincronizando ${stepLabel}...`);
-        setSyncProgress(50);
-        setSyncStep(stepLabel);
-        try {
-          const result = await contaAzulService.triggerSync(type);
-          setSyncProgress(100);
-          setSyncMessage(`${stepLabel}: ${result.sincronizados ?? 'OK'} registros sincronizados`);
-          await loadOverview();
-          if (type === 'receivables') loadReceivables();
-          else if (type === 'payables') loadPayables();
-          else loadAuxiliaries();
-        } catch (e: any) {
-          setSyncMessage(`Erro em ${stepLabel}: ${e.message}`);
+      for (const accId of connectedIds) {
+        const accName = getAccName(accId);
+        const prefix = accName ? `[${accName}] ` : '';
+
+        if (type === 'receivables' || type === 'payables') {
+          setSyncMessage(`${prefix}Sincronizando ${stepLabel} (trimestral)...`);
+          setSyncProgress(10);
+          setSyncStep(stepLabel);
+          try {
+            const result = await contaAzulService.triggerSyncChunked(type, accId, (chunk, total) => {
+              setSyncProgress(Math.round((chunk / total) * 100));
+              setSyncMessage(`${prefix}${stepLabel}... parte ${chunk}/${total}`);
+            });
+            totalSynced += result.sincronizados ?? 0;
+          } catch (e: any) {
+            setSyncMessage(`Erro em ${stepLabel}: ${e.message}`);
+          }
+        } else {
+          setSyncMessage(`${prefix}Sincronizando ${stepLabel}...`);
+          setSyncProgress(50);
+          setSyncStep(stepLabel);
+          try {
+            const result = await contaAzulService.triggerSync(type, accId);
+            totalSynced += result.sincronizados ?? 0;
+          } catch (e: any) {
+            setSyncMessage(`Erro em ${stepLabel}: ${e.message}`);
+          }
         }
       }
+
+      setSyncProgress(100);
+      setSyncMessage(`${stepLabel}: ${totalSynced} registros sincronizados`);
+      await loadOverview();
+      if (type === 'receivables') loadReceivables();
+      else if (type === 'payables') loadPayables();
+      else loadAuxiliaries();
     }
 
     setIsSyncing(false);
@@ -304,6 +450,10 @@ export const ContaAzulManager: React.FC = () => {
   // ── Create ──────────────────────────────────────────────
 
   const handleCreate = async () => {
+    if (!selectedAccountId) {
+      alert('Selecione uma conta específica antes de criar lançamentos.');
+      return;
+    }
     if (!createForm.descricao || !createForm.valor) {
       alert('Descrição e Valor são obrigatórios.');
       return;
@@ -319,9 +469,9 @@ export const ContaAzulManager: React.FC = () => {
     setIsCreating(true);
     try {
       if (createType === 'receivable') {
-        await contaAzulService.createReceivable(createForm as ContaAzulCreateReceivablePayload);
+        await contaAzulService.createReceivable(createForm as ContaAzulCreateReceivablePayload, selectedAccountId);
       } else {
-        await contaAzulService.createPayable(createForm as ContaAzulCreatePayablePayload);
+        await contaAzulService.createPayable(createForm as ContaAzulCreatePayablePayload, selectedAccountId);
       }
       alert(`${createType === 'receivable' ? 'Conta a Receber' : 'Conta a Pagar'} criada com sucesso no Conta Azul!`);
       setCreateForm({ descricao: '', valor: 0, parcelas: 1, data_vencimento: '', data_competencia: '', observacoes: '' });
@@ -360,6 +510,7 @@ export const ContaAzulManager: React.FC = () => {
     { id: 'accounts', label: 'Saldos', icon: <Wallet size={15} /> },
     { id: 'categories', label: 'Categorias', icon: <Tag size={15} /> },
     { id: 'create', label: 'Criar Lançamento', icon: <Plus size={15} /> },
+    { id: 'contas', label: 'Contas', icon: <Building2 size={15} /> },
     { id: 'powerbi', label: 'Power BI', icon: <Monitor size={15} /> },
   ];
 
@@ -376,7 +527,7 @@ export const ContaAzulManager: React.FC = () => {
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-500 pb-20">
       {/* Header + Connection Status */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 gap-4 shrink-0">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 gap-4 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit">
             <div className="px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest bg-blue-600 text-white shadow-md flex items-center gap-2">
@@ -384,52 +535,89 @@ export const ContaAzulManager: React.FC = () => {
             </div>
           </div>
 
-          {/* Connection badge */}
+          {/* Connection summary badge */}
           {isCheckingAuth ? (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-xl border text-slate-400 text-[10px] font-black uppercase">
               <Loader2 size={12} className="animate-spin" /> Verificando...
             </div>
-          ) : authStatus?.connected ? (
+          ) : caAccounts.length === 0 ? (
+            <button
+              onClick={() => setActiveTab('contas')}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 text-amber-700 text-[10px] font-black uppercase transition-all"
+            >
+              <Building2 size={12} /> Adicionar Conta
+            </button>
+          ) : hasAnyConnected ? (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-xl border border-green-100 text-green-700 text-[10px] font-black uppercase">
-              <Link2 size={12} /> Conectado
+              <Link2 size={12} /> {connectedCount}/{caAccounts.length} Conectadas
               {lastSuccessfulSync && (
                 <span className="text-green-500 font-bold normal-case ml-1">
-                  Ultima sync: {new Date(lastSuccessfulSync).toLocaleString('pt-BR')}
+                  Última sync: {new Date(lastSuccessfulSync).toLocaleString('pt-BR')}
                 </span>
               )}
             </div>
           ) : (
             <button
-              onClick={handleConnect}
+              onClick={() => setActiveTab('contas')}
               className="flex items-center gap-2 px-4 py-2 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 text-amber-700 text-[10px] font-black uppercase transition-all"
             >
-              <Unlink size={12} /> Conectar ao Conta Azul
+              <Unlink size={12} /> Nenhuma conta conectada
             </button>
           )}
         </div>
 
         <div className="flex items-center gap-2">
-          {authStatus?.connected && (
-            <>
-              <button
-                onClick={() => handleSync('all')}
-                disabled={isSyncing}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all flex items-center gap-2"
-              >
-                {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                Sincronizar Tudo
-              </button>
-              <button
-                onClick={() => contaAzulService.disconnect().then(checkAuth)}
-                className="p-2.5 text-slate-400 hover:text-red-500 bg-white border border-slate-200 rounded-xl transition-all shadow-sm"
-                title="Desconectar"
-              >
-                <Unlink size={16} />
-              </button>
-            </>
+          {isSelectedConnected && (
+            <button
+              onClick={() => handleSync('all')}
+              disabled={isSyncing}
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all flex items-center gap-2"
+            >
+              {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Sincronizar {selectedAccountId ? selectedAccountName : 'Tudo'}
+            </button>
           )}
         </div>
       </div>
+
+      {/* Account Selector */}
+      {caAccounts.length > 0 && (
+        <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm mb-4 shrink-0 flex items-center gap-3">
+          <Building2 size={16} className="text-blue-600 shrink-0" />
+          <select
+            value={selectedAccountId || ''}
+            onChange={e => setSelectedAccountId(e.target.value || null)}
+            className="flex-1 bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+          >
+            <option value="">Todas as Contas</option>
+            {caAccounts.map(acc => {
+              const st = accountStatuses.find(s => s.account_id === acc.id);
+              return (
+                <option key={acc.id} value={acc.id}>
+                  {acc.nome}{acc.cnpj ? ` (${acc.cnpj})` : ''} — {st?.connected ? '● Conectada' : '○ Desconectada'}
+                </option>
+              );
+            })}
+          </select>
+          {selectedAccountId && !isSelectedConnected && (
+            <button
+              onClick={() => handleConnect(selectedAccountId)}
+              className="px-4 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 whitespace-nowrap"
+            >
+              <Zap size={12} /> Conectar
+            </button>
+          )}
+          {selectedAccountId && isSelectedConnected && (
+            <button
+              onClick={() => handleDisconnect(selectedAccountId)}
+              className="p-2 text-slate-400 hover:text-red-500 bg-white border border-slate-200 rounded-xl transition-all shadow-sm"
+              title="Desconectar conta selecionada"
+            >
+              <Unlink size={14} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Sync Progress Bar */}
       {(isSyncing || syncMessage) && (
@@ -490,18 +678,25 @@ export const ContaAzulManager: React.FC = () => {
       </div>
 
       {/* Not connected state */}
-      {!authStatus?.connected && !isCheckingAuth && activeTab !== 'powerbi' && (
+      {!isSelectedConnected && !isCheckingAuth && activeTab !== 'powerbi' && activeTab !== 'contas' && (
         <div className="flex-1 flex flex-col items-center justify-center text-center p-20">
           <Landmark size={80} className="text-slate-200 mb-6" />
-          <h3 className="text-xl font-black text-slate-400 mb-2">Conta Azul não conectada</h3>
+          <h3 className="text-xl font-black text-slate-400 mb-2">
+            {caAccounts.length === 0 ? 'Nenhuma conta cadastrada' : 'Conta não conectada'}
+          </h3>
           <p className="text-sm text-slate-400 mb-6 max-w-md">
-            Conecte sua conta do Conta Azul para visualizar dados financeiros em tempo real, criar lançamentos e manter tudo sincronizado.
+            {caAccounts.length === 0
+              ? 'Cadastre sua primeira conta do Conta Azul para começar a visualizar dados financeiros em tempo real.'
+              : selectedAccountId
+                ? 'Esta conta ainda não está conectada ao Conta Azul. Conecte-a na aba Contas.'
+                : 'Nenhuma conta está conectada. Gerencie suas contas para conectar ao Conta Azul.'
+            }
           </p>
           <button
-            onClick={handleConnect}
+            onClick={() => setActiveTab('contas')}
             className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all flex items-center gap-3"
           >
-            <Zap size={18} /> Conectar ao Conta Azul
+            <Building2 size={18} /> {caAccounts.length === 0 ? 'Cadastrar Conta' : 'Gerenciar Contas'}
           </button>
         </div>
       )}
@@ -509,14 +704,14 @@ export const ContaAzulManager: React.FC = () => {
       {/* Tab content */}
       <div className="flex-1">
         {/* ═══ OVERVIEW ═══ */}
-        {activeTab === 'overview' && authStatus?.connected && (
+        {activeTab === 'overview' && isSelectedConnected && (
           <div className="space-y-6 animate-in slide-in-from-left-4 duration-500">
-            {/* Last Sync Info */}
             {lastSuccessfulSync && (
               <div className="flex items-center gap-3 px-5 py-3 bg-blue-50 rounded-2xl border border-blue-100">
                 <Clock size={16} className="text-blue-500" />
                 <span className="text-xs font-bold text-blue-700">
                   Dados sincronizados em: {new Date(lastSuccessfulSync).toLocaleString('pt-BR')}
+                  {selectedAccountId && <span className="ml-1 text-blue-500">({selectedAccountName})</span>}
                 </span>
                 <button
                   onClick={() => handleSync('all')}
@@ -631,7 +826,7 @@ export const ContaAzulManager: React.FC = () => {
         )}
 
         {/* ═══ RECEIVABLES ═══ */}
-        {activeTab === 'receivables' && authStatus?.connected && (
+        {activeTab === 'receivables' && isSelectedConnected && (
           <div className="space-y-6 animate-in slide-in-from-left-4 duration-500">
             <FilterBar
               searchTerm={searchTerm} setSearchTerm={setSearchTerm}
@@ -704,7 +899,7 @@ export const ContaAzulManager: React.FC = () => {
         )}
 
         {/* ═══ PAYABLES ═══ */}
-        {activeTab === 'payables' && authStatus?.connected && (
+        {activeTab === 'payables' && isSelectedConnected && (
           <div className="space-y-6 animate-in slide-in-from-left-4 duration-500">
             <FilterBar
               searchTerm={searchTerm} setSearchTerm={setSearchTerm}
@@ -777,7 +972,7 @@ export const ContaAzulManager: React.FC = () => {
         )}
 
         {/* ═══ ACCOUNTS / SALDOS ═══ */}
-        {activeTab === 'accounts' && authStatus?.connected && (
+        {activeTab === 'accounts' && isSelectedConnected && (
           <div className="space-y-6 animate-in slide-in-from-left-4 duration-500">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-black text-slate-700 flex items-center gap-2"><Wallet size={20} className="text-blue-600" /> Contas Financeiras</h3>
@@ -786,14 +981,14 @@ export const ContaAzulManager: React.FC = () => {
               </button>
             </div>
 
-            {accounts.length === 0 ? (
+            {financialAccounts.length === 0 ? (
               <div className="py-20 text-center text-slate-300">
                 <Building2 size={48} className="mx-auto mb-3 opacity-20" />
                 <p className="font-bold">Nenhuma conta financeira sincronizada.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {accounts.map(acc => (
+                {financialAccounts.map(acc => (
                   <div key={acc.id} className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:rotate-12 transition-transform">
                       <Building2 size={64} />
@@ -818,13 +1013,12 @@ export const ContaAzulManager: React.FC = () => {
               </div>
             )}
 
-            {/* Total */}
-            {accounts.length > 0 && (
+            {financialAccounts.length > 0 && (
               <div className="bg-slate-900 p-6 rounded-[2rem] text-white flex items-center justify-between">
                 <div>
                   <p className="text-xs font-black text-indigo-300 uppercase tracking-widest">Saldo Consolidado</p>
                   <p className="text-3xl font-black mt-1">
-                    {formatCurrency(accounts.reduce((s, a) => s + a.saldo_atual, 0))}
+                    {formatCurrency(financialAccounts.reduce((s, a) => s + a.saldo_atual, 0))}
                   </p>
                 </div>
                 <Wallet size={48} className="text-white/10" />
@@ -834,7 +1028,7 @@ export const ContaAzulManager: React.FC = () => {
         )}
 
         {/* ═══ CATEGORIES & COST CENTERS ═══ */}
-        {activeTab === 'categories' && authStatus?.connected && (
+        {activeTab === 'categories' && isSelectedConnected && (
           <div className="space-y-6 animate-in slide-in-from-left-4 duration-500">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-black text-slate-700 flex items-center gap-2"><Tag size={20} className="text-indigo-600" /> Categorias e Centros de Custo</h3>
@@ -849,7 +1043,6 @@ export const ContaAzulManager: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Categories */}
               <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 bg-slate-50 border-b flex items-center gap-2">
                   <Tag size={16} className="text-indigo-600" />
@@ -876,7 +1069,6 @@ export const ContaAzulManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Cost Centers */}
               <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 bg-slate-50 border-b flex items-center gap-2">
                   <Layers size={16} className="text-violet-600" />
@@ -908,21 +1100,32 @@ export const ContaAzulManager: React.FC = () => {
         )}
 
         {/* ═══ CREATE ═══ */}
-        {activeTab === 'create' && authStatus?.connected && (
+        {activeTab === 'create' && isSelectedConnected && (
           <div className="max-w-3xl mx-auto space-y-6 animate-in slide-in-from-left-4 duration-500">
-            <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
+            {!selectedAccountId && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
+                <AlertTriangle size={20} className="text-amber-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-amber-700">Selecione uma conta específica</p>
+                  <p className="text-xs text-amber-500">Para criar lançamentos, selecione uma conta no filtro acima.</p>
+                </div>
+              </div>
+            )}
+
+            <div className={clsx("bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden", !selectedAccountId && "opacity-50 pointer-events-none")}>
               <div className="px-8 py-6 bg-slate-50 border-b flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-blue-600 text-white rounded-2xl shadow-lg"><Plus size={22} /></div>
                   <div>
                     <h3 className="text-lg font-black text-slate-800">Criar Lançamento Financeiro</h3>
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Envia diretamente para o Conta Azul</p>
+                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                      {selectedAccountId ? `Conta: ${selectedAccountName}` : 'Selecione uma conta'}
+                    </p>
                   </div>
                 </div>
               </div>
 
               <div className="p-8 space-y-6">
-                {/* Type toggle */}
                 <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
                   <button onClick={() => setCreateType('receivable')} className={clsx("px-5 py-2 rounded-lg text-xs font-black uppercase transition-all", createType === 'receivable' ? "bg-green-600 text-white shadow-sm" : "text-slate-500")}>
                     Conta a Receber
@@ -990,7 +1193,7 @@ export const ContaAzulManager: React.FC = () => {
               </div>
 
               <div className="px-8 py-5 bg-slate-50 border-t flex justify-end">
-                <button onClick={handleCreate} disabled={isCreating} className={clsx(
+                <button onClick={handleCreate} disabled={isCreating || !selectedAccountId} className={clsx(
                   "px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center gap-2 transition-all active:scale-95",
                   createType === 'receivable'
                     ? "bg-green-600 hover:bg-green-700 text-white shadow-green-600/20"
@@ -1001,6 +1204,131 @@ export const ContaAzulManager: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ═══ CONTAS (Account Management) ═══ */}
+        {activeTab === 'contas' && (
+          <div className="space-y-6 animate-in slide-in-from-left-4 duration-500">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-slate-700 flex items-center gap-2">
+                <Building2 size={20} className="text-blue-600" /> Gerenciamento de Contas
+              </h3>
+              <button
+                onClick={openNewAccount}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-blue-600/20"
+              >
+                <Plus size={14} /> Nova Conta
+              </button>
+            </div>
+
+            {caAccounts.length === 0 ? (
+              <div className="py-20 text-center">
+                <Building2 size={64} className="mx-auto mb-4 text-slate-200" />
+                <h3 className="text-lg font-black text-slate-400 mb-2">Nenhuma conta cadastrada</h3>
+                <p className="text-sm text-slate-400 mb-6 max-w-md mx-auto">
+                  Cadastre sua primeira conta do Conta Azul para começar a sincronizar dados financeiros.
+                </p>
+                <button
+                  onClick={openNewAccount}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all flex items-center gap-3 mx-auto"
+                >
+                  <Plus size={18} /> Cadastrar Primeira Conta
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {caAccounts.map(acc => {
+                  const st = accountStatuses.find(s => s.account_id === acc.id);
+                  const isConnected = st?.connected ?? false;
+                  return (
+                    <div key={acc.id} className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                      <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:rotate-12 transition-transform">
+                        <Building2 size={64} />
+                      </div>
+
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className={clsx(
+                            "w-12 h-12 rounded-2xl flex items-center justify-center",
+                            isConnected ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-400"
+                          )}>
+                            <Building2 size={24} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-black text-slate-800">{acc.nome}</p>
+                            {acc.cnpj && <p className="text-[10px] text-slate-400 font-bold">{acc.cnpj}</p>}
+                          </div>
+                        </div>
+                        <span className={clsx(
+                          "text-[9px] font-black px-2.5 py-1 rounded-lg uppercase border",
+                          isConnected
+                            ? "bg-green-50 text-green-700 border-green-100"
+                            : "bg-slate-50 text-slate-500 border-slate-200"
+                        )}>
+                          {isConnected ? 'Conectada' : 'Desconectada'}
+                        </span>
+                      </div>
+
+                      {isConnected && st?.lastSync && (
+                        <p className="text-[10px] text-slate-400 font-bold mb-3">
+                          Última sync: {new Date(st.lastSync).toLocaleString('pt-BR')}
+                          {st.lastSyncType && <span className="ml-1 text-slate-300">({st.lastSyncType})</span>}
+                        </p>
+                      )}
+
+                      {isConnected && st?.tokenExpiresAt && (
+                        <p className="text-[10px] text-slate-400 font-bold mb-3">
+                          Token expira: {new Date(st.tokenExpiresAt).toLocaleString('pt-BR')}
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100">
+                        {isConnected ? (
+                          <button
+                            onClick={() => handleDisconnect(acc.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg text-[10px] font-black uppercase transition-all"
+                          >
+                            <Unlink size={12} /> Desconectar
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleConnect(acc.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-100 rounded-lg text-[10px] font-black uppercase transition-all"
+                          >
+                            <Zap size={12} /> Conectar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => openEditAccount(acc)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-black uppercase transition-all"
+                        >
+                          <Pencil size={12} /> Editar
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAccount(acc.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-red-400 hover:text-red-600 bg-white hover:bg-red-50 border border-slate-200 hover:border-red-200 rounded-lg text-[10px] font-black uppercase transition-all ml-auto"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {caAccounts.length > 0 && (
+              <div className="bg-slate-900 p-6 rounded-[2rem] text-white flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-black text-indigo-300 uppercase tracking-widest">Resumo</p>
+                  <p className="text-2xl font-black mt-1">
+                    {connectedCount} de {caAccounts.length} conta{caAccounts.length !== 1 ? 's' : ''} conectada{connectedCount !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                <Building2 size={48} className="text-white/10" />
+              </div>
+            )}
           </div>
         )}
 
@@ -1025,6 +1353,106 @@ export const ContaAzulManager: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ═══ Account Modal ═══ */}
+      {showAccountModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="px-8 py-5 bg-slate-50 border-b flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-600 text-white rounded-xl">
+                  <Building2 size={18} />
+                </div>
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">
+                  {editingAccount ? 'Editar Conta' : 'Nova Conta'}
+                </h3>
+              </div>
+              <button
+                onClick={() => { setShowAccountModal(false); setEditingAccount(null); }}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-8 space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Conta *</label>
+                <input
+                  type="text"
+                  value={accountForm.nome}
+                  onChange={e => setAccountForm(f => ({ ...f, nome: e.target.value }))}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="Ex: Voll Pilates - Matriz"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">CNPJ</label>
+                <input
+                  type="text"
+                  value={accountForm.cnpj}
+                  onChange={e => setAccountForm(f => ({ ...f, cnpj: e.target.value }))}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="00.000.000/0000-00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Client ID *</label>
+                <input
+                  type="text"
+                  value={accountForm.client_id}
+                  onChange={e => setAccountForm(f => ({ ...f, client_id: e.target.value }))}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="Client ID do app OAuth"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                  Client Secret {editingAccount ? '(deixe vazio para manter)' : '*'}
+                </label>
+                <input
+                  type="password"
+                  value={accountForm.client_secret}
+                  onChange={e => setAccountForm(f => ({ ...f, client_secret: e.target.value }))}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="Client Secret do app OAuth"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Redirect URI</label>
+                <input
+                  type="text"
+                  value={accountForm.redirect_uri}
+                  onChange={e => setAccountForm(f => ({ ...f, redirect_uri: e.target.value }))}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="https://..."
+                />
+              </div>
+            </div>
+
+            <div className="px-8 py-5 bg-slate-50 border-t flex justify-end gap-3">
+              <button
+                onClick={() => { setShowAccountModal(false); setEditingAccount(null); }}
+                className="px-6 py-2.5 text-slate-500 bg-white border border-slate-200 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveAccount}
+                disabled={isSavingAccount}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
+              >
+                {isSavingAccount ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {editingAccount ? 'Salvar Alterações' : 'Cadastrar Conta'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

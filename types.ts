@@ -689,6 +689,30 @@ export interface EmailConfig {
 
 // ── Conta Azul Integration Types ────────────────────────────
 
+export interface ContaAzulAccount {
+  id: string;
+  nome: string;
+  cnpj: string;
+  client_id: string;
+  redirect_uri: string;
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContaAzulAccountStatus {
+  account_id: string;
+  nome: string;
+  cnpj: string;
+  connected: boolean;
+  tokenExpiresAt?: string | null;
+  needsRefresh?: boolean;
+  connectedSince?: string | null;
+  lastSync: string | null;
+  lastSyncType?: string | null;
+  lastSyncStatus?: string | null;
+}
+
 export interface ContaAzulAuthStatus {
   connected: boolean;
   tokenExpiresAt?: string;
@@ -697,10 +721,12 @@ export interface ContaAzulAuthStatus {
   lastSync: string | null;
   lastSyncType?: string;
   lastSyncStatus?: string;
+  account_id?: string;
 }
 
 export interface ContaAzulReceivable {
   id: string;
+  account_id?: string;
   id_conta_azul: string;
   id_evento?: string;
   descricao?: string;
@@ -729,6 +755,7 @@ export interface ContaAzulReceivable {
 
 export interface ContaAzulPayable {
   id: string;
+  account_id?: string;
   id_conta_azul: string;
   id_evento?: string;
   descricao?: string;
@@ -757,6 +784,7 @@ export interface ContaAzulPayable {
 
 export interface ContaAzulCategory {
   id: string;
+  account_id?: string;
   id_conta_azul: string;
   nome: string;
   tipo: 'RECEITA' | 'DESPESA' | 'AMBOS';
@@ -766,6 +794,7 @@ export interface ContaAzulCategory {
 
 export interface ContaAzulCostCenter {
   id: string;
+  account_id?: string;
   id_conta_azul: string;
   codigo?: string;
   nome: string;
@@ -775,6 +804,7 @@ export interface ContaAzulCostCenter {
 
 export interface ContaAzulFinancialAccount {
   id: string;
+  account_id?: string;
   id_conta_azul: string;
   nome: string;
   tipo?: string;
@@ -785,6 +815,7 @@ export interface ContaAzulFinancialAccount {
 
 export interface ContaAzulSyncLog {
   id: string;
+  account_id?: string;
   tipo_sync: string;
   status: 'running' | 'success' | 'error';
   registros_sincronizados: number;

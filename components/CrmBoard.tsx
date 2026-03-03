@@ -157,6 +157,24 @@ const INITIAL_FORM_STATE: Partial<Deal> = {
     tasks: []
 };
 
+const PAYMENT_METHODS = [
+    { value: '', label: 'Selecione...' },
+    { value: 'Boleto', label: 'Boleto Bancário' },
+    { value: 'Cartão de Crédito', label: 'Cartão de Crédito' },
+    { value: 'Cartão de Débito', label: 'Cartão de Débito' },
+    { value: 'PIX', label: 'PIX' },
+    { value: 'Dinheiro', label: 'Dinheiro / À Vista' },
+    { value: 'Transferência', label: 'Transferência Bancária' },
+];
+
+const formatCurrencyInput = (raw: string): { display: string; numeric: number } => {
+    const digits = raw.replace(/\D/g, '');
+    const cents = parseInt(digits || '0', 10);
+    const numeric = cents / 100;
+    const display = numeric.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return { display: `R$ ${display}`, numeric };
+};
+
 export const CrmBoard: React.FC = () => {
   const [activeView, setActiveView] = useState<'pipeline' | 'teams' | 'pipelines_config' | 'tasks'>('pipeline');
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -216,6 +234,17 @@ export const CrmBoard: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+      const total = Number(dealFormData.value) || 0;
+      const entry = Number(dealFormData.entryValue) || 0;
+      const inst = Number(dealFormData.installments) || 1;
+      const remaining = Math.max(total - entry, 0);
+      const perInstallment = inst > 0 ? Math.round((remaining / inst) * 100) / 100 : 0;
+      if (dealFormData.installmentValue !== perInstallment) {
+          setDealFormData(prev => ({ ...prev, installmentValue: perInstallment }));
+      }
+  }, [dealFormData.value, dealFormData.entryValue, dealFormData.installments]);
 
   // Lógica de preenchimento automático de CNPJ, Empresa e Configuração Conta Azul
   useEffect(() => {
@@ -2071,11 +2100,28 @@ export const CrmBoard: React.FC = () => {
                     <div className="lg:col-span-3 border-t pt-6">
                         <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Dados Financeiros</h4>
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Forma Pagamento</label><input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.paymentMethod} onChange={e => setDealFormData({...dealFormData, paymentMethod: e.target.value})} /></div>
-                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Valor Entrada</label><input type="number" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.entryValue} onChange={e => setDealFormData({...dealFormData, entryValue: parseFloat(e.target.value) || 0})} /></div>
-                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Nº Parcelas</label><input type="number" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.installments} onChange={e => setDealFormData({...dealFormData, installments: parseInt(e.target.value) || 1})} /></div>
-                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Valor Parcela</label><input type="number" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.installmentValue} onChange={e => setDealFormData({...dealFormData, installmentValue: parseFloat(e.target.value) || 0})} /></div>
-                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">1º Vencimento</label><input type="date" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.firstDueDate} onChange={e => setDealFormData({...dealFormData, firstDueDate: e.target.value})} /></div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Forma Pagamento</label>
+                                <select className="w-full px-3 py-1.5 border rounded text-xs bg-white" value={dealFormData.paymentMethod} onChange={e => setDealFormData({...dealFormData, paymentMethod: e.target.value})}>
+                                    {PAYMENT_METHODS.map(pm => <option key={pm.value} value={pm.value}>{pm.label}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Valor Entrada</label>
+                                <input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={`R$ ${(dealFormData.entryValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} onChange={e => { const { numeric } = formatCurrencyInput(e.target.value); setDealFormData({...dealFormData, entryValue: numeric}); }} />
+                            </div>
+                            <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Nº Parcelas</label><input type="number" min={1} className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.installments} onChange={e => setDealFormData({...dealFormData, installments: parseInt(e.target.value) || 1})} /></div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Valor Parcela</label>
+                                <input type="text" readOnly className="w-full px-3 py-1.5 border rounded text-xs bg-slate-50 text-slate-600 cursor-default" value={`R$ ${(dealFormData.installmentValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">1º Vencimento</label>
+                                <div className="flex gap-1.5">
+                                    <input type="date" className="flex-1 px-3 py-1.5 border rounded text-xs" value={dealFormData.firstDueDate} onChange={e => setDealFormData({...dealFormData, firstDueDate: e.target.value})} />
+                                    <button type="button" className="px-2 py-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded text-[9px] font-bold hover:bg-blue-100 transition-colors whitespace-nowrap" onClick={() => { const d = new Date(); d.setDate(d.getDate() + 30); setDealFormData({...dealFormData, firstDueDate: d.toISOString().split('T')[0]}); }}>30d</button>
+                                </div>
+                            </div>
                             <div className="md:col-span-2"><label className="block text-[10px] font-bold text-slate-500 mb-1">Link do Comprovante</label><input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.receiptLink} onChange={e => setDealFormData({...dealFormData, receiptLink: e.target.value})} /></div>
                             <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Transação</label><input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.transactionCode} onChange={e => setDealFormData({...dealFormData, transactionCode: e.target.value})} /></div>
                         </div>

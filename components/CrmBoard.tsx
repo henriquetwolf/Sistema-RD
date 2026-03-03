@@ -523,6 +523,17 @@ export const CrmBoard: React.FC = () => {
               ccs = results[1].status === 'fulfilled' ? results[1].value : [];
               prods = results[2].status === 'fulfilled' ? results[2].value : [];
               mappingsData = results[3].status === 'fulfilled' ? results[3].value : [];
+
+              if (cats.length === 0 && accountId) {
+                  console.log('[CA] Nenhuma categoria encontrada, sincronizando automaticamente...');
+                  await contaAzulService.triggerSync('categories', accountId);
+                  cats = await contaAzulService.getCategories(accountId);
+              }
+              if (ccs.length === 0 && accountId) {
+                  console.log('[CA] Nenhum centro de custo encontrado, sincronizando automaticamente...');
+                  await contaAzulService.triggerSync('cost-centers', accountId);
+                  ccs = await contaAzulService.getCostCenters(accountId);
+              }
           }
       } catch (err) {
           console.error('Erro ao buscar dados do Conta Azul (modal será exibido mesmo assim):', err);

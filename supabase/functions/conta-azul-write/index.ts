@@ -274,54 +274,24 @@ async function listProducts(): Promise<Response> {
   // Delay entre chamadas para evitar rate limit
   await new Promise(r => setTimeout(r, 300));
 
-  // ── Serviços (GET /v1/servicos) — com paginação e retry ──
-  let svcLoaded = false;
-  for (let attempt = 1; attempt <= 3 && !svcLoaded; attempt++) {
-    try {
-      if (attempt > 1) {
-        console.log(`Servicos: retry ${attempt}/3 (aguardando 1s)...`);
-        await new Promise(r => setTimeout(r, 1000));
+  // ── Serviços (GET /v1/servicos) — tamanho_pagina max=100 (API rejeita 200) ──
+  try {
+    let page = 1;
+    const svcPageSize = 100;
+    for (let i = 0; i < 50; i++) {
+      const res = await contaAzulFetch(`/v1/servicos?pagina=${page}&tamanho_pagina=${svcPageSize}`);
+      if (!res.ok) { errors.push(`servicos p${page}: ${res.status}`); break; }
+      const body = await res.json();
+      const items = extractItems(body);
+      for (const s of items) {
+        all.push({ id: String(s.id), nome: s.nome || s.descricao || s.name || "Serviço", tipo: "SERVICO", valor: s.preco || s.preco_venda || s.valor || s.valor_venda || 0 });
       }
-      const token = await getValidAccessToken();
-      console.log(`Servicos attempt ${attempt}: token ok (${token.substring(0, 10)}...)`);
-      let page = 1;
-      let svcCount = 0;
-      for (let i = 0; i < 20; i++) {
-        const url = `${CONTA_AZUL_BASE}/v1/servicos?pagina=${page}&tamanho_pagina=200`;
-        console.log(`Servicos fetch: ${url}`);
-        const res = await fetch(url, { headers: { Authorization: "Bearer " + token, Accept: "application/json" } });
-        console.log(`Servicos response: ${res.status} ${res.statusText}`);
-        if (!res.ok) {
-          const errText = await res.text().catch(() => "");
-          errors.push(`servicos p${page} attempt${attempt}: ${res.status} - ${errText.substring(0, 200)}`);
-          console.error(`Servicos ERRO page ${page} attempt ${attempt}: ${res.status} ${errText.substring(0, 200)}`);
-          break;
-        }
-        const rawText = await res.text();
-        console.log(`Servicos raw (${rawText.length} chars): ${rawText.substring(0, 300)}`);
-        let body: any;
-        try { body = JSON.parse(rawText); } catch { errors.push(`servicos parse error attempt${attempt}`); break; }
-        const items = extractItems(body);
-        for (const s of items) {
-          all.push({ id: String(s.id), nome: s.nome || s.descricao || s.name || "Serviço", tipo: "SERVICO", valor: s.preco || s.preco_venda || s.valor || s.valor_venda || 0 });
-        }
-        svcCount += items.length;
-        const totalPg = body.paginacao?.total_paginas || body.totalPages || 1;
-        console.log(`Servicos page ${page}/${totalPg} attempt ${attempt}: ${items.length} itens`);
-        if (items.length < 200 || page >= totalPg) break;
-        page++;
-      }
-      if (svcCount > 0) {
-        svcLoaded = true;
-        console.log(`Servicos carregados: ${svcCount} (attempt ${attempt})`);
-      } else {
-        errors.push(`servicos attempt${attempt}: 0 itens retornados`);
-      }
-    } catch (e: any) {
-      errors.push(`servicos attempt${attempt} exception: ${e.message}`);
-      console.error(`Exception servicos attempt ${attempt}:`, e);
+      const totalPg = body.paginacao?.total_paginas || body.totalPages || 1;
+      console.log(`Servicos page ${page}/${totalPg}: ${items.length} itens`);
+      if (items.length < svcPageSize || page >= totalPg) break;
+      page++;
     }
-  }
+  } catch (e: any) { errors.push("servicos exception: " + e.message); console.error("Exception servicos:", e); }
 
   const totalProd = all.filter(i => i.tipo === 'PRODUTO').length;
   const totalSvc = all.filter(i => i.tipo === 'SERVICO').length;

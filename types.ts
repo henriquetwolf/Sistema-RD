@@ -829,15 +829,23 @@ export interface ContaAzulCreatePayablePayload {
   observacoes?: string;
 }
 
+export interface ContaAzulSaleItem {
+  id: string;
+  valor: number;
+  quantidade?: number;
+  descricao?: string;
+}
+
 export interface ContaAzulCreateSalePayload {
-  descricao: string;
+  descricao?: string;
   valor: number;
   data_venda?: string;
   data_vencimento?: string;
   parcelas?: number;
   categoria_id?: string;
   centro_custo_id?: string;
-  produto_id: string;
+  produto_id?: string;
+  itens?: ContaAzulSaleItem[];
   contato_id?: string;
   contato_nome?: string;
   contato_cpf?: string;

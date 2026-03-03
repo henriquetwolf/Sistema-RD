@@ -374,8 +374,10 @@ async function createSale(req: Request): Promise<Response> {
   const dataVenda = body.data_venda || body.data_competencia || new Date().toISOString().split("T")[0];
   const dataVencimento = body.data_vencimento || dataVenda;
 
-  if (!valor) return errorResponse("Valor é obrigatório e deve ser maior que zero.");
-  if (!body.produto_id) return errorResponse("Produto/Serviço é obrigatório para criar uma venda.");
+  const hasMultipleItems = Array.isArray(body.itens) && body.itens.length > 0;
+
+  if (!hasMultipleItems && !valor) return errorResponse("Valor é obrigatório e deve ser maior que zero.");
+  if (!hasMultipleItems && !body.produto_id) return errorResponse("Produto/Serviço é obrigatório para criar uma venda.");
 
   let clienteId = body.contato_id || null;
   if (!clienteId) {
@@ -386,7 +388,28 @@ async function createSale(req: Request): Promise<Response> {
     }
   }
 
-  const valorParcela = Math.round((valor / numParcelas) * 100) / 100;
+  let itensPayload: any[];
+  if (hasMultipleItems) {
+    itensPayload = body.itens.map((item: any) => ({
+      id: item.id,
+      valor: parseFloat(item.valor) || 0,
+      quantidade: item.quantidade || 1,
+      descricao: item.descricao || "Venda CRM",
+    }));
+  } else {
+    itensPayload = [{
+      id: body.produto_id,
+      valor,
+      quantidade: 1,
+      descricao: body.descricao || "Venda CRM",
+    }];
+  }
+
+  const valorTotal = hasMultipleItems
+    ? itensPayload.reduce((sum: number, it: any) => sum + it.valor, 0)
+    : valor;
+
+  const valorParcela = Math.round((valorTotal / numParcelas) * 100) / 100;
   let opcaoCondicao = "À vista";
   if (numParcelas > 1) opcaoCondicao = numParcelas + "x";
 
@@ -416,12 +439,7 @@ async function createSale(req: Request): Promise<Response> {
     numero: saleNum,
     situacao: "APROVADO",
     data_venda: dataVenda,
-    itens: [{
-      id: body.produto_id,
-      valor,
-      quantidade: 1,
-      descricao: body.descricao || "Venda CRM",
-    }],
+    itens: itensPayload,
     condicao_pagamento: {
       opcao_condicao_pagamento: opcaoCondicao,
       tipo_pagamento: tipoPagamento,

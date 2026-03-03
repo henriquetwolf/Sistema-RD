@@ -631,32 +631,34 @@ export const CrmBoard: React.FC = () => {
 
               const dealNum = contaAzulFormData.deal_number || '';
 
-              console.log('[CA] Sending service sale — produto_id:', resolvedSvcId, 'valor:', serviceValue);
-              const svcResult = await contaAzulService.createSale({
+              console.log('[CA] Sending unified sale with 2 items — svc:', resolvedSvcId, 'prod:', resolvedProdId, 'total:', totalValue);
+              const saleResult = await contaAzulService.createSale({
                   ...basePayload,
-                  descricao: `[CRM #${dealNum}] ${svcName} (${activeMapping.servicePercentage}%)`,
-                  valor: serviceValue,
-                  produto_id: resolvedSvcId,
-                  observacoes: `${contaAzulFormData.observacoes} | SERVIÇO ${activeMapping.servicePercentage}% de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+                  valor: totalValue,
+                  itens: [
+                      {
+                          id: resolvedSvcId,
+                          valor: serviceValue,
+                          quantidade: 1,
+                          descricao: `[CRM #${dealNum}] ${svcName} (${activeMapping.servicePercentage}%)`,
+                      },
+                      {
+                          id: resolvedProdId,
+                          valor: productValue,
+                          quantidade: 1,
+                          descricao: `[CRM #${dealNum}] ${prodName} (${activeMapping.productPercentage}%)`,
+                      },
+                  ],
+                  observacoes: `${contaAzulFormData.observacoes} | Dividido: ${activeMapping.servicePercentage}% serviço + ${activeMapping.productPercentage}% produto de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
               });
 
-              console.log('[CA] Sending product sale — produto_id:', resolvedProdId, 'valor:', productValue);
-              const prodResult = await contaAzulService.createSale({
-                  ...basePayload,
-                  descricao: `[CRM #${dealNum}] ${prodName} (${activeMapping.productPercentage}%)`,
-                  valor: productValue,
-                  produto_id: resolvedProdId,
-                  observacoes: `${contaAzulFormData.observacoes} | PRODUTO ${activeMapping.productPercentage}% de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-              });
+              const saleNum = saleResult?.numero_venda || saleResult?.data?.numero || '';
+              console.log('[CA] Número da venda unificada:', saleNum);
 
-              const svcNum = svcResult?.numero_venda || svcResult?.data?.numero || '';
-              const prodNum = prodResult?.numero_venda || prodResult?.data?.numero || '';
-              console.log('[CA] Números de venda — serviço:', svcNum, 'produto:', prodNum);
-
-              if (dealId && (svcNum || prodNum)) {
+              if (dealId && saleNum) {
                   await appBackend.client.from('crm_deals').update({
-                      conta_azul_sale_number_service: String(svcNum),
-                      conta_azul_sale_number_product: String(prodNum),
+                      conta_azul_sale_number_service: String(saleNum),
+                      conta_azul_sale_number_product: String(saleNum),
                   }).eq('id', dealId);
               }
 
@@ -664,7 +666,7 @@ export const CrmBoard: React.FC = () => {
                   await executePendingMove(pendingCloseMove);
                   setPendingCloseMove(null);
               }
-              alert(`2 lançamentos criados no Conta Azul!\n\n• Serviço: R$ ${serviceValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${activeMapping.servicePercentage}%) — Venda nº ${svcNum || '(auto)'}\n• Produto: R$ ${productValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${activeMapping.productPercentage}%) — Venda nº ${prodNum || '(auto)'}\n\nO negócio foi movido para a etapa final.`);
+              alert(`Venda criada no Conta Azul! Venda nº ${saleNum || '(auto)'}\n\n2 itens na mesma venda:\n• Serviço: R$ ${serviceValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${activeMapping.servicePercentage}%)\n• Produto: R$ ${productValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${activeMapping.productPercentage}%)\n\nO negócio foi movido para a etapa final.`);
           } else {
               const saleResult = await contaAzulService.createSale({
                   ...basePayload,

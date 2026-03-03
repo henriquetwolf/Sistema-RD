@@ -539,7 +539,21 @@ export const CrmBoard: React.FC = () => {
           console.error('Erro ao buscar dados do Conta Azul (modal será exibido mesmo assim):', err);
       }
 
-      const filteredCats = cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS');
+      let filteredCats = cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS');
+
+      const findDefaultCategory = (catList: any[]) => catList.find((c: any) =>
+          c.nome?.toLowerCase().includes('receita não realizada') ||
+          c.nome?.toLowerCase().includes('receita nao realizada') ||
+          c.nome?.toLowerCase().includes('diferidas')
+      );
+
+      if (accountId && !findDefaultCategory(filteredCats)) {
+          console.log('[CA] Categoria padrão "DIFERIDAS" não encontrada, re-sincronizando categorias...');
+          await contaAzulService.triggerSync('categories', accountId);
+          cats = await contaAzulService.getCategories(accountId);
+          filteredCats = cats.filter((c: any) => c.tipo === 'RECEITA' || c.tipo === 'AMBOS');
+      }
+
       setContaAzulCategories(filteredCats);
       setContaAzulCostCenters(ccs);
       setContaAzulProducts(prods);
@@ -583,11 +597,7 @@ export const CrmBoard: React.FC = () => {
       }
 
       if (!matchedCategoryId && filteredCats.length > 0) {
-          const defaultCat = filteredCats.find((c: any) =>
-              c.nome?.toLowerCase().includes('receita não realizada') ||
-              c.nome?.toLowerCase().includes('receita nao realizada') ||
-              c.nome?.toLowerCase().includes('diferidas')
-          );
+          const defaultCat = findDefaultCategory(filteredCats);
           if (defaultCat) {
               matchedCategoryId = defaultCat.id_conta_azul;
               console.log('[CA] Categoria padrão aplicada:', defaultCat.nome, '->', matchedCategoryId);

@@ -90,7 +90,69 @@ function setAccountFromBody(body: any): string {
   return accountId;
 }
 
-async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<string> {
+interface ContactExtra {
+  email?: string;
+  telefone?: string;
+  endereco?: string;
+  numero?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
+}
+
+function buildAddressObj(extra: ContactExtra): any | null {
+  if (!extra.endereco && !extra.cidade && !extra.cep) return null;
+  const addr: any = {};
+  if (extra.endereco) addr.logradouro = extra.endereco;
+  if (extra.numero) addr.numero = extra.numero;
+  if (extra.bairro) addr.bairro = extra.bairro;
+  if (extra.cidade) addr.cidade = extra.cidade;
+  if (extra.uf) addr.estado = extra.uf;
+  if (extra.cep) addr.cep = (extra.cep || '').replace(/\D/g, '');
+  return addr;
+}
+
+function buildPhoneArray(tel?: string): any[] | null {
+  if (!tel) return null;
+  const clean = tel.replace(/\D/g, '');
+  if (clean.length < 8) return null;
+  return [{ tipo: "Celular", numero: clean }];
+}
+
+async function patchContactIfNeeded(pessoaId: string, existing: any, extra: ContactExtra): Promise<void> {
+  const updates: any = {};
+  if (extra.email && !existing.email) updates.email = extra.email;
+  if (extra.telefone && (!existing.telefones || existing.telefones.length === 0)) {
+    const phones = buildPhoneArray(extra.telefone);
+    if (phones) updates.telefones = phones;
+  }
+  const hasAddr = existing.endereco && (existing.endereco.logradouro || existing.endereco.cidade);
+  if (!hasAddr && (extra.endereco || extra.cidade || extra.cep)) {
+    const addr = buildAddressObj(extra);
+    if (addr) updates.endereco = addr;
+  }
+  if (Object.keys(updates).length === 0) return;
+  try {
+    console.log(`PATCH /v1/pessoas/${pessoaId}:`, JSON.stringify(updates));
+    await contaAzulFetch(`/v1/pessoas/${pessoaId}`, { method: "PATCH", body: JSON.stringify(updates) });
+  } catch (e: any) { console.warn("patchContactIfNeeded erro:", e.message); }
+}
+
+function extractContactExtra(body: any): ContactExtra {
+  return {
+    email: body.contato_email || '',
+    telefone: body.contato_telefone || '',
+    endereco: body.contato_endereco || '',
+    numero: body.contato_numero || '',
+    bairro: body.contato_bairro || '',
+    cidade: body.contato_cidade || '',
+    uf: body.contato_uf || '',
+    cep: body.contato_cep || '',
+  };
+}
+
+async function findOrCreateContact(nome: string, cpfCnpj?: string, extra: ContactExtra = {}): Promise<string> {
   if (!nome && !cpfCnpj) throw new Error("CONTACT_ERROR: Nome do cliente é obrigatório.");
   const cleanDoc = (cpfCnpj || '').replace(/\D/g, '');
   const errors: string[] = [];
@@ -101,7 +163,11 @@ async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<stri
       if (res.ok) {
         const body = await res.json();
         const list = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
-        if (list.length > 0) return String(list[0].id);
+        if (list.length > 0) {
+          const found = list[0];
+          await patchContactIfNeeded(String(found.id), found, extra);
+          return String(found.id);
+        }
       }
     } catch (e: any) { errors.push("Busca por doc: " + e.message); }
   }
@@ -112,7 +178,10 @@ async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<stri
       const body = await res.json();
       const list = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
       const match = list.find((p: any) => (p.nome || '').toLowerCase() === nome.toLowerCase());
-      if (match) return String(match.id);
+      if (match) {
+        await patchContactIfNeeded(String(match.id), match, extra);
+        return String(match.id);
+      }
     }
   } catch (e: any) { errors.push("Busca por nome: " + e.message); }
 
@@ -125,6 +194,11 @@ async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<stri
   };
   if (cleanDoc.length === 11) newPessoa.cpf = cleanDoc;
   else if (cleanDoc.length === 14) newPessoa.cnpj = cleanDoc;
+  if (extra.email) newPessoa.email = extra.email;
+  const phones = buildPhoneArray(extra.telefone);
+  if (phones) newPessoa.telefones = phones;
+  const addr = buildAddressObj(extra);
+  if (addr) newPessoa.endereco = addr;
 
   console.log("Creating pessoa:", JSON.stringify(newPessoa));
   try {
@@ -150,6 +224,49 @@ async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<stri
   } catch (e: any) { errors.push("Retry: " + e.message); }
 
   throw new Error("Não foi possível encontrar ou criar o cliente '" + nome + "' no Conta Azul. Detalhes: " + errors.join(" | "));
+}
+
+async function findOrCreateSeller(nome: string): Promise<string | null> {
+  if (!nome) return null;
+  try {
+    const res = await contaAzulFetch("/v1/pessoas?busca=" + encodeURIComponent(nome));
+    if (res.ok) {
+      const body = await res.json();
+      const list = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
+      const match = list.find((p: any) => {
+        const perfis = p.perfis || [];
+        const isVendedor = perfis.some((pf: any) => (pf.tipo_perfil || '').toLowerCase().includes('vendedor'));
+        return (p.nome || '').toLowerCase() === nome.toLowerCase() && isVendedor;
+      });
+      if (match) return String(match.id);
+      const nameMatch = list.find((p: any) => (p.nome || '').toLowerCase() === nome.toLowerCase());
+      if (nameMatch) return String(nameMatch.id);
+    }
+  } catch (e: any) { console.error("findOrCreateSeller busca:", e.message); }
+
+  try {
+    const newPessoa = { nome, tipo_pessoa: "Fisica", perfis: [{ tipo_perfil: "Vendedor" }], ativo: true };
+    const createRes = await contaAzulFetch("/v1/pessoas", { method: "POST", body: JSON.stringify(newPessoa) });
+    if (createRes.ok || createRes.status === 201) {
+      const created = await createRes.json();
+      console.log(`findOrCreateSeller: criado vendedor "${nome}" id=${created.id}`);
+      return String(created.id);
+    }
+    const errText = await createRes.text();
+    console.warn(`findOrCreateSeller: falha ao criar vendedor (${createRes.status}): ${errText.substring(0, 200)}`);
+    if (errText.toLowerCase().includes("existe") || errText.toLowerCase().includes("duplicad")) {
+      const retry = await contaAzulFetch("/v1/pessoas?busca=" + encodeURIComponent(nome));
+      if (retry.ok) {
+        const body = await retry.json();
+        const list = Array.isArray(body) ? body : body.itens || body.items || body.content || [];
+        const m = list.find((p: any) => (p.nome || '').toLowerCase() === nome.toLowerCase());
+        if (m) return String(m.id);
+      }
+    }
+  } catch (e: any) { console.error("findOrCreateSeller criar:", e.message); }
+
+  console.warn(`findOrCreateSeller: não foi possível resolver vendedor "${nome}", prosseguindo sem.`);
+  return null;
 }
 
 async function ensureCostCenterExists(centroCustoId: string, centroCustoNome: string): Promise<string | null> {
@@ -226,7 +343,7 @@ async function createReceivable(req: Request): Promise<Response> {
 
   let contatoId = body.contato_id || null;
   if (!contatoId && (body.contato_nome || body.contato_cpf)) {
-    try { contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf); } catch (e: any) { console.error("Contact error:", e.message); }
+    try { contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf, extractContactExtra(body)); } catch (e: any) { console.error("Contact error:", e.message); }
   }
 
   const valorEntrada = Math.max(parseFloat(body.valor_entrada) || 0, 0);
@@ -300,7 +417,7 @@ async function createPayable(req: Request): Promise<Response> {
 
   let contatoId = body.contato_id || null;
   if (!contatoId && (body.contato_nome || body.contato_cpf)) {
-    try { contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf); } catch (e: any) { console.error("Contact error:", e.message); }
+    try { contatoId = await findOrCreateContact(body.contato_nome, body.contato_cpf, extractContactExtra(body)); } catch (e: any) { console.error("Contact error:", e.message); }
   }
 
   const valorEntrada = Math.max(parseFloat(body.valor_entrada) || 0, 0);
@@ -521,7 +638,7 @@ async function createSale(req: Request): Promise<Response> {
   let clienteId = body.contato_id || null;
   if (!clienteId) {
     try {
-      clienteId = await findOrCreateContact(body.contato_nome || '', body.contato_cpf || '');
+      clienteId = await findOrCreateContact(body.contato_nome || '', body.contato_cpf || '', extractContactExtra(body));
     } catch (e: any) {
       return errorResponse(e.message || "Erro ao buscar/criar cliente no Conta Azul.", 400);
     }
@@ -611,6 +728,11 @@ async function createSale(req: Request): Promise<Response> {
     if (validCcId) payload.id_centro_custo = validCcId;
   }
   if (body.transaction_code) payload.condicao_pagamento.nsu = body.transaction_code;
+
+  if (body.vendedor_nome) {
+    const vendedorId = await findOrCreateSeller(body.vendedor_nome);
+    if (vendedorId) payload.id_vendedor = vendedorId;
+  }
 
   console.log(`CREATE SALE payload (numero=${saleNum}):`, JSON.stringify(payload));
   let res = await contaAzulFetch("/v1/venda", { method: "POST", body: JSON.stringify(payload) });

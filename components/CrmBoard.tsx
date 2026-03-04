@@ -204,8 +204,10 @@ export const CrmBoard: React.FC = () => {
   const [contaAzulFormData, setContaAzulFormData] = useState<{
     descricao: string; valor: number; valor_entrada: number; data_competencia: string; data_vencimento: string;
     parcelas: number; categoria_id: string; centro_custo_id: string; observacoes: string;
-    contato_nome: string; contato_cpf: string; produto_id: string; tipo_pagamento: string; deal_number: string;
-  }>({ descricao: '', valor: 0, valor_entrada: 0, data_competencia: '', data_vencimento: '', parcelas: 1, categoria_id: '', centro_custo_id: '', observacoes: '', contato_nome: '', contato_cpf: '', produto_id: '', tipo_pagamento: '', deal_number: '' });
+    contato_nome: string; contato_cpf: string; contato_email: string; contato_telefone: string;
+    contato_endereco: string; contato_numero: string; contato_bairro: string; contato_cidade: string; contato_uf: string; contato_cep: string;
+    produto_id: string; tipo_pagamento: string; deal_number: string; vendedor_nome: string;
+  }>({ descricao: '', valor: 0, valor_entrada: 0, data_competencia: '', data_vencimento: '', parcelas: 1, categoria_id: '', centro_custo_id: '', observacoes: '', contato_nome: '', contato_cpf: '', contato_email: '', contato_telefone: '', contato_endereco: '', contato_numero: '', contato_bairro: '', contato_cidade: '', contato_uf: '', contato_cep: '', produto_id: '', tipo_pagamento: '', deal_number: '', vendedor_nome: '' });
   const [contaAzulCategories, setContaAzulCategories] = useState<{ id: string; id_conta_azul: string; nome: string; tipo: string }[]>([]);
   const [contaAzulCostCenters, setContaAzulCostCenters] = useState<{ id: string; id_conta_azul: string; nome: string }[]>([]);
   const [contaAzulProducts, setContaAzulProducts] = useState<{ id: string; nome: string; tipo: string; valor: number }[]>([]);
@@ -634,21 +636,50 @@ export const CrmBoard: React.FC = () => {
           }
       }
 
+      const ownerName = (collaborators || []).find(c => c.id === (deal.owner || deal.owner_id))?.fullName || '';
+
+      const valorTotal = deal.value || 0;
+      const entrada = deal.entry_value || deal.entryValue || 0;
+      const nParcelas = deal.installments || 1;
+      const valorParcela = nParcelas > 0 ? ((valorTotal - entrada) / nParcelas) : 0;
+
+      const obsLines = [
+          `Negócio CRM: ${deal.title || ''}`,
+          `Cliente: ${deal.company_name || deal.contact_name || ''}`,
+          `CNPJ: ${deal.billing_cnpj || 'N/A'}`,
+          deal.receipt_link || deal.receiptLink ? `Link Comprovante: ${deal.receipt_link || deal.receiptLink}` : '',
+          deal.transaction_code || deal.transactionCode ? `Cód. Transação: ${deal.transaction_code || deal.transactionCode}` : '',
+          `Valor Total: R$ ${valorTotal.toFixed(2)}`,
+          entrada > 0 ? `Entrada: R$ ${entrada.toFixed(2)}` : '',
+          `Parcelas: ${nParcelas}x R$ ${valorParcela.toFixed(2)}`,
+          `Forma Pgto: ${deal.payment_method || deal.paymentMethod || ''}`,
+          deal.observation ? `Obs: ${deal.observation}` : '',
+      ].filter(Boolean).join(' | ');
+
       setContaAzulFormData({
           descricao: `[CRM #${deal.deal_number || ''}] ${deal.product_name || deal.company_name || deal.contact_name || 'Venda'}`,
-          valor: deal.value || 0,
-          valor_entrada: deal.entry_value || deal.entryValue || 0,
+          valor: valorTotal,
+          valor_entrada: entrada,
           data_competencia: hoje,
           data_vencimento: deal.first_due_date || hoje,
-          parcelas: deal.installments || 1,
+          parcelas: nParcelas,
           categoria_id: matchedCategoryId,
           centro_custo_id: matchedCcId,
-          observacoes: `Negócio CRM: ${deal.title || ''} | Cliente: ${deal.company_name || deal.contact_name || ''} | CNPJ: ${deal.billing_cnpj || 'N/A'}`,
+          observacoes: obsLines,
           contato_nome: deal.company_name || deal.contact_name || '',
           contato_cpf: deal.cpf || deal.billing_cnpj || '',
+          contato_email: deal.email || '',
+          contato_telefone: deal.phone || '',
+          contato_endereco: deal.address || '',
+          contato_numero: deal.address_number || deal.addressNumber || '',
+          contato_bairro: deal.neighborhood || '',
+          contato_cidade: deal.address_city || deal.addressCity || '',
+          contato_uf: deal.address_state || deal.addressState || '',
+          contato_cep: deal.zip_code || deal.zipCode || '',
           produto_id: matchedProductId,
           tipo_pagamento: deal.payment_method || deal.paymentMethod || '',
           deal_number: String(deal.deal_number || deal.dealNumber || ''),
+          vendedor_nome: ownerName,
       });
       setContaAzulConfirmDeal(deal);
   };
@@ -703,8 +734,17 @@ export const CrmBoard: React.FC = () => {
               centro_custo_nome: contaAzulCostCenters.find(cc => cc.id_conta_azul === contaAzulFormData.centro_custo_id)?.nome || '',
               contato_nome: contaAzulFormData.contato_nome,
               contato_cpf: contaAzulFormData.contato_cpf,
+              contato_email: contaAzulFormData.contato_email,
+              contato_telefone: contaAzulFormData.contato_telefone,
+              contato_endereco: contaAzulFormData.contato_endereco,
+              contato_numero: contaAzulFormData.contato_numero,
+              contato_bairro: contaAzulFormData.contato_bairro,
+              contato_cidade: contaAzulFormData.contato_cidade,
+              contato_uf: contaAzulFormData.contato_uf,
+              contato_cep: contaAzulFormData.contato_cep,
               tipo_pagamento: contaAzulFormData.tipo_pagamento,
               deal_number: contaAzulFormData.deal_number,
+              vendedor_nome: contaAzulFormData.vendedor_nome,
           };
 
           const dealId = contaAzulConfirmDeal?.id || pendingCloseMove?.dealId || '';
@@ -840,7 +880,7 @@ export const CrmBoard: React.FC = () => {
 
     if (isLastStage(pipelineName, newStage)) {
         setPendingCloseMove({ dealId, pipeline: pipelineName, targetStage: newStage, previousStage: currentStage });
-        triggerContaAzulReceivable({ ...deal, stage: newStage, deal_number: deal.dealNumber, company_name: deal.companyName, contact_name: deal.contactName, product_name: deal.productName, product_type: deal.productType, payment_method: deal.paymentMethod, first_due_date: deal.firstDueDate, billing_cnpj: deal.billingCnpj, class_mod_1: deal.classMod1 });
+        triggerContaAzulReceivable({ ...deal, stage: newStage, deal_number: deal.dealNumber, company_name: deal.companyName, contact_name: deal.contactName, product_name: deal.productName, product_type: deal.productType, payment_method: deal.paymentMethod, first_due_date: deal.firstDueDate, billing_cnpj: deal.billingCnpj, class_mod_1: deal.classMod1, entry_value: deal.entryValue, receipt_link: deal.receiptLink, transaction_code: deal.transactionCode, observation: deal.observation, email: deal.email, phone: deal.phone, address: deal.address, address_number: deal.addressNumber, neighborhood: deal.neighborhood, address_city: deal.addressCity, address_state: deal.addressState, zip_code: deal.zipCode, owner: deal.owner });
         return;
     }
 
@@ -879,7 +919,7 @@ export const CrmBoard: React.FC = () => {
 
     if (isLastStage(pipelineName, targetStage)) {
         setPendingCloseMove({ dealId: draggedDealId, pipeline: pipelineName, targetStage, previousStage: currentDeal.stage });
-        triggerContaAzulReceivable({ ...currentDeal, stage: targetStage, deal_number: currentDeal.dealNumber, company_name: currentDeal.companyName, contact_name: currentDeal.contactName, product_name: currentDeal.productName, product_type: currentDeal.productType, payment_method: currentDeal.paymentMethod, first_due_date: currentDeal.firstDueDate, billing_cnpj: currentDeal.billingCnpj, class_mod_1: currentDeal.classMod1 });
+        triggerContaAzulReceivable({ ...currentDeal, stage: targetStage, deal_number: currentDeal.dealNumber, company_name: currentDeal.companyName, contact_name: currentDeal.contactName, product_name: currentDeal.productName, product_type: currentDeal.productType, payment_method: currentDeal.paymentMethod, first_due_date: currentDeal.firstDueDate, billing_cnpj: currentDeal.billingCnpj, class_mod_1: currentDeal.classMod1, entry_value: currentDeal.entryValue, receipt_link: currentDeal.receiptLink, transaction_code: currentDeal.transactionCode, observation: currentDeal.observation, email: currentDeal.email, phone: currentDeal.phone, address: currentDeal.address, address_number: currentDeal.addressNumber, neighborhood: currentDeal.neighborhood, address_city: currentDeal.addressCity, address_state: currentDeal.addressState, zip_code: currentDeal.zipCode, owner: currentDeal.owner });
         setDraggedDealId(null);
         return;
     }
@@ -2211,6 +2251,7 @@ export const CrmBoard: React.FC = () => {
                             </div>
                             <div className="md:col-span-2"><label className="block text-[10px] font-bold text-slate-500 mb-1">Link do Comprovante</label><input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.receiptLink} onChange={e => setDealFormData({...dealFormData, receiptLink: e.target.value})} /></div>
                             <div><label className="block text-[10px] font-bold text-slate-500 mb-1">Cód. Transação</label><input type="text" className="w-full px-3 py-1.5 border rounded text-xs" value={dealFormData.transactionCode} onChange={e => setDealFormData({...dealFormData, transactionCode: e.target.value})} /></div>
+                            <div className="md:col-span-3"><label className="block text-[10px] font-bold text-slate-500 mb-1">Observações</label><textarea className="w-full px-3 py-1.5 border rounded text-xs h-16 resize-none" placeholder="Anotações gerais sobre o negócio..." value={dealFormData.observation || ''} onChange={e => setDealFormData({...dealFormData, observation: e.target.value})} /></div>
                         </div>
                     </div>
                 </div>

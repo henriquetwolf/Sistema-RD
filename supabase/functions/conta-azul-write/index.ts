@@ -113,24 +113,25 @@ function buildAddressObj(extra: ContactExtra): any | null {
   return addr;
 }
 
-function buildPhoneArray(tel?: string): any[] | null {
+function cleanPhone(tel?: string): string | null {
   if (!tel) return null;
   const clean = tel.replace(/\D/g, '');
   if (clean.length < 8) return null;
-  return [{ tipo: "Celular", numero: clean }];
+  return clean;
 }
 
 async function patchContactIfNeeded(pessoaId: string, existing: any, extra: ContactExtra): Promise<void> {
   const updates: any = {};
   if (extra.email && !existing.email) updates.email = extra.email;
-  if (extra.telefone && (!existing.telefones || existing.telefones.length === 0)) {
-    const phones = buildPhoneArray(extra.telefone);
-    if (phones) updates.telefones = phones;
+  if (extra.telefone && !existing.telefone_celular) {
+    const phone = cleanPhone(extra.telefone);
+    if (phone) updates.telefone_celular = phone;
   }
-  const hasAddr = existing.endereco && (existing.endereco.logradouro || existing.endereco.cidade);
+  const existingAddrs = existing.enderecos || [];
+  const hasAddr = existingAddrs.length > 0 && (existingAddrs[0].logradouro || existingAddrs[0].cidade);
   if (!hasAddr && (extra.endereco || extra.cidade || extra.cep)) {
     const addr = buildAddressObj(extra);
-    if (addr) updates.endereco = addr;
+    if (addr) updates.enderecos = [addr];
   }
   if (Object.keys(updates).length === 0) return;
   try {
@@ -195,10 +196,10 @@ async function findOrCreateContact(nome: string, cpfCnpj?: string, extra: Contac
   if (cleanDoc.length === 11) newPessoa.cpf = cleanDoc;
   else if (cleanDoc.length === 14) newPessoa.cnpj = cleanDoc;
   if (extra.email) newPessoa.email = extra.email;
-  const phones = buildPhoneArray(extra.telefone);
-  if (phones) newPessoa.telefones = phones;
+  const phone = cleanPhone(extra.telefone);
+  if (phone) newPessoa.telefone_celular = phone;
   const addr = buildAddressObj(extra);
-  if (addr) newPessoa.endereco = addr;
+  if (addr) newPessoa.enderecos = [addr];
 
   console.log("Creating pessoa:", JSON.stringify(newPessoa));
   try {
@@ -245,7 +246,7 @@ async function findOrCreateSeller(nome: string): Promise<string | null> {
   } catch (e: any) { console.error("findOrCreateSeller busca:", e.message); }
 
   try {
-    const newPessoa = { nome, tipo_pessoa: "Fisica", perfis: [{ tipo_perfil: "Vendedor" }], ativo: true };
+    const newPessoa = { nome, tipo_pessoa: "Fisica", ativo: true };
     const createRes = await contaAzulFetch("/v1/pessoas", { method: "POST", body: JSON.stringify(newPessoa) });
     if (createRes.ok || createRes.status === 201) {
       const created = await createRes.json();

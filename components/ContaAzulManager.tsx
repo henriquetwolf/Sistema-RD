@@ -7,7 +7,7 @@ import {
   PieChart as PieIcon, TrendingUp, Monitor, BarChart, Wallet, ArrowDownToLine,
   ArrowUpRight, ArrowDownRight, Plus, Save, X, Link2, Unlink,
   CreditCard, Layers, Building2, Tag, FileText, List, Trash2, Pencil,
-  Download, Calendar, XCircle
+  Download, Calendar, XCircle, Database
 } from 'lucide-react';
 import {
   BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -59,6 +59,7 @@ export const ContaAzulManager: React.FC = () => {
   const [payables, setPayables] = useState<ContaAzulPayable[]>([]);
   const [payCount, setPayCount] = useState(0);
   const [payPage, setPayPage] = useState(1);
+  const [paySummary, setPaySummary] = useState({ vencidos: 0, vencem_hoje: 0, a_vencer: 0, recebidos: 0, total_periodo: 0 });
 
   // Shared filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -384,6 +385,76 @@ export const ContaAzulManager: React.FC = () => {
     }
   }, [searchTerm, statusFilter, startDate, endDate, selectedAccountId]);
 
+  const loadPayableSummary = useCallback(async () => {
+    try {
+      const summary = await contaAzulService.getPayableSummary({
+        search: searchTerm || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        accountId: selectedAccountId || undefined,
+      });
+      setPaySummary(summary);
+    } catch (e) {
+      console.error('Error loading payable summary:', e);
+    }
+  }, [searchTerm, startDate, endDate, selectedAccountId]);
+
+  const handleExportPayables = useCallback(async (format: 'csv' | 'xlsx') => {
+    setIsExporting(true);
+    try {
+      const { data } = await contaAzulService.getPayables({
+        search: searchTerm || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        limit: 50000,
+        offset: 0,
+        accountId: selectedAccountId || undefined,
+      });
+
+      const rows = data.map(p => ({
+        'Fornecedor': p.fornecedor_nome || '',
+        'Descrição': p.descricao || '',
+        'Vencimento': p.data_vencimento ? new Date(p.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '',
+        'Competência': p.data_competencia ? new Date(p.data_competencia + 'T00:00:00').toLocaleDateString('pt-BR') : '',
+        'Valor (R$)': p.valor,
+        'Pago (R$)': p.valor_pago,
+        'A Pagar (R$)': p.valor - p.valor_pago,
+        'Categoria': p.categoria_nome || '',
+        'Centro de Custo': p.centro_custo_nome || '',
+        'Conta Financeira': p.conta_financeira_nome || '',
+        'Status': p.status,
+        'Documento': p.numero_documento || '',
+        'Observações': p.observacoes || '',
+      }));
+
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      if (format === 'xlsx') {
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Contas a Pagar');
+        XLSX.writeFile(workbook, `Contas_Pagar_${dateStr}.xlsx`);
+      } else {
+        const csv = Papa.unparse(rows);
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Contas_Pagar_${dateStr}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      console.error('Error exporting payables:', e);
+      alert('Erro ao exportar dados. Tente novamente.');
+    } finally {
+      setIsExporting(false);
+    }
+  }, [searchTerm, statusFilter, startDate, endDate, selectedAccountId]);
+
   const loadPayables = useCallback(async () => {
     setIsLoadingData(true);
     try {
@@ -434,8 +505,11 @@ export const ContaAzulManager: React.FC = () => {
   }, [activeTab, loadReceivables, loadReceivableSummary, isSelectedConnected]);
 
   useEffect(() => {
-    if (activeTab === 'payables' && isSelectedConnected) loadPayables();
-  }, [activeTab, loadPayables, isSelectedConnected]);
+    if (activeTab === 'payables' && isSelectedConnected) {
+      loadPayables();
+      loadPayableSummary();
+    }
+  }, [activeTab, loadPayables, loadPayableSummary, isSelectedConnected]);
 
   // ── Sync ────────────────────────────────────────────────
 
@@ -447,7 +521,7 @@ export const ContaAzulManager: React.FC = () => {
     { type: 'payables', label: 'Contas a Pagar' },
   ];
 
-  const handleSync = async (type: 'all' | 'receivables' | 'payables' | 'categories' | 'cost-centers' | 'accounts') => {
+  const handleSync = async (type: 'all' | 'receivables' | 'payables' | 'categories' | 'cost-centers' | 'accounts', fullSync = false) => {
     const connectedIds = selectedAccountId
       ? [selectedAccountId]
       : accountStatuses.filter(s => s.connected).map(s => s.account_id);
@@ -464,6 +538,24 @@ export const ContaAzulManager: React.FC = () => {
     const getAccName = (id: string) => connectedIds.length > 1
       ? (accountStatuses.find(s => s.account_id === id)?.nome || id)
       : '';
+
+    const syncFinancial = async (
+      stepType: 'receivables' | 'payables',
+      accId: string,
+      prefix: string,
+      stepLabel: string,
+    ): Promise<{ synced: number; error?: string }> => {
+      if (fullSync) {
+        setSyncMessage(`${prefix}Sincronizando ${stepLabel} (completa, trimestral)...`);
+        const result = await contaAzulService.triggerSyncChunked(stepType, accId, (chunk, total) => {
+          setSyncMessage(`${prefix}${stepLabel}... parte ${chunk}/${total}`);
+        });
+        return { synced: result.sincronizados ?? 0 };
+      }
+      setSyncMessage(`${prefix}Sincronizando ${stepLabel} (rápido)...`);
+      const result = await contaAzulService.triggerSyncIncremental(stepType, accId);
+      return { synced: result.sincronizados ?? 0 };
+    };
 
     if (type === 'all') {
       let totalSynced = 0;
@@ -482,15 +574,9 @@ export const ContaAzulManager: React.FC = () => {
           setSyncStep(`${prefix}${step.label}`);
 
           if (step.type === 'receivables' || step.type === 'payables') {
-            setSyncMessage(`${prefix}Sincronizando ${step.label} (trimestral)... (${currentStep}/${totalSteps})`);
             try {
-              const result = await contaAzulService.triggerSyncChunked(step.type, accId, (chunk, total) => {
-                const baseProgress = Math.round(((currentStep - 1) / totalSteps) * 100);
-                const chunkProgress = Math.round((chunk / total) * (100 / totalSteps));
-                setSyncProgress(baseProgress + chunkProgress);
-                setSyncMessage(`${prefix}${step.label}... parte ${chunk}/${total}`);
-              });
-              totalSynced += result.sincronizados ?? 0;
+              const { synced } = await syncFinancial(step.type, accId, prefix, step.label);
+              totalSynced += synced;
             } catch (e: any) {
               errors.push(`${prefix}${step.label}: ${e.message}`);
             }
@@ -507,11 +593,12 @@ export const ContaAzulManager: React.FC = () => {
       }
       setSyncProgress(100);
       setSyncStep('');
+      const modeLabel = fullSync ? 'completa' : 'incremental';
       if (errors.length > 0) {
-        setSyncMessage(`Concluído com ${errors.length} erro(s). ${totalSynced} registros sincronizados.`);
+        setSyncMessage(`Sync ${modeLabel} concluída com ${errors.length} erro(s). ${totalSynced} registros sincronizados.`);
         console.warn('Sync errors:', errors);
       } else {
-        setSyncMessage(`Sincronização completa: ${totalSynced} registros sincronizados!`);
+        setSyncMessage(`Sync ${modeLabel}: ${totalSynced} registros sincronizados!`);
       }
       await loadOverview();
       loadAuxiliaries();
@@ -526,15 +613,11 @@ export const ContaAzulManager: React.FC = () => {
         const prefix = accName ? `[${accName}] ` : '';
 
         if (type === 'receivables' || type === 'payables') {
-          setSyncMessage(`${prefix}Sincronizando ${stepLabel} (trimestral)...`);
           setSyncProgress(10);
           setSyncStep(stepLabel);
           try {
-            const result = await contaAzulService.triggerSyncChunked(type, accId, (chunk, total) => {
-              setSyncProgress(Math.round((chunk / total) * 100));
-              setSyncMessage(`${prefix}${stepLabel}... parte ${chunk}/${total}`);
-            });
-            totalSynced += result.sincronizados ?? 0;
+            const { synced } = await syncFinancial(type, accId, prefix, stepLabel);
+            totalSynced += synced;
           } catch (e: any) {
             setSyncMessage(`Erro em ${stepLabel}: ${e.message}`);
           }
@@ -555,7 +638,8 @@ export const ContaAzulManager: React.FC = () => {
       if (totalSynced === 0 && (type === 'categories' || type === 'cost-centers')) {
         setSyncMessage(`${stepLabel}: 0 registros encontrados. Verifique se a conta está conectada e tente sincronizar novamente.`);
       } else {
-        setSyncMessage(`${stepLabel}: ${totalSynced} registros sincronizados`);
+        const modeLabel = (type === 'receivables' || type === 'payables') ? (fullSync ? ' (completa)' : ' (rápido)') : '';
+        setSyncMessage(`${stepLabel}${modeLabel}: ${totalSynced} registros sincronizados`);
       }
       await loadOverview();
       if (type === 'receivables') loadReceivables();
@@ -642,6 +726,15 @@ export const ContaAzulManager: React.FC = () => {
     return successLog?.finished_at || null;
   }, [syncLogs]);
 
+  const nextAutoSyncMinutes = useMemo(() => {
+    if (!lastSuccessfulSync) return null;
+    const lastMs = new Date(lastSuccessfulSync).getTime();
+    const nowMs = Date.now();
+    const elapsedMin = (nowMs - lastMs) / 60000;
+    const remaining = Math.max(0, Math.ceil(10 - (elapsedMin % 10)));
+    return remaining;
+  }, [lastSuccessfulSync]);
+
   // ── Render ──────────────────────────────────────────────
 
   return (
@@ -686,16 +779,27 @@ export const ContaAzulManager: React.FC = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {isSelectedConnected && (
-            <button
-              onClick={() => handleSync('all')}
-              disabled={isSyncing}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all flex items-center gap-2"
-            >
-              {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              Sincronizar {selectedAccountId ? selectedAccountName : 'Tudo'}
-            </button>
+            <>
+              <button
+                onClick={() => handleSync('all')}
+                disabled={isSyncing}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-l-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all flex items-center gap-2"
+                title="Sync rápido (apenas alterações recentes)"
+              >
+                {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                Sync Rápido
+              </button>
+              <button
+                onClick={() => handleSync('all', true)}
+                disabled={isSyncing}
+                className="bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white px-3 py-2.5 rounded-r-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-slate-600/20 transition-all flex items-center gap-1 border-l border-slate-500"
+                title="Sync completa (todos os registros, mais lento)"
+              >
+                <Database size={14} /> Completa
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -833,6 +937,12 @@ export const ContaAzulManager: React.FC = () => {
                   Dados sincronizados em: {new Date(lastSuccessfulSync).toLocaleString('pt-BR')}
                   {selectedAccountId && <span className="ml-1 text-blue-500">({selectedAccountName})</span>}
                 </span>
+                <span className="flex items-center gap-1.5 px-2.5 py-1 bg-green-100 border border-green-200 rounded-full" title="Sincronização automática a cada 10 minutos">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-[9px] font-black uppercase tracking-widest text-green-700">
+                    Auto-sync {nextAutoSyncMinutes !== null ? `· ~${nextAutoSyncMinutes}min` : 'ativo'}
+                  </span>
+                </span>
                 <button
                   onClick={() => handleSync('all')}
                   disabled={isSyncing}
@@ -954,6 +1064,7 @@ export const ContaAzulManager: React.FC = () => {
               startDate={startDate} setStartDate={setStartDate}
               endDate={endDate} setEndDate={setEndDate}
               onSync={() => handleSync('receivables')}
+              onFullSync={() => handleSync('receivables', true)}
               isSyncing={isSyncing}
               financialAccounts={financialAccounts}
               onClear={() => { setSearchTerm(''); setStatusFilter('all'); setStartDate(''); setEndDate(''); }}
@@ -1048,15 +1159,25 @@ export const ContaAzulManager: React.FC = () => {
         {/* ═══ PAYABLES ═══ */}
         {activeTab === 'payables' && isSelectedConnected && (
           <div className="space-y-6 animate-in slide-in-from-left-4 duration-500">
-            <FilterBar
+            <ReceivableFilterBar
               searchTerm={searchTerm} setSearchTerm={setSearchTerm}
               statusFilter={statusFilter} setStatusFilter={setStatusFilter}
               startDate={startDate} setStartDate={setStartDate}
               endDate={endDate} setEndDate={setEndDate}
               onSync={() => handleSync('payables')}
+              onFullSync={() => handleSync('payables', true)}
               isSyncing={isSyncing}
-              syncLabel="Sync Pagar"
+              financialAccounts={financialAccounts}
+              onClear={() => { setSearchTerm(''); setStatusFilter('all'); setStartDate(''); setEndDate(''); }}
             />
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <KpiCard label="Vencidos (R$)" value={formatCurrency(paySummary.vencidos)} sub="Em atraso" icon={<AlertTriangle size={48} />} color="red" />
+              <KpiCard label="Vencem Hoje (R$)" value={formatCurrency(paySummary.vencem_hoje)} sub="Vencimento hoje" icon={<Clock size={48} />} color="amber" />
+              <KpiCard label="A Vencer (R$)" value={formatCurrency(paySummary.a_vencer)} sub="Futuras" icon={<Calendar size={48} />} color="blue" />
+              <KpiCard label="Pagos (R$)" value={formatCurrency(paySummary.recebidos)} sub="Já pago" icon={<CheckCircle size={48} />} color="green" />
+              <KpiCard label="Total do Período (R$)" value={formatCurrency(paySummary.total_periodo)} sub={`${payCount} registros`} icon={<DollarSign size={48} />} color="dark" />
+            </div>
 
             <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden flex flex-col min-h-[500px]">
               <div className="px-8 py-5 border-b bg-slate-50/50 flex items-center justify-between shrink-0">
@@ -1066,6 +1187,22 @@ export const ContaAzulManager: React.FC = () => {
                     <h3 className="text-lg font-black text-slate-800 tracking-tight">Contas a Pagar</h3>
                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{payCount} registros sincronizados</p>
                   </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleExportPayables('csv')}
+                    disabled={isExporting || payables.length === 0}
+                    className="bg-white hover:bg-slate-50 disabled:opacity-40 border border-slate-200 text-slate-600 px-3 py-2 rounded-xl font-black text-[10px] uppercase flex items-center gap-1.5 transition-all shadow-sm"
+                  >
+                    {isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} CSV
+                  </button>
+                  <button
+                    onClick={() => handleExportPayables('xlsx')}
+                    disabled={isExporting || payables.length === 0}
+                    className="bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white px-3 py-2 rounded-xl font-black text-[10px] uppercase flex items-center gap-1.5 transition-all shadow-sm"
+                  >
+                    {isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Excel
+                  </button>
                 </div>
               </div>
 
@@ -1086,6 +1223,7 @@ export const ContaAzulManager: React.FC = () => {
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Vencimento</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Valor</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Pago</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">A Pagar</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Categoria</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Status</th>
                       </tr>
@@ -1100,6 +1238,7 @@ export const ContaAzulManager: React.FC = () => {
                           <td className="px-6 py-3 text-xs font-bold text-slate-700">{formatDate(p.data_vencimento)}</td>
                           <td className="px-6 py-3 text-xs font-bold text-slate-700 text-right">{formatCurrency(p.valor)}</td>
                           <td className="px-6 py-3 text-xs font-black text-emerald-600 text-right">{formatCurrency(p.valor_pago)}</td>
+                          <td className="px-6 py-3 text-xs font-black text-red-600 text-right">{formatCurrency(p.valor - p.valor_pago)}</td>
                           <td className="px-6 py-3 text-[10px] text-slate-500">{p.categoria_nome || '--'}</td>
                           <td className="px-6 py-3 text-center">
                             <StatusBadge status={p.status} />
@@ -1642,7 +1781,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function FilterBar({ searchTerm, setSearchTerm, statusFilter, setStatusFilter, startDate, setStartDate, endDate, setEndDate, onSync, isSyncing, syncLabel }: any) {
+function FilterBar({ searchTerm, setSearchTerm, statusFilter, setStatusFilter, startDate, setStartDate, endDate, setEndDate, onSync, onFullSync, isSyncing, syncLabel }: any) {
   return (
     <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-end gap-4">
       <div className="relative flex-1 w-full">
@@ -1660,16 +1799,23 @@ function FilterBar({ searchTerm, setSearchTerm, statusFilter, setStatusFilter, s
         <span className="text-slate-300">-</span>
         <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2.5 outline-none" />
       </div>
-      <button onClick={onSync} disabled={isSyncing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center gap-2 transition-all whitespace-nowrap">
-        {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncLabel}
-      </button>
+      <div className="flex items-center gap-1">
+        <button onClick={onSync} disabled={isSyncing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-l-xl font-black text-[10px] uppercase flex items-center gap-2 transition-all whitespace-nowrap" title="Sync rápido (apenas alterações recentes)">
+          {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Sync Rápido
+        </button>
+        {onFullSync && (
+          <button onClick={onFullSync} disabled={isSyncing} className="bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white px-3 py-2.5 rounded-r-xl font-black text-[10px] uppercase flex items-center gap-1 transition-all whitespace-nowrap border-l border-slate-500" title="Sync completa (todos os registros, mais lento)">
+            <Database size={14} /> Completa
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 const MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-function ReceivableFilterBar({ searchTerm, setSearchTerm, statusFilter, setStatusFilter, startDate, setStartDate, endDate, setEndDate, onSync, isSyncing, financialAccounts, onClear }: any) {
+function ReceivableFilterBar({ searchTerm, setSearchTerm, statusFilter, setStatusFilter, startDate, setStartDate, endDate, setEndDate, onSync, onFullSync, isSyncing, financialAccounts, onClear }: any) {
   const [contaFilter, setContaFilter] = useState('');
 
   const currentMonth = useMemo(() => {
@@ -1741,9 +1887,14 @@ function ReceivableFilterBar({ searchTerm, setSearchTerm, statusFilter, setStatu
           <option value="Atrasado">Atrasado / Vencido</option>
         </select>
 
-        <button onClick={onSync} disabled={isSyncing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center gap-2 transition-all whitespace-nowrap">
-          {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Sincronizar
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={onSync} disabled={isSyncing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-l-xl font-black text-[10px] uppercase flex items-center gap-2 transition-all whitespace-nowrap" title="Sync rápido (apenas alterações recentes)">
+            {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Sync Rápido
+          </button>
+          <button onClick={onFullSync} disabled={isSyncing} className="bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white px-3 py-2.5 rounded-r-xl font-black text-[10px] uppercase flex items-center gap-1 transition-all whitespace-nowrap border-l border-slate-500" title="Sync completa (todos os registros, mais lento)">
+            <Database size={14} /> Completa
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 px-1">

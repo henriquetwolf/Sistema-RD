@@ -67,7 +67,7 @@ function extractItems<T>(body: any): T[] {
   return [];
 }
 
-async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, queryParams: Record<string, string> = {}, maxPages = 200): Promise<T[]> {
+async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, queryParams: Record<string, string> = {}, maxPages = 500): Promise<T[]> {
   const all: T[] = [];
   let page = 1;
   const size = 200;
@@ -86,6 +86,9 @@ async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, q
     all.push(...items);
     if (items.length < size) break;
     page++;
+    if (page > maxPages) {
+      console.warn(`[contaAzulFetchPaginated] TRUNCATED at ${maxPages} pages (${all.length} items) for ${basePath}. There may be more data.`);
+    }
     await new Promise(r => setTimeout(r, 50));
   }
   return all;
@@ -105,6 +108,21 @@ async function completeSyncLog(logId: string, count: number, error?: string) {
   await db.from("conta_azul_sync_log").update({ status: error ? "error" : "success", registros_sincronizados: count, erro: error || null, finished_at: new Date().toISOString() }).eq("id", logId);
 }
 
+async function getLastSuccessfulSync(tipo: string, accountId: string): Promise<{ finished_at: string } | null> {
+  const db = getSupabaseServiceClient();
+  const { data } = await db
+    .from("conta_azul_sync_log")
+    .select("finished_at")
+    .eq("tipo_sync", tipo)
+    .eq("account_id", accountId)
+    .eq("status", "success")
+    .not("finished_at", "is", null)
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
 function safeFloat(val: any): number {
   if (val === null || val === undefined) return 0;
   const n = typeof val === 'number' ? val : parseFloat(String(val));
@@ -114,9 +132,9 @@ function safeFloat(val: any): number {
 function defaultDateRange() {
   const now = new Date();
   const from = new Date(now);
-  from.setFullYear(from.getFullYear() - 1);
+  from.setFullYear(from.getFullYear() - 10);
   const to = new Date(now);
-  to.setFullYear(to.getFullYear() + 1);
+  to.setFullYear(to.getFullYear() + 5);
   return {
     data_vencimento_de: from.toISOString().split("T")[0],
     data_vencimento_ate: to.toISOString().split("T")[0],
@@ -194,7 +212,9 @@ function extractAccountId(body: any): string {
 async function syncReceivables(req: Request): Promise<Response> {
   const body = await req.json().catch(() => ({}));
   const accountId = extractAccountId(body);
-  const logId = await createSyncLog("receivables", accountId);
+  const isIncremental = !!body.incremental;
+  const syncLabel = isIncremental ? "receivables-incremental" : "receivables";
+  const logId = await createSyncLog(syncLabel, accountId);
   let count = 0;
   try {
     const dateRange = defaultDateRange();
@@ -202,8 +222,21 @@ async function syncReceivables(req: Request): Promise<Response> {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
       data_vencimento_ate: body.data_vencimento_ate || dateRange.data_vencimento_ate,
     };
+
+    if (isIncremental) {
+      const lastSync = await getLastSuccessfulSync("receivables", accountId)
+        || await getLastSuccessfulSync("receivables-incremental", accountId);
+      if (lastSync?.finished_at) {
+        params.data_alteracao_de = lastSync.finished_at;
+        params.data_alteracao_ate = new Date().toISOString();
+        console.log(`[syncReceivables] Incremental since ${lastSync.finished_at} for account ${accountId}`);
+      } else {
+        console.log(`[syncReceivables] No previous sync found, incremental will fetch all recent changes for account ${accountId}`);
+      }
+    }
+
     const items = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", params);
-    console.log("Receivables fetched:", items.length, "items for account", accountId);
+    console.log(`Receivables fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
     const db = getSupabaseServiceClient();
     const rows = items.map(item => mapReceivableToRow(item, accountId));
     for (let i = 0; i < rows.length; i += 200) {
@@ -216,14 +249,16 @@ async function syncReceivables(req: Request): Promise<Response> {
       }
     }
     await completeSyncLog(logId!, count);
-    return jsonResponse({ success: true, tipo: "receivables", sincronizados: count });
+    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, incremental: isIncremental });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 
 async function syncPayables(req: Request): Promise<Response> {
   const body = await req.json().catch(() => ({}));
   const accountId = extractAccountId(body);
-  const logId = await createSyncLog("payables", accountId);
+  const isIncremental = !!body.incremental;
+  const syncLabel = isIncremental ? "payables-incremental" : "payables";
+  const logId = await createSyncLog(syncLabel, accountId);
   let count = 0;
   try {
     const dateRange = defaultDateRange();
@@ -231,8 +266,21 @@ async function syncPayables(req: Request): Promise<Response> {
       data_vencimento_de: body.data_vencimento_de || dateRange.data_vencimento_de,
       data_vencimento_ate: body.data_vencimento_ate || dateRange.data_vencimento_ate,
     };
+
+    if (isIncremental) {
+      const lastSync = await getLastSuccessfulSync("payables", accountId)
+        || await getLastSuccessfulSync("payables-incremental", accountId);
+      if (lastSync?.finished_at) {
+        params.data_alteracao_de = lastSync.finished_at;
+        params.data_alteracao_ate = new Date().toISOString();
+        console.log(`[syncPayables] Incremental since ${lastSync.finished_at} for account ${accountId}`);
+      } else {
+        console.log(`[syncPayables] No previous sync found, incremental will fetch all recent changes for account ${accountId}`);
+      }
+    }
+
     const items = await contaAzulFetchPaginated<any>(accountId, "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", params);
-    console.log("Payables fetched:", items.length, "items for account", accountId);
+    console.log(`Payables fetched: ${items.length} items for account ${accountId} (incremental=${isIncremental})`);
     const db = getSupabaseServiceClient();
     const rows = items.map(item => mapPayableToRow(item, accountId));
     for (let i = 0; i < rows.length; i += 200) {
@@ -245,7 +293,7 @@ async function syncPayables(req: Request): Promise<Response> {
       }
     }
     await completeSyncLog(logId!, count);
-    return jsonResponse({ success: true, tipo: "payables", sincronizados: count });
+    return jsonResponse({ success: true, tipo: syncLabel, sincronizados: count, incremental: isIncremental });
   } catch (err: any) { await completeSyncLog(logId!, count, err.message); throw err; }
 }
 
@@ -419,6 +467,42 @@ async function syncAllAccounts(req: Request): Promise<Response> {
   return jsonResponse({ success: true, results: allResults });
 }
 
+async function autoSyncAll(_req: Request): Promise<Response> {
+  console.log("[autoSyncAll] Starting automatic incremental sync for all active accounts...");
+  const db = getSupabaseServiceClient();
+  const { data: accounts } = await db
+    .from("conta_azul_accounts")
+    .select("id, nome")
+    .eq("ativo", true);
+
+  if (!accounts || accounts.length === 0) {
+    return jsonResponse({ success: true, auto_sync: true, message: "No active accounts found", results: {} });
+  }
+
+  const allResults: Record<string, any> = {};
+  for (const acc of accounts) {
+    const makeReq = (body: any) => new Request("http://localhost", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account_id: acc.id, incremental: true, ...body }),
+    });
+    try {
+      const recRes = await syncReceivables(makeReq({}));
+      const payRes = await syncPayables(makeReq({}));
+      allResults[acc.nome] = {
+        receivables: await recRes.json(),
+        payables: await payRes.json(),
+      };
+      console.log(`[autoSyncAll] ${acc.nome}: done`);
+    } catch (e: any) {
+      allResults[acc.nome] = { error: e.message };
+      console.error(`[autoSyncAll] ${acc.nome}: error -`, e.message);
+    }
+  }
+  console.log("[autoSyncAll] Finished for", accounts.length, "accounts");
+  return jsonResponse({ success: true, auto_sync: true, results: allResults });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders() });
   if (req.method !== "POST") return errorResponse("Metodo nao permitido. Use POST.", 405);
@@ -434,6 +518,7 @@ Deno.serve(async (req) => {
       case "accounts": return await syncAccounts(req);
       case "all": return await syncAll(req);
       case "all-accounts": return await syncAllAccounts(req);
+      case "auto-sync-all": return await autoSyncAll(req);
       default: return errorResponse("Sync type desconhecido: " + action, 404);
     }
   } catch (err: any) { console.error("conta-azul-sync error:", err); return errorResponse(err.message || "Erro interno", 500); }

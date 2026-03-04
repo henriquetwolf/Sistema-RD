@@ -160,24 +160,49 @@ async function ensureCostCenterExists(centroCustoId: string, centroCustoNome: st
 
   console.log(`ensureCostCenterExists: ID ${centroCustoId} não encontrado, criando "${centroCustoNome}"...`);
   const res = await contaAzulFetch("/v1/centro-de-custo", { method: "POST", body: JSON.stringify({ nome: centroCustoNome }) });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error("Erro ao criar centro de custo automaticamente: " + res.status + " - " + errText);
+
+  if (res.ok) {
+    const created = await res.json();
+    const newId = String(created.id);
+    console.log(`ensureCostCenterExists: criado "${centroCustoNome}" com novo id ${newId}`);
+    const db = getSupabaseServiceClient();
+    await db.from("conta_azul_centros_custo").upsert({
+      account_id: _currentAccountId,
+      id_conta_azul: newId,
+      nome: created.nome || centroCustoNome,
+      ativo: true,
+      synced_at: new Date().toISOString(),
+    }, { onConflict: "account_id,id_conta_azul" });
+    return newId;
   }
-  const created = await res.json();
-  const newId = String(created.id);
-  console.log(`ensureCostCenterExists: criado "${centroCustoNome}" com novo id ${newId}`);
 
-  const db = getSupabaseServiceClient();
-  await db.from("conta_azul_centros_custo").upsert({
-    account_id: _currentAccountId,
-    id_conta_azul: newId,
-    nome: created.nome || centroCustoNome,
-    ativo: true,
-    synced_at: new Date().toISOString(),
-  }, { onConflict: "account_id,id_conta_azul" });
+  const errText = await res.text();
 
-  return newId;
+  if (errText.toLowerCase().includes("existe")) {
+    console.log(`ensureCostCenterExists: já existe, buscando por nome "${centroCustoNome}"...`);
+    const listRes = await contaAzulFetch("/v1/centro-de-custo");
+    if (listRes.ok) {
+      const body = await listRes.json();
+      const list = Array.isArray(body) ? body : body.content || body.data || body.items || body.itens || [];
+      const normalName = centroCustoNome.toLowerCase().trim();
+      const match = list.find((cc: any) => (cc.nome || '').toLowerCase().trim() === normalName);
+      if (match) {
+        const foundId = String(match.id);
+        console.log(`ensureCostCenterExists: encontrado "${centroCustoNome}" com id ${foundId}`);
+        const db = getSupabaseServiceClient();
+        await db.from("conta_azul_centros_custo").upsert({
+          account_id: _currentAccountId,
+          id_conta_azul: foundId,
+          nome: match.nome || centroCustoNome,
+          ativo: true,
+          synced_at: new Date().toISOString(),
+        }, { onConflict: "account_id,id_conta_azul" });
+        return foundId;
+      }
+    }
+  }
+
+  throw new Error("Erro ao criar centro de custo automaticamente: " + res.status + " - " + errText);
 }
 
 async function createReceivable(req: Request): Promise<Response> {

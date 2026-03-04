@@ -152,57 +152,63 @@ async function findOrCreateContact(nome: string, cpfCnpj?: string): Promise<stri
   throw new Error("Não foi possível encontrar ou criar o cliente '" + nome + "' no Conta Azul. Detalhes: " + errors.join(" | "));
 }
 
-async function ensureCostCenterExists(centroCustoId: string, centroCustoNome: string): Promise<string> {
+async function ensureCostCenterExists(centroCustoId: string, centroCustoNome: string): Promise<string | null> {
   const check = await contaAzulFetch(`/v1/centro-de-custo/${centroCustoId}`, { method: "GET" });
   if (check.ok) return centroCustoId;
 
-  if (!centroCustoNome) throw new Error("Centro de custo não encontrado na API e nome não fornecido para criação automática.");
+  console.log(`ensureCostCenterExists: ID ${centroCustoId} não encontrado na API.`);
 
-  console.log(`ensureCostCenterExists: ID ${centroCustoId} não encontrado, criando "${centroCustoNome}"...`);
-  const res = await contaAzulFetch("/v1/centro-de-custo", { method: "POST", body: JSON.stringify({ nome: centroCustoNome }) });
-
-  if (res.ok) {
-    const created = await res.json();
-    const newId = String(created.id);
-    console.log(`ensureCostCenterExists: criado "${centroCustoNome}" com novo id ${newId}`);
+  const saveToDB = async (id: string, nome: string) => {
     const db = getSupabaseServiceClient();
     await db.from("conta_azul_centros_custo").upsert({
       account_id: _currentAccountId,
-      id_conta_azul: newId,
-      nome: created.nome || centroCustoNome,
+      id_conta_azul: id,
+      nome,
       ativo: true,
       synced_at: new Date().toISOString(),
     }, { onConflict: "account_id,id_conta_azul" });
-    return newId;
-  }
+  };
 
-  const errText = await res.text();
+  if (centroCustoNome) {
+    const normalName = centroCustoNome.toLowerCase().trim();
 
-  if (errText.toLowerCase().includes("existe")) {
-    console.log(`ensureCostCenterExists: já existe, buscando por nome "${centroCustoNome}"...`);
-    const listRes = await contaAzulFetch("/v1/centro-de-custo");
-    if (listRes.ok) {
-      const body = await listRes.json();
-      const list = Array.isArray(body) ? body : body.content || body.data || body.items || body.itens || [];
-      const normalName = centroCustoNome.toLowerCase().trim();
-      const match = list.find((cc: any) => (cc.nome || '').toLowerCase().trim() === normalName);
-      if (match) {
-        const foundId = String(match.id);
-        console.log(`ensureCostCenterExists: encontrado "${centroCustoNome}" com id ${foundId}`);
-        const db = getSupabaseServiceClient();
-        await db.from("conta_azul_centros_custo").upsert({
-          account_id: _currentAccountId,
-          id_conta_azul: foundId,
-          nome: match.nome || centroCustoNome,
-          ativo: true,
-          synced_at: new Date().toISOString(),
-        }, { onConflict: "account_id,id_conta_azul" });
-        return foundId;
+    try {
+      console.log(`ensureCostCenterExists: buscando por nome "${centroCustoNome}" na lista...`);
+      const listRes = await contaAzulFetch("/v1/centro-de-custo");
+      if (listRes.ok) {
+        const body = await listRes.json();
+        const list = Array.isArray(body) ? body : body.content || body.data || body.items || body.itens || [];
+        const match = list.find((cc: any) => (cc.nome || '').toLowerCase().trim() === normalName);
+        if (match) {
+          const foundId = String(match.id);
+          console.log(`ensureCostCenterExists: encontrado na lista com id ${foundId}`);
+          await saveToDB(foundId, match.nome || centroCustoNome);
+          return foundId;
+        }
+        console.log(`ensureCostCenterExists: não encontrado na lista (${list.length} itens), tentando criar...`);
       }
+    } catch (e: any) {
+      console.error("ensureCostCenterExists: erro ao buscar lista:", e.message);
+    }
+
+    try {
+      const res = await contaAzulFetch("/v1/centro-de-custo", { method: "POST", body: JSON.stringify({ nome: centroCustoNome }) });
+      if (res.ok) {
+        const created = await res.json();
+        const newId = String(created.id);
+        console.log(`ensureCostCenterExists: criado "${centroCustoNome}" com id ${newId}`);
+        await saveToDB(newId, created.nome || centroCustoNome);
+        return newId;
+      }
+      const errText = await res.text();
+      console.warn(`ensureCostCenterExists: POST falhou (${res.status}): ${errText.substring(0, 300)}`);
+    } catch (e: any) {
+      console.error("ensureCostCenterExists: erro ao criar:", e.message);
     }
   }
 
-  throw new Error("Erro ao criar centro de custo automaticamente: " + res.status + " - " + errText);
+  console.warn(`ensureCostCenterExists: não foi possível resolver o centro de custo, prosseguindo sem ele.`);
+  return null;
 }
 
 async function createReceivable(req: Request): Promise<Response> {
@@ -259,7 +265,7 @@ async function createReceivable(req: Request): Promise<Response> {
   const ratItem: any = { id_categoria: body.categoria_id, valor };
   if (body.centro_custo_id) {
     const validCcId = await ensureCostCenterExists(body.centro_custo_id, body.centro_custo_nome || '');
-    ratItem.rateio_centro_custo = [{ id_centro_custo: validCcId, valor }];
+    if (validCcId) ratItem.rateio_centro_custo = [{ id_centro_custo: validCcId, valor }];
   }
 
   const payload: any = {
@@ -333,7 +339,7 @@ async function createPayable(req: Request): Promise<Response> {
   const ratItem: any = { id_categoria: body.categoria_id, valor };
   if (body.centro_custo_id) {
     const validCcId = await ensureCostCenterExists(body.centro_custo_id, body.centro_custo_nome || '');
-    ratItem.rateio_centro_custo = [{ id_centro_custo: validCcId, valor }];
+    if (validCcId) ratItem.rateio_centro_custo = [{ id_centro_custo: validCcId, valor }];
   }
 
   const payload: any = {
@@ -601,7 +607,8 @@ async function createSale(req: Request): Promise<Response> {
   };
   if (body.categoria_id) payload.id_categoria = body.categoria_id;
   if (body.centro_custo_id) {
-    payload.id_centro_custo = await ensureCostCenterExists(body.centro_custo_id, body.centro_custo_nome || '');
+    const validCcId = await ensureCostCenterExists(body.centro_custo_id, body.centro_custo_nome || '');
+    if (validCcId) payload.id_centro_custo = validCcId;
   }
   if (body.transaction_code) payload.condicao_pagamento.nsu = body.transaction_code;
 

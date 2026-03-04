@@ -67,7 +67,7 @@ function extractItems<T>(body: any): T[] {
   return [];
 }
 
-async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, queryParams: Record<string, string> = {}, maxPages = 20): Promise<T[]> {
+async function contaAzulFetchPaginated<T>(accountId: string, basePath: string, queryParams: Record<string, string> = {}, maxPages = 200): Promise<T[]> {
   const all: T[] = [];
   let page = 1;
   const size = 200;
@@ -131,8 +131,8 @@ function mapReceivableToRow(item: any, accountId: string) {
     id_conta_azul: String(item.id),
     id_evento: item.id_evento ? String(item.id_evento) : null,
     descricao: item.descricao || null,
-    valor: safeFloat(item.total ?? item.valor ?? item.valor_original),
-    valor_pago: safeFloat(item.pago ?? item.valor_pago ?? item.valor_recebido),
+    valor: safeFloat(item.valor || item.total || item.valor_original),
+    valor_pago: safeFloat(item.valor_pago || item.pago || item.valor_recebido),
     data_vencimento: item.data_vencimento || null,
     data_competencia: item.data_competencia || null,
     data_pagamento: item.data_pagamento || null,
@@ -162,8 +162,8 @@ function mapPayableToRow(item: any, accountId: string) {
     id_conta_azul: String(item.id),
     id_evento: item.id_evento ? String(item.id_evento) : null,
     descricao: item.descricao || null,
-    valor: safeFloat(item.total ?? item.valor ?? item.valor_original),
-    valor_pago: safeFloat(item.pago ?? item.valor_pago),
+    valor: safeFloat(item.valor || item.total || item.valor_original),
+    valor_pago: safeFloat(item.valor_pago || item.pago),
     data_vencimento: item.data_vencimento || null,
     data_competencia: item.data_competencia || null,
     data_pagamento: item.data_pagamento || null,

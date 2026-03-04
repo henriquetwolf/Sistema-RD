@@ -219,7 +219,8 @@ interface ReceivableFilters {
 }
 
 async function getReceivables(filters: ReceivableFilters = {}): Promise<{ data: ContaAzulReceivable[]; count: number }> {
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   let query = supabase
     .from('conta_azul_contas_receber')
@@ -372,7 +373,8 @@ interface ReceivableSummary {
 }
 
 async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | 'offset'> = {}): Promise<ReceivableSummary> {
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   let query = supabase
     .from('conta_azul_contas_receber')
@@ -389,18 +391,6 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
   if (filters.categoria) query = query.ilike('categoria_nome', `%${filters.categoria}%`);
   if (filters.centroCusto) query = query.ilike('centro_custo_nome', `%${filters.centroCusto}%`);
 
-  if (filters.status && filters.status !== 'all') {
-    if (filters.status === 'Pago') {
-      query = query.ilike('status', '%Liquidado%');
-    } else if (filters.status === 'Pendente') {
-      query = query.not('status', 'ilike', '%Liquidado%').gte('data_vencimento', today);
-    } else if (filters.status === 'Atrasado') {
-      query = query.not('status', 'ilike', '%Liquidado%').lt('data_vencimento', today);
-    } else {
-      query = query.ilike('status', `%${filters.status}%`);
-    }
-  }
-
   const { data, error } = await query;
   if (error) throw error;
   const records = data || [];
@@ -410,7 +400,8 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
   for (const r of records) {
     const valor = Number(r.valor || 0);
     const valorPago = Number(r.valor_pago || 0);
-    const isLiquidado = (r.status || '').toLowerCase().includes('liquidado');
+    const st = (r.status || '').toLowerCase();
+    const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago');
     const restante = valor - valorPago;
 
     total_periodo += valor;
@@ -431,7 +422,8 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
 }
 
 async function getReceivableStats(accountId?: string): Promise<ReceivableStats> {
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   let query = supabase
     .from('conta_azul_contas_receber')
@@ -454,7 +446,8 @@ async function getReceivableStats(accountId?: string): Promise<ReceivableStats> 
     totalOriginal += valor;
     totalRecebido += valorPago;
 
-    const isLiquidado = (r.status || '').toLowerCase().includes('liquidado');
+    const st = (r.status || '').toLowerCase();
+    const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago');
     if (isLiquidado || (valor > 0 && valorPago >= valor)) {
       paidCount++;
     } else if (r.data_vencimento && r.data_vencimento < today) {

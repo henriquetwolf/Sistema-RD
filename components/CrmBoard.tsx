@@ -665,7 +665,7 @@ export const CrmBoard: React.FC = () => {
           parcelas: nParcelas,
           categoria_id: matchedCategoryId,
           centro_custo_id: matchedCcId,
-          observacoes: obsLines,
+          observacoes: ownerName ? `${obsLines}\nVENDEDOR COMERCIAL: ${ownerName}` : obsLines,
           contato_nome: deal.company_name || deal.contact_name || '',
           contato_cpf: deal.cpf || deal.billing_cnpj || '',
           contato_email: deal.email || '',

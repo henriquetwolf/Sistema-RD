@@ -386,32 +386,39 @@ async function getReceivableSummary(filters: Omit<ReceivableFilters, 'limit' | '
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-  let query = supabase
-    .from('conta_azul_contas_receber')
-    .select('valor, valor_pago, status, data_vencimento')
-    .order('data_vencimento', { ascending: false })
-    .limit(50000);
+  const PAGE_SIZE = 1000;
+  let allRecords: any[] = [];
+  let page = 0;
+  while (true) {
+    let query = supabase
+      .from('conta_azul_contas_receber')
+      .select('valor, valor_pago, status, data_vencimento')
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-  if (filters.accountId) query = query.eq('account_id', filters.accountId);
-  if (filters.startDate) query = query.gte('data_vencimento', filters.startDate);
-  if (filters.endDate) query = query.lte('data_vencimento', filters.endDate);
-  if (filters.search) {
-    query = query.or(`contato_nome.ilike.%${filters.search}%,descricao.ilike.%${filters.search}%,numero_documento.ilike.%${filters.search}%`);
+    if (filters.accountId) query = query.eq('account_id', filters.accountId);
+    if (filters.startDate) query = query.gte('data_vencimento', filters.startDate);
+    if (filters.endDate) query = query.lte('data_vencimento', filters.endDate);
+    if (filters.search) {
+      query = query.or(`contato_nome.ilike.%${filters.search}%,descricao.ilike.%${filters.search}%,numero_documento.ilike.%${filters.search}%`);
+    }
+    if (filters.categoria) query = query.ilike('categoria_nome', `%${filters.categoria}%`);
+    if (filters.centroCusto) query = query.ilike('centro_custo_nome', `%${filters.centroCusto}%`);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = data || [];
+    allRecords.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    page++;
   }
-  if (filters.categoria) query = query.ilike('categoria_nome', `%${filters.categoria}%`);
-  if (filters.centroCusto) query = query.ilike('centro_custo_nome', `%${filters.centroCusto}%`);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  const records = data || [];
 
   let vencidos = 0, vencem_hoje = 0, a_vencer = 0, recebidos = 0, total_periodo = 0;
 
-  for (const r of records) {
+  for (const r of allRecords) {
     const valor = Number(r.valor || 0);
     const valorPago = Number(r.valor_pago || 0);
     const st = (r.status || '').toLowerCase();
-    const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago');
+    const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago') || st.includes('quitado');
     const restante = valor - valorPago;
 
     total_periodo += valor;
@@ -437,24 +444,33 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-  let query = supabase
-    .from('conta_azul_contas_pagar')
-    .select('valor, valor_pago, status, data_vencimento')
-    .order('data_vencimento', { ascending: false })
-    .limit(50000);
+  const PAGE_SIZE = 1000;
+  let allRecords: any[] = [];
+  let page = 0;
+  while (true) {
+    let query = supabase
+      .from('conta_azul_contas_pagar')
+      .select('valor, valor_pago, status, data_vencimento')
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-  if (filters.accountId) query = query.eq('account_id', filters.accountId);
-  if (filters.startDate) query = query.gte('data_vencimento', filters.startDate);
-  if (filters.endDate) query = query.lte('data_vencimento', filters.endDate);
-  if (filters.search) {
-    query = query.or(`fornecedor_nome.ilike.%${filters.search}%,descricao.ilike.%${filters.search}%,numero_documento.ilike.%${filters.search}%`);
+    if (filters.accountId) query = query.eq('account_id', filters.accountId);
+    if (filters.startDate) query = query.gte('data_vencimento', filters.startDate);
+    if (filters.endDate) query = query.lte('data_vencimento', filters.endDate);
+    if (filters.search) {
+      query = query.or(`fornecedor_nome.ilike.%${filters.search}%,descricao.ilike.%${filters.search}%,numero_documento.ilike.%${filters.search}%`);
+    }
+    if (filters.categoria) query = query.ilike('categoria_nome', `%${filters.categoria}%`);
+    if (filters.centroCusto) query = query.ilike('centro_custo_nome', `%${filters.centroCusto}%`);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = data || [];
+    allRecords.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    page++;
   }
-  if (filters.categoria) query = query.ilike('categoria_nome', `%${filters.categoria}%`);
-  if (filters.centroCusto) query = query.ilike('centro_custo_nome', `%${filters.centroCusto}%`);
 
-  const { data, error } = await query;
-  if (error) throw error;
-  const records = data || [];
+  const records = allRecords;
 
   let vencidos = 0, vencem_hoje = 0, a_vencer = 0, recebidos = 0, total_periodo = 0;
 
@@ -462,7 +478,7 @@ async function getPayableSummary(filters: Omit<ReceivableFilters, 'limit' | 'off
     const valor = Number(r.valor || 0);
     const valorPago = Number(r.valor_pago || 0);
     const st = (r.status || '').toLowerCase();
-    const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago');
+    const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago') || st.includes('quitado');
     const restante = valor - valorPago;
 
     total_periodo += valor;
@@ -486,18 +502,22 @@ async function getReceivableStats(accountId?: string): Promise<ReceivableStats> 
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-  let query = supabase
-    .from('conta_azul_contas_receber')
-    .select('valor, valor_pago, status, data_vencimento')
-    .limit(50000);
-
-  if (accountId) {
-    query = query.eq('account_id', accountId);
+  const PAGE_SIZE = 1000;
+  let records: any[] = [];
+  let page = 0;
+  while (true) {
+    let query = supabase
+      .from('conta_azul_contas_receber')
+      .select('valor, valor_pago, status, data_vencimento')
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    if (accountId) query = query.eq('account_id', accountId);
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = data || [];
+    records.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    page++;
   }
-
-  const { data, error } = await query;
-  if (error) throw error;
-  const records = data || [];
 
   let totalOriginal = 0, totalRecebido = 0, paidCount = 0, pendingCount = 0, overdueCount = 0;
 
@@ -508,7 +528,7 @@ async function getReceivableStats(accountId?: string): Promise<ReceivableStats> 
     totalRecebido += valorPago;
 
     const st = (r.status || '').toLowerCase();
-    const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago');
+    const isLiquidado = st.includes('liquidado') || st.includes('recebido') || st.includes('pago') || st.includes('quitado');
     if (isLiquidado || (valor > 0 && valorPago >= valor)) {
       paidCount++;
     } else if (r.data_vencimento && r.data_vencimento < today) {
@@ -536,27 +556,36 @@ interface FinancialStats {
 }
 
 async function getFinancialStats(accountId?: string): Promise<FinancialStats> {
-  let receberQ = supabase.from('conta_azul_contas_receber').select('valor, valor_pago, status').limit(10000);
-  let pagarQ = supabase.from('conta_azul_contas_pagar').select('valor, valor_pago, status').limit(10000);
-  let contasQ = supabase.from('conta_azul_contas_financeiras').select('saldo_atual').eq('ativo', true).limit(10000);
+  const PAGE_SIZE = 1000;
 
-  if (accountId) {
-    receberQ = receberQ.eq('account_id', accountId);
-    pagarQ = pagarQ.eq('account_id', accountId);
-    contasQ = contasQ.eq('account_id', accountId);
+  async function fetchAll(table: string, select: string, extraFilter?: (q: any) => any) {
+    let all: any[] = [];
+    let page = 0;
+    while (true) {
+      let q = supabase.from(table).select(select).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+      if (accountId) q = q.eq('account_id', accountId);
+      if (extraFilter) q = extraFilter(q);
+      const { data, error } = await q;
+      if (error) throw error;
+      const rows = data || [];
+      all.push(...rows);
+      if (rows.length < PAGE_SIZE) break;
+      page++;
+    }
+    return all;
   }
 
-  const [receber, pagar, contas] = await Promise.all([receberQ, pagarQ, contasQ]);
+  const [receberData, pagarData, contasData] = await Promise.all([
+    fetchAll('conta_azul_contas_receber', 'valor, valor_pago, status'),
+    fetchAll('conta_azul_contas_pagar', 'valor, valor_pago, status'),
+    fetchAll('conta_azul_contas_financeiras', 'saldo_atual', (q: any) => q.eq('ativo', true)),
+  ]);
 
-  const receberData = receber.data || [];
-  const pagarData = pagar.data || [];
-  const contasData = contas.data || [];
-
-  const totalReceber = receberData.reduce((s, r) => s + Number(r.valor || 0), 0);
-  const totalReceberPago = receberData.reduce((s, r) => s + Number(r.valor_pago || 0), 0);
-  const totalPagar = pagarData.reduce((s, r) => s + Number(r.valor || 0), 0);
-  const totalPagarPago = pagarData.reduce((s, r) => s + Number(r.valor_pago || 0), 0);
-  const saldoContas = contasData.reduce((s, c) => s + Number(c.saldo_atual || 0), 0);
+  const totalReceber = receberData.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
+  const totalReceberPago = receberData.reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
+  const totalPagar = pagarData.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
+  const totalPagarPago = pagarData.reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
+  const saldoContas = contasData.reduce((s: number, c: any) => s + Number(c.saldo_atual || 0), 0);
 
   return {
     totalReceber,
